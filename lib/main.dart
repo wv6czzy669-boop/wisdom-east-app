@@ -13,13 +13,9 @@ import 'data/wisdoms.dart';
 import 'screens/premium_screen.dart';
 import 'screens/settings_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  try {
-    MobileAds.instance.initialize();
-  } catch (_) {}
-
+  await MobileAds.instance.initialize();
   runApp(const MyApp());
 }
 
@@ -121,8 +117,8 @@ class _HomeScreenState extends State<HomeScreen>
   double revealGlowOpacity = 0.0;
   double backgroundDepth = 0.0;
   double ritualHintOpacity = 0.0;
-  double blurAmount = 0.0;
   double openingSubtitleOpacity = 0.0;
+  double pauseFeelOpacity = 0.0;
 
   bool adReturnInProgress = false;
   bool transitionInProgress = false;
@@ -144,6 +140,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   RewardedAd? rewardedAd;
   bool isRewardedAdReady = false;
+  bool isLoadingRewardedAd = false;
   bool adRewardEarned = false;
 
   static const String rewardedAdUnitId =
@@ -161,11 +158,11 @@ class _HomeScreenState extends State<HomeScreen>
 
     pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3200),
+      duration: const Duration(milliseconds: 5200),
     )..repeat(reverse: true);
 
     pulseAnimation = Tween<double>(
-      begin: 0.62,
+      begin: 0.70,
       end: 1.0,
     ).animate(
       CurvedAnimation(
@@ -195,8 +192,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   bool get onPauseScreen => screenStep == 1;
-  bool get onRevealScreen => screenStep == 2;
-  bool get wisdomRevealed => screenStep == 3;
+  bool get onHeartScreen => screenStep == 2;
+  bool get onRevealScreen => screenStep == 3;
+  bool get wisdomRevealed => screenStep == 4;
+  bool get onPostAdBlackScreen => screenStep == 5;
 
   Future<void> runOpeningIntro() async {
     await Future.delayed(const Duration(milliseconds: 420));
@@ -206,10 +205,10 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       textOpacity = 1.0;
       textScale = 1.0;
-      backgroundDepth = 0.08;
+      backgroundDepth = 0.06;
     });
 
-    await Future.delayed(const Duration(milliseconds: 780));
+    await Future.delayed(const Duration(milliseconds: 900));
 
     if (!mounted) return;
 
@@ -246,23 +245,67 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       await player.play(
         AssetSource('sounds/reveal.mp3'),
-        volume: 0.42,
+        volume: 0.38,
       );
     } catch (_) {}
   }
 
+  void showEastSnack(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF111111),
+        duration: const Duration(milliseconds: 1400),
+        content: Text(
+          message,
+          style: wisdomStyle(17),
+        ),
+      ),
+    );
+  }
+
   void loadRewardedAd() {
+    if (isLoadingRewardedAd || isRewardedAdReady) return;
+
+    isLoadingRewardedAd = true;
+
     RewardedAd.load(
       adUnitId: rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
           rewardedAd = ad;
-          isRewardedAdReady = true;
+
+          if (!mounted) {
+            isLoadingRewardedAd = false;
+            isRewardedAdReady = true;
+            return;
+          }
+
+          setState(() {
+            isLoadingRewardedAd = false;
+            isRewardedAdReady = true;
+          });
         },
         onAdFailedToLoad: (error) {
           rewardedAd = null;
-          isRewardedAdReady = false;
+
+          if (!mounted) {
+            isLoadingRewardedAd = false;
+            isRewardedAdReady = false;
+            return;
+          }
+
+          setState(() {
+            isLoadingRewardedAd = false;
+            isRewardedAdReady = false;
+          });
+
+          Future.delayed(const Duration(seconds: 8), () {
+            if (mounted) loadRewardedAd();
+          });
         },
       ),
     );
@@ -308,76 +351,35 @@ class _HomeScreenState extends State<HomeScreen>
     await updateNextWisdomMessage();
   }
 
-  Future<void> returnToTapToRevealAfterAd() async {
-    if (!mounted) return;
-
-    setState(() {
-      adReturnInProgress = true;
-      currentText = "Listening...";
-      screenStep = 2;
-      textOpacity = 0.0;
-      heartOpacity = 0.0;
-      premiumPromptOpacity = 0.0;
-      ritualHintOpacity = 0.0;
-      revealGlowOpacity = 0.0;
-      backgroundDepth = 0.45;
-      textScale = 0.98;
-      blurAmount = 8.0;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 250));
-
-    if (!mounted) return;
-
-    setState(() {
-      textOpacity = 1.0;
-      textScale = 1.0;
-      blurAmount = 0.0;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 850));
-
-    if (!mounted) return;
-
-    setState(() {
-      textOpacity = 0.0;
-      textScale = 0.97;
-      blurAmount = 7.0;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 950));
-
+  Future<void> returnToBlackAfterAd() async {
     if (!mounted) return;
 
     setState(() {
       adReturnInProgress = false;
-      currentText = "Tap to Reveal";
+      currentText = "";
+      screenStep = 5;
+      textOpacity = 0.0;
+      heartOpacity = 0.0;
+      premiumPromptOpacity = 0.0;
+      ritualHintOpacity = 0.0;
+      pauseFeelOpacity = 0.0;
+      revealGlowOpacity = 0.0;
       backgroundDepth = 0.0;
-      textScale = 0.97;
-      blurAmount = 0.0;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 220));
-
-    if (!mounted) return;
-
-    setState(() {
-      textOpacity = 1.0;
-      textScale = 1.0;
-      ritualHintOpacity = 1.0;
+      textScale = 0.985;
     });
   }
 
   void showRewardedAdThenReveal() {
+    if (isPremium) {
+      revealWisdom(bypassLock: true);
+      return;
+    }
+
     if (!isRewardedAdReady || rewardedAd == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF111111),
-          content: Text(
-            "Ad is still preparing. Please try again.",
-            style: wisdomStyle(17),
-          ),
-        ),
+      showEastSnack(
+        isLoadingRewardedAd
+            ? "Ad is preparing. Please try again."
+            : "Ad is not ready yet. Please try again.",
       );
 
       loadRewardedAd();
@@ -388,7 +390,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     final adToShow = rewardedAd;
     rewardedAd = null;
-    isRewardedAdReady = false;
+
+    setState(() {
+      isRewardedAdReady = false;
+    });
 
     adToShow!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) async {
@@ -396,14 +401,17 @@ class _HomeScreenState extends State<HomeScreen>
 
         if (adRewardEarned) {
           await prepareRewardedWisdom();
+        } else {
+          showEastSnack("The wisdom opens after the ad is completed.");
         }
 
-        await returnToTapToRevealAfterAd();
+        await returnToBlackAfterAd();
         loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
         ad.dispose();
-        await returnToTapToRevealAfterAd();
+        showEastSnack("Ad could not open. Please try again.");
+        await returnToBlackAfterAd();
         loadRewardedAd();
       },
     );
@@ -417,6 +425,17 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> handleMainTap() async {
     if (adReturnInProgress || transitionInProgress) return;
+
+    if (screenStep == 5) {
+      HapticFeedback.selectionClick();
+
+      await transitionToText(
+        "Pause.",
+        nextStep: 1,
+      );
+
+      return;
+    }
 
     if (screenStep == 0) {
       HapticFeedback.selectionClick();
@@ -432,18 +451,57 @@ class _HomeScreenState extends State<HomeScreen>
     if (screenStep == 1) {
       HapticFeedback.selectionClick();
 
-      await transitionToText(
-        "Tap to Reveal",
-        nextStep: 2,
-      );
+      if (pauseFeelOpacity < 1.0) {
+        await revealFeelBesidePause();
+      } else {
+        await transitionToText(
+          "Ask from your heart.",
+          nextStep: 2,
+        );
+      }
 
       return;
     }
 
     if (screenStep == 2) {
+      HapticFeedback.selectionClick();
+
+      await transitionToText(
+        "Tap to Reveal",
+        nextStep: 3,
+      );
+
+      return;
+    }
+
+    if (screenStep == 3) {
       await revealWisdom();
       return;
     }
+  }
+
+  Future<void> revealFeelBesidePause() async {
+    if (transitionInProgress) return;
+
+    transitionInProgress = true;
+
+    setState(() {
+      ritualHintOpacity = 0.0;
+      pauseFeelOpacity = 1.0;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 1250));
+
+    if (!mounted) {
+      transitionInProgress = false;
+      return;
+    }
+
+    setState(() {
+      ritualHintOpacity = 1.0;
+    });
+
+    transitionInProgress = false;
   }
 
   Future<void> transitionToText(
@@ -459,14 +517,16 @@ class _HomeScreenState extends State<HomeScreen>
       heartOpacity = 0.0;
       premiumPromptOpacity = 0.0;
       ritualHintOpacity = 0.0;
+      pauseFeelOpacity = 0.0;
       revealGlowOpacity = 0.0;
-      backgroundDepth = nextStep == 1 ? 0.18 : 0.0;
-      textScale = 0.97;
-      blurAmount = 8.0;
+      backgroundDepth = nextStep == 1 ? 0.14 : 0.0;
+      textScale = 0.985;
       openingSubtitleOpacity = 0.0;
     });
 
-    await Future.delayed(const Duration(milliseconds: 900));
+    await Future.delayed(
+      Duration(milliseconds: nextStep == 3 ? 980 : 820),
+    );
 
     if (!mounted) {
       transitionInProgress = false;
@@ -488,10 +548,13 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       textOpacity = 1.0;
       textScale = 1.0;
-      blurAmount = 0.0;
     });
 
-    await Future.delayed(const Duration(milliseconds: 520));
+    if (nextStep == 1) {
+      await Future.delayed(const Duration(milliseconds: 820));
+    } else {
+      await Future.delayed(const Duration(milliseconds: 560));
+    }
 
     if (!mounted) {
       transitionInProgress = false;
@@ -499,9 +562,9 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (nextStep == 1) {
-  setState(() {
-    ritualHintOpacity = 1.0;
-  });
+      setState(() {
+        ritualHintOpacity = 1.0;
+      });
     }
 
     transitionInProgress = false;
@@ -696,13 +759,13 @@ class _HomeScreenState extends State<HomeScreen>
       heartOpacity = 0.0;
       premiumPromptOpacity = 0.0;
       ritualHintOpacity = 0.0;
+      pauseFeelOpacity = 0.0;
       revealGlowOpacity = 0.0;
-      backgroundDepth = 1.0;
-      textScale = 0.955;
-      blurAmount = 10.0;
+      backgroundDepth = 0.82;
+      textScale = 0.975;
     });
 
-    await Future.delayed(const Duration(milliseconds: 1120));
+    await Future.delayed(const Duration(milliseconds: 880));
 
     if (!mounted) {
       transitionInProgress = false;
@@ -715,12 +778,11 @@ class _HomeScreenState extends State<HomeScreen>
 
     setState(() {
       currentText = selectedText;
-      screenStep = 3;
-      revealGlowOpacity = 0.20;
-      blurAmount = 0.0;
+      screenStep = 4;
+      revealGlowOpacity = 0.16;
     });
 
-    await Future.delayed(const Duration(milliseconds: 420));
+    await Future.delayed(const Duration(milliseconds: 260));
 
     if (!mounted) {
       transitionInProgress = false;
@@ -730,10 +792,10 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       textOpacity = 1.0;
       textScale = 1.0;
-      backgroundDepth = 0.35;
+      backgroundDepth = 0.30;
     });
 
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 280));
 
     if (!mounted) {
       transitionInProgress = false;
@@ -752,7 +814,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     setState(() {
       heartOpacity = 1.0;
-      revealGlowOpacity = 0.11;
+      revealGlowOpacity = 0.10;
     });
 
     await Future.delayed(const Duration(milliseconds: 520));
@@ -774,7 +836,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await transitionToText(
       "Tap to Reveal",
-      nextStep: 2,
+      nextStep: 3,
     );
   }
 
@@ -788,18 +850,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
 
     HapticFeedback.selectionClick();
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF111111),
-        duration: const Duration(milliseconds: 1200),
-        content: Text(
-          "Copied quietly.",
-          style: wisdomStyle(17),
-        ),
-      ),
-    );
+    showEastSnack("Copied quietly.");
   }
 
   void openPremiumScreen() {
@@ -994,11 +1045,11 @@ class _HomeScreenState extends State<HomeScreen>
       shadows: glow
           ? [
               Shadow(
-                color: const Color(0xFFF4F0E8).withValues(alpha: 0.14),
+                color: const Color(0xFFF4F0E8).withValues(alpha: 0.12),
                 blurRadius: 14,
               ),
               Shadow(
-                color: const Color(0xFFD9B86F).withValues(alpha: 0.06),
+                color: const Color(0xFFD9B86F).withValues(alpha: 0.045),
                 blurRadius: 24,
               ),
             ]
@@ -1013,10 +1064,12 @@ class _HomeScreenState extends State<HomeScreen>
         : wisdomRevealed
             ? 33.0
             : adReturnInProgress
-                ? 23.0
+                ? 24.0
                 : onPauseScreen
                     ? 31.0
-                    : 34.0;
+                    : onHeartScreen
+                        ? 29.0
+                        : 34.0;
 
     final finalColor = const Color(0xFFF4F0E8);
     final darkColor = const Color(0xFF111111);
@@ -1033,7 +1086,7 @@ class _HomeScreenState extends State<HomeScreen>
         child: Stack(
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 900),
+              duration: const Duration(milliseconds: 1000),
               curve: Curves.easeInOutCubic,
               color: Color.lerp(
                 const Color(0xFF030303),
@@ -1051,7 +1104,7 @@ class _HomeScreenState extends State<HomeScreen>
                     return CustomPaint(
                       painter: GrainPainter(
                         movement: pulse,
-                        intensity: wisdomRevealed ? 0.027 : 0.021,
+                        intensity: wisdomRevealed ? 0.025 : 0.019,
                       ),
                     );
                   },
@@ -1062,11 +1115,11 @@ class _HomeScreenState extends State<HomeScreen>
               Positioned.fill(
                 child: IgnorePointer(
                   child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 1300),
+                    duration: const Duration(milliseconds: 1400),
                     opacity: adReturnInProgress
-                        ? 0.07
+                        ? 0.045
                         : onPauseScreen
-                            ? 0.055
+                            ? 0.045
                             : revealGlowOpacity,
                     child: Center(
                       child: Container(
@@ -1077,13 +1130,13 @@ class _HomeScreenState extends State<HomeScreen>
                           boxShadow: [
                             BoxShadow(
                               color: const Color(0xFFD9B86F)
-                                  .withValues(alpha: 0.10),
+                                  .withValues(alpha: 0.085),
                               blurRadius: 85,
-                              spreadRadius: 2,
+                              spreadRadius: 1,
                             ),
                             BoxShadow(
                               color: const Color(0xFFF4F0E8)
-                                  .withValues(alpha: 0.04),
+                                  .withValues(alpha: 0.035),
                               blurRadius: 55,
                               spreadRadius: 1,
                             ),
@@ -1111,9 +1164,9 @@ class _HomeScreenState extends State<HomeScreen>
                           animation: pulseController,
                           builder: (context, child) {
                             final floatingY = wisdomRevealed
-                                ? sin(pulseController.value * pi * 2) * 1.8
+                                ? sin(pulseController.value * pi * 2) * 0.8
                                 : adReturnInProgress || onPauseScreen
-                                    ? sin(pulseController.value * pi * 2) * 1.1
+                                    ? sin(pulseController.value * pi * 2) * 0.5
                                     : 0.0;
 
                             final liftedY = wisdomRevealed ? -18.0 : 0.0;
@@ -1126,30 +1179,24 @@ class _HomeScreenState extends State<HomeScreen>
                           child: AnimatedScale(
                             scale: textScale,
                             duration: const Duration(
-                              milliseconds: 1050,
+                              milliseconds: 1000,
                             ),
                             curve: Curves.easeInOutCubic,
                             child: AnimatedOpacity(
                               duration: const Duration(
-                                milliseconds: 1150,
+                                milliseconds: 1250,
                               ),
                               curve: Curves.easeInOutCubic,
                               opacity: textOpacity,
                               child: AnimatedBuilder(
                                 animation: pulseAnimation,
                                 builder: (context, child) {
-                                  return ImageFiltered(
-                                    imageFilter: ImageFilter.blur(
-                                      sigmaX: blurAmount,
-                                      sigmaY: blurAmount,
-                                    ),
-                                    child: Opacity(
-                                      opacity:
-                                          onRevealScreen && !adReturnInProgress
-                                              ? pulseAnimation.value
-                                              : 1.0,
-                                      child: child,
-                                    ),
+                                  return Opacity(
+                                    opacity: onRevealScreen &&
+                                            !adReturnInProgress
+                                        ? pulseAnimation.value
+                                        : 1.0,
+                                    child: child,
                                   );
                                 },
                                 child: screenStep == 0
@@ -1182,19 +1229,53 @@ class _HomeScreenState extends State<HomeScreen>
                                           ),
                                         ],
                                       )
-                                    : Text(
-                                        currentText,
-                                        textAlign: TextAlign.center,
-                                        style: wisdomStyle(
-                                          textSize,
-                                          color: wisdomRevealed
-                                              ? animatedTextColor
-                                              : finalColor,
-                                          glow: wisdomRevealed ||
-                                              adReturnInProgress ||
-                                              onPauseScreen,
-                                        ),
-                                      ),
+                                    : onPauseScreen
+                                        ? Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                "Pause.",
+                                                textAlign: TextAlign.center,
+                                                style: wisdomStyle(
+                                                  textSize,
+                                                  color: finalColor,
+                                                  glow: true,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 28),
+                                              AnimatedOpacity(
+                                                duration: const Duration(
+                                                  milliseconds: 1250,
+                                                ),
+                                                curve: Curves.easeInOutCubic,
+                                                opacity: pauseFeelOpacity,
+                                                child: Text(
+                                                  "Feel.",
+                                                  textAlign: TextAlign.center,
+                                                  style: wisdomStyle(
+                                                    textSize,
+                                                    color: finalColor,
+                                                    glow: true,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : Text(
+                                            currentText,
+                                            textAlign: TextAlign.center,
+                                            style: wisdomStyle(
+                                              textSize,
+                                              color: wisdomRevealed
+                                                  ? animatedTextColor
+                                                  : finalColor,
+                                              glow: wisdomRevealed ||
+                                                  adReturnInProgress ||
+                                                  onHeartScreen,
+                                            ),
+                                          ),
                               ),
                             ),
                           ),
@@ -1205,7 +1286,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            if (screenStep >= 2)
+            if (screenStep >= 3)
               Positioned(
                 top: 4,
                 right: 8,
@@ -1231,7 +1312,6 @@ class _HomeScreenState extends State<HomeScreen>
                   ],
                 ),
               ),
-            
             if (wisdomRevealed)
               Positioned(
                 top: 4,
@@ -1429,7 +1509,7 @@ class GrainPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final random = Random(7);
 
-    for (int i = 0; i < 1200; i++) {
+    for (int i = 0; i < 650; i++) {
       final baseX = random.nextDouble() * size.width;
       final baseY = random.nextDouble() * size.height;
 
