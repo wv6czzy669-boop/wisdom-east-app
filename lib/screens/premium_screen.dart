@@ -69,39 +69,42 @@ class PremiumScreen extends StatelessWidget {
                 children: [
                   const Spacer(),
                   Text(
-                    "East Premium",
+                    "Become a Keeper of East",
                     textAlign: TextAlign.center,
-                    style: premiumStyle(38),
+                    style: premiumStyle(36),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 34),
                   Text(
-                    "A quieter path, without interruption.",
+                    "∞ Unlimited Wisdom",
+                    textAlign: TextAlign.center,
+                    style: premiumStyle(24),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    "∞ Unlimited Favorites",
+                    textAlign: TextAlign.center,
+                    style: premiumStyle(24),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    "No Interruptions",
+                    textAlign: TextAlign.center,
+                    style: premiumStyle(24),
+                  ),
+                  const SizedBox(height: 36),
+                  Text(
+                    "One-time offering",
                     textAlign: TextAlign.center,
                     style: premiumStyle(
-                      21,
+                      19,
                       color: Colors.white60,
                     ),
                   ),
-                  const SizedBox(height: 34),
-                  _PremiumFeature(
-                    icon: Icons.visibility_outlined,
-                    text: "Reveal wisdom without waiting",
-                    style: premiumStyle(21),
-                  ),
-                  _PremiumFeature(
-                    icon: Icons.favorite_border,
-                    text: "Save unlimited reflections",
-                    style: premiumStyle(21),
-                  ),
-                  _PremiumFeature(
-                    icon: Icons.block,
-                    text: "Remove all ads",
-                    style: premiumStyle(21),
-                  ),
-                  _PremiumFeature(
-                    icon: Icons.spa_outlined,
-                    text: "Support the future of East",
-                    style: premiumStyle(21),
+                  const SizedBox(height: 6),
+                  Text(
+                    "CA\$1.99",
+                    textAlign: TextAlign.center,
+                    style: premiumStyle(27),
                   ),
                   const SizedBox(height: 38),
                   GestureDetector(
@@ -118,70 +121,26 @@ class PremiumScreen extends StatelessWidget {
                         color: const Color(0xFFF4F0E8).withValues(alpha: 0.04),
                       ),
                       child: Text(
-                        "Unlock Premium",
+                        "Enter the Circle",
                         textAlign: TextAlign.center,
                         style: premiumStyle(23),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   GestureDetector(
                     onTap: () => showComingSoon(context),
                     child: Text(
-                      "Restore Purchase",
+                      "Restore Purchases",
                       style: premiumStyle(
                         18,
                         color: Colors.white54,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Pricing will be finalized before App Store release.",
-                    textAlign: TextAlign.center,
-                    style: premiumStyle(
-                      14,
-                      color: Colors.white30,
-                    ),
-                  ),
                   const Spacer(),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PremiumFeature extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final TextStyle style;
-
-  const _PremiumFeature({
-    required this.icon,
-    required this.text,
-    required this.style,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            color: const Color(0xFFF4F0E8).withValues(alpha: 0.78),
-            size: 22,
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Text(
-              text,
-              style: style,
             ),
           ),
         ],
