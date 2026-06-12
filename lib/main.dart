@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
+import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 
 import 'data/wisdoms.dart';
 import 'screens/premium_screen.dart';
@@ -15,6 +17,17 @@ import 'screens/settings_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isIOS) {
+    final status =
+        await AppTrackingTransparency.trackingAuthorizationStatus;
+
+    if (status == TrackingStatus.notDetermined) {
+      await Future.delayed(const Duration(milliseconds: 700));
+      await AppTrackingTransparency.requestTrackingAuthorization();
+    }
+  }
+
   await MobileAds.instance.initialize();
   runApp(const MyApp());
 }
@@ -144,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool adRewardEarned = false;
 
   static const String rewardedAdUnitId =
-      'ca-app-pub-3940256099942544/1712485313';
+      'ca-app-pub-1367967256658706/4388775484';
 
   String nextWisdomMessage = "";
 

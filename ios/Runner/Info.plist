@@ -3,8 +3,11 @@
 <plist version="1.0">
 <dict>
 
-	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-1367967256658706~1382462480</string>
+    <key>GADApplicationIdentifier</key>
+    <string>ca-app-pub-1367967256658706~1382462480</string>
+
+    <key>NSUserTrackingUsageDescription</key>
+    <string>East uses tracking permission to show more relevant ads and support the free daily wisdom experience.</string>
 
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
