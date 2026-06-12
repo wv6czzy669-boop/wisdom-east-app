@@ -250,6 +250,36 @@ class _HomeScreenState extends State<HomeScreen>
     } catch (_) {}
   }
 
+  Future<void> playPauseSound() async {
+    try {
+      await player.stop();
+      await player.play(
+        AssetSource('sounds/pause.mp3'),
+        volume: 0.45,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> playFeelSound() async {
+    try {
+      await player.stop();
+      await player.play(
+        AssetSource('sounds/feel.mp3'),
+        volume: 0.45,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> playHeartSound() async {
+    try {
+      await player.stop();
+      await player.play(
+        AssetSource('sounds/heart.mp3'),
+        volume: 0.45,
+      );
+    } catch (_) {}
+  }
+
   void showEastSnack(String message) {
     if (!mounted) return;
 
@@ -428,6 +458,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (screenStep == 5) {
       HapticFeedback.selectionClick();
+      await playPauseSound();
 
       await transitionToText(
         "Pause.",
@@ -439,6 +470,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (screenStep == 0) {
       HapticFeedback.selectionClick();
+      await playPauseSound();
 
       await transitionToText(
         "Pause.",
@@ -452,8 +484,10 @@ class _HomeScreenState extends State<HomeScreen>
       HapticFeedback.selectionClick();
 
       if (pauseFeelOpacity < 1.0) {
+        await playFeelSound();
         await revealFeelBesidePause();
       } else {
+        await playHeartSound();
         await transitionToText(
           "Ask from your heart.",
           nextStep: 2,
