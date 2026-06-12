@@ -458,7 +458,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (screenStep == 5) {
       HapticFeedback.selectionClick();
-      await playPauseSound();
+      Future.delayed(
+  const Duration(milliseconds: 1200),
+  () => playPauseSound(),
+);
 
       await transitionToText(
         "Pause.",
@@ -470,7 +473,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (screenStep == 0) {
       HapticFeedback.selectionClick();
-      await playPauseSound();
+      Future.delayed(
+  const Duration(milliseconds: 1200),
+  () => playPauseSound(),
+);
 
       await transitionToText(
         "Pause.",
@@ -484,10 +490,16 @@ class _HomeScreenState extends State<HomeScreen>
       HapticFeedback.selectionClick();
 
       if (pauseFeelOpacity < 1.0) {
-        await playFeelSound();
+        Future.delayed(
+  const Duration(milliseconds: 200),
+  () => playFeelSound(),
+);
         await revealFeelBesidePause();
       } else {
-        await playHeartSound();
+        var future = Future.delayed(
+  const Duration(milliseconds: 1100),
+  () => playHeartSound(),
+);
         await transitionToText(
           "Ask from your heart.",
           nextStep: 2,
