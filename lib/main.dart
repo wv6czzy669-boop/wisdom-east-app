@@ -517,7 +517,6 @@ class _HomeScreenState extends State<HomeScreen>
       heartOpacity = 0.0;
       premiumPromptOpacity = 0.0;
       ritualHintOpacity = 0.0;
-      pauseFeelOpacity = 0.0;
       revealGlowOpacity = 0.0;
       backgroundDepth = nextStep == 1 ? 0.14 : 0.0;
       textScale = 0.985;
@@ -536,6 +535,9 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       currentText = newText;
       screenStep = nextStep;
+      if (nextStep != 1) {
+        pauseFeelOpacity = 0.0;
+      }
     });
 
     await Future.delayed(const Duration(milliseconds: 220));
@@ -1286,7 +1288,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            if (screenStep >= 3)
+            if (true)
               Positioned(
                 top: 4,
                 right: 8,
