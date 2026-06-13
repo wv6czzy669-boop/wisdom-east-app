@@ -253,14 +253,23 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadPremiumStatus() async {
-    final prefs = await SharedPreferences.getInstance();
+  final prefs = await SharedPreferences.getInstance();
 
-    if (!mounted) return;
+  if (!mounted) return;
 
-    setState(() {
-      isPremium = prefs.getBool("is_premium") ?? false;
-    });
+  final premiumValue = prefs.getBool("is_premium") ?? false;
+
+  setState(() {
+    isPremium = premiumValue;
+  });
+
+  if (premiumValue) {
+    rewardedAd?.dispose();
+    rewardedAd = null;
+    isRewardedAdReady = false;
+    isLoadingRewardedAd = false;
   }
+}
 
   Future<void> playRevealSound() async {
     try {
@@ -318,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void loadRewardedAd() {
-    if (isLoadingRewardedAd || isRewardedAdReady) return;
+  if (isPremium || isLoadingRewardedAd || isRewardedAdReady) return;
 
     isLoadingRewardedAd = true;
 
@@ -330,10 +339,11 @@ class _HomeScreenState extends State<HomeScreen>
           rewardedAd = ad;
 
           if (!mounted) {
-            isLoadingRewardedAd = false;
-            isRewardedAdReady = true;
-            return;
-          }
+  ad.dispose();
+  isLoadingRewardedAd = false;
+  isRewardedAdReady = false;
+  return;
+}
 
           setState(() {
             isLoadingRewardedAd = false;
@@ -355,8 +365,8 @@ class _HomeScreenState extends State<HomeScreen>
           });
 
           Future.delayed(const Duration(seconds: 8), () {
-            if (mounted) loadRewardedAd();
-          });
+  if (mounted && !isPremium) loadRewardedAd();
+});
         },
       ),
     );
@@ -442,19 +452,21 @@ class _HomeScreenState extends State<HomeScreen>
     final adToShow = rewardedAd;
     rewardedAd = null;
 
-    setState(() {
-      isRewardedAdReady = false;
-    });
+    if (!mounted) return;
+
+setState(() {
+  isRewardedAdReady = false;
+});
 
     adToShow!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) async {
         ad.dispose();
 
-        if (adRewardEarned) {
-          await prepareRewardedWisdom();
-        } else {
-          showEastSnack("The wisdom opens after the ad is completed.");
-        }
+        if (adRewardEarned && !isPremium) {
+  await prepareRewardedWisdom();
+} else if (!adRewardEarned) {
+  showEastSnack("The wisdom opens after the ad is completed.");
+}
 
         await returnToBlackAfterAd();
         loadRewardedAd();
@@ -926,26 +938,26 @@ class _HomeScreenState extends State<HomeScreen>
     HapticFeedback.selectionClick();
 
     Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PremiumScreen(),
-      ),
-    ).then((_) {
-      loadPremiumStatus();
-    });
+  context,
+  MaterialPageRoute(
+    builder: (context) => const PremiumScreen(),
+  ),
+).then((_) async {
+  await loadPremiumStatus();
+});
   }
 
   void openSettings() {
     HapticFeedback.selectionClick();
 
     Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const SettingsScreen(),
-      ),
-    ).then((_) {
-      loadPremiumStatus();
-    });
+  context,
+  MaterialPageRoute(
+    builder: (context) => const SettingsScreen(),
+  ),
+).then((_) async {
+  await loadPremiumStatus();
+});
   }
 
   void showRevealAnotherOptions() {

@@ -15,6 +15,7 @@ class PurchaseService extends ChangeNotifier {
   bool isAvailable = false;
   bool isPremium = false;
   bool isLoading = false;
+  bool _disposed = false;
 
   ProductDetails? keeperProduct;
 
@@ -62,9 +63,13 @@ class PurchaseService extends ChangeNotifier {
   notifyListeners();
 
   final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
-  await _iap.buyNonConsumable(purchaseParam: purchaseParam);
-
-  return true;
+  try {
+  return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+} catch (_) {
+  isLoading = false;
+  notifyListeners();
+  return false;
+}
 }
 
   Future<void> restorePurchases() async {
@@ -73,14 +78,20 @@ class PurchaseService extends ChangeNotifier {
   isLoading = true;
   notifyListeners();
 
+  try {
   await _iap.restorePurchases();
+} catch (_) {
+  isLoading = false;
+  notifyListeners();
+  return;
+}
 
   Future.delayed(const Duration(seconds: 3), () {
-    if (isLoading) {
-      isLoading = false;
-      notifyListeners();
-    }
-  });
+  if (!_disposed && isLoading) {
+    isLoading = false;
+    notifyListeners();
+  }
+});
 }
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
@@ -117,8 +128,9 @@ class PurchaseService extends ChangeNotifier {
   }
 
   @override
-  void dispose() {
-    _subscription?.cancel();
-    super.dispose();
-  }
+void dispose() {
+  _disposed = true;
+  _subscription?.cancel();
+  super.dispose();
+}
 }

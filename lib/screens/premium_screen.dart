@@ -43,7 +43,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
     );
   }
 
+  if (mounted) {
   setState(() {});
+}
 }
 
   Future<void> restorePurchases() async {
@@ -52,7 +54,20 @@ class _PremiumScreenState extends State<PremiumScreen> {
     await purchaseService.restorePurchases();
 
     if (!mounted) return;
-    setState(() {});
+
+setState(() {});
+
+ScaffoldMessenger.of(context).showSnackBar(
+  SnackBar(
+    backgroundColor: const Color(0xFF111111),
+    content: Text(
+      purchaseService.isPremium
+          ? "Purchases restored."
+          : "No previous purchase was found.",
+      style: premiumStyle(17),
+    ),
+  ),
+);
   }
 
   @override

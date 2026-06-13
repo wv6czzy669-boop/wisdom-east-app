@@ -104,17 +104,16 @@ class SettingsScreen extends StatelessWidget {
     },
   );
 }
+
 Future<void> openPrivacyPolicy() async {
   final uri = Uri.parse(
     'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
   );
 
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-  }
+  await launchUrl(
+    uri,
+    mode: LaunchMode.externalApplication,
+  );
 }
 
 Future<void> sendEmail() async {
@@ -124,9 +123,7 @@ Future<void> sendEmail() async {
     query: 'subject=East Support',
   );
 
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri);
-  }
+  await launchUrl(uri);
 }
 
   @override
@@ -196,7 +193,9 @@ if (!context.mounted) return;
   showInfoDialog(
     context,
     "Restore Purchases",
-    "Your purchase restoration request has been sent.",
+    purchaseService.isPremium
+    ? "Your Premium access has been restored."
+    : "No previous Premium purchase was found.",
   );
 },
           ),
@@ -208,7 +207,11 @@ if (!context.mounted) return;
             icon: Icons.privacy_tip_outlined,
             title: "Privacy Policy",
             subtitle: "Required for App Store release.",
-            onTap: openPrivacyPolicy,
+            onTap: () async {
+  await openPrivacyPolicy();
+
+  if (!context.mounted) return;
+},
           ),
           
           const Divider(
