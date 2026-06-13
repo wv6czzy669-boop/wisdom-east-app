@@ -189,8 +189,11 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
 
-    loadInitialState();
+    loadInitialState().then((_) {
+  if (!isPremium) {
     loadRewardedAd();
+  }
+});
 
     countdownTimer = Timer.periodic(
       const Duration(minutes: 1),
@@ -1217,7 +1220,7 @@ class _HomeScreenState extends State<HomeScreen>
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: handleMainTap,
-                onLongPress: wisdomRevealed ? copyCurrentWisdom : null,
+                onLongPress: null,
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(

@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class PurchaseService extends ChangeNotifier {
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
-  static const String _premiumKey = 'is_premium_keeper';
+  static const String _premiumKey = 'is_premium';
 
   final InAppPurchase _iap = InAppPurchase.instance;
 
@@ -44,13 +44,8 @@ class PurchaseService extends ChangeNotifier {
   Future<void> _loadProducts() async {
   final response = await _iap.queryProductDetails({keeperProductId});
 
-  debugPrint('IAP product details: ${response.productDetails.length}');
-  debugPrint('IAP not found IDs: ${response.notFoundIDs}');
-  debugPrint('IAP error: ${response.error}');
-
   if (response.productDetails.isNotEmpty) {
     keeperProduct = response.productDetails.first;
-    debugPrint('IAP loaded product: ${keeperProduct!.id}');
   }
 
   notifyListeners();

@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../main.dart' show purchaseService;
 
-class PremiumScreen extends StatelessWidget {
+class PremiumScreen extends StatefulWidget {
   const PremiumScreen({super.key});
 
+  @override
+  State<PremiumScreen> createState() => _PremiumScreenState();
+}
+
+class _PremiumScreenState extends State<PremiumScreen> {
   TextStyle premiumStyle(
     double size, {
     Color color = const Color(0xFFF4F0E8),
@@ -19,8 +24,28 @@ class PremiumScreen extends StatelessWidget {
     );
   }
 
+  Future<void> buyKeeper() async {
+    if (purchaseService.isLoading) return;
+
+    await purchaseService.buyKeeper();
+
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> restorePurchases() async {
+    if (purchaseService.isLoading) return;
+
+    await purchaseService.restorePurchases();
+
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isPremium = purchaseService.isPremium;
+
     return Scaffold(
       backgroundColor: const Color(0xFF030303),
       appBar: AppBar(
@@ -58,74 +83,80 @@ class PremiumScreen extends StatelessWidget {
                 children: [
                   const Spacer(),
                   Text(
-                    "Become a Keeper of East",
+                    isPremium
+                        ? "Premium Active"
+                        : "Become a Keeper of East",
                     textAlign: TextAlign.center,
                     style: premiumStyle(36),
                   ),
                   const SizedBox(height: 34),
                   Text(
-                    "Unlimited Wisdom",
+                    isPremium
+                        ? "Welcome, Keeper of East."
+                        : "Unlimited Wisdom",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    "Unlimited Favorites",
+                    isPremium
+                        ? "The circle is open."
+                        : "Unlimited Favorites",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    "No Interruptions",
+                    isPremium ? "No interruptions." : "No Interruptions",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
                   const SizedBox(height: 36),
                   Text(
-                    "One-time offering",
+                    isPremium ? "Thank you for supporting East." : "One-time offering",
                     textAlign: TextAlign.center,
                     style: premiumStyle(
                       19,
                       color: Colors.white60,
                     ),
                   ),
-                  
                   const SizedBox(height: 52),
-                  GestureDetector(
-  onTap: () async {
-    await purchaseService.buyKeeper();
-  },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(42),
-                        border: Border.all(
-                          color: const Color(0xFFF4F0E8),
-                          width: 1,
+                  if (!isPremium)
+                    GestureDetector(
+                      onTap: buyKeeper,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(42),
+                          border: Border.all(
+                            color: const Color(0xFFF4F0E8),
+                            width: 1,
+                          ),
+                          color:
+                              const Color(0xFFF4F0E8).withValues(alpha: 0.04),
                         ),
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.04),
+                        child: Text(
+                          purchaseService.isLoading
+                              ? "Opening..."
+                              : "Enter the Circle",
+                          textAlign: TextAlign.center,
+                          style: premiumStyle(23),
+                        ),
                       ),
+                    ),
+                  if (!isPremium) const SizedBox(height: 18),
+                  if (!isPremium)
+                    GestureDetector(
+                      onTap: restorePurchases,
                       child: Text(
-                        "Enter the Circle",
-                        textAlign: TextAlign.center,
-                        style: premiumStyle(23),
+                        "Restore Purchases",
+                        style: premiumStyle(
+                          18,
+                          color: Colors.white54,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  GestureDetector(
-                    onTap: () async {
-                      await purchaseService.restorePurchases();
-                    },
-                    child: Text(
-                      "Restore Purchases",
-                      style: premiumStyle(
-                        18,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ),
                   const Spacer(),
                 ],
               ),

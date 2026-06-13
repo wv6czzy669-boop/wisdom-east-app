@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'premium_screen.dart';
+import '../main.dart' show purchaseService;
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -66,17 +68,40 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  void comingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+  void showInfoDialog(
+  BuildContext context,
+  String title,
+  String message,
+) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
         backgroundColor: const Color(0xFF111111),
-        content: Text(
-          "This will be connected before launch.",
-          style: eastStyle(17),
+        title: Text(
+          title,
+          style: eastStyle(21),
         ),
-      ),
-    );
-  }
+        content: Text(
+          message,
+          style: eastStyle(
+            17,
+            color: Colors.white70,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "Close",
+              style: eastStyle(16),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -116,12 +141,20 @@ class SettingsScreen extends StatelessWidget {
             color: Colors.white24,
             thickness: 0.5,
           ),
+          
           settingsItem(
-            icon: Icons.workspace_premium_outlined,
-            title: "Premium",
-            subtitle: "Unlimited reveals, unlimited favorites, and no ads.",
-            onTap: () => comingSoon(context),
-          ),
+  icon: Icons.workspace_premium_outlined,
+  title: "Premium",
+  subtitle: "Unlimited reveals, unlimited favorites, and no ads.",
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PremiumScreen(),
+      ),
+    );
+  },
+),
           const Divider(
             color: Colors.white24,
             thickness: 0.5,
@@ -130,7 +163,17 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.restore,
             title: "Restore Purchases",
             subtitle: "Restore your Premium access on this device.",
-            onTap: () => comingSoon(context),
+            onTap: () async {
+  await purchaseService.restorePurchases();
+
+if (!context.mounted) return;
+
+  showInfoDialog(
+    context,
+    "Restore Purchases",
+    "Your purchase restoration request has been sent.",
+  );
+},
           ),
           const Divider(
             color: Colors.white24,
@@ -140,7 +183,13 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.privacy_tip_outlined,
             title: "Privacy Policy",
             subtitle: "Required for App Store release.",
-            onTap: () => comingSoon(context),
+            onTap: () {
+  showInfoDialog(
+    context,
+    "Privacy Policy",
+    "Privacy Policy is available on the App Store listing and official East support page.",
+  );
+},
           ),
           const Divider(
             color: Colors.white24,
@@ -150,7 +199,13 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.mail_outline,
             title: "Contact",
             subtitle: "Support and feedback.",
-            onTap: () => comingSoon(context),
+            onTap: () {
+  showInfoDialog(
+    context,
+    "Contact",
+    "For support or feedback, please use the App Store support link.",
+  );
+},
           ),
           const Divider(
             color: Colors.white24,
