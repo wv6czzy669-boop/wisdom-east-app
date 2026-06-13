@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'premium_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../main.dart' show purchaseService;
+import 'premium_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -102,6 +104,30 @@ class SettingsScreen extends StatelessWidget {
     },
   );
 }
+Future<void> openPrivacyPolicy() async {
+  final uri = Uri.parse(
+    'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
+  );
+
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+  }
+}
+
+Future<void> sendEmail() async {
+  final uri = Uri(
+    scheme: 'mailto',
+    path: 'dailywisdomeast@gmail.com',
+    query: 'subject=East Support',
+  );
+
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -182,14 +208,9 @@ if (!context.mounted) return;
             icon: Icons.privacy_tip_outlined,
             title: "Privacy Policy",
             subtitle: "Required for App Store release.",
-            onTap: () {
-  showInfoDialog(
-    context,
-    "Privacy Policy",
-    "East respects your stillness.\n\nWe do not collect personal information directly inside the app.\n\nThe app may use Apple services, Google AdMob, and purchase systems to support ads and Premium access.\n\nFor full details, please see the Privacy Policy linked on the App Store page.",
-  );
-},
+            onTap: openPrivacyPolicy,
           ),
+          
           const Divider(
             color: Colors.white24,
             thickness: 0.5,
@@ -198,14 +219,9 @@ if (!context.mounted) return;
             icon: Icons.mail_outline,
             title: "Contact",
             subtitle: "Support and feedback.",
-            onTap: () {
-  showInfoDialog(
-    context,
-    "Contact",
-    "For support, feedback, or purchase questions:\n\ndailywisdomeast@gmail.com",
-  );
-},
+            onTap: sendEmail,
           ),
+
           const Divider(
             color: Colors.white24,
             thickness: 0.5,
