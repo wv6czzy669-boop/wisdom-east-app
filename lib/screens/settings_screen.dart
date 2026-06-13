@@ -167,7 +167,6 @@ class SettingsScreen extends StatelessWidget {
   await purchaseService.restorePurchases();
 
 if (!context.mounted) return;
-
   showInfoDialog(
     context,
     "Restore Purchases",
@@ -187,7 +186,7 @@ if (!context.mounted) return;
   showInfoDialog(
     context,
     "Privacy Policy",
-    "Privacy Policy is available on the App Store listing and official East support page.",
+    "East respects your stillness.\n\nWe do not collect personal information directly inside the app.\n\nThe app may use Apple services, Google AdMob, and purchase systems to support ads and Premium access.\n\nFor full details, please see the Privacy Policy linked on the App Store page.",
   );
 },
           ),
@@ -203,7 +202,7 @@ if (!context.mounted) return;
   showInfoDialog(
     context,
     "Contact",
-    "For support or feedback, please use the App Store support link.",
+    "For support, feedback, or purchase questions:\n\ndailywisdomeast@gmail.com",
   );
 },
           ),

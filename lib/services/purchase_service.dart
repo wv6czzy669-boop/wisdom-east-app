@@ -51,24 +51,37 @@ class PurchaseService extends ChangeNotifier {
   notifyListeners();
 }
 
-  Future<void> buyKeeper() async {
-    if (keeperProduct == null || isLoading) return;
+  Future<bool> buyKeeper() async {
+  if (isLoading) return false;
 
-    isLoading = true;
-    notifyListeners();
-
-    final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
-    await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+  if (!isAvailable || keeperProduct == null) {
+    return false;
   }
+
+  isLoading = true;
+  notifyListeners();
+
+  final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
+  await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+
+  return true;
+}
 
   Future<void> restorePurchases() async {
-    if (isLoading) return;
+  if (isLoading) return;
 
-    isLoading = true;
-    notifyListeners();
+  isLoading = true;
+  notifyListeners();
 
-    await _iap.restorePurchases();
-  }
+  await _iap.restorePurchases();
+
+  Future.delayed(const Duration(seconds: 3), () {
+    if (isLoading) {
+      isLoading = false;
+      notifyListeners();
+    }
+  });
+}
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {

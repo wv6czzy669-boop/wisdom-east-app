@@ -25,13 +25,26 @@ class _PremiumScreenState extends State<PremiumScreen> {
   }
 
   Future<void> buyKeeper() async {
-    if (purchaseService.isLoading) return;
+  if (purchaseService.isLoading) return;
 
-    await purchaseService.buyKeeper();
+  final started = await purchaseService.buyKeeper();
 
-    if (!mounted) return;
-    setState(() {});
+  if (!mounted) return;
+
+  if (!started) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF111111),
+        content: Text(
+          "Purchase is not ready yet. Please try again shortly.",
+          style: premiumStyle(17),
+        ),
+      ),
+    );
   }
+
+  setState(() {});
+}
 
   Future<void> restorePurchases() async {
     if (purchaseService.isLoading) return;
