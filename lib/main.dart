@@ -514,7 +514,7 @@ class _HomeScreenState extends State<HomeScreen>
 );
         await revealFeelBesidePause();
       } else {
-        var future = Future.delayed(
+        Future.delayed(
   const Duration(milliseconds: 1100),
   () => playHeartSound(),
 );
