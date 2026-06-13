@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../main.dart' show purchaseService;
 
 class PremiumScreen extends StatelessWidget {
   const PremiumScreen({super.key});
@@ -15,18 +16,6 @@ class PremiumScreen extends StatelessWidget {
       fontFamily: GoogleFonts.cormorantGaramond().fontFamily,
       height: 1.32,
       letterSpacing: 0.45,
-    );
-  }
-
-  void showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF111111),
-        content: Text(
-          "Apple In-App Purchase will be connected before launch.",
-          style: premiumStyle(17),
-        ),
-      ),
     );
   }
 
@@ -75,13 +64,13 @@ class PremiumScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 34),
                   Text(
-                    "∞ Unlimited Wisdom",
+                    "Unlimited Wisdom",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    "∞ Unlimited Favorites",
+                    "Unlimited Favorites",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
@@ -100,15 +89,12 @@ class PremiumScreen extends StatelessWidget {
                       color: Colors.white60,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "CA\$1.99",
-                    textAlign: TextAlign.center,
-                    style: premiumStyle(27),
-                  ),
-                  const SizedBox(height: 38),
+                  
+                  const SizedBox(height: 52),
                   GestureDetector(
-                    onTap: () => showComingSoon(context),
+  onTap: () async {
+    await purchaseService.buyKeeper();
+  },
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 18),
@@ -129,7 +115,9 @@ class PremiumScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   GestureDetector(
-                    onTap: () => showComingSoon(context),
+                    onTap: () async {
+                      await purchaseService.restorePurchases();
+                    },
                     child: Text(
                       "Restore Purchases",
                       style: premiumStyle(

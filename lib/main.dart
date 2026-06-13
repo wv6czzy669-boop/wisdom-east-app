@@ -14,6 +14,9 @@ import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'data/wisdoms.dart';
 import 'screens/premium_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/purchase_service.dart';
+
+final PurchaseService purchaseService = PurchaseService();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,10 +31,12 @@ Future<void> main() async {
     }
   }
 
-  await MobileAds.instance.initialize();
-  runApp(const MyApp());
-}
+   await MobileAds.instance.initialize();
+  await purchaseService.init();
 
+ runApp(const MyApp());
+}
+ 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
