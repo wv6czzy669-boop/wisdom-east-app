@@ -123,7 +123,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int screenStep = 0;
 
   String currentText = "East";
@@ -203,6 +203,8 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addObserver(this);
+
     pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 5200),
@@ -234,11 +236,27 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     stopCountdownTimer();
     pulseController.dispose();
     player.dispose();
     rewardedAd?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      player.stop();
+      stopCountdownTimer();
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed) {
+      startCountdownTimer();
+      updateNextWisdomMessage();
+    }
   }
 
   bool get onPauseScreen => screenStep == 1;
