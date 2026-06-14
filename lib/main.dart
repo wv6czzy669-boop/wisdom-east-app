@@ -303,6 +303,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> playRevealSound() async {
     try {
+      await player.stop();
       await player.play(
         AssetSource('sounds/reveal.mp3'),
         volume: 0.38,
