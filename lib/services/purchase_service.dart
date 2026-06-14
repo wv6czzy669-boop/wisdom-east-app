@@ -19,18 +19,23 @@ class PurchaseService extends ChangeNotifier {
 
   ProductDetails? keeperProduct;
 
+  void safeNotifyListeners() {
+  if (_disposed) return;
+  notifyListeners();
+}
+
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     if (_disposed) return;
 
     isPremium = prefs.getBool(_premiumKey) ?? false;
-    notifyListeners();
+safeNotifyListeners();
 
     isAvailable = await _iap.isAvailable();
     if (_disposed) return;
 
     if (!isAvailable) {
-      notifyListeners();
+      safeNotifyListeners();
       return;
     }
 
@@ -40,7 +45,7 @@ class PurchaseService extends ChangeNotifier {
       _handlePurchases,
       onError: (_) {
         isLoading = false;
-        notifyListeners();
+        safeNotifyListeners();
       },
     );
 
@@ -56,7 +61,7 @@ class PurchaseService extends ChangeNotifier {
       keeperProduct = response.productDetails.first;
     }
 
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   Future<bool> buyKeeper() async {
@@ -67,14 +72,14 @@ class PurchaseService extends ChangeNotifier {
     }
 
     isLoading = true;
-    notifyListeners();
+    safeNotifyListeners();
 
     final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
     try {
       return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
     } catch (_) {
       isLoading = false;
-      notifyListeners();
+      safeNotifyListeners();
       return false;
     }
   }
@@ -83,20 +88,20 @@ class PurchaseService extends ChangeNotifier {
     if (isLoading) return;
 
     isLoading = true;
-    notifyListeners();
+    safeNotifyListeners();
 
     try {
       await _iap.restorePurchases();
     } catch (_) {
       isLoading = false;
-      notifyListeners();
+      safeNotifyListeners();
       return;
     }
 
     Future.delayed(const Duration(seconds: 8), () {
       if (!_disposed && isLoading) {
         isLoading = false;
-        notifyListeners();
+        safeNotifyListeners();
       }
     });
   }
@@ -112,7 +117,7 @@ class PurchaseService extends ChangeNotifier {
         if (purchase.status == PurchaseStatus.error ||
             purchase.status == PurchaseStatus.canceled) {
           isLoading = false;
-          notifyListeners();
+          safeNotifyListeners();
         }
       }
 
@@ -122,7 +127,7 @@ class PurchaseService extends ChangeNotifier {
     }
 
     isLoading = false;
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   Future<void> _unlockPremium() async {
@@ -131,7 +136,7 @@ class PurchaseService extends ChangeNotifier {
 
     isPremium = true;
     isLoading = false;
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   @override
