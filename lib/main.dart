@@ -751,9 +751,17 @@ setState(() {
   }
 
   Map<String, dynamic> chooseSmartRandomWisdom() {
-    final random = Random();
+  final random = Random();
 
-    final candidates = wisdoms.where((wisdom) {
+  if (wisdoms.isEmpty) {
+    return {
+      "text": "Silence is still available.",
+      "tags": ["silence"],
+      "tone": "calm",
+    };
+  }
+
+  final candidates = wisdoms.where((wisdom) {
       final text = wisdom["text"] as String;
       return !recentWisdoms.contains(text);
     }).toList();
