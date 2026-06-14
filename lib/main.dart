@@ -141,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool adReturnInProgress = false;
   bool transitionInProgress = false;
   bool _transitionLock = false;
+  int flowSessionId = 0;
   bool introFinished = false;
 
   List<FavoriteItem> favorites = [];
@@ -247,9 +248,11 @@ class _HomeScreenState extends State<HomeScreen>
   bool get onPostAdBlackScreen => screenStep == 5;
 
   Future<void> runOpeningIntro() async {
+    final currentFlow = ++flowSessionId;
+
     await Future.delayed(const Duration(milliseconds: 420));
 
-    if (!mounted) return;
+    if (!mounted || currentFlow != flowSessionId) return;
 
     setState(() {
       textOpacity = 1.0;
@@ -259,7 +262,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 900));
 
-    if (!mounted) return;
+    if (!mounted || currentFlow != flowSessionId) return;
 
     setState(() {
       openingSubtitleOpacity = 1.0;
@@ -267,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 500));
 
-    if (!mounted) return;
+    if (!mounted || currentFlow != flowSessionId) return;
 
     setState(() {
       introFinished = true;
@@ -928,6 +931,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     transitionInProgress = true;
 
+    final currentFlow = ++flowSessionId;
+
     HapticFeedback.lightImpact();
 
     setState(() {
@@ -943,7 +948,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 880));
 
-    if (!mounted) {
+    if (!mounted || currentFlow != flowSessionId) {
       transitionInProgress = false;
       _transitionLock = false;
       return;
@@ -961,7 +966,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 260));
 
-    if (!mounted) {
+    if (!mounted || currentFlow != flowSessionId) {
       transitionInProgress = false;
       _transitionLock = false;
       return;
@@ -975,7 +980,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 280));
 
-    if (!mounted) {
+    if (!mounted || currentFlow != flowSessionId) {
       transitionInProgress = false;
       _transitionLock = false;
       return;
@@ -986,7 +991,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 900));
 
-    if (!mounted) {
+    if (!mounted || currentFlow != flowSessionId) {
       transitionInProgress = false;
       _transitionLock = false;
       return;
@@ -999,7 +1004,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     await Future.delayed(const Duration(milliseconds: 520));
 
-    if (!mounted) {
+    if (!mounted || currentFlow != flowSessionId) {
       transitionInProgress = false;
       _transitionLock = false;
       return;
