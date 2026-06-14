@@ -7,7 +7,6 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 
@@ -58,9 +57,9 @@ class WisdomApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF030303),
-        textTheme: GoogleFonts.cormorantGaramondTextTheme(
-          ThemeData.dark().textTheme,
-        ),
+        textTheme: ThemeData.dark().textTheme.apply(
+              fontFamily: 'CormorantGaramond',
+            ),
       ),
       home: const HomeScreen(),
     );
@@ -156,6 +155,13 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? countdownTimer;
 
   final AudioPlayer player = AudioPlayer();
+
+  SharedPreferences? cachedPrefs;
+
+  Future<SharedPreferences> getPrefs() async {
+    cachedPrefs ??= await SharedPreferences.getInstance();
+    return cachedPrefs!;
+  }
 
   RewardedAd? rewardedAd;
   bool isRewardedAdReady = false;
@@ -258,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadPremiumStatus() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
 
     if (!mounted) return;
 
@@ -382,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> saveDailyArchive(String text) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
 
     final archive = prefs.getStringList("daily_wisdom_archive") ?? [];
     final entry = "${formattedToday()}|||$text";
@@ -402,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> prepareRewardedWisdom() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
 
     final selectedWisdom = chooseSmartRandomWisdom();
     final selectedText = selectedWisdom["text"] as String;
@@ -684,7 +690,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> updateNextWisdomMessage() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
     final savedTime = prefs.getInt("wisdom_unlock_time_ms");
 
     if (savedTime == null) {
@@ -730,7 +736,7 @@ class _HomeScreenState extends State<HomeScreen>
   Future<String> getLockedOrNewWisdom({
     bool bypassLock = false,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
 
     final savedText = prefs.getString("daily_wisdom_text");
     final unlockTimeMs = prefs.getInt("wisdom_unlock_time_ms");
@@ -1112,7 +1118,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> saveFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
 
     final encodedFavorites = favorites.map((item) => item.encode()).toList();
 
@@ -1123,7 +1129,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await getPrefs();
 
     final saved = prefs.getStringList('favorites') ?? [];
 
@@ -1160,7 +1166,7 @@ class _HomeScreenState extends State<HomeScreen>
       color: color,
       fontSize: size,
       fontWeight: FontWeight.w300,
-      fontFamily: GoogleFonts.cormorantGaramond().fontFamily,
+      fontFamily: 'CormorantGaramond',
       height: 1.28,
       letterSpacing: 0.5,
       shadows: glow
@@ -1539,7 +1545,7 @@ class FavoritesScreen extends StatelessWidget {
       color: const Color(0xFFF4F0E8),
       fontSize: size,
       fontWeight: FontWeight.w300,
-      fontFamily: GoogleFonts.cormorantGaramond().fontFamily,
+      fontFamily: 'CormorantGaramond',
       height: 1.35,
       letterSpacing: 0.3,
     );
@@ -1550,7 +1556,7 @@ class FavoritesScreen extends StatelessWidget {
       color: Colors.white54,
       fontSize: 15,
       fontWeight: FontWeight.w300,
-      fontFamily: GoogleFonts.cormorantGaramond().fontFamily,
+      fontFamily: 'CormorantGaramond',
       letterSpacing: 0.4,
     );
   }
@@ -1631,31 +1637,45 @@ class GrainPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final random = Random(7);
+    final thinPoints = <Offset>[];
+    final thickPoints = <Offset>[];
 
     for (int i = 0; i < 500; i++) {
       final baseX = random.nextDouble() * size.width;
       final baseY = random.nextDouble() * size.height;
 
-      final shimmer = 0.65 + (sin(movement * pi * 2 + i * 0.13) * 0.35);
-
-      final paint = Paint()
-        ..color = Colors.white.withValues(alpha: intensity * shimmer)
-        ..strokeWidth = random.nextDouble() > 0.72 ? 0.85 : 0.55;
-
       final driftX = sin(movement * pi * 2 + i) * 0.85;
       final driftY = cos(movement * pi * 2 + i * 0.71) * 0.85;
 
-      canvas.drawPoints(
-        PointMode.points,
-        [
-          Offset(
-            baseX + driftX,
-            baseY + driftY,
-          ),
-        ],
-        paint,
+      final point = Offset(
+        baseX + driftX,
+        baseY + driftY,
       );
+
+      if (random.nextDouble() > 0.72) {
+        thickPoints.add(point);
+      } else {
+        thinPoints.add(point);
+      }
     }
+
+    final alpha = intensity * 0.72;
+
+    canvas.drawPoints(
+      PointMode.points,
+      thinPoints,
+      Paint()
+        ..color = Colors.white.withValues(alpha: alpha)
+        ..strokeWidth = 0.55,
+    );
+
+    canvas.drawPoints(
+      PointMode.points,
+      thickPoints,
+      Paint()
+        ..color = Colors.white.withValues(alpha: alpha)
+        ..strokeWidth = 0.85,
+    );
   }
 
   @override

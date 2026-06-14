@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../main.dart' show purchaseService;
 
 class PremiumScreen extends StatefulWidget {
@@ -36,7 +35,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       color: color,
       fontSize: size,
       fontWeight: FontWeight.w300,
-      fontFamily: GoogleFonts.cormorantGaramond().fontFamily,
+      fontFamily: 'CormorantGaramond',
       height: 1.32,
       letterSpacing: 0.45,
     );
@@ -61,10 +60,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
         ),
       );
     }
-
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   Future<void> restorePurchases() async {
@@ -73,8 +68,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
     await purchaseService.restorePurchases();
 
     if (!mounted) return;
-
-    setState(() {});
 
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(

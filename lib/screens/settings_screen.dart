@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart' show purchaseService;
@@ -16,7 +15,7 @@ class SettingsScreen extends StatelessWidget {
       color: color,
       fontSize: size,
       fontWeight: FontWeight.w300,
-      fontFamily: GoogleFonts.cormorantGaramond().fontFamily,
+      fontFamily: 'CormorantGaramond',
       height: 1.35,
       letterSpacing: 0.4,
     );
@@ -71,64 +70,64 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void showInfoDialog(
-  BuildContext context,
-  String title,
-  String message,
-) {
-  showDialog(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        backgroundColor: const Color(0xFF111111),
-        title: Text(
-          title,
-          style: eastStyle(21),
-        ),
-        content: Text(
-          message,
-          style: eastStyle(
-            17,
-            color: Colors.white70,
+    BuildContext context,
+    String title,
+    String message,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF111111),
+          title: Text(
+            title,
+            style: eastStyle(21),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              "Close",
-              style: eastStyle(16),
+          content: Text(
+            message,
+            style: eastStyle(
+              17,
+              color: Colors.white70,
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                "Close",
+                style: eastStyle(16),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> openPrivacyPolicy() async {
+    final uri = Uri.parse(
+      'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
+    );
+
+    try {
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
       );
-    },
-  );
-}
+    } catch (_) {}
+  }
 
-Future<void> openPrivacyPolicy() async {
-  final uri = Uri.parse(
-    'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
-  );
+  Future<void> sendEmail() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'dailywisdomeast@gmail.com',
+      query: 'subject=East Support',
+    );
 
- try {
-  await launchUrl(
-    uri,
-    mode: LaunchMode.externalApplication,
-  );
-} catch (_) {}
-}
-
-Future<void> sendEmail() async {
-  final uri = Uri(
-    scheme: 'mailto',
-    path: 'dailywisdomeast@gmail.com',
-    query: 'subject=East Support',
-  );
-
-  try {
-  await launchUrl(uri);
-} catch (_) {}
-}
+    try {
+      await launchUrl(uri);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,20 +167,19 @@ Future<void> sendEmail() async {
             color: Colors.white24,
             thickness: 0.5,
           ),
-          
           settingsItem(
-  icon: Icons.workspace_premium_outlined,
-  title: "Premium",
-  subtitle: "Unlimited reveals, unlimited favorites, and no ads.",
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PremiumScreen(),
-      ),
-    );
-  },
-),
+            icon: Icons.workspace_premium_outlined,
+            title: "Premium",
+            subtitle: "Unlimited reveals, unlimited favorites, and no ads.",
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PremiumScreen(),
+                ),
+              );
+            },
+          ),
           const Divider(
             color: Colors.white24,
             thickness: 0.5,
@@ -191,17 +189,17 @@ Future<void> sendEmail() async {
             title: "Restore Purchases",
             subtitle: "Restore your Premium access on this device.",
             onTap: () async {
-  await purchaseService.restorePurchases();
+              await purchaseService.restorePurchases();
 
-if (!context.mounted) return;
-  showInfoDialog(
-    context,
-    "Restore Purchases",
-    purchaseService.isPremium
-    ? "Your Premium access has been restored."
-    : "No previous Premium purchase was found.",
-  );
-},
+              if (!context.mounted) return;
+              showInfoDialog(
+                context,
+                "Restore Purchases",
+                purchaseService.isPremium
+                    ? "Your Premium access has been restored."
+                    : "No previous Premium purchase was found.",
+              );
+            },
           ),
           const Divider(
             color: Colors.white24,
@@ -212,12 +210,11 @@ if (!context.mounted) return;
             title: "Privacy Policy",
             subtitle: "Required for App Store release.",
             onTap: () async {
-  await openPrivacyPolicy();
+              await openPrivacyPolicy();
 
-  if (!context.mounted) return;
-},
+              if (!context.mounted) return;
+            },
           ),
-          
           const Divider(
             color: Colors.white24,
             thickness: 0.5,
@@ -228,7 +225,6 @@ if (!context.mounted) return;
             subtitle: "Support and feedback.",
             onTap: sendEmail,
           ),
-
           const Divider(
             color: Colors.white24,
             thickness: 0.5,
