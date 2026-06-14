@@ -198,6 +198,8 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     loadInitialState().then((_) {
+      if (!mounted) return;
+
       if (!isPremium) {
         Future.delayed(const Duration(seconds: 2), () {
           if (!mounted) return;
@@ -487,20 +489,30 @@ class _HomeScreenState extends State<HomeScreen>
         adShowInProgress = false;
         ad.dispose();
 
+        if (!mounted) return;
+
         if (adRewardEarned && !isPremium) {
           await prepareRewardedWisdom();
+          if (!mounted) return;
         } else if (!adRewardEarned) {
           showEastSnack("The wisdom opens after the ad is completed.");
         }
 
         await returnToBlackAfterAd();
+        if (!mounted) return;
+
         loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
         adShowInProgress = false;
         ad.dispose();
+
+        if (!mounted) return;
+
         showEastSnack("Ad could not open. Please try again.");
         await returnToBlackAfterAd();
+        if (!mounted) return;
+
         loadRewardedAd();
       },
     );
