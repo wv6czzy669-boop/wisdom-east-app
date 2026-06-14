@@ -88,7 +88,7 @@ await _subscription?.cancel();
   return;
 }
 
-  Future.delayed(const Duration(seconds: 3), () {
+  Future.delayed(const Duration(seconds: 8), () {
   if (!_disposed && isLoading) {
     isLoading = false;
     notifyListeners();

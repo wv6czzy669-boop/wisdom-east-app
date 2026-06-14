@@ -10,6 +10,24 @@ class PremiumScreen extends StatefulWidget {
 }
 
 class _PremiumScreenState extends State<PremiumScreen> {
+  @override
+  void initState() {
+    super.initState();
+    purchaseService.addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    purchaseService.removeListener(_refresh);
+    super.dispose();
+  }
+
   TextStyle premiumStyle(
     double size, {
     Color color = const Color(0xFFF4F0E8),
@@ -25,29 +43,29 @@ class _PremiumScreenState extends State<PremiumScreen> {
   }
 
   Future<void> buyKeeper() async {
-  if (purchaseService.isLoading) return;
+    if (purchaseService.isLoading) return;
 
-  final started = await purchaseService.buyKeeper();
+    final started = await purchaseService.buyKeeper();
 
-  if (!mounted) return;
+    if (!mounted) return;
 
-  if (!started) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF111111),
-        content: Text(
-          "Purchase is not ready yet. Please try again shortly.",
-          style: premiumStyle(17),
+    if (!started) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF111111),
+          content: Text(
+            "Purchase is not ready yet. Please try again shortly.",
+            style: premiumStyle(17),
+          ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  if (mounted) {
-  setState(() {});
-}
-}
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   Future<void> restorePurchases() async {
     if (purchaseService.isLoading) return;
@@ -56,20 +74,20 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
     if (!mounted) return;
 
-setState(() {});
+    setState(() {});
 
-ScaffoldMessenger.of(context).clearSnackBars();
-ScaffoldMessenger.of(context).showSnackBar(
-  SnackBar(
-    backgroundColor: const Color(0xFF111111),
-    content: Text(
-      purchaseService.isPremium
-          ? "Purchases restored."
-          : "No previous purchase was found.",
-      style: premiumStyle(17),
-    ),
-  ),
-);
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF111111),
+        content: Text(
+          purchaseService.isPremium
+              ? "Purchases restored."
+              : "No previous purchase was found.",
+          style: premiumStyle(17),
+        ),
+      ),
+    );
   }
 
   @override
@@ -113,25 +131,19 @@ ScaffoldMessenger.of(context).showSnackBar(
                 children: [
                   const Spacer(),
                   Text(
-                    isPremium
-                        ? "Premium Active"
-                        : "Become a Keeper of East",
+                    isPremium ? "Premium Active" : "Become a Keeper of East",
                     textAlign: TextAlign.center,
                     style: premiumStyle(36),
                   ),
                   const SizedBox(height: 34),
                   Text(
-                    isPremium
-                        ? "Welcome, Keeper of East."
-                        : "Unlimited Wisdom",
+                    isPremium ? "Welcome, Keeper of East." : "Unlimited Wisdom",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    isPremium
-                        ? "The circle is open."
-                        : "Unlimited Favorites",
+                    isPremium ? "The circle is open." : "Unlimited Favorites",
                     textAlign: TextAlign.center,
                     style: premiumStyle(24),
                   ),
@@ -143,7 +155,9 @@ ScaffoldMessenger.of(context).showSnackBar(
                   ),
                   const SizedBox(height: 36),
                   Text(
-                    isPremium ? "Thank you for supporting East." : "One-time offering",
+                    isPremium
+                        ? "Thank you for supporting East."
+                        : "One-time offering",
                     textAlign: TextAlign.center,
                     style: premiumStyle(
                       19,

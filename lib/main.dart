@@ -22,8 +22,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isIOS) {
-    final status =
-        await AppTrackingTransparency.trackingAuthorizationStatus;
+    final status = await AppTrackingTransparency.trackingAuthorizationStatus;
 
     if (status == TrackingStatus.notDetermined) {
       await Future.delayed(const Duration(milliseconds: 700));
@@ -31,12 +30,12 @@ Future<void> main() async {
     }
   }
 
-   await MobileAds.instance.initialize();
+  await MobileAds.instance.initialize();
   await purchaseService.init();
 
- runApp(const MyApp());
+  runApp(const MyApp());
 }
- 
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -191,10 +190,10 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     loadInitialState().then((_) {
-  if (!isPremium) {
-    loadRewardedAd();
-  }
-});
+      if (!isPremium) {
+        loadRewardedAd();
+      }
+    });
 
     countdownTimer = Timer.periodic(
       const Duration(minutes: 1),
@@ -254,23 +253,23 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadPremiumStatus() async {
-  final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
-  if (!mounted) return;
+    if (!mounted) return;
 
-  final premiumValue = prefs.getBool("is_premium") ?? false;
+    final premiumValue = prefs.getBool("is_premium") ?? false;
 
-  setState(() {
-    isPremium = premiumValue;
-  });
+    setState(() {
+      isPremium = premiumValue;
+    });
 
-  if (premiumValue) {
-    rewardedAd?.dispose();
-    rewardedAd = null;
-    isRewardedAdReady = false;
-    isLoadingRewardedAd = false;
+    if (premiumValue) {
+      rewardedAd?.dispose();
+      rewardedAd = null;
+      isRewardedAdReady = false;
+      isLoadingRewardedAd = false;
+    }
   }
-}
 
   Future<void> playRevealSound() async {
     try {
@@ -328,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void loadRewardedAd() {
-  if (isPremium || isLoadingRewardedAd || isRewardedAdReady) return;
+    if (isPremium || isLoadingRewardedAd || isRewardedAdReady) return;
 
     isLoadingRewardedAd = true;
 
@@ -340,11 +339,11 @@ class _HomeScreenState extends State<HomeScreen>
           rewardedAd = ad;
 
           if (!mounted) {
-  ad.dispose();
-  isLoadingRewardedAd = false;
-  isRewardedAdReady = false;
-  return;
-}
+            ad.dispose();
+            isLoadingRewardedAd = false;
+            isRewardedAdReady = false;
+            return;
+          }
 
           setState(() {
             isLoadingRewardedAd = false;
@@ -366,12 +365,12 @@ class _HomeScreenState extends State<HomeScreen>
           });
 
           Future.delayed(const Duration(seconds: 8), () {
-  if (!mounted) return;
-  if (isPremium) return;
-  if (isLoadingRewardedAd || isRewardedAdReady) return;
+            if (!mounted) return;
+            if (isPremium) return;
+            if (isLoadingRewardedAd || isRewardedAdReady) return;
 
-  loadRewardedAd();
-});
+            loadRewardedAd();
+          });
         },
       ),
     );
@@ -436,9 +435,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void showRewardedAdThenReveal() {
-  if (adShowInProgress) return;
+    if (adShowInProgress) return;
 
-  if (isPremium) {
+    if (isPremium) {
       revealWisdom(bypassLock: true);
       return;
     }
@@ -455,34 +454,40 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     adRewardEarned = false;
-adShowInProgress = true;
+    adShowInProgress = true;
 
-final adToShow = rewardedAd;
+    final adToShow = rewardedAd;
     rewardedAd = null;
 
     if (!mounted) return;
 
-setState(() {
-  isRewardedAdReady = false;
-});
+    if (adToShow == null) {
+      adShowInProgress = false;
+      loadRewardedAd();
+      return;
+    }
 
-    adToShow!.fullScreenContentCallback = FullScreenContentCallback(
+    setState(() {
+      isRewardedAdReady = false;
+    });
+
+    adToShow.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) async {
-  adShowInProgress = false;
-  ad.dispose();
+        adShowInProgress = false;
+        ad.dispose();
 
         if (adRewardEarned && !isPremium) {
-  await prepareRewardedWisdom();
-} else if (!adRewardEarned) {
-  showEastSnack("The wisdom opens after the ad is completed.");
-}
+          await prepareRewardedWisdom();
+        } else if (!adRewardEarned) {
+          showEastSnack("The wisdom opens after the ad is completed.");
+        }
 
         await returnToBlackAfterAd();
         loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
-  adShowInProgress = false;
-  ad.dispose();
+        adShowInProgress = false;
+        ad.dispose();
         showEastSnack("Ad could not open. Please try again.");
         await returnToBlackAfterAd();
         loadRewardedAd();
@@ -502,9 +507,12 @@ setState(() {
     if (screenStep == 5) {
       HapticFeedback.selectionClick();
       Future.delayed(
-  const Duration(milliseconds: 1200),
-  () => playPauseSound(),
-);
+        const Duration(milliseconds: 1200),
+        () {
+          if (!mounted) return;
+          playPauseSound();
+        },
+      );
 
       await transitionToText(
         "Pause.",
@@ -517,9 +525,12 @@ setState(() {
     if (screenStep == 0) {
       HapticFeedback.selectionClick();
       Future.delayed(
-  const Duration(milliseconds: 1200),
-  () => playPauseSound(),
-);
+        const Duration(milliseconds: 1200),
+        () {
+          if (!mounted) return;
+          playPauseSound();
+        },
+      );
 
       await transitionToText(
         "Pause.",
@@ -534,15 +545,21 @@ setState(() {
 
       if (pauseFeelOpacity < 1.0) {
         Future.delayed(
-  const Duration(milliseconds: 200),
-  () => playFeelSound(),
-);
+          const Duration(milliseconds: 200),
+          () {
+            if (!mounted) return;
+            playFeelSound();
+          },
+        );
         await revealFeelBesidePause();
       } else {
         Future.delayed(
-  const Duration(milliseconds: 1100),
-  () => playHeartSound(),
-);
+          const Duration(milliseconds: 1100),
+          () {
+            if (!mounted) return;
+            playHeartSound();
+          },
+        );
         await transitionToText(
           "Ask from your heart.",
           nextStep: 2,
@@ -751,17 +768,17 @@ setState(() {
   }
 
   Map<String, dynamic> chooseSmartRandomWisdom() {
-  final random = Random();
+    final random = Random();
 
-  if (wisdoms.isEmpty) {
-    return {
-      "text": "Silence is still available.",
-      "tags": ["silence"],
-      "tone": "calm",
-    };
-  }
+    if (wisdoms.isEmpty) {
+      return {
+        "text": "Silence is still available.",
+        "tags": ["silence"],
+        "tone": "calm",
+      };
+    }
 
-  final candidates = wisdoms.where((wisdom) {
+    final candidates = wisdoms.where((wisdom) {
       final text = wisdom["text"] as String;
       return !recentWisdoms.contains(text);
     }).toList();
@@ -811,9 +828,8 @@ setState(() {
     final topPoolSize = min(12, scoredCandidates.length);
     final topPool = scoredCandidates.take(topPoolSize).toList();
 
-    final selected =
-        topPool[random.nextInt(topPool.length)]["wisdom"]
-            as Map<String, dynamic>;
+    final selected = topPool[random.nextInt(topPool.length)]["wisdom"]
+        as Map<String, dynamic>;
 
     rememberWisdomPattern(selected);
 
@@ -956,28 +972,28 @@ setState(() {
     HapticFeedback.selectionClick();
 
     Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => const PremiumScreen(),
-  ),
-).then((_) async {
-  if (!mounted) return;
-  await loadPremiumStatus();
-});
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PremiumScreen(),
+      ),
+    ).then((_) async {
+      if (!mounted) return;
+      await loadPremiumStatus();
+    });
   }
 
   void openSettings() {
     HapticFeedback.selectionClick();
 
     Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => const SettingsScreen(),
-  ),
-).then((_) async {
-  if (!mounted) return;
-  await loadPremiumStatus();
-});
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
+      ),
+    ).then((_) async {
+      if (!mounted) return;
+      await loadPremiumStatus();
+    });
   }
 
   void showRevealAnotherOptions() {
@@ -1087,14 +1103,13 @@ setState(() {
     }
 
     setState(() {});
-await saveFavorites();
+    await saveFavorites();
   }
 
   Future<void> saveFavorites() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final encodedFavorites =
-        favorites.map((item) => item.encode()).toList();
+    final encodedFavorites = favorites.map((item) => item.encode()).toList();
 
     await prefs.setStringList(
       'favorites',
@@ -1293,10 +1308,10 @@ await saveFavorites();
                                 animation: pulseAnimation,
                                 builder: (context, child) {
                                   return Opacity(
-                                    opacity: onRevealScreen &&
-                                            !adReturnInProgress
-                                        ? pulseAnimation.value
-                                        : 1.0,
+                                    opacity:
+                                        onRevealScreen && !adReturnInProgress
+                                            ? pulseAnimation.value
+                                            : 1.0,
                                     child: child,
                                   );
                                 },
