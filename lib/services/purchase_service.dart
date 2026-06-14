@@ -21,17 +21,20 @@ class PurchaseService extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_disposed) return;
+
     isPremium = prefs.getBool(_premiumKey) ?? false;
     notifyListeners();
 
     isAvailable = await _iap.isAvailable();
+    if (_disposed) return;
 
     if (!isAvailable) {
       notifyListeners();
       return;
     }
 
-await _subscription?.cancel();
+    await _subscription?.cancel();
 
     _subscription = _iap.purchaseStream.listen(
       _handlePurchases,
@@ -45,56 +48,58 @@ await _subscription?.cancel();
   }
 
   Future<void> _loadProducts() async {
-  final response = await _iap.queryProductDetails({keeperProductId});
+    final response = await _iap.queryProductDetails({keeperProductId});
 
-  if (response.productDetails.isNotEmpty) {
-    keeperProduct = response.productDetails.first;
-  }
+    if (_disposed) return;
 
-  notifyListeners();
-}
+    if (response.productDetails.isNotEmpty) {
+      keeperProduct = response.productDetails.first;
+    }
 
-  Future<bool> buyKeeper() async {
-  if (isLoading) return false;
-
-  if (!isAvailable || keeperProduct == null) {
-    return false;
-  }
-
-  isLoading = true;
-  notifyListeners();
-
-  final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
-  try {
-  return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
-} catch (_) {
-  isLoading = false;
-  notifyListeners();
-  return false;
-}
-}
-
-  Future<void> restorePurchases() async {
-  if (isLoading) return;
-
-  isLoading = true;
-  notifyListeners();
-
-  try {
-  await _iap.restorePurchases();
-} catch (_) {
-  isLoading = false;
-  notifyListeners();
-  return;
-}
-
-  Future.delayed(const Duration(seconds: 8), () {
-  if (!_disposed && isLoading) {
-    isLoading = false;
     notifyListeners();
   }
-});
-}
+
+  Future<bool> buyKeeper() async {
+    if (isLoading) return false;
+
+    if (!isAvailable || keeperProduct == null) {
+      return false;
+    }
+
+    isLoading = true;
+    notifyListeners();
+
+    final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
+    try {
+      return await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+    } catch (_) {
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> restorePurchases() async {
+    if (isLoading) return;
+
+    isLoading = true;
+    notifyListeners();
+
+    try {
+      await _iap.restorePurchases();
+    } catch (_) {
+      isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    Future.delayed(const Duration(seconds: 8), () {
+      if (!_disposed && isLoading) {
+        isLoading = false;
+        notifyListeners();
+      }
+    });
+  }
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
@@ -130,9 +135,9 @@ await _subscription?.cancel();
   }
 
   @override
-void dispose() {
-  _disposed = true;
-  _subscription?.cancel();
-  super.dispose();
-}
+  void dispose() {
+    _disposed = true;
+    _subscription?.cancel();
+    super.dispose();
+  }
 }
