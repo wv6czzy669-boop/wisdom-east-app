@@ -157,6 +157,24 @@ class _HomeScreenState extends State<HomeScreen>
 
   final AudioPlayer player = AudioPlayer();
 
+  void startCountdownTimer() {
+    if (countdownTimer?.isActive ?? false) return;
+
+    countdownTimer?.cancel();
+    countdownTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) {
+        if (!mounted) return;
+        updateNextWisdomMessage();
+      },
+    );
+  }
+
+  void stopCountdownTimer() {
+    countdownTimer?.cancel();
+    countdownTimer = null;
+  }
+
   SharedPreferences? cachedPrefs;
 
   Future<SharedPreferences> getPrefs() async {
@@ -214,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
-    countdownTimer?.cancel();
+    stopCountdownTimer();
     pulseController.dispose();
     player.dispose();
     rewardedAd?.dispose();
@@ -254,10 +272,7 @@ class _HomeScreenState extends State<HomeScreen>
       introFinished = true;
     });
 
-    countdownTimer ??= Timer.periodic(
-      const Duration(minutes: 1),
-      (_) => updateNextWisdomMessage(),
-    );
+    startCountdownTimer();
   }
 
   Future<void> loadInitialState() async {
