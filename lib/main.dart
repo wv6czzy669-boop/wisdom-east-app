@@ -473,6 +473,13 @@ class _HomeScreenState extends State<HomeScreen>
     await updateNextWisdomMessage();
   }
 
+  void resetRewardedAdState() {
+    adShowInProgress = false;
+    adRewardEarned = false;
+    isRewardedAdReady = false;
+    rewardedAd = null;
+  }
+
   Future<void> returnToBlackAfterAd() async {
     if (!mounted) return;
 
@@ -521,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
 
     if (adToShow == null) {
-      adShowInProgress = false;
+      resetRewardedAdState();
       loadRewardedAd();
       return;
     }
@@ -537,8 +544,8 @@ class _HomeScreenState extends State<HomeScreen>
           return;
         }
 
-        adShowInProgress = false;
         ad.dispose();
+        resetRewardedAdState();
 
         if (!mounted) return;
 
@@ -560,8 +567,8 @@ class _HomeScreenState extends State<HomeScreen>
           return;
         }
 
-        adShowInProgress = false;
         ad.dispose();
+        resetRewardedAdState();
 
         if (!mounted) return;
 
