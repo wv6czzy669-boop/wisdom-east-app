@@ -31,6 +31,8 @@ class PurchaseService extends ChangeNotifier {
       return;
     }
 
+await _subscription?.cancel();
+
     _subscription = _iap.purchaseStream.listen(
       _handlePurchases,
       onError: (_) {

@@ -110,10 +110,12 @@ Future<void> openPrivacyPolicy() async {
     'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
   );
 
+ try {
   await launchUrl(
     uri,
     mode: LaunchMode.externalApplication,
   );
+} catch (_) {}
 }
 
 Future<void> sendEmail() async {
@@ -123,7 +125,9 @@ Future<void> sendEmail() async {
     query: 'subject=East Support',
   );
 
+  try {
   await launchUrl(uri);
+} catch (_) {}
 }
 
   @override

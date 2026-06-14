@@ -32,6 +32,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
   if (!mounted) return;
 
   if (!started) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: const Color(0xFF111111),
@@ -57,6 +58,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
 setState(() {});
 
+ScaffoldMessenger.of(context).clearSnackBars();
 ScaffoldMessenger.of(context).showSnackBar(
   SnackBar(
     backgroundColor: const Color(0xFF111111),

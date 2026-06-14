@@ -160,6 +160,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool isRewardedAdReady = false;
   bool isLoadingRewardedAd = false;
   bool adRewardEarned = false;
+  bool adShowInProgress = false;
 
   static const String rewardedAdUnitId =
       'ca-app-pub-1367967256658706/4388775484';
@@ -365,7 +366,11 @@ class _HomeScreenState extends State<HomeScreen>
           });
 
           Future.delayed(const Duration(seconds: 8), () {
-  if (mounted && !isPremium) loadRewardedAd();
+  if (!mounted) return;
+  if (isPremium) return;
+  if (isLoadingRewardedAd || isRewardedAdReady) return;
+
+  loadRewardedAd();
 });
         },
       ),
@@ -431,7 +436,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void showRewardedAdThenReveal() {
-    if (isPremium) {
+  if (adShowInProgress) return;
+
+  if (isPremium) {
       revealWisdom(bypassLock: true);
       return;
     }
@@ -448,8 +455,9 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     adRewardEarned = false;
+adShowInProgress = true;
 
-    final adToShow = rewardedAd;
+final adToShow = rewardedAd;
     rewardedAd = null;
 
     if (!mounted) return;
@@ -460,7 +468,8 @@ setState(() {
 
     adToShow!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) async {
-        ad.dispose();
+  adShowInProgress = false;
+  ad.dispose();
 
         if (adRewardEarned && !isPremium) {
   await prepareRewardedWisdom();
@@ -472,7 +481,8 @@ setState(() {
         loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
-        ad.dispose();
+  adShowInProgress = false;
+  ad.dispose();
         showEastSnack("Ad could not open. Please try again.");
         await returnToBlackAfterAd();
         loadRewardedAd();
@@ -943,6 +953,7 @@ setState(() {
     builder: (context) => const PremiumScreen(),
   ),
 ).then((_) async {
+  if (!mounted) return;
   await loadPremiumStatus();
 });
   }
@@ -956,6 +967,7 @@ setState(() {
     builder: (context) => const SettingsScreen(),
   ),
 ).then((_) async {
+  if (!mounted) return;
   await loadPremiumStatus();
 });
   }
@@ -1067,7 +1079,7 @@ setState(() {
     }
 
     setState(() {});
-    saveFavorites();
+await saveFavorites();
   }
 
   Future<void> saveFavorites() async {
