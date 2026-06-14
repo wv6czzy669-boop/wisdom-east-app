@@ -21,19 +21,21 @@ final PurchaseService purchaseService = PurchaseService();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (Platform.isIOS) {
-    final status = await AppTrackingTransparency.trackingAuthorizationStatus;
-
-    if (status == TrackingStatus.notDetermined) {
-      await Future.delayed(const Duration(milliseconds: 700));
-      await AppTrackingTransparency.requestTrackingAuthorization();
-    }
-  }
-
-  await MobileAds.instance.initialize();
-  await purchaseService.init();
-
   runApp(const MyApp());
+
+  Future.microtask(() async {
+    if (Platform.isIOS) {
+      final status = await AppTrackingTransparency.trackingAuthorizationStatus;
+
+      if (status == TrackingStatus.notDetermined) {
+        await Future.delayed(const Duration(seconds: 2));
+        await AppTrackingTransparency.requestTrackingAuthorization();
+      }
+    }
+
+    MobileAds.instance.initialize();
+    purchaseService.init();
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -191,14 +193,12 @@ class _HomeScreenState extends State<HomeScreen>
 
     loadInitialState().then((_) {
       if (!isPremium) {
-        loadRewardedAd();
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!mounted) return;
+          loadRewardedAd();
+        });
       }
     });
-
-    countdownTimer = Timer.periodic(
-      const Duration(minutes: 1),
-      (_) => updateNextWisdomMessage(),
-    );
 
     runOpeningIntro();
   }
@@ -244,6 +244,11 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       introFinished = true;
     });
+
+    countdownTimer ??= Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => updateNextWisdomMessage(),
+    );
   }
 
   Future<void> loadInitialState() async {
@@ -1212,18 +1217,20 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             Positioned.fill(
               child: IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: pulseController,
-                  builder: (context, child) {
-                    final pulse = pulseController.value;
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: pulseController,
+                    builder: (context, child) {
+                      final pulse = pulseController.value;
 
-                    return CustomPaint(
-                      painter: GrainPainter(
-                        movement: pulse,
-                        intensity: wisdomRevealed ? 0.025 : 0.019,
-                      ),
-                    );
-                  },
+                      return CustomPaint(
+                        painter: GrainPainter(
+                          movement: pulse,
+                          intensity: wisdomRevealed ? 0.025 : 0.019,
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -1625,7 +1632,7 @@ class GrainPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final random = Random(7);
 
-    for (int i = 0; i < 650; i++) {
+    for (int i = 0; i < 500; i++) {
       final baseX = random.nextDouble() * size.width;
       final baseY = random.nextDouble() * size.height;
 
