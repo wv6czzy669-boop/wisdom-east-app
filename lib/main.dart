@@ -142,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool transitionInProgress = false;
   bool _transitionLock = false;
   int flowSessionId = 0;
+  bool navigationInProgress = false;
   bool introFinished = false;
 
   List<FavoriteItem> favorites = [];
@@ -1058,32 +1059,50 @@ class _HomeScreenState extends State<HomeScreen>
     showEastSnack("Copied quietly.");
   }
 
-  void openPremiumScreen() {
+  Future<void> openPremiumScreen() async {
+    if (navigationInProgress) return;
+
+    navigationInProgress = true;
     HapticFeedback.selectionClick();
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PremiumScreen(),
-      ),
-    ).then((_) async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const PremiumScreen(),
+        ),
+      );
+
       if (!mounted) return;
       await loadPremiumStatus();
-    });
+    } finally {
+      if (mounted) {
+        navigationInProgress = false;
+      }
+    }
   }
 
-  void openSettings() {
+  Future<void> openSettings() async {
+    if (navigationInProgress) return;
+
+    navigationInProgress = true;
     HapticFeedback.selectionClick();
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const SettingsScreen(),
-      ),
-    ).then((_) async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const SettingsScreen(),
+        ),
+      );
+
       if (!mounted) return;
       await loadPremiumStatus();
-    });
+    } finally {
+      if (mounted) {
+        navigationInProgress = false;
+      }
+    }
   }
 
   void showRevealAnotherOptions() {
@@ -1223,17 +1242,26 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  void openFavorites() {
+  Future<void> openFavorites() async {
+    if (navigationInProgress) return;
+
+    navigationInProgress = true;
     HapticFeedback.selectionClick();
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FavoritesScreen(
-          favorites: favorites,
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FavoritesScreen(
+            favorites: favorites,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        navigationInProgress = false;
+      }
+    }
   }
 
   TextStyle wisdomStyle(
