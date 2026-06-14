@@ -140,6 +140,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   bool adReturnInProgress = false;
   bool transitionInProgress = false;
+  bool _transitionLock = false;
   bool introFinished = false;
 
   List<FavoriteItem> favorites = [];
@@ -886,7 +887,14 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> revealWisdom({
     bool bypassLock = false,
   }) async {
-    if (transitionInProgress) return;
+    if (_transitionLock && !bypassLock) return;
+
+    _transitionLock = true;
+
+    if (transitionInProgress) {
+      _transitionLock = false;
+      return;
+    }
 
     transitionInProgress = true;
 
@@ -907,6 +915,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) {
       transitionInProgress = false;
+      _transitionLock = false;
       return;
     }
 
@@ -924,6 +933,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) {
       transitionInProgress = false;
+      _transitionLock = false;
       return;
     }
 
@@ -937,6 +947,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) {
       transitionInProgress = false;
+      _transitionLock = false;
       return;
     }
 
@@ -947,6 +958,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) {
       transitionInProgress = false;
+      _transitionLock = false;
       return;
     }
 
@@ -959,6 +971,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) {
       transitionInProgress = false;
+      _transitionLock = false;
       return;
     }
 
@@ -967,6 +980,7 @@ class _HomeScreenState extends State<HomeScreen>
     });
 
     transitionInProgress = false;
+    _transitionLock = false;
   }
 
   void resetToRevealScreen() async {
