@@ -187,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool isLoadingRewardedAd = false;
   bool adRewardEarned = false;
   bool adShowInProgress = false;
+  int adSessionId = 0;
 
   static const String rewardedAdUnitId =
       'ca-app-pub-1367967256658706/4388775484';
@@ -484,6 +485,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     adRewardEarned = false;
     adShowInProgress = true;
+    adSessionId += 1;
+    final currentAdSessionId = adSessionId;
 
     final adToShow = rewardedAd;
     rewardedAd = null;
@@ -502,6 +505,11 @@ class _HomeScreenState extends State<HomeScreen>
 
     adToShow.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) async {
+        if (currentAdSessionId != adSessionId) {
+          ad.dispose();
+          return;
+        }
+
         adShowInProgress = false;
         ad.dispose();
 
@@ -520,6 +528,11 @@ class _HomeScreenState extends State<HomeScreen>
         loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
+        if (currentAdSessionId != adSessionId) {
+          ad.dispose();
+          return;
+        }
+
         adShowInProgress = false;
         ad.dispose();
 
@@ -535,6 +548,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     adToShow.show(
       onUserEarnedReward: (ad, reward) {
+        if (currentAdSessionId != adSessionId) return;
         adRewardEarned = true;
       },
     );
