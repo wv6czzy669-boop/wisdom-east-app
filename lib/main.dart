@@ -190,6 +190,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool adRewardEarned = false;
   bool adShowInProgress = false;
   int adSessionId = 0;
+  int adRetrySessionId = 0;
 
   static const String rewardedAdUnitId =
       'ca-app-pub-1367967256658706/4388775484';
@@ -382,6 +383,8 @@ class _HomeScreenState extends State<HomeScreen>
   void loadRewardedAd() {
     if (isPremium || isLoadingRewardedAd || isRewardedAdReady) return;
 
+    final currentAdRetrySessionId = ++adRetrySessionId;
+
     isLoadingRewardedAd = true;
 
     RewardedAd.load(
@@ -419,6 +422,7 @@ class _HomeScreenState extends State<HomeScreen>
 
           Future.delayed(const Duration(seconds: 8), () {
             if (!mounted) return;
+            if (currentAdRetrySessionId != adRetrySessionId) return;
             if (isPremium) return;
             if (isLoadingRewardedAd || isRewardedAdReady) return;
 
