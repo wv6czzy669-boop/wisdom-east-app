@@ -249,11 +249,12 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  bool get onPauseScreen => screenStep == 1;
-  bool get onHeartScreen => screenStep == 2;
-  bool get onRevealScreen => screenStep == 3;
-  bool get wisdomRevealed => screenStep == 4;
-  bool get onPostAdBlackScreen => screenStep == 5;
+  bool get onPauseScreen => ritualFlowController.isPauseScreen(screenStep);
+  bool get onHeartScreen => ritualFlowController.isHeartScreen(screenStep);
+  bool get onRevealScreen => ritualFlowController.isRevealScreen(screenStep);
+  bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
+  bool get onPostAdBlackScreen =>
+      ritualFlowController.isPostAdBlackScreen(screenStep);
 
   Future<void> runOpeningIntro() async {
     final currentFlow = ++flowSessionId;
