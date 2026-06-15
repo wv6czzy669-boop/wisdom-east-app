@@ -4,6 +4,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 class RewardedAdService {
   RewardedAd? rewardedAd;
 
+  bool _isDisposed = false;
+
   bool isRewardedAdReady = false;
   bool isLoadingRewardedAd = false;
   bool adRewardEarned = false;
@@ -15,7 +17,7 @@ class RewardedAdService {
   static const String rewardedAdUnitId =
       'ca-app-pub-1367967256658706/4388775484';
 
-  bool get canShowAd => isRewardedAdReady && rewardedAd != null;
+  bool get canShowAd => !_isDisposed && isRewardedAdReady && rewardedAd != null;
 
   bool get shouldShowPreparingMessage => isLoadingRewardedAd;
 
@@ -48,7 +50,7 @@ class RewardedAdService {
     required VoidCallback onStateChanged,
     required VoidCallback onRetry,
   }) {
-    if (isPremium || isLoadingRewardedAd || isRewardedAdReady) {
+    if (_isDisposed || isPremium || isLoadingRewardedAd || isRewardedAdReady) {
       return;
     }
 
@@ -61,7 +63,7 @@ class RewardedAdService {
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
-          if (!isMounted()) {
+          if (_isDisposed || !isMounted()) {
             ad.dispose();
             markLoadFailed();
             return;
@@ -71,6 +73,8 @@ class RewardedAdService {
           onStateChanged();
         },
         onAdFailedToLoad: (error) {
+          if (_isDisposed) return;
+
           markLoadFailed();
 
           if (isMounted()) {
@@ -78,7 +82,7 @@ class RewardedAdService {
           }
 
           Future.delayed(const Duration(seconds: 8), () {
-            if (!isMounted()) {
+            if (_isDisposed || !isMounted()) {
               return;
             }
 
@@ -123,7 +127,7 @@ class RewardedAdService {
     required Future<void> Function() onAdDismissedAfterRewardCheck,
     required Future<void> Function() onAdFailedToShow,
   }) {
-    if (adShowInProgress) {
+    if (_isDisposed || adShowInProgress) {
       return;
     }
 
@@ -194,6 +198,10 @@ class RewardedAdService {
   }
 
   void dispose() {
+    _isDisposed = true;
+    adRetrySessionId += 1;
+    adSessionId += 1;
+
     rewardedAd?.dispose();
     rewardedAd = null;
     isRewardedAdReady = false;
