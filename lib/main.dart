@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'dart:io';
 
 import 'services/audio_service.dart';
+import 'services/rewarded_ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -158,6 +159,7 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? countdownTimer;
 
   final AudioService audioService = AudioService();
+  final RewardedAdService adService = RewardedAdService();
 
   void startCountdownTimer() {
     if (countdownTimer?.isActive ?? false) return;
@@ -191,9 +193,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool adShowInProgress = false;
   int adSessionId = 0;
   int adRetrySessionId = 0;
-
-  static const String rewardedAdUnitId =
-      'ca-app-pub-1367967256658706/4388775484';
 
   String nextWisdomMessage = "";
 
@@ -250,6 +249,7 @@ class _HomeScreenState extends State<HomeScreen>
     stopCountdownTimer();
     pulseController.dispose();
     audioService.dispose();
+    adService.dispose();
     rewardedAd?.dispose();
     super.dispose();
   }
@@ -369,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen>
     isLoadingRewardedAd = true;
 
     RewardedAd.load(
-      adUnitId: rewardedAdUnitId,
+      adUnitId: RewardedAdService.rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
