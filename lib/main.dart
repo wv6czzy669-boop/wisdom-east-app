@@ -1311,8 +1311,11 @@ class _HomeScreenState extends State<HomeScreen>
                     padding: const EdgeInsets.symmetric(
                       horizontal: 34,
                     ),
-                    child: SizedBox(
-                      height: 250,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: 180,
+                        maxHeight: MediaQuery.of(context).size.height * 0.38,
+                      ),
                       child: Center(
                         child: AnimatedBuilder(
                           animation: pulseController,
@@ -1442,7 +1445,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             if (true)
               Positioned(
-                top: 4,
+                top: MediaQuery.of(context).padding.top + 4,
                 right: 8,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1468,7 +1471,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             if (wisdomRevealed)
               Positioned(
-                top: 4,
+                top: MediaQuery.of(context).padding.top + 4,
                 left: 8,
                 child: IconButton(
                   icon: const Icon(
@@ -1664,7 +1667,7 @@ class GrainPainter extends CustomPainter {
   static List<_GrainParticle> _buildParticles() {
     final random = Random(7);
 
-    return List.generate(500, (_) {
+    return List.generate(350, (_) {
       return _GrainParticle(
         xFactor: random.nextDouble(),
         yFactor: random.nextDouble(),
