@@ -1569,30 +1569,43 @@ class GrainPainter extends CustomPainter {
   final double movement;
   final double intensity;
 
+  static final List<_GrainParticle> _particles = _buildParticles();
+
   const GrainPainter({
     required this.movement,
     required this.intensity,
   });
 
+  static List<_GrainParticle> _buildParticles() {
+    final random = Random(7);
+
+    return List.generate(500, (_) {
+      return _GrainParticle(
+        xFactor: random.nextDouble(),
+        yFactor: random.nextDouble(),
+        isThick: random.nextDouble() > 0.72,
+      );
+    });
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    final random = Random(7);
     final thinPoints = <Offset>[];
     final thickPoints = <Offset>[];
+    final motion = movement * pi * 2;
 
-    for (int i = 0; i < 500; i++) {
-      final baseX = random.nextDouble() * size.width;
-      final baseY = random.nextDouble() * size.height;
+    for (int i = 0; i < _particles.length; i++) {
+      final particle = _particles[i];
 
-      final driftX = sin(movement * pi * 2 + i) * 0.85;
-      final driftY = cos(movement * pi * 2 + i * 0.71) * 0.85;
+      final driftX = sin(motion + i) * 0.85;
+      final driftY = cos(motion + i * 0.71) * 0.85;
 
       final point = Offset(
-        baseX + driftX,
-        baseY + driftY,
+        particle.xFactor * size.width + driftX,
+        particle.yFactor * size.height + driftY,
       );
 
-      if (random.nextDouble() > 0.72) {
+      if (particle.isThick) {
         thickPoints.add(point);
       } else {
         thinPoints.add(point);
@@ -1623,4 +1636,16 @@ class GrainPainter extends CustomPainter {
     return oldDelegate.movement != movement ||
         oldDelegate.intensity != intensity;
   }
+}
+
+class _GrainParticle {
+  final double xFactor;
+  final double yFactor;
+  final bool isThick;
+
+  const _GrainParticle({
+    required this.xFactor,
+    required this.yFactor,
+    required this.isThick,
+  });
 }
