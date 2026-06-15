@@ -206,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
+    purchaseService.addListener(_syncPremiumStatus);
 
     pulseController = AnimationController(
       vsync: this,
@@ -239,11 +240,17 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    purchaseService.removeListener(_syncPremiumStatus);
     stopCountdownTimer();
     pulseController.dispose();
     player.dispose();
     rewardedAd?.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncPremiumStatus() async {
+    if (!mounted) return;
+    await loadPremiumStatus();
   }
 
   @override
