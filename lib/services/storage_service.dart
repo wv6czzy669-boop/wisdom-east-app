@@ -78,6 +78,28 @@ class StorageService {
     );
   }
 
+  Future<String?> getDailyWisdomText() async {
+    final prefs = await getPrefs();
+    return prefs.getString("daily_wisdom_text");
+  }
+
+  Future<void> saveDailyWisdom({
+    required String text,
+    required DateTime unlockTime,
+  }) async {
+    final prefs = await getPrefs();
+
+    await prefs.setString(
+      "daily_wisdom_text",
+      text,
+    );
+
+    await prefs.setInt(
+      "wisdom_unlock_time_ms",
+      unlockTime.millisecondsSinceEpoch,
+    );
+  }
+
   Future<int?> getWisdomUnlockTimeMs() async {
     final prefs = await getPrefs();
     return prefs.getInt("wisdom_unlock_time_ms");

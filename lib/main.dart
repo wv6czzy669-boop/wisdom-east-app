@@ -651,10 +651,8 @@ class _HomeScreenState extends State<HomeScreen>
   Future<String> getLockedOrNewWisdom({
     bool bypassLock = false,
   }) async {
-    final prefs = await getPrefs();
-
-    final savedText = prefs.getString("daily_wisdom_text");
-    final unlockTimeMs = prefs.getInt("wisdom_unlock_time_ms");
+    final savedText = await storageService.getDailyWisdomText();
+    final unlockTimeMs = await storageService.getWisdomUnlockTimeMs();
 
     final now = DateTime.now();
 
@@ -675,14 +673,9 @@ class _HomeScreenState extends State<HomeScreen>
     if (!isPremium) {
       final nextUnlock = now.add(wisdomLockDuration);
 
-      await prefs.setString(
-        "daily_wisdom_text",
-        selectedText,
-      );
-
-      await prefs.setInt(
-        "wisdom_unlock_time_ms",
-        nextUnlock.millisecondsSinceEpoch,
+      await storageService.saveDailyWisdom(
+        text: selectedText,
+        unlockTime: nextUnlock,
       );
 
       await saveDailyArchive(selectedText);
