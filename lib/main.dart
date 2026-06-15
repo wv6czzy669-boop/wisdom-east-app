@@ -327,14 +327,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> playRevealSound() => audioService.playRevealSound();
-
-  Future<void> playPauseSound() => audioService.playPauseSound();
-
-  Future<void> playFeelSound() => audioService.playFeelSound();
-
-  Future<void> playHeartSound() => audioService.playHeartSound();
-
   void showEastSnack(String message) {
     if (!mounted) return;
 
@@ -495,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen>
         const Duration(milliseconds: 1200),
         () {
           if (!mounted) return;
-          playPauseSound();
+          audioService.playPauseSound();
         },
       );
 
@@ -513,7 +505,7 @@ class _HomeScreenState extends State<HomeScreen>
         const Duration(milliseconds: 1200),
         () {
           if (!mounted) return;
-          playPauseSound();
+          audioService.playPauseSound();
         },
       );
 
@@ -533,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen>
           const Duration(milliseconds: 200),
           () {
             if (!mounted) return;
-            playFeelSound();
+            audioService.playFeelSound();
           },
         );
         await revealFeelBesidePause();
@@ -542,7 +534,7 @@ class _HomeScreenState extends State<HomeScreen>
           const Duration(milliseconds: 1100),
           () {
             if (!mounted) return;
-            playHeartSound();
+            audioService.playHeartSound();
           },
         );
         await transitionToText(
@@ -914,7 +906,7 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    playRevealSound();
+    audioService.playRevealSound();
     HapticFeedback.selectionClick();
 
     await Future.delayed(const Duration(milliseconds: 900));
