@@ -3,7 +3,7 @@ import 'dart:math';
 import 'dart:ui';
 import 'dart:io';
 
-import 'package:audioplayers/audioplayers.dart';
+import 'services/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -157,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Timer? countdownTimer;
 
-  final AudioPlayer player = AudioPlayer();
+  final AudioService audioService = AudioService();
 
   void startCountdownTimer() {
     if (countdownTimer?.isActive ?? false) return;
@@ -249,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen>
     purchaseService.removeListener(_syncPremiumStatus);
     stopCountdownTimer();
     pulseController.dispose();
-    player.dispose();
+    audioService.dispose();
     rewardedAd?.dispose();
     super.dispose();
   }
@@ -263,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      player.stop();
+      audioService.stop();
       stopCountdownTimer();
       return;
     }
@@ -337,45 +337,13 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> playRevealSound() async {
-    try {
-      await player.stop();
-      await player.play(
-        AssetSource('sounds/reveal.mp3'),
-        volume: 0.38,
-      );
-    } catch (_) {}
-  }
+  Future<void> playRevealSound() => audioService.playRevealSound();
 
-  Future<void> playPauseSound() async {
-    try {
-      await player.stop();
-      await player.play(
-        AssetSource('sounds/pause.mp3'),
-        volume: 0.45,
-      );
-    } catch (_) {}
-  }
+  Future<void> playPauseSound() => audioService.playPauseSound();
 
-  Future<void> playFeelSound() async {
-    try {
-      await player.stop();
-      await player.play(
-        AssetSource('sounds/feel.mp3'),
-        volume: 0.45,
-      );
-    } catch (_) {}
-  }
+  Future<void> playFeelSound() => audioService.playFeelSound();
 
-  Future<void> playHeartSound() async {
-    try {
-      await player.stop();
-      await player.play(
-        AssetSource('sounds/heart.mp3'),
-        volume: 0.45,
-      );
-    } catch (_) {}
-  }
+  Future<void> playHeartSound() => audioService.playHeartSound();
 
   void showEastSnack(String message) {
     if (!mounted) return;
