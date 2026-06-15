@@ -136,6 +136,9 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF030303),
         foregroundColor: const Color(0xFFF4F0E8),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         elevation: 0,
         title: Text(
           "East",

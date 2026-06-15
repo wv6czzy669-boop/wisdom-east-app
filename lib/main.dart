@@ -1445,7 +1445,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             if (true)
               Positioned(
-                top: MediaQuery.of(context).padding.top + 4,
+                top: 10,
                 right: 8,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1471,7 +1471,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             if (wisdomRevealed)
               Positioned(
-                top: MediaQuery.of(context).padding.top + 4,
+                top: 10,
                 left: 8,
                 child: IconButton(
                   icon: const Icon(
