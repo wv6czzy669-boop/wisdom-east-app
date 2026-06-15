@@ -227,8 +227,14 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
 
       if (!isPremium) {
+        final startupAdSessionId = adRetrySessionId;
+
         Future.delayed(const Duration(seconds: 2), () {
           if (!mounted) return;
+          if (startupAdSessionId != adRetrySessionId) return;
+          if (isPremium) return;
+          if (isLoadingRewardedAd || isRewardedAdReady) return;
+
           loadRewardedAd();
         });
       }
