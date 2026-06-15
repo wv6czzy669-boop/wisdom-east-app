@@ -576,13 +576,14 @@ class _HomeScreenState extends State<HomeScreen>
       premiumPromptOpacity = 0.0;
       ritualHintOpacity = 0.0;
       revealGlowOpacity = 0.0;
-      backgroundDepth = nextStep == 1 ? 0.14 : 0.0;
+      backgroundDepth =
+          ritualFlowController.transitionBackgroundDepth(nextStep);
       textScale = 0.985;
       openingSubtitleOpacity = 0.0;
     });
 
     await Future.delayed(
-      Duration(milliseconds: nextStep == 3 ? 980 : 820),
+      ritualFlowController.transitionFadeOutDuration(nextStep),
     );
 
     if (!mounted) {
@@ -610,11 +611,9 @@ class _HomeScreenState extends State<HomeScreen>
       textScale = 1.0;
     });
 
-    if (nextStep == 1) {
-      await Future.delayed(const Duration(milliseconds: 820));
-    } else {
-      await Future.delayed(const Duration(milliseconds: 560));
-    }
+    await Future.delayed(
+      ritualFlowController.transitionSettleDuration(nextStep),
+    );
 
     if (!mounted) {
       transitionInProgress = false;
