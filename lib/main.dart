@@ -6,6 +6,7 @@ import 'dart:io';
 import 'services/audio_service.dart';
 import 'services/rewarded_ad_service.dart';
 import 'services/storage_service.dart';
+import 'controllers/ritual_flow_controller.dart';
 import 'models/favorite_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -118,6 +119,8 @@ class _HomeScreenState extends State<HomeScreen>
   int flowSessionId = 0;
   bool navigationInProgress = false;
   bool introFinished = false;
+
+  final ritualFlowController = const RitualFlowController();
 
   int delayedCallbackSession = 0;
 
