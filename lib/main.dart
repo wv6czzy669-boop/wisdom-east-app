@@ -282,11 +282,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadPremiumStatus() async {
-    final prefs = await getPrefs();
+    final premiumValue = await storageService.getPremiumStatus();
 
     if (!mounted) return;
-
-    final premiumValue = prefs.getBool("is_premium") ?? false;
 
     setState(() {
       isPremium = premiumValue;

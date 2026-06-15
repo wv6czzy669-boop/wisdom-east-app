@@ -104,4 +104,9 @@ class StorageService {
     final prefs = await getPrefs();
     return prefs.getInt("wisdom_unlock_time_ms");
   }
+
+  Future<bool> getPremiumStatus() async {
+    final prefs = await getPrefs();
+    return prefs.getBool("is_premium") ?? false;
+  }
 }
