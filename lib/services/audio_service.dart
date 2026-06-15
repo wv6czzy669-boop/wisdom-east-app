@@ -50,6 +50,8 @@ class AudioService {
   }
 
   void dispose() {
-    _player.dispose();
+    try {
+      _player.dispose();
+    } catch (_) {}
   }
 }

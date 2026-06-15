@@ -28,14 +28,22 @@ class StorageService {
 
     final saved = prefs.getStringList('favorites') ?? [];
 
-    return saved
-        .map(
-          (item) => FavoriteItem.decode(
+    final List<FavoriteItem> validFavorites = [];
+
+    for (final item in saved) {
+      try {
+        validFavorites.add(
+          FavoriteItem.decode(
             item,
             fallbackDate: fallbackDate,
           ),
-        )
-        .toList();
+        );
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return validFavorites;
   }
 
   Future<void> saveDailyArchive({

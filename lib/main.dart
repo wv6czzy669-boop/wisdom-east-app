@@ -26,17 +26,31 @@ Future<void> main() async {
   runApp(const MyApp());
 
   Future.microtask(() async {
-    if (Platform.isIOS) {
-      final status = await AppTrackingTransparency.trackingAuthorizationStatus;
+    try {
+      if (Platform.isIOS) {
+        final status =
+            await AppTrackingTransparency.trackingAuthorizationStatus;
 
-      if (status == TrackingStatus.notDetermined) {
-        await Future.delayed(const Duration(seconds: 2));
-        await AppTrackingTransparency.requestTrackingAuthorization();
+        if (status == TrackingStatus.notDetermined) {
+          await Future.delayed(const Duration(seconds: 2));
+          await AppTrackingTransparency.requestTrackingAuthorization();
+        }
       }
+    } catch (_) {
+      // Native ATT failures must never block app startup.
     }
 
-    MobileAds.instance.initialize();
-    purchaseService.init();
+    try {
+      await MobileAds.instance.initialize();
+    } catch (_) {
+      // AdMob startup failures must never block app startup.
+    }
+
+    try {
+      await purchaseService.init();
+    } catch (_) {
+      // StoreKit startup failures must never block app startup.
+    }
   });
 }
 
@@ -207,6 +221,9 @@ class _HomeScreenState extends State<HomeScreen>
           loadRewardedAd();
         });
       }
+    }).catchError((_) {
+      if (!mounted) return;
+      startCountdownTimer();
     });
 
     runOpeningIntro();
@@ -238,12 +255,24 @@ class _HomeScreenState extends State<HomeScreen>
       invalidateDelayedCallbacks();
       audioService.stop();
       stopCountdownTimer();
+
+      if (pulseController.isAnimating) {
+        pulseController.stop();
+      }
+
       transitionInProgress = false;
       _transitionLock = false;
+      adReturnInProgress = false;
       return;
     }
 
     if (state == AppLifecycleState.resumed) {
+      if (!mounted) return;
+
+      if (!pulseController.isAnimating) {
+        pulseController.repeat(reverse: true);
+      }
+
       startCountdownTimer();
       updateNextWisdomMessage();
     }
@@ -404,7 +433,13 @@ class _HomeScreenState extends State<HomeScreen>
         }
 
         if (adService.adRewardEarned && !isPremium) {
-          await prepareRewardedWisdom();
+          try {
+            await prepareRewardedWisdom();
+          } catch (_) {
+            if (mounted) {
+              showEastSnack("Your wisdom is safe. Please try again.");
+            }
+          }
 
           if (!mounted) {
             return;
@@ -544,6 +579,8 @@ class _HomeScreenState extends State<HomeScreen>
     transitionInProgress = true;
 
     try {
+      if (!mounted) return;
+
       setState(() {
         ritualHintOpacity = 0.0;
         pauseFeelOpacity = 1.0;
@@ -570,6 +607,8 @@ class _HomeScreenState extends State<HomeScreen>
     transitionInProgress = true;
 
     try {
+      if (!mounted) return;
+
       setState(() {
         textOpacity = 0.0;
         heartOpacity = 0.0;
@@ -622,7 +661,18 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> updateNextWisdomMessage() async {
-    final savedTime = await storageService.getWisdomUnlockTimeMs();
+    final int? savedTime;
+
+    try {
+      savedTime = await storageService.getWisdomUnlockTimeMs();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          nextWisdomMessage = "";
+        });
+      }
+      return;
+    }
 
     if (savedTime == null) {
       if (mounted) {
@@ -814,6 +864,8 @@ class _HomeScreenState extends State<HomeScreen>
 
       HapticFeedback.lightImpact();
 
+      if (!mounted) return;
+
       setState(() {
         textOpacity = 0.0;
         heartOpacity = 0.0;
@@ -829,9 +881,17 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!mounted || currentFlow != flowSessionId) return;
 
-      final selectedText = await getLockedOrNewWisdom(
-        bypassLock: bypassLock,
-      );
+      String selectedText;
+
+      try {
+        selectedText = await getLockedOrNewWisdom(
+          bypassLock: bypassLock,
+        );
+      } catch (_) {
+        selectedText = "Silence is still available.";
+      }
+
+      if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
         currentText = selectedText;
@@ -947,6 +1007,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void showRevealAnotherOptions() {
+    if (!mounted) return;
+
     HapticFeedback.selectionClick();
 
     showDialog(
@@ -999,6 +1061,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void showFavoriteLimitDialog() {
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -1041,6 +1105,8 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
+    final previousFavorites = List<FavoriteItem>.from(favorites);
+
     setState(() {
       if (isCurrentFavorite()) {
         favorites.removeWhere(
@@ -1056,17 +1122,36 @@ class _HomeScreenState extends State<HomeScreen>
       }
     });
 
-    await saveFavorites();
+    final saved = await saveFavorites();
+
+    if (!saved && mounted) {
+      setState(() {
+        favorites = previousFavorites;
+      });
+
+      showEastSnack("Favorite could not be saved. Please try again.");
+    }
   }
 
-  Future<void> saveFavorites() async {
-    await storageService.saveFavorites(favorites);
+  Future<bool> saveFavorites() async {
+    try {
+      await storageService.saveFavorites(favorites);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> loadFavorites() async {
-    final loadedFavorites = await storageService.loadFavorites(
-      fallbackDate: formattedToday(),
-    );
+    List<FavoriteItem> loadedFavorites;
+
+    try {
+      loadedFavorites = await storageService.loadFavorites(
+        fallbackDate: formattedToday(),
+      );
+    } catch (_) {
+      loadedFavorites = [];
+    }
 
     if (!mounted) return;
 
@@ -1086,7 +1171,7 @@ class _HomeScreenState extends State<HomeScreen>
         context,
         MaterialPageRoute(
           builder: (context) => FavoritesScreen(
-            favorites: favorites,
+            favorites: List<FavoriteItem>.from(favorites),
           ),
         ),
       );
@@ -1219,7 +1304,7 @@ class _HomeScreenState extends State<HomeScreen>
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: handleMainTap,
+                onTap: navigationInProgress ? null : handleMainTap,
                 onLongPress: null,
                 child: Center(
                   child: Padding(

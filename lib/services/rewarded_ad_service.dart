@@ -58,51 +58,59 @@ class RewardedAdService {
 
     markLoading();
 
-    RewardedAd.load(
-      adUnitId: rewardedAdUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          if (_isDisposed || !isMounted()) {
-            ad.dispose();
-            markLoadFailed();
-            return;
-          }
-
-          markLoaded(ad);
-          onStateChanged();
-        },
-        onAdFailedToLoad: (error) {
-          if (_isDisposed) return;
-
-          markLoadFailed();
-
-          if (isMounted()) {
-            onStateChanged();
-          }
-
-          Future.delayed(const Duration(seconds: 8), () {
+    try {
+      RewardedAd.load(
+        adUnitId: rewardedAdUnitId,
+        request: const AdRequest(),
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
+          onAdLoaded: (ad) {
             if (_isDisposed || !isMounted()) {
+              ad.dispose();
+              markLoadFailed();
               return;
             }
 
-            if (!isCurrentRetrySession(currentAdRetrySessionId)) {
-              return;
+            markLoaded(ad);
+            onStateChanged();
+          },
+          onAdFailedToLoad: (error) {
+            if (_isDisposed) return;
+
+            markLoadFailed();
+
+            if (isMounted()) {
+              onStateChanged();
             }
 
-            if (isPremium) {
-              return;
-            }
+            Future.delayed(const Duration(seconds: 8), () {
+              if (_isDisposed || !isMounted()) {
+                return;
+              }
 
-            if (isLoadingRewardedAd || isRewardedAdReady) {
-              return;
-            }
+              if (!isCurrentRetrySession(currentAdRetrySessionId)) {
+                return;
+              }
 
-            onRetry();
-          });
-        },
-      ),
-    );
+              if (isPremium) {
+                return;
+              }
+
+              if (isLoadingRewardedAd || isRewardedAdReady) {
+                return;
+              }
+
+              onRetry();
+            });
+          },
+        ),
+      );
+    } catch (_) {
+      markLoadFailed();
+
+      if (isMounted()) {
+        onStateChanged();
+      }
+    }
   }
 
   void markLoading() {
@@ -157,7 +165,9 @@ class RewardedAdService {
         ad.dispose();
         resetRewardedAdState();
 
-        await onAdDismissedAfterRewardCheck();
+        try {
+          await onAdDismissedAfterRewardCheck();
+        } catch (_) {}
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
         if (!isCurrentShowSession(currentAdSessionId)) {
@@ -168,19 +178,26 @@ class RewardedAdService {
         ad.dispose();
         resetRewardedAdState();
 
-        await onAdFailedToShow();
+        try {
+          await onAdFailedToShow();
+        } catch (_) {}
       },
     );
 
-    adToShow.show(
-      onUserEarnedReward: (ad, reward) {
-        if (!isCurrentShowSession(currentAdSessionId)) {
-          return;
-        }
+    try {
+      adToShow.show(
+        onUserEarnedReward: (ad, reward) {
+          if (!isCurrentShowSession(currentAdSessionId)) {
+            return;
+          }
 
-        markRewardEarned();
-      },
-    );
+          markRewardEarned();
+        },
+      );
+    } catch (_) {
+      resetRewardedAdState();
+      onAdMissing();
+    }
   }
 
   RewardedAd? takeAdForShowing() {
@@ -202,7 +219,10 @@ class RewardedAdService {
     adRetrySessionId += 1;
     adSessionId += 1;
 
-    rewardedAd?.dispose();
+    try {
+      rewardedAd?.dispose();
+    } catch (_) {}
+
     rewardedAd = null;
     isRewardedAdReady = false;
     isLoadingRewardedAd = false;

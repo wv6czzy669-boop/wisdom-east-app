@@ -189,7 +189,9 @@ class SettingsScreen extends StatelessWidget {
             title: "Restore Purchases",
             subtitle: "Restore your Premium access on this device.",
             onTap: () async {
-              await purchaseService.restorePurchases();
+              try {
+                await purchaseService.restorePurchases();
+              } catch (_) {}
 
               if (!context.mounted) return;
               showInfoDialog(
