@@ -432,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> handleMainTap() async {
-    if (adReturnInProgress || transitionInProgress) return;
+    if (adReturnInProgress || transitionInProgress || _transitionLock) return;
 
     if (screenStep == 5) {
       HapticFeedback.selectionClick();
