@@ -1,0 +1,3 @@
+class RitualFlowController {
+  const RitualFlowController();
+}
