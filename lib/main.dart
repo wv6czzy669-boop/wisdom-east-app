@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'services/audio_service.dart';
 import 'services/rewarded_ad_service.dart';
+import 'services/storage_service.dart';
 import 'models/favorite_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -133,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   final AudioService audioService = AudioService();
   final RewardedAdService adService = RewardedAdService();
+  final StorageService storageService = StorageService();
 
   void startCountdownTimer() {
     if (countdownTimer?.isActive ?? false) return;
@@ -152,12 +154,7 @@ class _HomeScreenState extends State<HomeScreen>
     countdownTimer = null;
   }
 
-  SharedPreferences? cachedPrefs;
-
-  Future<SharedPreferences> getPrefs() async {
-    cachedPrefs ??= await SharedPreferences.getInstance();
-    return cachedPrefs!;
-  }
+  Future<SharedPreferences> getPrefs() => storageService.getPrefs();
 
   String nextWisdomMessage = "";
 
