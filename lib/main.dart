@@ -1087,32 +1087,18 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> saveFavorites() async {
-    final prefs = await getPrefs();
-
-    final encodedFavorites = favorites.map((item) => item.encode()).toList();
-
-    await prefs.setStringList(
-      'favorites',
-      encodedFavorites,
-    );
+    await storageService.saveFavorites(favorites);
   }
 
   Future<void> loadFavorites() async {
-    final prefs = await getPrefs();
-
-    final saved = prefs.getStringList('favorites') ?? [];
+    final loadedFavorites = await storageService.loadFavorites(
+      fallbackDate: formattedToday(),
+    );
 
     if (!mounted) return;
 
     setState(() {
-      favorites = saved
-          .map(
-            (item) => FavoriteItem.decode(
-              item,
-              fallbackDate: formattedToday(),
-            ),
-          )
-          .toList();
+      favorites = loadedFavorites;
     });
   }
 
