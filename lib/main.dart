@@ -606,8 +606,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> updateNextWisdomMessage() async {
-    final prefs = await getPrefs();
-    final savedTime = prefs.getInt("wisdom_unlock_time_ms");
+    final savedTime = await storageService.getWisdomUnlockTimeMs();
 
     if (savedTime == null) {
       if (mounted) {

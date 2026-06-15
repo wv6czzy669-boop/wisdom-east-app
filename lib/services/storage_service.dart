@@ -77,4 +77,9 @@ class StorageService {
       unlockTime.millisecondsSinceEpoch,
     );
   }
+
+  Future<int?> getWisdomUnlockTimeMs() async {
+    final prefs = await getPrefs();
+    return prefs.getInt("wisdom_unlock_time_ms");
+  }
 }
