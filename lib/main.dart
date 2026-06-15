@@ -352,62 +352,17 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void loadRewardedAd() {
-    if (isPremium ||
-        adService.isLoadingRewardedAd ||
-        adService.isRewardedAdReady) {
-      return;
-    }
+    adService.loadRewardedAd(
+      isPremium: isPremium,
+      isMounted: () => mounted,
+      onStateChanged: () {
+        if (!mounted) {
+          return;
+        }
 
-    final currentAdRetrySessionId = adService.beginRetrySession();
-
-    adService.markLoading();
-
-    RewardedAd.load(
-      adUnitId: RewardedAdService.rewardedAdUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          if (!mounted) {
-            ad.dispose();
-            adService.markLoadFailed();
-            return;
-          }
-
-          setState(() {
-            adService.markLoaded(ad);
-          });
-        },
-        onAdFailedToLoad: (error) {
-          if (!mounted) {
-            adService.markLoadFailed();
-            return;
-          }
-
-          setState(() {
-            adService.markLoadFailed();
-          });
-
-          Future.delayed(const Duration(seconds: 8), () {
-            if (!mounted) {
-              return;
-            }
-
-            if (!adService.isCurrentRetrySession(currentAdRetrySessionId)) {
-              return;
-            }
-
-            if (isPremium) {
-              return;
-            }
-
-            if (adService.isLoadingRewardedAd || adService.isRewardedAdReady) {
-              return;
-            }
-
-            loadRewardedAd();
-          });
-        },
-      ),
+        setState(() {});
+      },
+      onRetry: loadRewardedAd,
     );
   }
 

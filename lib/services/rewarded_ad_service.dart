@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class RewardedAdService {
@@ -39,6 +40,65 @@ class RewardedAdService {
 
   bool isCurrentRetrySession(int sessionId) {
     return sessionId == adRetrySessionId;
+  }
+
+  void loadRewardedAd({
+    required bool isPremium,
+    required bool Function() isMounted,
+    required VoidCallback onStateChanged,
+    required VoidCallback onRetry,
+  }) {
+    if (isPremium || isLoadingRewardedAd || isRewardedAdReady) {
+      return;
+    }
+
+    final currentAdRetrySessionId = beginRetrySession();
+
+    markLoading();
+
+    RewardedAd.load(
+      adUnitId: rewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          if (!isMounted()) {
+            ad.dispose();
+            markLoadFailed();
+            return;
+          }
+
+          markLoaded(ad);
+          onStateChanged();
+        },
+        onAdFailedToLoad: (error) {
+          markLoadFailed();
+
+          if (isMounted()) {
+            onStateChanged();
+          }
+
+          Future.delayed(const Duration(seconds: 8), () {
+            if (!isMounted()) {
+              return;
+            }
+
+            if (!isCurrentRetrySession(currentAdRetrySessionId)) {
+              return;
+            }
+
+            if (isPremium) {
+              return;
+            }
+
+            if (isLoadingRewardedAd || isRewardedAdReady) {
+              return;
+            }
+
+            onRetry();
+          });
+        },
+      ),
+    );
   }
 
   void markLoading() {
