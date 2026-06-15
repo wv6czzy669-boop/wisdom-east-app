@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'services/audio_service.dart';
 import 'services/rewarded_ad_service.dart';
+import 'models/favorite_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -63,34 +64,6 @@ class WisdomApp extends StatelessWidget {
             ),
       ),
       home: const HomeScreen(),
-    );
-  }
-}
-
-class FavoriteItem {
-  final String text;
-  final String date;
-
-  FavoriteItem({
-    required this.text,
-    required this.date,
-  });
-
-  String encode() => "$date|||$text";
-
-  static FavoriteItem decode(String value) {
-    final parts = value.split("|||");
-
-    if (parts.length >= 2) {
-      return FavoriteItem(
-        date: parts.first,
-        text: parts.sublist(1).join("|||"),
-      );
-    }
-
-    return FavoriteItem(
-      date: formattedToday(),
-      text: value,
     );
   }
 }
@@ -1137,7 +1110,10 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       favorites = saved
           .map(
-            (item) => FavoriteItem.decode(item),
+            (item) => FavoriteItem.decode(
+              item,
+              fallbackDate: formattedToday(),
+            ),
           )
           .toList();
     });
