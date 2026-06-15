@@ -1029,30 +1029,33 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void toggleFavorite() async {
+  Future<void> toggleFavorite() async {
     if (!wisdomRevealed) return;
 
     HapticFeedback.selectionClick();
 
-    if (isCurrentFavorite()) {
-      favorites.removeWhere(
-        (item) => item.text == currentText,
-      );
-    } else {
-      if (!isPremium && favorites.length >= freeFavoriteLimit) {
-        showFavoriteLimitDialog();
-        return;
-      }
-
-      favorites.add(
-        FavoriteItem(
-          text: currentText,
-          date: formattedToday(),
-        ),
-      );
+    if (!isPremium &&
+        !isCurrentFavorite() &&
+        favorites.length >= freeFavoriteLimit) {
+      showFavoriteLimitDialog();
+      return;
     }
 
-    setState(() {});
+    setState(() {
+      if (isCurrentFavorite()) {
+        favorites.removeWhere(
+          (item) => item.text == currentText,
+        );
+      } else {
+        favorites.add(
+          FavoriteItem(
+            text: currentText,
+            date: formattedToday(),
+          ),
+        );
+      }
+    });
+
     await saveFavorites();
   }
 
