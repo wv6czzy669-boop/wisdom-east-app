@@ -16,20 +16,21 @@ class PurchaseService extends ChangeNotifier {
   bool isPremium = false;
   bool isLoading = false;
   bool _disposed = false;
+  int _restoreSessionId = 0;
 
   ProductDetails? keeperProduct;
 
   void safeNotifyListeners() {
-  if (_disposed) return;
-  notifyListeners();
-}
+    if (_disposed) return;
+    notifyListeners();
+  }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     if (_disposed) return;
 
     isPremium = prefs.getBool(_premiumKey) ?? false;
-safeNotifyListeners();
+    safeNotifyListeners();
 
     isAvailable = await _iap.isAvailable();
     if (_disposed) return;
@@ -85,21 +86,26 @@ safeNotifyListeners();
   }
 
   Future<void> restorePurchases() async {
-    if (isLoading) return;
+    if (_disposed || isLoading) return;
 
     isLoading = true;
+    final currentRestoreSessionId = ++_restoreSessionId;
     safeNotifyListeners();
 
     try {
       await _iap.restorePurchases();
     } catch (_) {
+      if (_disposed || currentRestoreSessionId != _restoreSessionId) return;
+
       isLoading = false;
       safeNotifyListeners();
       return;
     }
 
     Future.delayed(const Duration(seconds: 8), () {
-      if (!_disposed && isLoading) {
+      if (_disposed || currentRestoreSessionId != _restoreSessionId) return;
+
+      if (isLoading) {
         isLoading = false;
         safeNotifyListeners();
       }
@@ -107,6 +113,7 @@ safeNotifyListeners();
   }
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
+    if (_disposed) return;
     for (final purchase in purchases) {
       if (purchase.productID == keeperProductId) {
         if (purchase.status == PurchaseStatus.purchased ||
@@ -142,6 +149,7 @@ safeNotifyListeners();
   @override
   void dispose() {
     _disposed = true;
+    _restoreSessionId += 1;
     _subscription?.cancel();
     super.dispose();
   }
