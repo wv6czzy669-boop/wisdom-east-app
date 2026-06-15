@@ -186,14 +186,6 @@ class _HomeScreenState extends State<HomeScreen>
     return cachedPrefs!;
   }
 
-  RewardedAd? rewardedAd;
-  bool isRewardedAdReady = false;
-  bool isLoadingRewardedAd = false;
-  bool adRewardEarned = false;
-  bool adShowInProgress = false;
-  int adSessionId = 0;
-  int adRetrySessionId = 0;
-
   String nextWisdomMessage = "";
 
   final List<String> recentWisdoms = [];
@@ -226,13 +218,15 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
 
       if (!isPremium) {
-        final startupAdSessionId = adRetrySessionId;
+        final startupAdSessionId = adService.adRetrySessionId;
 
         Future.delayed(const Duration(seconds: 2), () {
           if (!mounted) return;
-          if (startupAdSessionId != adRetrySessionId) return;
+          if (!adService.isCurrentRetrySession(startupAdSessionId)) return;
           if (isPremium) return;
-          if (isLoadingRewardedAd || isRewardedAdReady) return;
+          if (adService.isLoadingRewardedAd || adService.isRewardedAdReady) {
+            return;
+          }
 
           loadRewardedAd();
         });
@@ -250,7 +244,6 @@ class _HomeScreenState extends State<HomeScreen>
     pulseController.dispose();
     audioService.dispose();
     adService.dispose();
-    rewardedAd?.dispose();
     super.dispose();
   }
 
@@ -330,10 +323,7 @@ class _HomeScreenState extends State<HomeScreen>
     });
 
     if (premiumValue) {
-      rewardedAd?.dispose();
-      rewardedAd = null;
-      isRewardedAdReady = false;
-      isLoadingRewardedAd = false;
+      adService.dispose();
     }
   }
 
@@ -362,50 +352,57 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void loadRewardedAd() {
-    if (isPremium || isLoadingRewardedAd || isRewardedAdReady) return;
+    if (isPremium ||
+        adService.isLoadingRewardedAd ||
+        adService.isRewardedAdReady) {
+      return;
+    }
 
-    final currentAdRetrySessionId = ++adRetrySessionId;
+    final currentAdRetrySessionId = adService.beginRetrySession();
 
-    isLoadingRewardedAd = true;
+    adService.markLoading();
 
     RewardedAd.load(
       adUnitId: RewardedAdService.rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
-          rewardedAd = ad;
-
           if (!mounted) {
             ad.dispose();
-            isLoadingRewardedAd = false;
-            isRewardedAdReady = false;
+            adService.markLoadFailed();
             return;
           }
 
           setState(() {
-            isLoadingRewardedAd = false;
-            isRewardedAdReady = true;
+            adService.markLoaded(ad);
           });
         },
         onAdFailedToLoad: (error) {
-          rewardedAd = null;
-
           if (!mounted) {
-            isLoadingRewardedAd = false;
-            isRewardedAdReady = false;
+            adService.markLoadFailed();
             return;
           }
 
           setState(() {
-            isLoadingRewardedAd = false;
-            isRewardedAdReady = false;
+            adService.markLoadFailed();
           });
 
           Future.delayed(const Duration(seconds: 8), () {
-            if (!mounted) return;
-            if (currentAdRetrySessionId != adRetrySessionId) return;
-            if (isPremium) return;
-            if (isLoadingRewardedAd || isRewardedAdReady) return;
+            if (!mounted) {
+              return;
+            }
+
+            if (!adService.isCurrentRetrySession(currentAdRetrySessionId)) {
+              return;
+            }
+
+            if (isPremium) {
+              return;
+            }
+
+            if (adService.isLoadingRewardedAd || adService.isRewardedAdReady) {
+              return;
+            }
 
             loadRewardedAd();
           });
@@ -454,12 +451,7 @@ class _HomeScreenState extends State<HomeScreen>
     await updateNextWisdomMessage();
   }
 
-  void resetRewardedAdState() {
-    adShowInProgress = false;
-    adRewardEarned = false;
-    isRewardedAdReady = false;
-    rewardedAd = null;
-  }
+  void resetRewardedAdState() => adService.resetRewardedAdState();
 
   Future<void> returnToBlackAfterAd() async {
     if (!mounted) return;
@@ -480,16 +472,16 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void showRewardedAdThenReveal() {
-    if (adShowInProgress) return;
+    if (adService.adShowInProgress) return;
 
     if (isPremium) {
       revealWisdom(bypassLock: true);
       return;
     }
 
-    if (!isRewardedAdReady || rewardedAd == null) {
+    if (!adService.canShowAd) {
       showEastSnack(
-        isLoadingRewardedAd
+        adService.shouldShowPreparingMessage
             ? "Ad is preparing. Please try again."
             : "Ad is not ready yet. Please try again.",
       );
@@ -498,13 +490,10 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    adRewardEarned = false;
-    adShowInProgress = true;
-    adSessionId += 1;
-    final currentAdSessionId = adSessionId;
+    adService.beginShowSession();
+    final currentAdSessionId = adService.adSessionId;
 
-    final adToShow = rewardedAd;
-    rewardedAd = null;
+    final adToShow = adService.takeAdForShowing();
 
     if (!mounted) return;
 
@@ -514,13 +503,9 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    setState(() {
-      isRewardedAdReady = false;
-    });
-
     adToShow.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) async {
-        if (currentAdSessionId != adSessionId) {
+        if (!adService.isCurrentShowSession(currentAdSessionId)) {
           ad.dispose();
           return;
         }
@@ -530,10 +515,10 @@ class _HomeScreenState extends State<HomeScreen>
 
         if (!mounted) return;
 
-        if (adRewardEarned && !isPremium) {
+        if (adService.adRewardEarned && !isPremium) {
           await prepareRewardedWisdom();
           if (!mounted) return;
-        } else if (!adRewardEarned) {
+        } else if (!adService.adRewardEarned) {
           showEastSnack("The wisdom opens after the ad is completed.");
         }
 
@@ -543,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen>
         loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (ad, error) async {
-        if (currentAdSessionId != adSessionId) {
+        if (!adService.isCurrentShowSession(currentAdSessionId)) {
           ad.dispose();
           return;
         }
@@ -563,8 +548,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     adToShow.show(
       onUserEarnedReward: (ad, reward) {
-        if (currentAdSessionId != adSessionId) return;
-        adRewardEarned = true;
+        if (!adService.isCurrentShowSession(currentAdSessionId)) {
+          return;
+        }
+        adService.markRewardEarned();
       },
     );
   }
