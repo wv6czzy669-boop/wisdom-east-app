@@ -543,23 +543,22 @@ class _HomeScreenState extends State<HomeScreen>
 
     transitionInProgress = true;
 
-    setState(() {
-      ritualHintOpacity = 0.0;
-      pauseFeelOpacity = 1.0;
-    });
+    try {
+      setState(() {
+        ritualHintOpacity = 0.0;
+        pauseFeelOpacity = 1.0;
+      });
 
-    await Future.delayed(const Duration(milliseconds: 1250));
+      await Future.delayed(const Duration(milliseconds: 1250));
 
-    if (!mounted) {
+      if (!mounted) return;
+
+      setState(() {
+        ritualHintOpacity = 1.0;
+      });
+    } finally {
       transitionInProgress = false;
-      return;
     }
-
-    setState(() {
-      ritualHintOpacity = 1.0;
-    });
-
-    transitionInProgress = false;
   }
 
   Future<void> transitionToText(
@@ -570,63 +569,56 @@ class _HomeScreenState extends State<HomeScreen>
 
     transitionInProgress = true;
 
-    setState(() {
-      textOpacity = 0.0;
-      heartOpacity = 0.0;
-      premiumPromptOpacity = 0.0;
-      ritualHintOpacity = 0.0;
-      revealGlowOpacity = 0.0;
-      backgroundDepth =
-          ritualFlowController.transitionBackgroundDepth(nextStep);
-      textScale = 0.985;
-      openingSubtitleOpacity = 0.0;
-    });
-
-    await Future.delayed(
-      ritualFlowController.transitionFadeOutDuration(nextStep),
-    );
-
-    if (!mounted) {
-      transitionInProgress = false;
-      return;
-    }
-
-    setState(() {
-      currentText = newText;
-      screenStep = nextStep;
-      if (nextStep != 1) {
-        pauseFeelOpacity = 0.0;
-      }
-    });
-
-    await Future.delayed(const Duration(milliseconds: 220));
-
-    if (!mounted) {
-      transitionInProgress = false;
-      return;
-    }
-
-    setState(() {
-      textOpacity = 1.0;
-      textScale = 1.0;
-    });
-
-    await Future.delayed(
-      ritualFlowController.transitionSettleDuration(nextStep),
-    );
-
-    if (!mounted) {
-      transitionInProgress = false;
-      return;
-    }
-
-    if (nextStep == 1) {
+    try {
       setState(() {
-        ritualHintOpacity = 1.0;
+        textOpacity = 0.0;
+        heartOpacity = 0.0;
+        premiumPromptOpacity = 0.0;
+        ritualHintOpacity = 0.0;
+        revealGlowOpacity = 0.0;
+        backgroundDepth =
+            ritualFlowController.transitionBackgroundDepth(nextStep);
+        textScale = 0.985;
+        openingSubtitleOpacity = 0.0;
       });
-    }
 
-    transitionInProgress = false;
+      await Future.delayed(
+        ritualFlowController.transitionFadeOutDuration(nextStep),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        currentText = newText;
+        screenStep = nextStep;
+        if (nextStep != 1) {
+          pauseFeelOpacity = 0.0;
+        }
+      });
+
+      await Future.delayed(const Duration(milliseconds: 220));
+
+      if (!mounted) return;
+
+      setState(() {
+        textOpacity = 1.0;
+        textScale = 1.0;
+      });
+
+      await Future.delayed(
+        ritualFlowController.transitionSettleDuration(nextStep),
+      );
+
+      if (!mounted) return;
+
+      if (nextStep == 1) {
+        setState(() {
+          ritualHintOpacity = 1.0;
+        });
+      }
+    } finally {
+      transitionInProgress = false;
+    }
   }
 
   Future<void> updateNextWisdomMessage() async {
