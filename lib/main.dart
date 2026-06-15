@@ -119,6 +119,12 @@ class _HomeScreenState extends State<HomeScreen>
   bool navigationInProgress = false;
   bool introFinished = false;
 
+  int delayedCallbackSession = 0;
+
+  void invalidateDelayedCallbacks() {
+    delayedCallbackSession++;
+  }
+
   List<FavoriteItem> favorites = [];
 
   bool isPremium = false;
@@ -205,6 +211,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    invalidateDelayedCallbacks();
+
     WidgetsBinding.instance.removeObserver(this);
     purchaseService.removeListener(_syncPremiumStatus);
     stopCountdownTimer();
@@ -428,10 +436,14 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (screenStep == 5) {
       HapticFeedback.selectionClick();
+
+      final callbackSession = delayedCallbackSession;
+
       Future.delayed(
         const Duration(milliseconds: 1200),
         () {
           if (!mounted) return;
+          if (callbackSession != delayedCallbackSession) return;
           audioService.playPauseSound();
         },
       );
@@ -446,10 +458,14 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (screenStep == 0) {
       HapticFeedback.selectionClick();
+
+      final callbackSession = delayedCallbackSession;
+
       Future.delayed(
         const Duration(milliseconds: 1200),
         () {
           if (!mounted) return;
+          if (callbackSession != delayedCallbackSession) return;
           audioService.playPauseSound();
         },
       );
@@ -466,19 +482,25 @@ class _HomeScreenState extends State<HomeScreen>
       HapticFeedback.selectionClick();
 
       if (pauseFeelOpacity < 1.0) {
+        final callbackSession = delayedCallbackSession;
+
         Future.delayed(
           const Duration(milliseconds: 200),
           () {
             if (!mounted) return;
+            if (callbackSession != delayedCallbackSession) return;
             audioService.playFeelSound();
           },
         );
         await revealFeelBesidePause();
       } else {
+        final callbackSession = delayedCallbackSession;
+
         Future.delayed(
           const Duration(milliseconds: 1100),
           () {
             if (!mounted) return;
+            if (callbackSession != delayedCallbackSession) return;
             audioService.playHeartSound();
           },
         );
