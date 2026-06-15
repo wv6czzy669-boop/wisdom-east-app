@@ -329,23 +329,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> saveDailyArchive(String text) async {
-    final prefs = await getPrefs();
-
-    final archive = prefs.getStringList("daily_wisdom_archive") ?? [];
-    final entry = "${formattedToday()}|||$text";
-
-    final alreadySavedToday = archive.any(
-      (item) => item.startsWith("${formattedToday()}|||"),
+    await storageService.saveDailyArchive(
+      text: text,
+      today: formattedToday(),
     );
-
-    if (!alreadySavedToday) {
-      archive.insert(0, entry);
-
-      await prefs.setStringList(
-        "daily_wisdom_archive",
-        archive.take(90).toList(),
-      );
-    }
   }
 
   Future<void> prepareRewardedWisdom() async {

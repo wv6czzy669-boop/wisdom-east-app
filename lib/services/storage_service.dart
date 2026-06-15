@@ -37,4 +37,27 @@ class StorageService {
         )
         .toList();
   }
+
+  Future<void> saveDailyArchive({
+    required String text,
+    required String today,
+  }) async {
+    final prefs = await getPrefs();
+
+    final archive = prefs.getStringList("daily_wisdom_archive") ?? [];
+    final entry = "$today|||$text";
+
+    final alreadySavedToday = archive.any(
+      (item) => item.startsWith("$today|||"),
+    );
+
+    if (!alreadySavedToday) {
+      archive.insert(0, entry);
+
+      await prefs.setStringList(
+        "daily_wisdom_archive",
+        archive.take(90).toList(),
+      );
+    }
+  }
 }
