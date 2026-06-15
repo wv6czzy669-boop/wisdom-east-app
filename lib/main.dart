@@ -231,8 +231,12 @@ class _HomeScreenState extends State<HomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
+      flowSessionId++;
+      invalidateDelayedCallbacks();
       audioService.stop();
       stopCountdownTimer();
+      transitionInProgress = false;
+      _transitionLock = false;
       return;
     }
 
