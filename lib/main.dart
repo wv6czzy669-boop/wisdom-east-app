@@ -809,91 +809,73 @@ class _HomeScreenState extends State<HomeScreen>
 
     transitionInProgress = true;
 
-    final currentFlow = ++flowSessionId;
+    try {
+      final currentFlow = ++flowSessionId;
 
-    HapticFeedback.lightImpact();
+      HapticFeedback.lightImpact();
 
-    setState(() {
-      textOpacity = 0.0;
-      heartOpacity = 0.0;
-      premiumPromptOpacity = 0.0;
-      ritualHintOpacity = 0.0;
-      pauseFeelOpacity = 0.0;
-      revealGlowOpacity = 0.0;
-      backgroundDepth = 0.82;
-      textScale = 0.975;
-    });
+      setState(() {
+        textOpacity = 0.0;
+        heartOpacity = 0.0;
+        premiumPromptOpacity = 0.0;
+        ritualHintOpacity = 0.0;
+        pauseFeelOpacity = 0.0;
+        revealGlowOpacity = 0.0;
+        backgroundDepth = 0.82;
+        textScale = 0.975;
+      });
 
-    await Future.delayed(const Duration(milliseconds: 880));
+      await Future.delayed(const Duration(milliseconds: 880));
 
-    if (!mounted || currentFlow != flowSessionId) {
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      final selectedText = await getLockedOrNewWisdom(
+        bypassLock: bypassLock,
+      );
+
+      setState(() {
+        currentText = selectedText;
+        screenStep = 4;
+        revealGlowOpacity = 0.16;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 260));
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      setState(() {
+        textOpacity = 1.0;
+        textScale = 1.0;
+        backgroundDepth = 0.30;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 280));
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      audioService.playRevealSound();
+      HapticFeedback.selectionClick();
+
+      await Future.delayed(const Duration(milliseconds: 900));
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      setState(() {
+        heartOpacity = 1.0;
+        revealGlowOpacity = 0.10;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 520));
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      setState(() {
+        premiumPromptOpacity = 1.0;
+      });
+    } finally {
       transitionInProgress = false;
       _transitionLock = false;
-      return;
     }
-
-    final selectedText = await getLockedOrNewWisdom(
-      bypassLock: bypassLock,
-    );
-
-    setState(() {
-      currentText = selectedText;
-      screenStep = 4;
-      revealGlowOpacity = 0.16;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 260));
-
-    if (!mounted || currentFlow != flowSessionId) {
-      transitionInProgress = false;
-      _transitionLock = false;
-      return;
-    }
-
-    setState(() {
-      textOpacity = 1.0;
-      textScale = 1.0;
-      backgroundDepth = 0.30;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 280));
-
-    if (!mounted || currentFlow != flowSessionId) {
-      transitionInProgress = false;
-      _transitionLock = false;
-      return;
-    }
-
-    audioService.playRevealSound();
-    HapticFeedback.selectionClick();
-
-    await Future.delayed(const Duration(milliseconds: 900));
-
-    if (!mounted || currentFlow != flowSessionId) {
-      transitionInProgress = false;
-      _transitionLock = false;
-      return;
-    }
-
-    setState(() {
-      heartOpacity = 1.0;
-      revealGlowOpacity = 0.10;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 520));
-
-    if (!mounted || currentFlow != flowSessionId) {
-      transitionInProgress = false;
-      _transitionLock = false;
-      return;
-    }
-
-    setState(() {
-      premiumPromptOpacity = 1.0;
-    });
-
-    transitionInProgress = false;
-    _transitionLock = false;
   }
 
   void resetToRevealScreen() async {
