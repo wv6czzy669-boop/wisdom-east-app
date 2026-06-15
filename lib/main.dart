@@ -427,86 +427,61 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void showRewardedAdThenReveal() {
-    if (adService.adShowInProgress) return;
-
     if (isPremium) {
       revealWisdom(bypassLock: true);
       return;
     }
 
-    if (!adService.canShowAd) {
-      showEastSnack(
-        adService.shouldShowPreparingMessage
-            ? "Ad is preparing. Please try again."
-            : "Ad is not ready yet. Please try again.",
-      );
+    adService.showRewardedAd(
+      onAdNotReady: () {
+        showEastSnack(
+          adService.shouldShowPreparingMessage
+              ? "Ad is preparing. Please try again."
+              : "Ad is not ready yet. Please try again.",
+        );
 
-      loadRewardedAd();
-      return;
-    }
-
-    adService.beginShowSession();
-    final currentAdSessionId = adService.adSessionId;
-
-    final adToShow = adService.takeAdForShowing();
-
-    if (!mounted) return;
-
-    if (adToShow == null) {
-      resetRewardedAdState();
-      loadRewardedAd();
-      return;
-    }
-
-    adToShow.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) async {
-        if (!adService.isCurrentShowSession(currentAdSessionId)) {
-          ad.dispose();
+        loadRewardedAd();
+      },
+      onAdMissing: () {
+        loadRewardedAd();
+      },
+      onAdDismissedAfterRewardCheck: () async {
+        if (!mounted) {
           return;
         }
 
-        ad.dispose();
-        resetRewardedAdState();
-
-        if (!mounted) return;
-
         if (adService.adRewardEarned && !isPremium) {
           await prepareRewardedWisdom();
-          if (!mounted) return;
+
+          if (!mounted) {
+            return;
+          }
         } else if (!adService.adRewardEarned) {
           showEastSnack("The wisdom opens after the ad is completed.");
         }
 
         await returnToBlackAfterAd();
-        if (!mounted) return;
 
-        loadRewardedAd();
-      },
-      onAdFailedToShowFullScreenContent: (ad, error) async {
-        if (!adService.isCurrentShowSession(currentAdSessionId)) {
-          ad.dispose();
+        if (!mounted) {
           return;
         }
 
-        ad.dispose();
-        resetRewardedAdState();
-
-        if (!mounted) return;
+        loadRewardedAd();
+      },
+      onAdFailedToShow: () async {
+        if (!mounted) {
+          return;
+        }
 
         showEastSnack("Ad could not open. Please try again.");
+
         await returnToBlackAfterAd();
-        if (!mounted) return;
 
-        loadRewardedAd();
-      },
-    );
-
-    adToShow.show(
-      onUserEarnedReward: (ad, reward) {
-        if (!adService.isCurrentShowSession(currentAdSessionId)) {
+        if (!mounted) {
           return;
         }
-        adService.markRewardEarned();
+
+        loadRewardedAd();
       },
     );
   }

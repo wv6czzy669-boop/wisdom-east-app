@@ -117,6 +117,68 @@ class RewardedAdService {
     isRewardedAdReady = false;
   }
 
+  void showRewardedAd({
+    required VoidCallback onAdNotReady,
+    required VoidCallback onAdMissing,
+    required Future<void> Function() onAdDismissedAfterRewardCheck,
+    required Future<void> Function() onAdFailedToShow,
+  }) {
+    if (adShowInProgress) {
+      return;
+    }
+
+    if (!canShowAd) {
+      onAdNotReady();
+      return;
+    }
+
+    beginShowSession();
+    final currentAdSessionId = adSessionId;
+
+    final adToShow = takeAdForShowing();
+
+    if (adToShow == null) {
+      resetRewardedAdState();
+      onAdMissing();
+      return;
+    }
+
+    adToShow.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) async {
+        if (!isCurrentShowSession(currentAdSessionId)) {
+          ad.dispose();
+          return;
+        }
+
+        ad.dispose();
+        resetRewardedAdState();
+
+        await onAdDismissedAfterRewardCheck();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) async {
+        if (!isCurrentShowSession(currentAdSessionId)) {
+          ad.dispose();
+          return;
+        }
+
+        ad.dispose();
+        resetRewardedAdState();
+
+        await onAdFailedToShow();
+      },
+    );
+
+    adToShow.show(
+      onUserEarnedReward: (ad, reward) {
+        if (!isCurrentShowSession(currentAdSessionId)) {
+          return;
+        }
+
+        markRewardEarned();
+      },
+    );
+  }
+
   RewardedAd? takeAdForShowing() {
     final adToShow = rewardedAd;
     rewardedAd = null;
