@@ -9,7 +9,6 @@ import 'services/storage_service.dart';
 import 'models/favorite_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 
@@ -153,8 +152,6 @@ class _HomeScreenState extends State<HomeScreen>
     countdownTimer?.cancel();
     countdownTimer = null;
   }
-
-  Future<SharedPreferences> getPrefs() => storageService.getPrefs();
 
   String nextWisdomMessage = "";
 
