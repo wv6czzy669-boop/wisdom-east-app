@@ -60,4 +60,21 @@ class StorageService {
       );
     }
   }
+
+  Future<void> saveRewardedWisdom({
+    required String text,
+    required DateTime unlockTime,
+  }) async {
+    final prefs = await getPrefs();
+
+    await prefs.setString(
+      "daily_wisdom_text",
+      text,
+    );
+
+    await prefs.setInt(
+      "wisdom_unlock_time_ms",
+      unlockTime.millisecondsSinceEpoch,
+    );
+  }
 }

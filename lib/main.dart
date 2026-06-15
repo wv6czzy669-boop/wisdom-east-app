@@ -336,19 +336,12 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> prepareRewardedWisdom() async {
-    final prefs = await getPrefs();
-
     final selectedWisdom = chooseSmartRandomWisdom();
     final selectedText = selectedWisdom["text"] as String;
 
-    await prefs.setString(
-      "daily_wisdom_text",
-      selectedText,
-    );
-
-    await prefs.setInt(
-      "wisdom_unlock_time_ms",
-      DateTime.now().add(wisdomLockDuration).millisecondsSinceEpoch,
+    await storageService.saveRewardedWisdom(
+      text: selectedText,
+      unlockTime: DateTime.now().add(wisdomLockDuration),
     );
 
     await saveDailyArchive(selectedText);
