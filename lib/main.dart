@@ -878,7 +878,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void resetToRevealScreen() async {
+  Future<void> resetToRevealScreen() async {
     HapticFeedback.selectionClick();
 
     await transitionToText(
@@ -887,7 +887,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void copyCurrentWisdom() async {
+  Future<void> copyCurrentWisdom() async {
     if (!wisdomRevealed) return;
 
     await Clipboard.setData(
