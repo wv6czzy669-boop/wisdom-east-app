@@ -5,17 +5,27 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PurchaseService extends ChangeNotifier {
+  PurchaseService({
+    Future<bool> Function()? entitlementWriter,
+  }) : _entitlementWriter = entitlementWriter;
+
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
-  static const String _premiumKey = 'is_premium';
+  // Keep the existing persisted key so current Keeper purchases remain active.
+  static const String _keeperKey = 'is_premium';
 
   final InAppPurchase _iap = InAppPurchase.instance;
+  final Future<bool> Function()? _entitlementWriter;
 
   StreamSubscription<List<PurchaseDetails>>? _subscription;
+  Completer<void>? _restoreStreamSignal;
 
   bool isAvailable = false;
-  bool isPremium = false;
+  bool isKeeper = false;
   bool isLoading = false;
+  bool entitlementPersistenceFailed = false;
   bool _disposed = false;
+  bool _purchasePending = false;
+  bool _restorePending = false;
   int _restoreSessionId = 0;
   int _buySessionId = 0;
 
@@ -26,13 +36,30 @@ class PurchaseService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _refreshLoadingState() {
+    isLoading = _purchasePending || _restorePending;
+    safeNotifyListeners();
+  }
+
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_disposed) return;
 
-      isPremium = prefs.getBool(_premiumKey) ?? false;
+      isKeeper = prefs.getBool(_keeperKey) ?? false;
       safeNotifyListeners();
+
+      await _subscription?.cancel();
+
+      _subscription = _iap.purchaseStream.listen(
+        _handlePurchases,
+        onError: (_) {
+          _purchasePending = false;
+          _signalRestoreStream();
+          _restorePending = false;
+          _refreshLoadingState();
+        },
+      );
 
       isAvailable = await _iap
           .isAvailable()
@@ -44,16 +71,6 @@ class PurchaseService extends ChangeNotifier {
         safeNotifyListeners();
         return;
       }
-
-      await _subscription?.cancel();
-
-      _subscription = _iap.purchaseStream.listen(
-        _handlePurchases,
-        onError: (_) {
-          isLoading = false;
-          safeNotifyListeners();
-        },
-      );
 
       await _loadProducts();
     } catch (_) {
@@ -82,110 +99,154 @@ class PurchaseService extends ChangeNotifier {
   }
 
   Future<bool> buyKeeper() async {
-    if (_disposed || isLoading) return false;
+    if (_disposed || isKeeper || isLoading || entitlementPersistenceFailed) {
+      return false;
+    }
 
     if (!isAvailable || keeperProduct == null) {
       return false;
     }
 
-    isLoading = true;
+    entitlementPersistenceFailed = false;
+    _purchasePending = true;
     final currentBuySessionId = ++_buySessionId;
-    safeNotifyListeners();
+    _refreshLoadingState();
 
     final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
 
     try {
-      final started = await _iap
-          .buyNonConsumable(purchaseParam: purchaseParam)
-          .timeout(const Duration(seconds: 12), onTimeout: () => false);
+      final started = await _iap.buyNonConsumable(
+        purchaseParam: purchaseParam,
+      );
 
-      Future.delayed(const Duration(seconds: 20), () {
-        if (_disposed || currentBuySessionId != _buySessionId) return;
-
-        if (isLoading) {
-          isLoading = false;
-          safeNotifyListeners();
-        }
-      });
+      if (!started && currentBuySessionId == _buySessionId) {
+        _purchasePending = false;
+        _refreshLoadingState();
+      }
 
       return started;
     } catch (_) {
       if (_disposed || currentBuySessionId != _buySessionId) return false;
 
-      isLoading = false;
-      safeNotifyListeners();
+      _purchasePending = false;
+      _refreshLoadingState();
       return false;
     }
   }
 
-  Future<void> restorePurchases() async {
-    if (_disposed || isLoading) return;
+  Future<bool> restorePurchases() async {
+    if (_disposed || isLoading || !isAvailable) return false;
 
-    isLoading = true;
+    _restorePending = true;
     final currentRestoreSessionId = ++_restoreSessionId;
-    safeNotifyListeners();
+    final streamSignal = Completer<void>();
+    _restoreStreamSignal = streamSignal;
+    _refreshLoadingState();
 
     try {
       await _iap.restorePurchases().timeout(const Duration(seconds: 12));
     } catch (_) {
-      if (_disposed || currentRestoreSessionId != _restoreSessionId) return;
+      if (_disposed || currentRestoreSessionId != _restoreSessionId) {
+        return false;
+      }
 
-      isLoading = false;
-      safeNotifyListeners();
-      return;
+      _restorePending = false;
+      if (identical(_restoreStreamSignal, streamSignal)) {
+        _restoreStreamSignal = null;
+      }
+      _refreshLoadingState();
+      return false;
     }
 
-    Future.delayed(const Duration(seconds: 8), () {
-      if (_disposed || currentRestoreSessionId != _restoreSessionId) return;
+    unawaited(
+      _finishRestoreWindow(currentRestoreSessionId, streamSignal),
+    );
+    return true;
+  }
 
-      if (isLoading) {
-        isLoading = false;
-        safeNotifyListeners();
-      }
-    });
+  Future<void> _finishRestoreWindow(
+    int sessionId,
+    Completer<void> streamSignal,
+  ) async {
+    await Future.any([
+      streamSignal.future,
+      Future<void>.delayed(const Duration(seconds: 8)),
+    ]);
+
+    if (_disposed || sessionId != _restoreSessionId) return;
+
+    _restorePending = false;
+    if (identical(_restoreStreamSignal, streamSignal)) {
+      _restoreStreamSignal = null;
+    }
+    _refreshLoadingState();
   }
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
     if (_disposed) return;
 
     for (final purchase in purchases) {
-      try {
-        if (purchase.productID == keeperProductId) {
-          if (purchase.status == PurchaseStatus.purchased ||
-              purchase.status == PurchaseStatus.restored) {
-            await _unlockPremium();
-          }
+      if (purchase.productID != keeperProductId) continue;
 
-          if (purchase.status == PurchaseStatus.error ||
-              purchase.status == PurchaseStatus.canceled) {
-            isLoading = false;
-            safeNotifyListeners();
-          }
-        }
-      } finally {
-        if (purchase.pendingCompletePurchase) {
-          try {
-            await _iap.completePurchase(purchase);
-          } catch (_) {}
+      var shouldComplete = false;
+
+      if (purchase.status == PurchaseStatus.pending) {
+        _purchasePending = true;
+        _refreshLoadingState();
+        continue;
+      }
+
+      if (purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored) {
+        final persisted = await _persistKeeperEntitlement();
+        shouldComplete = persisted;
+        entitlementPersistenceFailed = !persisted;
+        _purchasePending = false;
+        _signalRestoreStream();
+      } else if (purchase.status == PurchaseStatus.error ||
+          purchase.status == PurchaseStatus.canceled) {
+        shouldComplete = true;
+        _purchasePending = false;
+        _signalRestoreStream();
+      }
+
+      if (shouldComplete && purchase.pendingCompletePurchase) {
+        try {
+          await _iap.completePurchase(purchase);
+        } catch (_) {
+          // StoreKit will redeliver unfinished transactions for another attempt.
         }
       }
-    }
 
-    isLoading = false;
-    safeNotifyListeners();
+      _refreshLoadingState();
+    }
   }
 
-  Future<void> _unlockPremium() async {
+  Future<bool> _persistKeeperEntitlement() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_premiumKey, true);
+      final entitlementWriter = _entitlementWriter;
+      if (entitlementWriter != null) {
+        final persisted = await entitlementWriter();
+        if (!persisted) return false;
+        isKeeper = true;
+        return true;
+      }
 
-      isPremium = true;
+      final prefs = await SharedPreferences.getInstance();
+      final saved = await prefs.setBool(_keeperKey, true);
+      if (!saved || prefs.getBool(_keeperKey) != true) return false;
+
+      isKeeper = true;
+      return true;
     } catch (_) {
-      // Purchase completion still happens in _handlePurchases finally.
-    } finally {
-      isLoading = false;
-      safeNotifyListeners();
+      return false;
+    }
+  }
+
+  void _signalRestoreStream() {
+    final signal = _restoreStreamSignal;
+    if (signal != null && !signal.isCompleted) {
+      signal.complete();
     }
   }
 
@@ -194,6 +255,7 @@ class PurchaseService extends ChangeNotifier {
     _disposed = true;
     _restoreSessionId += 1;
     _buySessionId += 1;
+    _signalRestoreStream();
     _subscription?.cancel();
     super.dispose();
   }

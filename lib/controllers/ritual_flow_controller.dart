@@ -9,8 +9,6 @@ class RitualFlowController {
 
   bool isWisdomRevealed(int screenStep) => screenStep == 4;
 
-  bool isPostAdBlackScreen(int screenStep) => screenStep == 5;
-
   Duration transitionFadeOutDuration(int nextStep) =>
       Duration(milliseconds: nextStep == 3 ? 980 : 820);
 

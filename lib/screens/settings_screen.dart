@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../main.dart' show purchaseService;
-import 'premium_screen.dart';
+import '../services/app_services.dart';
+import 'keeper_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -172,13 +172,13 @@ class SettingsScreen extends StatelessWidget {
           ),
           settingsItem(
             icon: Icons.workspace_premium_outlined,
-            title: "Premium",
-            subtitle: "Unlimited reveals, unlimited favorites, and no ads.",
+            title: "Keeper",
+            subtitle: "Unlimited saved reflections and support for East.",
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const PremiumScreen(),
+                  builder: (context) => const KeeperScreen(),
                 ),
               );
             },
@@ -190,19 +190,22 @@ class SettingsScreen extends StatelessWidget {
           settingsItem(
             icon: Icons.restore,
             title: "Restore Purchases",
-            subtitle: "Restore your Premium access on this device.",
+            subtitle: "Restore your Keeper access on this device.",
             onTap: () async {
+              if (purchaseService.isLoading) return;
+
+              var restoreStarted = false;
               try {
-                await purchaseService.restorePurchases();
+                restoreStarted = await purchaseService.restorePurchases();
               } catch (_) {}
 
               if (!context.mounted) return;
               showInfoDialog(
                 context,
                 "Restore Purchases",
-                purchaseService.isPremium
-                    ? "Your Premium access has been restored."
-                    : "No previous Premium purchase was found.",
+                restoreStarted
+                    ? "Restore request sent. Keeper access will update automatically."
+                    : "Restore is not available right now. Please try again shortly.",
               );
             },
           ),

@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/favorite_item.dart';
+import '../models/daily_wisdom_record.dart';
 
 class StorageService {
   SharedPreferences? _cachedPrefs;
@@ -69,51 +70,47 @@ class StorageService {
     }
   }
 
-  Future<void> saveRewardedWisdom({
-    required String text,
-    required DateTime unlockTime,
+  Future<DailyWisdomRecord?> loadDailyWisdomRecord({
+    required Duration lockDuration,
   }) async {
     final prefs = await getPrefs();
+    final encodedRecord = prefs.getString("daily_wisdom_access");
 
-    await prefs.setString(
-      "daily_wisdom_text",
-      text,
+    if (encodedRecord != null) {
+      try {
+        return DailyWisdomRecord.decode(encodedRecord);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final legacyText = prefs.getString("daily_wisdom_text");
+    final legacyUnlockTimeMs = prefs.getInt("wisdom_unlock_time_ms");
+    if (legacyText == null || legacyUnlockTimeMs == null) return null;
+
+    final unlockAt = DateTime.fromMillisecondsSinceEpoch(legacyUnlockTimeMs);
+    final migratedRecord = DailyWisdomRecord(
+      text: legacyText,
+      revealedAt: unlockAt.subtract(lockDuration),
+      unlockAt: unlockAt,
     );
 
-    await prefs.setInt(
-      "wisdom_unlock_time_ms",
-      unlockTime.millisecondsSinceEpoch,
-    );
+    await saveDailyWisdomRecord(migratedRecord);
+    return migratedRecord;
   }
 
-  Future<String?> getDailyWisdomText() async {
+  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) async {
     final prefs = await getPrefs();
-    return prefs.getString("daily_wisdom_text");
+    final saved = await prefs.setString("daily_wisdom_access", record.encode());
+    if (!saved) {
+      throw StateError('Daily wisdom lock could not be persisted.');
+    }
+
+    await prefs.remove("daily_wisdom_text");
+    await prefs.remove("wisdom_unlock_time_ms");
   }
 
-  Future<void> saveDailyWisdom({
-    required String text,
-    required DateTime unlockTime,
-  }) async {
-    final prefs = await getPrefs();
-
-    await prefs.setString(
-      "daily_wisdom_text",
-      text,
-    );
-
-    await prefs.setInt(
-      "wisdom_unlock_time_ms",
-      unlockTime.millisecondsSinceEpoch,
-    );
-  }
-
-  Future<int?> getWisdomUnlockTimeMs() async {
-    final prefs = await getPrefs();
-    return prefs.getInt("wisdom_unlock_time_ms");
-  }
-
-  Future<bool> getPremiumStatus() async {
+  Future<bool> getKeeperStatus() async {
     final prefs = await getPrefs();
     return prefs.getBool("is_premium") ?? false;
   }
