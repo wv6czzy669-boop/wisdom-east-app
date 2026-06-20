@@ -82,4 +82,33 @@ void main() {
 
     expect(items, hasLength(12));
   });
+
+  test('failed persistence does not report a changed reflection list',
+      () async {
+    final originalItems = [
+      FavoriteItem(text: 'Existing reflection', date: 'Today'),
+    ];
+    service = SavedReflectionsService(
+      storageService: _FailingFavoritesStorageService(),
+    );
+
+    await expectLater(
+      service.toggle(
+        currentItems: originalItems,
+        text: 'Unsaved reflection',
+        date: 'Today',
+        isKeeper: false,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(originalItems.map((item) => item.text), ['Existing reflection']);
+  });
+}
+
+class _FailingFavoritesStorageService extends StorageService {
+  @override
+  Future<void> saveFavorites(List<FavoriteItem> favorites) {
+    throw StateError('Simulated persistence failure.');
+  }
 }

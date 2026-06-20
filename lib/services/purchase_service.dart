@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class PurchaseService extends ChangeNotifier {
   PurchaseService({
     Future<bool> Function()? entitlementWriter,
+    this.purchaseInitiationTimeout = const Duration(seconds: 12),
   }) : _entitlementWriter = entitlementWriter;
 
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
@@ -15,6 +16,7 @@ class PurchaseService extends ChangeNotifier {
 
   final InAppPurchase _iap = InAppPurchase.instance;
   final Future<bool> Function()? _entitlementWriter;
+  final Duration purchaseInitiationTimeout;
 
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   Completer<void>? _restoreStreamSignal;
@@ -25,11 +27,15 @@ class PurchaseService extends ChangeNotifier {
   bool entitlementPersistenceFailed = false;
   bool _disposed = false;
   bool _purchasePending = false;
+  bool _purchaseUncertain = false;
   bool _restorePending = false;
   int _restoreSessionId = 0;
   int _buySessionId = 0;
 
   ProductDetails? keeperProduct;
+
+  bool get purchaseNeedsRecovery =>
+      _purchaseUncertain || entitlementPersistenceFailed;
 
   void safeNotifyListeners() {
     if (_disposed) return;
@@ -54,6 +60,9 @@ class PurchaseService extends ChangeNotifier {
       _subscription = _iap.purchaseStream.listen(
         _handlePurchases,
         onError: (_) {
+          if (_purchasePending) {
+            _purchaseUncertain = true;
+          }
           _purchasePending = false;
           _signalRestoreStream();
           _restorePending = false;
@@ -99,7 +108,11 @@ class PurchaseService extends ChangeNotifier {
   }
 
   Future<bool> buyKeeper() async {
-    if (_disposed || isKeeper || isLoading || entitlementPersistenceFailed) {
+    if (_disposed ||
+        isKeeper ||
+        isLoading ||
+        _purchaseUncertain ||
+        entitlementPersistenceFailed) {
       return false;
     }
 
@@ -108,6 +121,7 @@ class PurchaseService extends ChangeNotifier {
     }
 
     entitlementPersistenceFailed = false;
+    _purchaseUncertain = false;
     _purchasePending = true;
     final currentBuySessionId = ++_buySessionId;
     _refreshLoadingState();
@@ -115,12 +129,15 @@ class PurchaseService extends ChangeNotifier {
     final purchaseParam = PurchaseParam(productDetails: keeperProduct!);
 
     try {
-      final started = await _iap.buyNonConsumable(
-        purchaseParam: purchaseParam,
-      );
+      final started = await _iap
+          .buyNonConsumable(
+            purchaseParam: purchaseParam,
+          )
+          .timeout(purchaseInitiationTimeout);
 
       if (!started && currentBuySessionId == _buySessionId) {
         _purchasePending = false;
+        _purchaseUncertain = false;
         _refreshLoadingState();
       }
 
@@ -129,13 +146,16 @@ class PurchaseService extends ChangeNotifier {
       if (_disposed || currentBuySessionId != _buySessionId) return false;
 
       _purchasePending = false;
+      _purchaseUncertain = true;
       _refreshLoadingState();
       return false;
     }
   }
 
   Future<bool> restorePurchases() async {
-    if (_disposed || isLoading || !isAvailable) return false;
+    if (_disposed || _restorePending || _purchasePending || !isAvailable) {
+      return false;
+    }
 
     _restorePending = true;
     final currentRestoreSessionId = ++_restoreSessionId;
@@ -191,6 +211,7 @@ class PurchaseService extends ChangeNotifier {
       var shouldComplete = false;
 
       if (purchase.status == PurchaseStatus.pending) {
+        _purchaseUncertain = false;
         _purchasePending = true;
         _refreshLoadingState();
         continue;
@@ -201,11 +222,13 @@ class PurchaseService extends ChangeNotifier {
         final persisted = await _persistKeeperEntitlement();
         shouldComplete = persisted;
         entitlementPersistenceFailed = !persisted;
+        _purchaseUncertain = false;
         _purchasePending = false;
         _signalRestoreStream();
       } else if (purchase.status == PurchaseStatus.error ||
           purchase.status == PurchaseStatus.canceled) {
         shouldComplete = true;
+        _purchaseUncertain = false;
         _purchasePending = false;
         _signalRestoreStream();
       }

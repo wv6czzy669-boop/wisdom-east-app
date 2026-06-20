@@ -29,7 +29,7 @@ void main() {
     expect(renderedCopy, lockedCopy.toSet());
   });
 
-  testWidgets('Keeper screen remains scroll-safe on iPhone SE with large text',
+  testWidgets('Keeper screen remains stable on iPhone SE with large text',
       (tester) async {
     tester.view.physicalSize = const Size(640, 1136);
     tester.view.devicePixelRatio = 2;
@@ -44,7 +44,7 @@ void main() {
       const MaterialApp(home: KeeperScreen()),
     );
 
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsNothing);
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text('Help keep East alive.'), findsOneWidget);
     expect(tester.takeException(), isNull);

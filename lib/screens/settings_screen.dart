@@ -216,7 +216,7 @@ class SettingsScreen extends StatelessWidget {
           settingsItem(
             icon: Icons.privacy_tip_outlined,
             title: "Privacy Policy",
-            subtitle: "Required for App Store release.",
+            subtitle: "How East handles your information.",
             onTap: () async {
               await openPrivacyPolicy();
 

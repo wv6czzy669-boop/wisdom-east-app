@@ -3,6 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/favorite_item.dart';
 import '../models/daily_wisdom_record.dart';
 
+class CorruptDailyWisdomRecordException implements Exception {
+  const CorruptDailyWisdomRecordException();
+}
+
 class StorageService {
   SharedPreferences? _cachedPrefs;
 
@@ -16,10 +20,13 @@ class StorageService {
 
     final encodedFavorites = favorites.map((item) => item.encode()).toList();
 
-    await prefs.setStringList(
+    final saved = await prefs.setStringList(
       'favorites',
       encodedFavorites,
     );
+    if (!saved) {
+      throw StateError('Saved reflections could not be persisted.');
+    }
   }
 
   Future<List<FavoriteItem>> loadFavorites({
@@ -74,13 +81,18 @@ class StorageService {
     required Duration lockDuration,
   }) async {
     final prefs = await getPrefs();
-    final encodedRecord = prefs.getString("daily_wisdom_access");
+    final String? encodedRecord;
+    try {
+      encodedRecord = prefs.getString("daily_wisdom_access");
+    } catch (_) {
+      throw const CorruptDailyWisdomRecordException();
+    }
 
     if (encodedRecord != null) {
       try {
         return DailyWisdomRecord.decode(encodedRecord);
       } catch (_) {
-        return null;
+        throw const CorruptDailyWisdomRecordException();
       }
     }
 

@@ -99,6 +99,37 @@ void main() {
     expect(platform.completedPurchases, 0);
     expect(await service.buyKeeper(), isFalse);
   });
+
+  test('buy timeout blocks duplicate purchases and leaves restore available',
+      () async {
+    service.dispose();
+    service = PurchaseService(
+      purchaseInitiationTimeout: const Duration(milliseconds: 20),
+    );
+    await service.init();
+    platform.buyCompleter = Completer<bool>();
+
+    expect(await service.buyKeeper(), isFalse);
+    expect(service.isLoading, isFalse);
+    expect(service.purchaseNeedsRecovery, isTrue);
+    expect(await service.buyKeeper(), isFalse);
+
+    expect(await service.restorePurchases(), isTrue);
+    expect(service.isLoading, isTrue);
+  });
+
+  test('purchase stream error keeps duplicate purchase guard active', () async {
+    expect(await service.buyKeeper(), isTrue);
+    expect(service.isLoading, isTrue);
+
+    platform.emitError(StateError('Simulated purchase stream failure.'));
+    await _flushEvents();
+
+    expect(service.isKeeper, isFalse);
+    expect(service.isLoading, isFalse);
+    expect(service.purchaseNeedsRecovery, isTrue);
+    expect(await service.buyKeeper(), isFalse);
+  });
 }
 
 Future<void> _flushEvents() async {
@@ -171,6 +202,10 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
     )..pendingCompletePurchase = pendingCompletePurchase;
 
     _purchaseController.add([purchase]);
+  }
+
+  void emitError(Object error) {
+    _purchaseController.addError(error);
   }
 
   Future<void> dispose() => _purchaseController.close();

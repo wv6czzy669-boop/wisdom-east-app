@@ -88,7 +88,9 @@ class _KeeperScreenState extends State<KeeperScreen> {
         SnackBar(
           backgroundColor: const Color(0xFF111111),
           content: Text(
-            "Purchase is not ready yet. Please try again shortly.",
+            purchaseService.purchaseNeedsRecovery
+                ? "Purchase status is still updating. Please use Restore Purchases in Settings."
+                : "Purchase is not ready yet. Please try again shortly.",
             style: keeperStyle(17),
           ),
         ),
@@ -99,10 +101,6 @@ class _KeeperScreenState extends State<KeeperScreen> {
   @override
   Widget build(BuildContext context) {
     final isKeeper = purchaseService.isKeeper;
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final circleSize =
-        (214 + ((textScale - 1).clamp(0.0, 1.5) * 32)).clamp(214, 260);
-
     return Scaffold(
       backgroundColor: const Color(0xFF030303),
       appBar: AppBar(
@@ -114,112 +112,104 @@ class _KeeperScreenState extends State<KeeperScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(30, 18, 30, 32),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 50,
-                ),
-                child: IntrinsicHeight(
-                  child: Column(
-                    children: [
-                      const Spacer(flex: 3),
-                      Text(
-                        "Keeper",
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(42).copyWith(letterSpacing: 0.8),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Keep what stays.",
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(
-                          23,
-                          color:
-                              const Color(0xFFF4F0E8).withValues(alpha: 0.82),
-                        ).copyWith(letterSpacing: 1.35),
-                      ),
-                      const Spacer(flex: 2),
-                      Semantics(
-                        button: !isKeeper,
-                        child: GestureDetector(
-                          onTap: isKeeper || purchaseService.isLoading
-                              ? null
-                              : buyKeeper,
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 500),
-                            opacity: purchaseService.isLoading ? 0.72 : 1.0,
-                            child: Container(
-                              width: circleSize.toDouble(),
-                              height: circleSize.toDouble(),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
+        child: SizedBox.expand(
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Transform.translate(
+                offset: const Offset(0, -8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Keeper",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(48).copyWith(letterSpacing: 0.8),
+                    ),
+                    const SizedBox(height: 34),
+                    Text(
+                      "Keep what stays.",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(
+                        25,
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.82),
+                      ).copyWith(letterSpacing: 1.55),
+                    ),
+                    const SizedBox(height: 92),
+                    Semantics(
+                      button: !isKeeper,
+                      child: GestureDetector(
+                        onTap: isKeeper || purchaseService.isLoading
+                            ? null
+                            : buyKeeper,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 500),
+                          opacity: purchaseService.isLoading ? 0.72 : 1.0,
+                          child: Container(
+                            width: 238,
+                            height: 238,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFFF4F0E8)
+                                  .withValues(alpha: 0.012),
+                              border: Border.all(
                                 color: const Color(0xFFF4F0E8)
-                                    .withValues(alpha: 0.012),
-                                border: Border.all(
-                                  color: const Color(0xFFF4F0E8)
-                                      .withValues(alpha: 0.42),
-                                  width: 0.7,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFD9B86F)
-                                        .withValues(alpha: 0.055),
-                                    blurRadius: 118,
-                                    spreadRadius: 5,
-                                  ),
-                                  BoxShadow(
-                                    color: const Color(0xFFF4F0E8)
-                                        .withValues(alpha: 0.022),
-                                    blurRadius: 72,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
+                                    .withValues(alpha: 0.38),
+                                width: 0.7,
                               ),
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 20),
-                                child: Text(
-                                  "Enter the Circle",
-                                  textAlign: TextAlign.center,
-                                  style: keeperStyle(21)
-                                      .copyWith(letterSpacing: 0.75),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFD9B86F)
+                                      .withValues(alpha: 0.05),
+                                  blurRadius: 122,
+                                  spreadRadius: 5,
                                 ),
+                                BoxShadow(
+                                  color: const Color(0xFFF4F0E8)
+                                      .withValues(alpha: 0.02),
+                                  blurRadius: 78,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 22),
+                              child: Text(
+                                "Enter the Circle",
+                                textAlign: TextAlign.center,
+                                style: keeperStyle(22)
+                                    .copyWith(letterSpacing: 0.85),
                               ),
                             ),
                           ),
                         ),
                       ),
-                      const Spacer(flex: 3),
-                      Text(
-                        "Preserve what stays with you.",
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(
-                          14,
-                          color:
-                              const Color(0xFFF4F0E8).withValues(alpha: 0.55),
-                        ).copyWith(letterSpacing: 0.7),
-                      ),
-                      const SizedBox(height: 9),
-                      Text(
-                        "Help keep East alive.",
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(
-                          12,
-                          color:
-                              const Color(0xFFF4F0E8).withValues(alpha: 0.55),
-                        ).copyWith(letterSpacing: 0.75),
-                      ),
-                      const Spacer(),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 108),
+                    Text(
+                      "Preserve what stays with you.",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(
+                        15,
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.55),
+                      ).copyWith(letterSpacing: 0.75),
+                    ),
+                    const SizedBox(height: 11),
+                    Text(
+                      "Help keep East alive.",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(
+                        13,
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.55),
+                      ).copyWith(letterSpacing: 0.8),
+                    ),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );

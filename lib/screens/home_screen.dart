@@ -46,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen>
   int flowSessionId = 0;
   bool navigationInProgress = false;
   bool introFinished = false;
+  bool heartInteractionEnabled = false;
 
   final ritualFlowController = const RitualFlowController();
 
@@ -65,6 +66,40 @@ class _HomeScreenState extends State<HomeScreen>
     audioService.stop();
     transitionInProgress = false;
     _transitionLock = false;
+  }
+
+  void restoreStableRitualState() {
+    if (!mounted) return;
+
+    setState(() {
+      transitionInProgress = false;
+      _transitionLock = false;
+      textOpacity = 1.0;
+      textScale = 1.0;
+
+      if (screenStep == 0) {
+        openingSubtitleOpacity = 1.0;
+        backgroundDepth = 0.06;
+      } else {
+        openingSubtitleOpacity = 0.0;
+        backgroundDepth = wisdomRevealed ? 0.30 : 0.0;
+      }
+
+      if (!onPauseScreen) {
+        pauseFeelOpacity = 0.0;
+      }
+
+      if (wisdomRevealed) {
+        heartOpacity = 1.0;
+        keeperPromptOpacity = 1.0;
+        revealGlowOpacity = 0.10;
+      } else {
+        heartOpacity = 0.0;
+        heartInteractionEnabled = false;
+        keeperPromptOpacity = 0.0;
+        revealGlowOpacity = 0.0;
+      }
+    });
   }
 
   List<FavoriteItem> favorites = [];
@@ -170,8 +205,7 @@ class _HomeScreenState extends State<HomeScreen>
         pulseController.stop();
       }
 
-      transitionInProgress = false;
-      _transitionLock = false;
+      restoreStableRitualState();
       return;
     }
 
@@ -390,6 +424,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         textOpacity = 0.0;
         heartOpacity = 0.0;
+        heartInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
         ritualHintOpacity = 0.0;
         revealGlowOpacity = 0.0;
@@ -489,10 +524,18 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     if (access.isNew) {
-      await saveDailyArchive(access.text);
+      try {
+        await saveDailyArchive(access.text);
+      } catch (_) {
+        // Archiving is best-effort and must never hide a persisted wisdom.
+      }
     }
 
-    await updateNextWisdomMessage();
+    try {
+      await updateNextWisdomMessage();
+    } catch (_) {
+      // Countdown copy is noncritical after the daily wisdom is persisted.
+    }
 
     return access.text;
   }
@@ -518,6 +561,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         textOpacity = 0.0;
         heartOpacity = 0.0;
+        heartInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
         ritualHintOpacity = 0.0;
         pauseFeelOpacity = 0.0;
@@ -793,6 +837,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final ritualTextWidth = max(
+      1.0,
+      MediaQuery.sizeOf(context).width - 68,
+    );
     final textSize = screenStep == 0
         ? 42.0
         : wisdomRevealed
@@ -916,6 +964,7 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                             curve: Curves.easeInOutCubic,
                             child: AnimatedOpacity(
+                              key: const ValueKey('ritual-content-opacity'),
                               duration: const Duration(
                                 milliseconds: 1250,
                               ),
@@ -932,59 +981,51 @@ class _HomeScreenState extends State<HomeScreen>
                                   );
                                 },
                                 child: screenStep == 0
-                                    ? Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            "East",
-                                            textAlign: TextAlign.center,
-                                            style: wisdomStyle(
-                                              44,
-                                              color: finalColor,
-                                              glow: true,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          AnimatedOpacity(
-                                            duration: const Duration(
-                                              milliseconds: 1200,
-                                            ),
-                                            opacity: openingSubtitleOpacity,
-                                            child: Text(
-                                              "where silence speaks",
-                                              textAlign: TextAlign.center,
-                                              style: wisdomStyle(
-                                                20,
-                                                color: Colors.white54,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : onPauseScreen
-                                        ? Row(
+                                    ? FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: SizedBox(
+                                          width: ritualTextWidth,
+                                          child: Column(
                                             mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
                                             children: [
                                               Text(
-                                                "Pause.",
+                                                "East",
                                                 textAlign: TextAlign.center,
                                                 style: wisdomStyle(
-                                                  textSize,
+                                                  44,
                                                   color: finalColor,
                                                   glow: true,
                                                 ),
                                               ),
-                                              const SizedBox(width: 28),
+                                              const SizedBox(height: 8),
                                               AnimatedOpacity(
                                                 duration: const Duration(
-                                                  milliseconds: 1250,
+                                                  milliseconds: 1200,
                                                 ),
-                                                curve: Curves.easeInOutCubic,
-                                                opacity: pauseFeelOpacity,
+                                                opacity: openingSubtitleOpacity,
                                                 child: Text(
-                                                  "Feel.",
+                                                  "where silence speaks",
+                                                  textAlign: TextAlign.center,
+                                                  style: wisdomStyle(
+                                                    20,
+                                                    color: Colors.white54,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : onPauseScreen
+                                        ? FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  "Pause.",
                                                   textAlign: TextAlign.center,
                                                   style: wisdomStyle(
                                                     textSize,
@@ -992,19 +1033,42 @@ class _HomeScreenState extends State<HomeScreen>
                                                     glow: true,
                                                   ),
                                                 ),
-                                              ),
-                                            ],
+                                                const SizedBox(width: 28),
+                                                AnimatedOpacity(
+                                                  duration: const Duration(
+                                                    milliseconds: 1250,
+                                                  ),
+                                                  curve: Curves.easeInOutCubic,
+                                                  opacity: pauseFeelOpacity,
+                                                  child: Text(
+                                                    "Feel.",
+                                                    textAlign: TextAlign.center,
+                                                    style: wisdomStyle(
+                                                      textSize,
+                                                      color: finalColor,
+                                                      glow: true,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           )
-                                        : Text(
-                                            currentText,
-                                            textAlign: TextAlign.center,
-                                            style: wisdomStyle(
-                                              textSize,
-                                              color: wisdomRevealed
-                                                  ? animatedTextColor
-                                                  : finalColor,
-                                              glow: wisdomRevealed ||
-                                                  onHeartScreen,
+                                        : FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: SizedBox(
+                                              width: ritualTextWidth,
+                                              child: Text(
+                                                currentText,
+                                                textAlign: TextAlign.center,
+                                                style: wisdomStyle(
+                                                  textSize,
+                                                  color: wisdomRevealed
+                                                      ? animatedTextColor
+                                                      : finalColor,
+                                                  glow: wisdomRevealed ||
+                                                      onHeartScreen,
+                                                ),
+                                              ),
                                             ),
                                           ),
                               ),
@@ -1062,20 +1126,36 @@ class _HomeScreenState extends State<HomeScreen>
                 right: 0,
                 top: MediaQuery.of(context).size.height / 2 + 72,
                 child: Center(
-                  child: AnimatedOpacity(
-                    duration: const Duration(
-                      milliseconds: 1000,
-                    ),
-                    opacity: heartOpacity,
-                    child: IconButton(
-                      icon: Icon(
-                        isCurrentFavorite()
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        color: const Color(0xFFF4F0E8),
-                        size: 28,
+                  child: IgnorePointer(
+                    key: const ValueKey('favorite-interaction-guard'),
+                    ignoring: !heartInteractionEnabled,
+                    child: AnimatedOpacity(
+                      duration: const Duration(
+                        milliseconds: 1000,
                       ),
-                      onPressed: toggleFavorite,
+                      opacity: heartOpacity,
+                      onEnd: () {
+                        if (!mounted ||
+                            heartInteractionEnabled ||
+                            heartOpacity < 1.0 ||
+                            !wisdomRevealed) {
+                          return;
+                        }
+
+                        setState(() {
+                          heartInteractionEnabled = true;
+                        });
+                      },
+                      child: IconButton(
+                        icon: Icon(
+                          isCurrentFavorite()
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          color: const Color(0xFFF4F0E8),
+                          size: 28,
+                        ),
+                        onPressed: toggleFavorite,
+                      ),
                     ),
                   ),
                 ),
@@ -1090,26 +1170,6 @@ class _HomeScreenState extends State<HomeScreen>
                   opacity: keeperPromptOpacity,
                   child: Column(
                     children: [
-                      GestureDetector(
-                        onTap: revealWisdom,
-                        child: Text(
-                          "Ask Again",
-                          textAlign: TextAlign.center,
-                          style: wisdomStyle(
-                            18,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        "Keeper",
-                        textAlign: TextAlign.center,
-                        style: wisdomStyle(
-                          14,
-                          color: Colors.white38,
-                        ),
-                      ),
                       if (nextWisdomMessage.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Text(

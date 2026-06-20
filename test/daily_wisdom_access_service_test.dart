@@ -90,6 +90,54 @@ void main() {
     expect(result.text, 'Locked wisdom');
   });
 
+  final corruptRecords = <String, Object>{
+    'malformed JSON': '{',
+    'missing fields': '{"text":"Incomplete wisdom"}',
+    'invalid timestamp type':
+        '{"text":"Invalid wisdom","revealedAtMs":"now","unlockAtMs":2}',
+    'invalid timestamp order':
+        '{"text":"Invalid wisdom","revealedAtMs":2,"unlockAtMs":1}',
+    'invalid stored value type': 42,
+  };
+
+  for (final corruptRecord in corruptRecords.entries) {
+    test('corrupt daily record fails closed: ${corruptRecord.key}', () async {
+      SharedPreferences.setMockInitialValues({
+        'daily_wisdom_access': corruptRecord.value,
+      });
+      storage = StorageService();
+      service = DailyWisdomAccessService(
+        storageService: storage,
+        clock: () => now,
+      );
+      var selected = false;
+
+      final result = await service.reveal(
+        selectWisdom: () {
+          selected = true;
+          return 'New wisdom';
+        },
+      );
+      final recovered = await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      );
+
+      expect(selected, isFalse);
+      expect(result.isNew, isFalse);
+      expect(
+        result.text,
+        DailyWisdomAccessService.corruptRecordRecoveryText,
+      );
+      expect(result.unlockAt, now.add(const Duration(hours: 24)));
+      expect(recovered, isNotNull);
+      expect(recovered!.text, result.text);
+      expect(
+        recovered.unlockAt.millisecondsSinceEpoch,
+        result.unlockAt!.millisecondsSinceEpoch,
+      );
+    });
+  }
+
   test('Keeper receives one new wisdom and stays locked inside 24 hours',
       () async {
     var selections = 0;
