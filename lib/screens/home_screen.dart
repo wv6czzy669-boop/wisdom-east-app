@@ -37,7 +37,6 @@ class _HomeScreenState extends State<HomeScreen>
   double textScale = 0.985;
   double revealGlowOpacity = 0.0;
   double backgroundDepth = 0.0;
-  double ritualHintOpacity = 0.0;
   double openingSubtitleOpacity = 0.0;
   double pauseFeelOpacity = 0.0;
 
@@ -45,8 +44,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _transitionLock = false;
   int flowSessionId = 0;
   bool navigationInProgress = false;
-  bool introFinished = false;
   bool heartInteractionEnabled = false;
+  bool _reduceMotion = false;
 
   final ritualFlowController = const RitualFlowController();
 
@@ -63,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen>
   void interruptRitualForNavigation() {
     flowSessionId++;
     invalidateDelayedCallbacks();
-    audioService.stop();
+    unawaited(audioService.stop());
     transitionInProgress = false;
     _transitionLock = false;
   }
@@ -175,6 +174,24 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (_reduceMotion == reduceMotion) return;
+
+    _reduceMotion = reduceMotion;
+    if (_reduceMotion) {
+      pulseController.stop();
+      pulseController.value = 0.5;
+    } else if (WidgetsBinding.instance.lifecycleState ==
+            AppLifecycleState.resumed &&
+        !pulseController.isAnimating) {
+      pulseController.repeat(reverse: true);
+    }
+  }
+
+  @override
   void dispose() {
     flowSessionId++;
     invalidateDelayedCallbacks();
@@ -198,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen>
         state == AppLifecycleState.inactive) {
       flowSessionId++;
       invalidateDelayedCallbacks();
-      audioService.stop();
+      unawaited(audioService.stop());
       stopCountdownTimer();
 
       if (pulseController.isAnimating) {
@@ -212,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (state == AppLifecycleState.resumed) {
       if (!mounted) return;
 
-      if (!pulseController.isAnimating) {
+      if (!_reduceMotion && !pulseController.isAnimating) {
         pulseController.repeat(reverse: true);
       }
 
@@ -249,10 +266,6 @@ class _HomeScreenState extends State<HomeScreen>
     await Future.delayed(const Duration(milliseconds: 500));
 
     if (!mounted || currentFlow != flowSessionId) return;
-
-    setState(() {
-      introFinished = true;
-    });
 
     startCountdownTimer();
   }
@@ -391,17 +404,12 @@ class _HomeScreenState extends State<HomeScreen>
       if (!isCurrentFlow(currentFlow)) return;
 
       setState(() {
-        ritualHintOpacity = 0.0;
         pauseFeelOpacity = 1.0;
       });
 
       await Future.delayed(const Duration(milliseconds: 1250));
 
       if (!isCurrentFlow(currentFlow)) return;
-
-      setState(() {
-        ritualHintOpacity = 1.0;
-      });
     } finally {
       if (currentFlow == flowSessionId) {
         transitionInProgress = false;
@@ -426,7 +434,6 @@ class _HomeScreenState extends State<HomeScreen>
         heartOpacity = 0.0;
         heartInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
-        ritualHintOpacity = 0.0;
         revealGlowOpacity = 0.0;
         backgroundDepth =
             ritualFlowController.transitionBackgroundDepth(nextStep);
@@ -462,12 +469,6 @@ class _HomeScreenState extends State<HomeScreen>
       );
 
       if (!isCurrentFlow(currentFlow)) return;
-
-      if (nextStep == 1) {
-        setState(() {
-          ritualHintOpacity = 1.0;
-        });
-      }
     } finally {
       if (currentFlow == flowSessionId) {
         transitionInProgress = false;
@@ -563,7 +564,6 @@ class _HomeScreenState extends State<HomeScreen>
         heartOpacity = 0.0;
         heartInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
-        ritualHintOpacity = 0.0;
         pauseFeelOpacity = 0.0;
         revealGlowOpacity = 0.0;
         backgroundDepth = 0.82;
@@ -638,19 +638,6 @@ class _HomeScreenState extends State<HomeScreen>
       "Tap to Reveal",
       nextStep: 3,
     );
-  }
-
-  Future<void> copyCurrentWisdom() async {
-    if (!wisdomRevealed) return;
-
-    await Clipboard.setData(
-      ClipboardData(text: currentText),
-    );
-
-    if (!mounted) return;
-
-    HapticFeedback.selectionClick();
-    showEastSnack("Copied quietly.");
   }
 
   Future<void> openKeeperScreen() async {
@@ -884,7 +871,7 @@ class _HomeScreenState extends State<HomeScreen>
 
                       return CustomPaint(
                         painter: GrainPainter(
-                          movement: pulse,
+                          movement: _reduceMotion ? 0.0 : pulse,
                           intensity: wisdomRevealed ? 0.025 : 0.019,
                         ),
                       );
@@ -944,11 +931,14 @@ class _HomeScreenState extends State<HomeScreen>
                         child: AnimatedBuilder(
                           animation: pulseController,
                           builder: (context, child) {
-                            final floatingY = wisdomRevealed
-                                ? sin(pulseController.value * pi * 2) * 0.8
-                                : onPauseScreen
-                                    ? sin(pulseController.value * pi * 2) * 0.5
-                                    : 0.0;
+                            final floatingY = _reduceMotion
+                                ? 0.0
+                                : wisdomRevealed
+                                    ? sin(pulseController.value * pi * 2) * 0.8
+                                    : onPauseScreen
+                                        ? sin(pulseController.value * pi * 2) *
+                                            0.5
+                                        : 0.0;
 
                             final liftedY = wisdomRevealed ? -18.0 : 0.0;
 
@@ -974,7 +964,7 @@ class _HomeScreenState extends State<HomeScreen>
                                 animation: pulseAnimation,
                                 builder: (context, child) {
                                   return Opacity(
-                                    opacity: onRevealScreen
+                                    opacity: onRevealScreen && !_reduceMotion
                                         ? pulseAnimation.value
                                         : 1.0,
                                     child: child,
@@ -1081,37 +1071,39 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            if (true)
-              Positioned(
-                top: 10,
-                right: 8,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.settings_outlined,
-                        color: Colors.white70,
-                        size: 27,
-                      ),
-                      onPressed: openSettings,
+            Positioned(
+              top: 10,
+              right: 8,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Settings',
+                    icon: const Icon(
+                      Icons.settings_outlined,
+                      color: Colors.white70,
+                      size: 27,
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.star_border,
-                        color: Colors.white70,
-                        size: 29,
-                      ),
-                      onPressed: openFavorites,
+                    onPressed: openSettings,
+                  ),
+                  IconButton(
+                    tooltip: 'Saved reflections',
+                    icon: const Icon(
+                      Icons.star_border,
+                      color: Colors.white70,
+                      size: 29,
                     ),
-                  ],
-                ),
+                    onPressed: openFavorites,
+                  ),
+                ],
               ),
+            ),
             if (wisdomRevealed)
               Positioned(
                 top: 10,
                 left: 8,
                 child: IconButton(
+                  tooltip: 'Back',
                   icon: const Icon(
                     Icons.arrow_back_ios_new,
                     color: Colors.white70,
@@ -1147,6 +1139,9 @@ class _HomeScreenState extends State<HomeScreen>
                         });
                       },
                       child: IconButton(
+                        tooltip: isCurrentFavorite()
+                            ? 'Remove saved reflection'
+                            : 'Save reflection',
                         icon: Icon(
                           isCurrentFavorite()
                               ? Icons.favorite

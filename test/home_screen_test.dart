@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
+import 'package:wisdom_app/widgets/grain_painter.dart';
 
 void main() {
   setUp(() {
@@ -15,6 +16,8 @@ void main() {
       const MaterialApp(home: HomeScreen()),
     );
     await _finishOpeningIntro(tester);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Saved reflections'), findsOneWidget);
 
     await _tapCenter(tester);
     await tester.pump();
@@ -94,6 +97,12 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1100));
     expect(_favoriteGuard(tester).ignoring, isFalse);
+    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.byTooltip('Save reflection'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Save reflection'));
+    await tester.pump();
+    expect(find.byTooltip('Remove saved reflection'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -128,6 +137,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 950));
     await tester.pump(const Duration(milliseconds: 1100));
+  });
+
+  testWidgets('reduce motion freezes continuous grain movement',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(disableAnimations: true),
+              child: const HomeScreen(),
+            );
+          },
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+
+    expect(_grainPainter(tester).movement, 0.0);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(_grainPainter(tester).movement, 0.0);
+    expect(tester.takeException(), isNull);
   });
 }
 
@@ -174,4 +207,12 @@ IgnorePointer _favoriteGuard(WidgetTester tester) {
   return tester.widget<IgnorePointer>(
     find.byKey(const ValueKey('favorite-interaction-guard')),
   );
+}
+
+GrainPainter _grainPainter(WidgetTester tester) {
+  return tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .map((widget) => widget.painter)
+      .whereType<GrainPainter>()
+      .single;
 }

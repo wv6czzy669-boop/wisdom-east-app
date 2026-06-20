@@ -205,7 +205,9 @@ class SettingsScreen extends StatelessWidget {
                 "Restore Purchases",
                 restoreStarted
                     ? "Restore request sent. Keeper access will update automatically."
-                    : "Restore is not available right now. Please try again shortly.",
+                    : purchaseService.restoreNeedsRecovery
+                        ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen East before trying again."
+                        : "Restore is not available right now. Please try again shortly.",
               );
             },
           ),

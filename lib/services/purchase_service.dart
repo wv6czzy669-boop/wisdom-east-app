@@ -8,6 +8,8 @@ class PurchaseService extends ChangeNotifier {
   PurchaseService({
     Future<bool> Function()? entitlementWriter,
     this.purchaseInitiationTimeout = const Duration(seconds: 12),
+    this.restoreInitiationTimeout = const Duration(seconds: 12),
+    this.restoreResponseWindow = const Duration(seconds: 8),
   }) : _entitlementWriter = entitlementWriter;
 
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
@@ -17,6 +19,8 @@ class PurchaseService extends ChangeNotifier {
   final InAppPurchase _iap = InAppPurchase.instance;
   final Future<bool> Function()? _entitlementWriter;
   final Duration purchaseInitiationTimeout;
+  final Duration restoreInitiationTimeout;
+  final Duration restoreResponseWindow;
 
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   Completer<void>? _restoreStreamSignal;
@@ -29,6 +33,7 @@ class PurchaseService extends ChangeNotifier {
   bool _purchasePending = false;
   bool _purchaseUncertain = false;
   bool _restorePending = false;
+  bool _restoreUncertain = false;
   int _restoreSessionId = 0;
   int _buySessionId = 0;
 
@@ -36,6 +41,7 @@ class PurchaseService extends ChangeNotifier {
 
   bool get purchaseNeedsRecovery =>
       _purchaseUncertain || entitlementPersistenceFailed;
+  bool get restoreNeedsRecovery => _restoreUncertain;
 
   void safeNotifyListeners() {
     if (_disposed) return;
@@ -62,6 +68,9 @@ class PurchaseService extends ChangeNotifier {
         onError: (_) {
           if (_purchasePending) {
             _purchaseUncertain = true;
+          }
+          if (_restorePending) {
+            _restoreUncertain = true;
           }
           _purchasePending = false;
           _signalRestoreStream();
@@ -153,10 +162,15 @@ class PurchaseService extends ChangeNotifier {
   }
 
   Future<bool> restorePurchases() async {
-    if (_disposed || _restorePending || _purchasePending || !isAvailable) {
+    if (_disposed ||
+        _restorePending ||
+        _restoreUncertain ||
+        _purchasePending ||
+        !isAvailable) {
       return false;
     }
 
+    _restoreUncertain = false;
     _restorePending = true;
     final currentRestoreSessionId = ++_restoreSessionId;
     final streamSignal = Completer<void>();
@@ -164,13 +178,26 @@ class PurchaseService extends ChangeNotifier {
     _refreshLoadingState();
 
     try {
-      await _iap.restorePurchases().timeout(const Duration(seconds: 12));
+      await _iap.restorePurchases().timeout(restoreInitiationTimeout);
+    } on TimeoutException {
+      if (_disposed || currentRestoreSessionId != _restoreSessionId) {
+        return false;
+      }
+
+      _restorePending = false;
+      _restoreUncertain = true;
+      if (identical(_restoreStreamSignal, streamSignal)) {
+        _restoreStreamSignal = null;
+      }
+      _refreshLoadingState();
+      return false;
     } catch (_) {
       if (_disposed || currentRestoreSessionId != _restoreSessionId) {
         return false;
       }
 
       _restorePending = false;
+      _restoreUncertain = false;
       if (identical(_restoreStreamSignal, streamSignal)) {
         _restoreStreamSignal = null;
       }
@@ -190,7 +217,7 @@ class PurchaseService extends ChangeNotifier {
   ) async {
     await Future.any([
       streamSignal.future,
-      Future<void>.delayed(const Duration(seconds: 8)),
+      Future<void>.delayed(restoreResponseWindow),
     ]);
 
     if (_disposed || sessionId != _restoreSessionId) return;
@@ -224,12 +251,14 @@ class PurchaseService extends ChangeNotifier {
         entitlementPersistenceFailed = !persisted;
         _purchaseUncertain = false;
         _purchasePending = false;
+        _restoreUncertain = false;
         _signalRestoreStream();
       } else if (purchase.status == PurchaseStatus.error ||
           purchase.status == PurchaseStatus.canceled) {
         shouldComplete = true;
         _purchaseUncertain = false;
         _purchasePending = false;
+        _restoreUncertain = false;
         _signalRestoreStream();
       }
 

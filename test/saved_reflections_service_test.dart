@@ -83,6 +83,62 @@ void main() {
     expect(items, hasLength(12));
   });
 
+  test('free users preserve legacy over-limit items but cannot add more',
+      () async {
+    var items = [
+      FavoriteItem(text: 'One', date: 'Today'),
+      FavoriteItem(text: 'Two', date: 'Today'),
+      FavoriteItem(text: 'Three', date: 'Today'),
+      FavoriteItem(text: 'Legacy four', date: 'Today'),
+    ];
+
+    final blocked = await service.toggle(
+      currentItems: items,
+      text: 'Five',
+      date: 'Today',
+      isKeeper: false,
+    );
+    expect(blocked.limitReached, isTrue);
+    expect(blocked.items, hasLength(4));
+
+    final firstRemoval = await service.toggle(
+      currentItems: items,
+      text: 'Legacy four',
+      date: 'Today',
+      isKeeper: false,
+    );
+    items = firstRemoval.items;
+    expect(items, hasLength(3));
+
+    final stillBlocked = await service.toggle(
+      currentItems: items,
+      text: 'Replacement',
+      date: 'Today',
+      isKeeper: false,
+    );
+    expect(stillBlocked.limitReached, isTrue);
+
+    final secondRemoval = await service.toggle(
+      currentItems: items,
+      text: 'Three',
+      date: 'Today',
+      isKeeper: false,
+    );
+    final replacement = await service.toggle(
+      currentItems: secondRemoval.items,
+      text: 'Replacement',
+      date: 'Today',
+      isKeeper: false,
+    );
+
+    expect(replacement.limitReached, isFalse);
+    expect(replacement.items, hasLength(3));
+    expect(
+      replacement.items.any((item) => item.text == 'Replacement'),
+      isTrue,
+    );
+  });
+
   test('failed persistence does not report a changed reflection list',
       () async {
     final originalItems = [

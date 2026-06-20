@@ -130,6 +130,32 @@ void main() {
     expect(service.purchaseNeedsRecovery, isTrue);
     expect(await service.buyKeeper(), isFalse);
   });
+
+  test('restore timeout blocks overlap until a late response is reconciled',
+      () async {
+    service.dispose();
+    service = PurchaseService(
+      restoreInitiationTimeout: const Duration(milliseconds: 20),
+    );
+    await service.init();
+    platform.restoreCompleter = Completer<void>();
+
+    expect(await service.restorePurchases(), isFalse);
+    expect(service.isLoading, isFalse);
+    expect(service.restoreNeedsRecovery, isTrue);
+    expect(await service.restorePurchases(), isFalse);
+    expect(platform.restoreCalls, 1);
+
+    platform.emitPurchase(
+      PurchaseStatus.restored,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(service.isKeeper, isTrue);
+    expect(service.restoreNeedsRecovery, isFalse);
+    expect(platform.completedPurchases, 1);
+  });
 }
 
 Future<void> _flushEvents() async {
@@ -143,6 +169,7 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
   Completer<bool>? buyCompleter;
   Completer<void>? restoreCompleter;
   int completedPurchases = 0;
+  int restoreCalls = 0;
 
   final ProductDetails keeperProduct = ProductDetails(
     id: PurchaseService.keeperProductId,
@@ -177,6 +204,7 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
 
   @override
   Future<void> restorePurchases({String? applicationUserName}) {
+    restoreCalls++;
     return restoreCompleter?.future ?? Future<void>.value();
   }
 

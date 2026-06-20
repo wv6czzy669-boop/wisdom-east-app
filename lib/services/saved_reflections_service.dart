@@ -36,6 +36,8 @@ class SavedReflectionsService {
     if (existingIndex >= 0) {
       items.removeAt(existingIndex);
     } else {
+      // Preserve legacy items without silently deleting user data. Free users
+      // may remove entries, but cannot add until the list is below the limit.
       if (!isKeeper && items.length >= freeLimit) {
         return SavedReflectionsResult(
           items: List.unmodifiable(items),
