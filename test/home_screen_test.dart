@@ -26,9 +26,16 @@ void main() {
             find.byKey(const ValueKey('top-navigation')),
           )
           .top,
-      4,
+      0,
     );
     expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.text('◎'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(
       find.descendant(
@@ -93,6 +100,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
     expect(find.text('Pause.'), findsOneWidget);
     expect(find.text('Feel.'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Pause.')).style?.fontSize, 33);
+    expect(tester.widget<Text>(find.text('Feel.')).style?.fontSize, 33);
 
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 850));
@@ -232,6 +241,7 @@ void main() {
     await _finishOpeningIntro(tester);
 
     expect(_grainPainter(tester).movement, 0.0);
+    expect(_grainPainter(tester).intensity, 0.01235);
     await tester.pump(const Duration(milliseconds: 600));
     expect(_grainPainter(tester).movement, 0.0);
     expect(tester.takeException(), isNull);

@@ -199,16 +199,16 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         15,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.55),
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
                       ).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 11),
                     Text(
-                      "Help keep EAST. alive.",
+                      "Keep EAST. alive.",
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         13,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.55),
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
                       ).copyWith(letterSpacing: 0.8),
                     ),
                   ],

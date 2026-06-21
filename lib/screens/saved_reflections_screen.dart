@@ -23,12 +23,22 @@ class SavedReflectionsScreen extends StatelessWidget {
 
   TextStyle dateStyle() {
     return const TextStyle(
-      color: Colors.white54,
+      color: Color(0x91FFFFFF),
       fontSize: 15,
       fontWeight: FontWeight.w300,
       fontFamily: 'CormorantGaramond',
       letterSpacing: 0.4,
     );
+  }
+
+  String displayDate(String storedDate) {
+    final commaIndex = storedDate.lastIndexOf(',');
+    if (commaIndex < 0) return storedDate;
+
+    final possibleYear = storedDate.substring(commaIndex + 1).trim();
+    if (!RegExp(r'^\d{4}$').hasMatch(possibleYear)) return storedDate;
+
+    return storedDate.substring(0, commaIndex);
   }
 
   @override
@@ -53,7 +63,9 @@ class SavedReflectionsScreen extends StatelessWidget {
           ? Center(
               child: Text(
                 "Nothing kept yet.",
-                style: reflectionStyle(21).copyWith(color: Colors.white54),
+                style: reflectionStyle(21).copyWith(
+                  color: const Color(0x91FFFFFF),
+                ),
               ),
             )
           : ListView.separated(
@@ -74,7 +86,7 @@ class SavedReflectionsScreen extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.date, style: dateStyle()),
+                    Text(displayDate(item.date), style: dateStyle()),
                     const SizedBox(height: 8),
                     Text(item.text, style: reflectionStyle(24)),
                   ],

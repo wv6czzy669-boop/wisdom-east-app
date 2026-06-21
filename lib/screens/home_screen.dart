@@ -820,7 +820,7 @@ class _HomeScreenState extends State<HomeScreen>
         : wisdomRevealed
             ? 32.0
             : onPauseScreen
-                ? 31.0
+                ? 33.0
                 : onHeartScreen
                     ? 29.0
                     : 34.0;
@@ -860,7 +860,7 @@ class _HomeScreenState extends State<HomeScreen>
                       return CustomPaint(
                         painter: GrainPainter(
                           movement: _reduceMotion ? 0.0 : pulse,
-                          intensity: wisdomRevealed ? 0.025 : 0.019,
+                          intensity: wisdomRevealed ? 0.01625 : 0.01235,
                         ),
                       );
                     },
@@ -989,7 +989,9 @@ class _HomeScreenState extends State<HomeScreen>
                                                   textAlign: TextAlign.center,
                                                   style: wisdomStyle(
                                                     20,
-                                                    color: Colors.white54,
+                                                    color: const Color(
+                                                      0x91FFFFFF,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -1075,31 +1077,41 @@ class _HomeScreenState extends State<HomeScreen>
             if (!(screenStep == 2 && _transitionLock))
               Positioned(
                 key: const ValueKey('top-navigation'),
-                top: 4,
+                top: 0,
                 right: 8,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       tooltip: 'Settings',
-                      icon: const Icon(
-                        Icons.settings_outlined,
-                        color: Colors.white70,
-                        size: 27,
-                        weight: 300,
+                      icon: Transform.translate(
+                        offset: const Offset(0, -4),
+                        child: const Text(
+                          '◎',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 29,
+                            fontWeight: FontWeight.w300,
+                            fontFamily: 'CormorantGaramond',
+                            height: 1,
+                          ),
+                        ),
                       ),
                       onPressed: openSettings,
                     ),
                     IconButton(
                       tooltip: 'Kept',
-                      icon: const Text(
-                        '○',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 29,
-                          fontWeight: FontWeight.w300,
-                          fontFamily: 'CormorantGaramond',
-                          height: 1,
+                      icon: Transform.translate(
+                        offset: const Offset(0, -4),
+                        child: const Text(
+                          '○',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 29,
+                            fontWeight: FontWeight.w300,
+                            fontFamily: 'CormorantGaramond',
+                            height: 1,
+                          ),
                         ),
                       ),
                       onPressed: openFavorites,
@@ -1172,7 +1184,7 @@ class _HomeScreenState extends State<HomeScreen>
                           textAlign: TextAlign.center,
                           style: wisdomStyle(
                             15,
-                            color: Colors.white38,
+                            color: const Color(0x91FFFFFF),
                           ),
                         ),
                       ],

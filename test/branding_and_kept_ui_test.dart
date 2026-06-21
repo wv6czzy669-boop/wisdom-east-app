@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/app.dart';
+import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
 
@@ -32,6 +33,29 @@ void main() {
       scrollable: find.byType(Scrollable),
     );
     expect(find.text('built quietly.'), findsOneWidget);
+    expect(find.text('Reach Out'), findsOneWidget);
+  });
+
+  testWidgets('Kept omits the stored year without changing its data',
+      (tester) async {
+    const storedDate = 'June 21, 2026';
+    final reflection = FavoriteItem(
+      text: 'A quiet reflection.',
+      date: storedDate,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [reflection],
+        ),
+      ),
+    );
+
+    expect(find.text('June 21'), findsOneWidget);
+    expect(find.text(storedDate), findsNothing);
+    final displayedDate = tester.widget<Text>(find.text('June 21'));
+    expect(displayedDate.style?.color, const Color(0x91FFFFFF));
+    expect(reflection.date, storedDate);
   });
 
   testWidgets('Kept screen uses the new feature title', (tester) async {

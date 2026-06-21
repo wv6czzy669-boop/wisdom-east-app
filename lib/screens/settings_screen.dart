@@ -64,7 +64,7 @@ class SettingsScreen extends StatelessWidget {
                       subtitle,
                       style: eastStyle(
                         15,
-                        color: Colors.white54,
+                        color: const Color(0x91FFFFFF),
                       ),
                     ),
                   ],
@@ -251,7 +251,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           settingsItem(
             icon: Icons.mail_outline,
-            title: "Contact",
+            title: "Reach Out",
             subtitle: "Support and feedback.",
             onTap: sendEmail,
           ),
@@ -265,7 +265,7 @@ class SettingsScreen extends StatelessWidget {
               "built quietly.",
               style: eastStyle(
                 15,
-                color: Colors.white38,
+                color: const Color(0x91FFFFFF),
               ),
             ),
           ),
