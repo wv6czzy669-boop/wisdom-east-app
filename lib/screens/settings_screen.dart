@@ -151,7 +151,7 @@ class SettingsScreen extends StatelessWidget {
           return SingleChildScrollView(
             key: const ValueKey('settings-scroll'),
             physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 22, 24, 36),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 36),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: constraints.maxHeight - 52,
@@ -182,22 +182,7 @@ class SettingsScreen extends StatelessWidget {
                       thickness: 0.5,
                     ),
                     settingsItem(
-                      symbol: const Text(
-                        '○',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w300,
-                          fontFamily: 'CormorantGaramond',
-                          height: 1,
-                          shadows: [
-                            Shadow(
-                              color: Colors.white60,
-                              blurRadius: 0.35,
-                            ),
-                          ],
-                        ),
-                      ),
+                      symbol: const _KeeperCircleSymbol(),
                       title: "Keeper",
                       subtitle: "Support the circle, keep what stays.",
                       onTap: () {
@@ -290,4 +275,38 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _KeeperCircleSymbol extends StatelessWidget {
+  const _KeeperCircleSymbol();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(
+      key: ValueKey('keeper-circle-symbol'),
+      size: Size.square(22),
+      painter: _KeeperCirclePainter(),
+    );
+  }
+}
+
+class _KeeperCirclePainter extends CustomPainter {
+  const _KeeperCirclePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white60
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.25;
+
+    canvas.drawCircle(
+      size.center(Offset.zero),
+      (size.shortestSide - paint.strokeWidth) / 2,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _KeeperCirclePainter oldDelegate) => false;
 }

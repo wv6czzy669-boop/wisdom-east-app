@@ -48,6 +48,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isInBlackSilence = false;
   bool _dailyStatusResolved = false;
   bool _dailyLockActive = false;
+  bool _showingLockedWisdom = false;
+  String? _lockedWisdomText;
 
   final ritualFlowController = const RitualFlowController();
 
@@ -75,6 +77,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     wisdomRevealController.stop();
     wisdomRevealController.value = wisdomRevealed ? 1.0 : 0.0;
+    askFadeController.stop();
+    askFadeController.value = 1.0;
 
     setState(() {
       transitionInProgress = false;
@@ -114,6 +118,8 @@ class _HomeScreenState extends State<HomeScreen>
   late Animation<double> pulseAnimation;
   late final AnimationController wisdomRevealController;
   late final Animation<double> wisdomRevealAnimation;
+  late final AnimationController askFadeController;
+  late final Animation<double> askFadeAnimation;
 
   Timer? countdownTimer;
 
@@ -180,6 +186,16 @@ class _HomeScreenState extends State<HomeScreen>
       parent: wisdomRevealController,
       curve: Curves.easeOutCubic,
     );
+    askFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1250),
+      value: 1.0,
+    );
+    askFadeAnimation = CurvedAnimation(
+      parent: askFadeController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
 
     loadInitialState().catchError((_) {});
     startCountdownTimer();
@@ -213,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen>
     stopCountdownTimer();
     pulseController.dispose();
     wisdomRevealController.dispose();
+    askFadeController.dispose();
     audioService.dispose();
     super.dispose();
   }
@@ -315,10 +332,15 @@ class _HomeScreenState extends State<HomeScreen>
       if (!_dailyStatusResolved) return;
 
       if (_dailyLockActive) {
-        await transitionToText(
-          nextWisdomMessage,
-          nextStep: 5,
-        );
+        final lockedWisdomText = _lockedWisdomText;
+        if (lockedWisdomText == null) {
+          await transitionToText(
+            nextWisdomMessage,
+            nextStep: 5,
+          );
+        } else {
+          await transitionToExistingWisdom(lockedWisdomText);
+        }
         return;
       }
 
@@ -440,6 +462,11 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!isCurrentFlow(currentFlow)) return;
 
+      if (nextStep == 2) {
+        askFadeController.stop();
+        askFadeController.value = 1.0;
+      }
+
       setState(() {
         currentText = newText;
         screenStep = nextStep;
@@ -469,6 +496,70 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> transitionToExistingWisdom(String text) async {
+    if (transitionInProgress) return;
+
+    final currentFlow = ++flowSessionId;
+    transitionInProgress = true;
+
+    try {
+      if (!isCurrentFlow(currentFlow)) return;
+
+      setState(() {
+        textOpacity = 0.0;
+        saveControlOpacity = 0.0;
+        saveInteractionEnabled = false;
+        keeperPromptOpacity = 0.0;
+        revealGlowOpacity = 0.0;
+        textScale = 1.0;
+      });
+
+      await Future.delayed(
+        ritualFlowController.transitionFadeOutDuration(4),
+      );
+
+      if (!isCurrentFlow(currentFlow)) return;
+
+      wisdomRevealController.stop();
+      wisdomRevealController.value = 0.0;
+
+      setState(() {
+        currentText = text;
+        screenStep = 4;
+        _showingLockedWisdom = true;
+        textOpacity = 1.0;
+        textScale = 1.0;
+        backgroundDepth = 0.30;
+        revealGlowOpacity = 0.10;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!isCurrentFlow(currentFlow) || !wisdomRevealed) return;
+        wisdomRevealController.forward(from: 0.0);
+      });
+
+      await Future.delayed(const Duration(milliseconds: 900));
+
+      if (!isCurrentFlow(currentFlow)) return;
+
+      setState(() {
+        saveControlOpacity = 1.0;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 520));
+
+      if (!isCurrentFlow(currentFlow)) return;
+
+      setState(() {
+        keeperPromptOpacity = 1.0;
+      });
+    } finally {
+      if (currentFlow == flowSessionId) {
+        transitionInProgress = false;
+      }
+    }
+  }
+
   Future<void> updateNextWisdomMessage() async {
     final DailyWisdomStatus status;
 
@@ -489,11 +580,13 @@ class _HomeScreenState extends State<HomeScreen>
         setState(() {
           _dailyStatusResolved = true;
           _dailyLockActive = false;
+          _lockedWisdomText = null;
           nextWisdomMessage =
               status.unlockAt == null ? "" : "A new wisdom is ready.";
 
-          if (onLockedCountdown) {
+          if (onLockedCountdown || _showingLockedWisdom) {
             screenStep = 0;
+            _showingLockedWisdom = false;
             currentText = "EAST.";
             textOpacity = 1.0;
             textScale = 1.0;
@@ -502,6 +595,21 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
       return;
+    }
+
+    String? lockedWisdomText;
+    try {
+      final record = await storageService.loadDailyWisdomRecord(
+        lockDuration: dailyWisdomAccessService.lockDuration,
+      );
+      final text = record?.text.trim();
+      if (text != null &&
+          text.isNotEmpty &&
+          text != DailyWisdomAccessService.corruptRecordRecoveryText) {
+        lockedWisdomText = record!.text;
+      }
+    } catch (_) {
+      // Without a trustworthy stored wisdom, remain on the countdown.
     }
 
     final remaining = status.remaining!;
@@ -520,6 +628,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _dailyStatusResolved = true;
         _dailyLockActive = true;
+        _lockedWisdomText = lockedWisdomText;
         nextWisdomMessage = message;
         if (onLockedCountdown) {
           currentText = message;
@@ -570,9 +679,12 @@ class _HomeScreenState extends State<HomeScreen>
 
       wisdomRevealController.stop();
       wisdomRevealController.value = 0.0;
+      askFadeController.stop();
+      askFadeController.value = 1.0;
+      askFadeController.reverse();
 
       setState(() {
-        textOpacity = 0.0;
+        textOpacity = 1.0;
         saveControlOpacity = 0.0;
         saveInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
@@ -611,6 +723,7 @@ class _HomeScreenState extends State<HomeScreen>
         _isInBlackSilence = false;
         currentText = selectedText;
         screenStep = 4;
+        _showingLockedWisdom = false;
         textOpacity = 1.0;
         textScale = 1.0;
         backgroundDepth = 0.30;
@@ -1102,7 +1215,17 @@ class _HomeScreenState extends State<HomeScreen>
                                                           wisdomRevealAnimation,
                                                       child: currentRitualText,
                                                     )
-                                                  : currentRitualText,
+                                                  : onHeartScreen
+                                                      ? FadeTransition(
+                                                          key: const ValueKey(
+                                                            'ask-fade',
+                                                          ),
+                                                          opacity:
+                                                              askFadeAnimation,
+                                                          child:
+                                                              currentRitualText,
+                                                        )
+                                                      : currentRitualText,
                                             ),
                                           ),
                               ),

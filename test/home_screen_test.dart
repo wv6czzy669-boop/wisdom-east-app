@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
+import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
 
@@ -92,15 +93,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
   });
 
-  testWidgets('active lock reopens directly into the two-line countdown',
+  testWidgets('active lock reopens to the existing wisdom without revealing',
       (tester) async {
     final now = DateTime.now();
+    const existingWisdom = 'Already received wisdom';
+    final originalRecord = DailyWisdomRecord(
+      text: existingWisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
     SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: 'Already received wisdom',
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
+      'daily_wisdom_access': originalRecord.encode(),
+      'favorites': [
+        FavoriteItem(
+          text: existingWisdom,
+          date: 'June 21, 2026',
+        ).encode(),
+      ],
     });
 
     await tester.pumpWidget(
@@ -109,28 +118,44 @@ void main() {
     await _finishOpeningIntro(tester);
     expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
 
-    await _openLockedCountdown(tester);
+    await _openExistingWisdom(tester);
 
-    final countdown = tester.widget<Text>(
+    expect(find.text(existingWisdom), findsOneWidget);
+    expect(
       find.textContaining('Return when the silence opens again.'),
+      findsOneWidget,
     );
-    final countdownLines = countdown.data!.split('\n');
-    expect(countdownLines, hasLength(2));
-    expect(countdownLines.first, 'Return when the silence opens again.');
-    expect(countdownLines.last, matches(RegExp(r'^\d+h \d+m$')));
     expect(find.text('Pause.'), findsNothing);
     expect(find.text('Feel.'), findsNothing);
     expect(find.text('Ask from your heart.'), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
+    expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byTooltip('Remove kept reflection'),
+        matching: find.text('●'),
+      ),
+      findsOneWidget,
+    );
 
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text(countdown.data!), findsOneWidget);
-    expect(find.text('Pause.'), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    final persistedRecord = DailyWisdomRecord.decode(
+      prefs.getString('daily_wisdom_access')!,
+    );
+    expect(persistedRecord.text, originalRecord.text);
+    expect(
+      persistedRecord.revealedAt.millisecondsSinceEpoch,
+      originalRecord.revealedAt.millisecondsSinceEpoch,
+    );
+    expect(
+      persistedRecord.unlockAt.millisecondsSinceEpoch,
+      originalRecord.unlockAt.millisecondsSinceEpoch,
+    );
+    expect(prefs.getStringList('daily_wisdom_archive'), isNull);
   });
 
-  testWidgets('Keeper cannot bypass the locked reopen countdown',
+  testWidgets('Keeper reopens to the same existing locked wisdom',
       (tester) async {
     final now = DateTime.now();
     SharedPreferences.setMockInitialValues({
@@ -146,11 +171,40 @@ void main() {
       const MaterialApp(home: HomeScreen()),
     );
     await _finishOpeningIntro(tester);
-    await _openLockedCountdown(tester);
+    await _openExistingWisdom(tester);
 
+    expect(find.text('Keeper received wisdom'), findsOneWidget);
     expect(
       find.textContaining('Return when the silence opens again.'),
       findsOneWidget,
+    );
+    expect(find.text('Pause.'), findsNothing);
+    expect(find.text('Feel.'), findsNothing);
+    expect(find.text('Ask from your heart.'), findsNothing);
+  });
+
+  testWidgets('corrupt locked state falls back to conservative countdown',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': '{',
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openLockedCountdown(tester);
+
+    final countdown = tester.widget<Text>(
+      find.textContaining('Return when the silence opens again.'),
+    );
+    final countdownLines = countdown.data!.split('\n');
+    expect(countdownLines, hasLength(2));
+    expect(countdownLines.first, 'Return when the silence opens again.');
+    expect(countdownLines.last, matches(RegExp(r'^\d+h \d+m$')));
+    expect(
+      find.text('Silence is still available.'),
+      findsNothing,
     );
     expect(find.text('Pause.'), findsNothing);
     expect(find.text('Feel.'), findsNothing);
@@ -181,7 +235,7 @@ void main() {
     );
   });
 
-  testWidgets('locked countdown returns to launch after expiry refresh',
+  testWidgets('locked wisdom returns to launch after expiry refresh',
       (tester) async {
     final now = DateTime.now();
     SharedPreferences.setMockInitialValues({
@@ -198,11 +252,8 @@ void main() {
       const MaterialApp(home: HomeScreen()),
     );
     await _finishOpeningIntro(tester);
-    await _openLockedCountdown(tester);
-    expect(
-      find.textContaining('Return when the silence opens again.'),
-      findsOneWidget,
-    );
+    await _openExistingWisdom(tester);
+    expect(find.text('Nearly unlocked wisdom'), findsOneWidget);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -359,14 +410,24 @@ void main() {
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
-    final askFade = tester.widget<AnimatedOpacity>(
-      find.byKey(const ValueKey('ritual-content-opacity')),
+    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(_ritualOpacity(tester), 1.0);
+    final askFade = tester.widget<FadeTransition>(
+      find.byKey(const ValueKey('ask-fade')),
     );
-    expect(askFade.opacity, 0.0);
-    expect(askFade.duration, const Duration(milliseconds: 1250));
-    expect(askFade.curve, Curves.easeOutCubic);
+    final askCurve = askFade.opacity as CurvedAnimation;
+    final askController = askCurve.parent as AnimationController;
+    expect(askFade.opacity.value, 1.0);
+    expect(askController.duration, const Duration(milliseconds: 1250));
+    expect(askCurve.reverseCurve, Curves.easeInCubic);
 
-    await tester.pump(const Duration(milliseconds: 1249));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(askFade.opacity.value, greaterThan(0.0));
+    expect(askFade.opacity.value, lessThan(1.0));
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 949));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
@@ -571,6 +632,13 @@ Future<void> _openLockedCountdown(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 850));
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 600));
+}
+
+Future<void> _openExistingWisdom(WidgetTester tester) async {
+  await _tapCenter(tester);
+  await tester.pump(const Duration(milliseconds: 850));
+  await tester.pump(const Duration(milliseconds: 1200));
+  await tester.pump(const Duration(milliseconds: 1100));
 }
 
 Future<void> _advanceToQuestion(WidgetTester tester) async {
