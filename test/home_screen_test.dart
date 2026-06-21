@@ -16,6 +16,18 @@ void main() {
       const MaterialApp(home: HomeScreen()),
     );
     await _finishOpeningIntro(tester);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      const Color(0xFF040404),
+    );
+    expect(
+      tester
+          .widget<Positioned>(
+            find.byKey(const ValueKey('top-navigation')),
+          )
+          .top,
+      4,
+    );
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(
@@ -86,22 +98,63 @@ void main() {
     await tester.pump(const Duration(milliseconds: 850));
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Ask from your heart.'), findsOneWidget);
 
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1000));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+    expect(find.byTooltip('Settings'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1249));
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(
+      tester
+          .widget<ColoredBox>(
+            find.byKey(const ValueKey('black-silence')),
+          )
+          .color,
+      Colors.black,
+    );
 
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 900));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 1799));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(find.text(longWisdom), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
 
     expect(find.text(longWisdom), findsOneWidget);
+    final wisdomText = tester.widget<Text>(find.text(longWisdom));
+    expect(wisdomText.style?.fontSize, 32);
+    expect(wisdomText.style?.height, 1.48);
+    expect(
+      tester
+          .widget<SizedBox>(
+            find.byKey(const ValueKey('revealed-wisdom-layout')),
+          )
+          .width,
+      192,
+    );
+    final revealOpacity = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('ritual-content-opacity')),
+    );
+    expect(revealOpacity.duration, const Duration(milliseconds: 850));
+    expect(revealOpacity.curve, Curves.easeOutCubic);
+    final countdown = tester.widget<Text>(
+      find.textContaining('Return when the silence opens again.'),
+    );
+    final countdownLines = countdown.data!.split('\n');
+    expect(countdownLines.first, 'Return when the silence opens again.');
+    expect(countdownLines, hasLength(2));
+    expect(countdownLines.last, matches(RegExp(r'^\d+h \d+m$')));
     expect(_keptGuard(tester).ignoring, isTrue);
     expect(tester.takeException(), isNull);
 
+    await tester.pump(const Duration(milliseconds: 950));
+    expect(_keptGuard(tester).ignoring, isTrue);
     await tester.pump(const Duration(milliseconds: 1100));
     expect(_keptGuard(tester).ignoring, isFalse);
     expect(find.byTooltip('Back'), findsNothing);
@@ -137,11 +190,11 @@ void main() {
       const MaterialApp(home: HomeScreen()),
     );
     await _finishOpeningIntro(tester);
-    await _advanceToReveal(tester);
+    await _advanceToQuestion(tester);
 
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 900));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 1800));
 
     final prefs = await SharedPreferences.getInstance();
     final persisted = DailyWisdomRecord.decode(
@@ -196,7 +249,7 @@ Future<void> _tapCenter(WidgetTester tester) {
   return tester.tapAt(size.center(Offset.zero));
 }
 
-Future<void> _advanceToReveal(WidgetTester tester) async {
+Future<void> _advanceToQuestion(WidgetTester tester) async {
   await _tapCenter(tester);
   await tester.pump(const Duration(milliseconds: 850));
   await tester.pump(const Duration(milliseconds: 250));
@@ -207,11 +260,6 @@ Future<void> _advanceToReveal(WidgetTester tester) async {
 
   await _tapCenter(tester);
   await tester.pump(const Duration(milliseconds: 850));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.pump(const Duration(milliseconds: 600));
-
-  await _tapCenter(tester);
-  await tester.pump(const Duration(milliseconds: 1000));
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 600));
 }

@@ -34,10 +34,15 @@ class SavedReflectionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: const Color(0xFF040404),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF030303),
+        backgroundColor: const Color(0xFF040404),
         foregroundColor: const Color(0xFFF4F0E8),
+        iconTheme: const IconThemeData(
+          color: Color(0xFFF4F0E8),
+          size: 22,
+          weight: 300,
+        ),
         elevation: 0,
         title: Text(
           "Kept",

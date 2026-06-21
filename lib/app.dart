@@ -12,7 +12,7 @@ class WisdomApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF030303),
+        scaffoldBackgroundColor: const Color(0xFF040404),
         textTheme: ThemeData.dark().textTheme.apply(
               fontFamily: 'CormorantGaramond',
             ),

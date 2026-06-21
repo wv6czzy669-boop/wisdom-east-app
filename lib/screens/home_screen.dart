@@ -46,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool navigationInProgress = false;
   bool saveInteractionEnabled = false;
   bool _reduceMotion = false;
+  bool _isInBlackSilence = false;
 
   final ritualFlowController = const RitualFlowController();
 
@@ -65,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen>
     unawaited(audioService.stop());
     transitionInProgress = false;
     _transitionLock = false;
+    _isInBlackSilence = false;
   }
 
   void restoreStableRitualState() {
@@ -73,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       transitionInProgress = false;
       _transitionLock = false;
+      _isInBlackSilence = false;
       textOpacity = 1.0;
       textScale = 1.0;
 
@@ -378,17 +381,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (screenStep == 2) {
-      HapticFeedback.selectionClick();
-
-      await transitionToText(
-        "Tap to Reveal",
-        nextStep: 3,
-      );
-
-      return;
-    }
-
-    if (screenStep == 3) {
       await revealWisdom();
       return;
     }
@@ -507,9 +499,9 @@ class _HomeScreenState extends State<HomeScreen>
     String message;
 
     if (hours <= 0) {
-      message = "The next wisdom opens in ${minutes + 1} min.";
+      message = "Return when the silence opens again.\n${minutes + 1} min";
     } else {
-      message = "The next wisdom opens in ${hours}h ${minutes}m.";
+      message = "Return when the silence opens again.\n${hours}h ${minutes}m";
     }
 
     if (mounted) {
@@ -566,13 +558,12 @@ class _HomeScreenState extends State<HomeScreen>
         keeperPromptOpacity = 0.0;
         pauseFeelOpacity = 0.0;
         revealGlowOpacity = 0.0;
-        backgroundDepth = 0.82;
+        backgroundDepth = 1.0;
         textScale = 0.975;
       });
 
-      await Future.delayed(const Duration(milliseconds: 880));
-
-      if (!mounted || currentFlow != flowSessionId) return;
+      final fadeComplete =
+          Future<void>.delayed(const Duration(milliseconds: 1250));
 
       String selectedText;
 
@@ -582,29 +573,29 @@ class _HomeScreenState extends State<HomeScreen>
         selectedText = "Silence is still available.";
       }
 
+      await fadeComplete;
+
       if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
-        currentText = selectedText;
-        screenStep = 4;
-        revealGlowOpacity = 0.16;
+        _isInBlackSilence = true;
       });
 
-      await Future.delayed(const Duration(milliseconds: 260));
+      await Future.delayed(const Duration(milliseconds: 1800));
 
       if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
+        _isInBlackSilence = false;
+        currentText = selectedText;
+        screenStep = 4;
         textOpacity = 1.0;
         textScale = 1.0;
         backgroundDepth = 0.30;
+        revealGlowOpacity = 0.16;
       });
 
-      await Future.delayed(const Duration(milliseconds: 280));
-
-      if (!mounted || currentFlow != flowSessionId) return;
-
-      audioService.playRevealSound();
+      unawaited(audioService.playRevealSound());
       HapticFeedback.selectionClick();
 
       await Future.delayed(const Duration(milliseconds: 900));
@@ -790,13 +781,14 @@ class _HomeScreenState extends State<HomeScreen>
     double size, {
     Color color = const Color(0xFFF4F0E8),
     bool glow = false,
+    double height = 1.28,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
       fontWeight: FontWeight.w300,
       fontFamily: 'CormorantGaramond',
-      height: 1.28,
+      height: height,
       letterSpacing: 0.5,
       shadows: glow
           ? [
@@ -819,10 +811,14 @@ class _HomeScreenState extends State<HomeScreen>
       1.0,
       MediaQuery.sizeOf(context).width - 68,
     );
+    final revealedWisdomWidth = max(
+      1.0,
+      MediaQuery.sizeOf(context).width * 0.60,
+    );
     final textSize = screenStep == 0
         ? 42.0
         : wisdomRevealed
-            ? 33.0
+            ? 32.0
             : onPauseScreen
                 ? 31.0
                 : onHeartScreen
@@ -839,7 +835,8 @@ class _HomeScreenState extends State<HomeScreen>
     )!;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor:
+          _isInBlackSilence ? Colors.black : const Color(0xFF040404),
       body: SafeArea(
         child: Stack(
           children: [
@@ -847,7 +844,7 @@ class _HomeScreenState extends State<HomeScreen>
               duration: const Duration(milliseconds: 1000),
               curve: Curves.easeInOutCubic,
               color: Color.lerp(
-                const Color(0xFF030303),
+                const Color(0xFF040404),
                 const Color(0xFF000000),
                 backgroundDepth,
               ),
@@ -906,7 +903,9 @@ class _HomeScreenState extends State<HomeScreen>
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: navigationInProgress ? null : handleMainTap,
+                onTap: navigationInProgress || _transitionLock
+                    ? null
+                    : handleMainTap,
                 onLongPress: null,
                 child: Center(
                   child: Padding(
@@ -946,10 +945,10 @@ class _HomeScreenState extends State<HomeScreen>
                             curve: Curves.easeInOutCubic,
                             child: AnimatedOpacity(
                               key: const ValueKey('ritual-content-opacity'),
-                              duration: const Duration(
-                                milliseconds: 1250,
+                              duration: Duration(
+                                milliseconds: wisdomRevealed ? 850 : 1250,
                               ),
-                              curve: Curves.easeInOutCubic,
+                              curve: Curves.easeOutCubic,
                               opacity: textOpacity,
                               child: AnimatedBuilder(
                                 animation: pulseAnimation,
@@ -983,6 +982,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                 duration: const Duration(
                                                   milliseconds: 1200,
                                                 ),
+                                                curve: Curves.easeOutCubic,
                                                 opacity: openingSubtitleOpacity,
                                                 child: Text(
                                                   "where silence speaks",
@@ -1019,7 +1019,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                   duration: const Duration(
                                                     milliseconds: 1250,
                                                   ),
-                                                  curve: Curves.easeInOutCubic,
+                                                  curve: Curves.easeOutCubic,
                                                   opacity: pauseFeelOpacity,
                                                   child: Text(
                                                     "Feel.",
@@ -1037,7 +1037,14 @@ class _HomeScreenState extends State<HomeScreen>
                                         : FittedBox(
                                             fit: BoxFit.scaleDown,
                                             child: SizedBox(
-                                              width: ritualTextWidth,
+                                              key: wisdomRevealed
+                                                  ? const ValueKey(
+                                                      'revealed-wisdom-layout',
+                                                    )
+                                                  : null,
+                                              width: wisdomRevealed
+                                                  ? revealedWisdomWidth
+                                                  : ritualTextWidth,
                                               child: Text(
                                                 currentText,
                                                 textAlign: TextAlign.center,
@@ -1048,6 +1055,9 @@ class _HomeScreenState extends State<HomeScreen>
                                                       : finalColor,
                                                   glow: wisdomRevealed ||
                                                       onHeartScreen,
+                                                  height: wisdomRevealed
+                                                      ? 1.48
+                                                      : 1.28,
                                                 ),
                                               ),
                                             ),
@@ -1062,37 +1072,41 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            Positioned(
-              top: 10,
-              right: 8,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Settings',
-                    icon: const Icon(
-                      Icons.settings_outlined,
-                      color: Colors.white70,
-                      size: 27,
-                    ),
-                    onPressed: openSettings,
-                  ),
-                  IconButton(
-                    tooltip: 'Kept',
-                    icon: const Text(
-                      '○',
-                      style: TextStyle(
+            if (!(screenStep == 2 && _transitionLock))
+              Positioned(
+                key: const ValueKey('top-navigation'),
+                top: 4,
+                right: 8,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Settings',
+                      icon: const Icon(
+                        Icons.settings_outlined,
                         color: Colors.white70,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w300,
-                        height: 1,
+                        size: 27,
+                        weight: 300,
                       ),
+                      onPressed: openSettings,
                     ),
-                    onPressed: openFavorites,
-                  ),
-                ],
+                    IconButton(
+                      tooltip: 'Kept',
+                      icon: const Text(
+                        '○',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 29,
+                          fontWeight: FontWeight.w300,
+                          fontFamily: 'CormorantGaramond',
+                          height: 1,
+                        ),
+                      ),
+                      onPressed: openFavorites,
+                    ),
+                  ],
+                ),
               ),
-            ),
             if (wisdomRevealed)
               Positioned(
                 left: 0,
@@ -1106,6 +1120,7 @@ class _HomeScreenState extends State<HomeScreen>
                       duration: const Duration(
                         milliseconds: 1000,
                       ),
+                      curve: Curves.easeOutCubic,
                       opacity: saveControlOpacity,
                       onEnd: () {
                         if (!mounted ||
@@ -1129,6 +1144,7 @@ class _HomeScreenState extends State<HomeScreen>
                             color: Color(0xFFF4F0E8),
                             fontSize: 29,
                             fontWeight: FontWeight.w300,
+                            fontFamily: 'CormorantGaramond',
                             height: 1,
                           ),
                         ),
@@ -1145,6 +1161,7 @@ class _HomeScreenState extends State<HomeScreen>
                 top: MediaQuery.of(context).size.height / 2 + 124,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
                   opacity: keeperPromptOpacity,
                   child: Column(
                     children: [
@@ -1161,6 +1178,13 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                     ],
                   ),
+                ),
+              ),
+            if (_isInBlackSilence)
+              const Positioned.fill(
+                child: ColoredBox(
+                  key: ValueKey('black-silence'),
+                  color: Colors.black,
                 ),
               ),
           ],

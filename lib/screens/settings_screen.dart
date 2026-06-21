@@ -144,10 +144,15 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: const Color(0xFF040404),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF030303),
+        backgroundColor: const Color(0xFF040404),
         foregroundColor: const Color(0xFFF4F0E8),
+        iconTheme: const IconThemeData(
+          color: Color(0xFFF4F0E8),
+          size: 22,
+          weight: 300,
+        ),
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         scrolledUnderElevation: 0,
@@ -166,16 +171,8 @@ class SettingsScreen extends StatelessWidget {
         ),
         children: [
           Text(
-            "Daily Wisdom",
+            "Silence, before meaning.",
             style: eastStyle(34),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "A quiet space for reflection, stillness, and timeless Eastern wisdom.",
-            style: eastStyle(
-              20,
-              color: Colors.white60,
-            ),
           ),
           const SizedBox(height: 34),
           const Divider(
@@ -265,7 +262,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 34),
           Center(
             child: Text(
-              "Version 1.0.0",
+              "built quietly.",
               style: eastStyle(
                 15,
                 color: Colors.white38,
@@ -291,8 +288,8 @@ class _NotificationStateIndicator extends StatelessWidget {
         child: Text(
           isEnabled ? '●' : '○',
           style: const TextStyle(
-            color: Color(0xFFF4F0E8),
-            fontSize: 23,
+            color: Colors.white60,
+            fontSize: 24,
             fontWeight: FontWeight.w300,
             fontFamily: 'CormorantGaramond',
             height: 1,

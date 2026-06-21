@@ -20,10 +20,18 @@ void main() {
     );
 
     expect(find.text('EAST.'), findsOneWidget);
+    expect(find.text('Silence, before meaning.'), findsOneWidget);
     expect(
       find.text('Unlimited kept reflections and support for EAST.'),
       findsOneWidget,
     );
+
+    await tester.scrollUntilVisible(
+      find.text('built quietly.'),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(find.text('built quietly.'), findsOneWidget);
   });
 
   testWidgets('Kept screen uses the new feature title', (tester) async {

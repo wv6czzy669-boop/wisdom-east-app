@@ -102,10 +102,15 @@ class _KeeperScreenState extends State<KeeperScreen> {
   Widget build(BuildContext context) {
     final isKeeper = purchaseService.isKeeper;
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: const Color(0xFF040404),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF030303),
+        backgroundColor: const Color(0xFF040404),
         foregroundColor: const Color(0xFFF4F0E8),
+        iconTheme: const IconThemeData(
+          color: Color(0xFFF4F0E8),
+          size: 22,
+          weight: 300,
+        ),
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
@@ -144,6 +149,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                             : buyKeeper,
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 500),
+                          curve: Curves.easeOutCubic,
                           opacity: purchaseService.isLoading ? 0.72 : 1.0,
                           child: Container(
                             width: 238,
