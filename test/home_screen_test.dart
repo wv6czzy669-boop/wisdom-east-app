@@ -36,6 +36,18 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byTooltip('Settings'),
+              matching: find.text('◎'),
+            ),
+          )
+          .style
+          ?.fontSize,
+      29,
+    );
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(
       find.descendant(
@@ -43,6 +55,22 @@ void main() {
         matching: find.text('○'),
       ),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byTooltip('Kept'),
+              matching: find.text('○'),
+            ),
+          )
+          .style
+          ?.fontSize,
+      33,
+    );
+    expect(
+      tester.getSize(find.byTooltip('Settings')),
+      tester.getSize(find.byTooltip('Kept')),
     );
 
     await _tapCenter(tester);
@@ -65,6 +93,8 @@ void main() {
 
   testWidgets('ritual remains overflow-safe on iPhone SE at 3x text scale',
       (tester) async {
+    final removedRevealPrompt = ['Tap', 'to', 'Reveal'].join(' ');
+
     tester.view.physicalSize = const Size(640, 1136);
     tester.view.devicePixelRatio = 2;
     tester.platformDispatcher.textScaleFactorTestValue = 3.0;
@@ -108,16 +138,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(find.text(removedRevealPrompt), findsNothing);
 
     await _tapCenter(tester);
     await tester.pump();
     expect(find.byTooltip('Settings'), findsNothing);
+    expect(find.text(removedRevealPrompt), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1249));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(find.text(removedRevealPrompt), findsNothing);
     expect(
       tester
           .widget<ColoredBox>(
@@ -136,6 +169,7 @@ void main() {
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
 
     expect(find.text(longWisdom), findsOneWidget);
+    expect(find.text(removedRevealPrompt), findsNothing);
     final wisdomText = tester.widget<Text>(find.text(longWisdom));
     expect(wisdomText.style?.fontSize, 32);
     expect(wisdomText.style?.height, 1.48);
@@ -147,11 +181,21 @@ void main() {
           .width,
       192,
     );
-    final revealOpacity = tester.widget<AnimatedOpacity>(
-      find.byKey(const ValueKey('ritual-content-opacity')),
+    final revealFade = tester.widget<FadeTransition>(
+      find.byKey(const ValueKey('wisdom-reveal-fade')),
     );
-    expect(revealOpacity.duration, const Duration(milliseconds: 850));
-    expect(revealOpacity.curve, Curves.easeOutCubic);
+    final revealCurve = revealFade.opacity as CurvedAnimation;
+    final revealController = revealCurve.parent as AnimationController;
+    expect(revealFade.opacity.value, 0.0);
+    expect(revealController.duration, const Duration(milliseconds: 850));
+    expect(revealCurve.curve, Curves.easeOutCubic);
+
+    await tester.pump(const Duration(milliseconds: 425));
+    expect(revealFade.opacity.value, greaterThan(0.0));
+    expect(revealFade.opacity.value, lessThan(1.0));
+
+    await tester.pump(const Duration(milliseconds: 425));
+    expect(revealFade.opacity.value, 1.0);
     final countdown = tester.widget<Text>(
       find.textContaining('Return when the silence opens again.'),
     );

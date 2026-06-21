@@ -5,12 +5,7 @@ import '../services/app_services.dart';
 import 'keeper_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({
-    super.key,
-    this.notificationsEnabled = false,
-  });
-
-  final bool notificationsEnabled;
+  const SettingsScreen({super.key});
 
   TextStyle eastStyle(
     double size, {
@@ -27,10 +22,9 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget settingsItem({
-    required IconData icon,
+    required Widget symbol,
     required String title,
-    String? subtitle,
-    Widget? trailing,
+    required String subtitle,
     VoidCallback? onTap,
   }) {
     return InkWell(
@@ -42,12 +36,12 @@ class SettingsScreen extends StatelessWidget {
           vertical: 17,
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: Colors.white60,
-              size: 22,
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Center(child: symbol),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -58,23 +52,17 @@ class SettingsScreen extends StatelessWidget {
                     title,
                     style: eastStyle(21),
                   ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: eastStyle(
-                        15,
-                        color: const Color(0x91FFFFFF),
-                      ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: eastStyle(
+                      15,
+                      color: const Color(0x91FFFFFF),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-            if (trailing != null) ...[
-              const SizedBox(width: 16),
-              trailing,
-            ],
           ],
         ),
       ),
@@ -162,137 +150,116 @@ class SettingsScreen extends StatelessWidget {
           style: eastStyle(26),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          24,
-          16,
-          24,
-          36,
-        ),
-        children: [
-          Text(
-            "Silence, before meaning.",
-            style: eastStyle(34),
-          ),
-          const SizedBox(height: 34),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.workspace_premium_outlined,
-            title: "Keeper",
-            subtitle: "Unlimited kept reflections and support for EAST.",
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const KeeperScreen(),
-                ),
-              );
-            },
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.notifications_none,
-            title: "Notifications",
-            trailing: _NotificationStateIndicator(
-              isEnabled: notificationsEnabled,
-            ),
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.restore,
-            title: "Restore Purchases",
-            subtitle: "Restore your Keeper access on this device.",
-            onTap: () async {
-              if (purchaseService.isLoading) return;
+      body: SizedBox.expand(
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: MediaQuery.sizeOf(context).width - 48,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Divider(
+                    color: Colors.white24,
+                    thickness: 0.5,
+                  ),
+                  settingsItem(
+                    symbol: const Text(
+                      '○',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w300,
+                        fontFamily: 'CormorantGaramond',
+                        height: 1,
+                      ),
+                    ),
+                    title: "Keeper",
+                    subtitle: "Support the circle, keep what stays.",
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const KeeperScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(
+                    color: Colors.white24,
+                    thickness: 0.5,
+                  ),
+                  settingsItem(
+                    symbol: const Icon(
+                      Icons.restore,
+                      color: Colors.white60,
+                      size: 22,
+                      weight: 300,
+                    ),
+                    title: "Restore Purchases",
+                    subtitle: "Restore what belongs with you.",
+                    onTap: () async {
+                      if (purchaseService.isLoading) return;
 
-              var restoreStarted = false;
-              try {
-                restoreStarted = await purchaseService.restorePurchases();
-              } catch (_) {}
+                      var restoreStarted = false;
+                      try {
+                        restoreStarted =
+                            await purchaseService.restorePurchases();
+                      } catch (_) {}
 
-              if (!context.mounted) return;
-              showInfoDialog(
-                context,
-                "Restore Purchases",
-                restoreStarted
-                    ? "Restore request sent. Keeper access will update automatically."
-                    : purchaseService.restoreNeedsRecovery
-                        ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
-                        : "Restore is not available right now. Please try again shortly.",
-              );
-            },
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.privacy_tip_outlined,
-            title: "Privacy Policy",
-            subtitle: "How EAST. handles your information.",
-            onTap: () async {
-              await openPrivacyPolicy();
+                      if (!context.mounted) return;
+                      showInfoDialog(
+                        context,
+                        "Restore Purchases",
+                        restoreStarted
+                            ? "Restore request sent. Keeper access will update automatically."
+                            : purchaseService.restoreNeedsRecovery
+                                ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
+                                : "Restore is not available right now. Please try again shortly.",
+                      );
+                    },
+                  ),
+                  const Divider(
+                    color: Colors.white24,
+                    thickness: 0.5,
+                  ),
+                  settingsItem(
+                    symbol: const Icon(
+                      Icons.privacy_tip_outlined,
+                      color: Colors.white60,
+                      size: 22,
+                      weight: 300,
+                    ),
+                    title: "Privacy Policy",
+                    subtitle: "What stays private.",
+                    onTap: () async {
+                      await openPrivacyPolicy();
 
-              if (!context.mounted) return;
-            },
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.mail_outline,
-            title: "Reach Out",
-            subtitle: "Support and feedback.",
-            onTap: sendEmail,
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          const SizedBox(height: 34),
-          Center(
-            child: Text(
-              "built quietly.",
-              style: eastStyle(
-                15,
-                color: const Color(0x91FFFFFF),
+                      if (!context.mounted) return;
+                    },
+                  ),
+                  const Divider(
+                    color: Colors.white24,
+                    thickness: 0.5,
+                  ),
+                  settingsItem(
+                    symbol: const Icon(
+                      Icons.mail_outline,
+                      color: Colors.white60,
+                      size: 22,
+                      weight: 300,
+                    ),
+                    title: "Reach Out",
+                    subtitle: "For thoughts and questions.",
+                    onTap: sendEmail,
+                  ),
+                  const Divider(
+                    color: Colors.white24,
+                    thickness: 0.5,
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NotificationStateIndicator extends StatelessWidget {
-  const _NotificationStateIndicator({required this.isEnabled});
-
-  final bool isEnabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: isEnabled ? 'Notifications enabled' : 'Notifications disabled',
-      child: ExcludeSemantics(
-        child: Text(
-          isEnabled ? '●' : '○',
-          style: const TextStyle(
-            color: Colors.white60,
-            fontSize: 24,
-            fontWeight: FontWeight.w300,
-            fontFamily: 'CormorantGaramond',
-            height: 1,
           ),
         ),
       ),

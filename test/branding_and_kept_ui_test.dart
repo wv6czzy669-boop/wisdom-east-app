@@ -21,19 +21,22 @@ void main() {
     );
 
     expect(find.text('EAST.'), findsOneWidget);
-    expect(find.text('Silence, before meaning.'), findsOneWidget);
     expect(
-      find.text('Unlimited kept reflections and support for EAST.'),
+      find.text('Support the circle, keep what stays.'),
       findsOneWidget,
     );
-
-    await tester.scrollUntilVisible(
-      find.text('built quietly.'),
-      200,
-      scrollable: find.byType(Scrollable),
+    expect(
+      find.text('Restore what belongs with you.'),
+      findsOneWidget,
     );
-    expect(find.text('built quietly.'), findsOneWidget);
+    expect(find.text('What stays private.'), findsOneWidget);
+    expect(find.text('For thoughts and questions.'), findsOneWidget);
     expect(find.text('Reach Out'), findsOneWidget);
+    expect(find.text('Notifications'), findsNothing);
+    expect(find.byType(ListView), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(find.byType(Scrollable), findsNothing);
+    expect(find.text('○'), findsOneWidget);
   });
 
   testWidgets('Kept omits the stored year without changing its data',
@@ -69,33 +72,24 @@ void main() {
     expect(find.text('Nothing kept yet.'), findsOneWidget);
   });
 
-  testWidgets('notification visual state is disabled without interaction',
+  testWidgets('Settings remains fixed on iPhone SE at 3x text scale',
       (tester) async {
-    final semantics = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(640, 1136);
+    tester.view.devicePixelRatio = 2;
+    tester.platformDispatcher.textScaleFactorTestValue = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
 
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
 
-    expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('○'), findsOneWidget);
-    expect(
-      find.bySemanticsLabel(RegExp('Notifications disabled')),
-      findsOneWidget,
-    );
-
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: SettingsScreen(notificationsEnabled: true),
-      ),
-    );
-
-    expect(find.text('●'), findsOneWidget);
-    expect(find.text('○'), findsNothing);
-    expect(
-      find.bySemanticsLabel(RegExp('Notifications enabled')),
-      findsOneWidget,
-    );
-    semantics.dispose();
+    expect(find.byType(Scrollable), findsNothing);
+    expect(find.text('Keeper'), findsOneWidget);
+    expect(find.text('Reach Out'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

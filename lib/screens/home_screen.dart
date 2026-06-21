@@ -26,7 +26,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   int screenStep = 0;
 
   String currentText = "EAST.";
@@ -72,6 +72,9 @@ class _HomeScreenState extends State<HomeScreen>
   void restoreStableRitualState() {
     if (!mounted) return;
 
+    wisdomRevealController.stop();
+    wisdomRevealController.value = wisdomRevealed ? 1.0 : 0.0;
+
     setState(() {
       transitionInProgress = false;
       _transitionLock = false;
@@ -110,6 +113,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   late AnimationController pulseController;
   late Animation<double> pulseAnimation;
+  late final AnimationController wisdomRevealController;
+  late final Animation<double> wisdomRevealAnimation;
 
   Timer? countdownTimer;
 
@@ -168,6 +173,15 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
 
+    wisdomRevealController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    wisdomRevealAnimation = CurvedAnimation(
+      parent: wisdomRevealController,
+      curve: Curves.easeOutCubic,
+    );
+
     loadInitialState().catchError((_) {
       if (!mounted) return;
       startCountdownTimer();
@@ -203,6 +217,7 @@ class _HomeScreenState extends State<HomeScreen>
     purchaseService.removeListener(_syncKeeperStatus);
     stopCountdownTimer();
     pulseController.dispose();
+    wisdomRevealController.dispose();
     audioService.dispose();
     super.dispose();
   }
@@ -224,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (pulseController.isAnimating) {
         pulseController.stop();
       }
+      wisdomRevealController.stop();
 
       restoreStableRitualState();
       return;
@@ -551,6 +567,9 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!mounted) return;
 
+      wisdomRevealController.stop();
+      wisdomRevealController.value = 0.0;
+
       setState(() {
         textOpacity = 0.0;
         saveControlOpacity = 0.0;
@@ -595,6 +614,7 @@ class _HomeScreenState extends State<HomeScreen>
         revealGlowOpacity = 0.16;
       });
 
+      wisdomRevealController.forward(from: 0.0);
       unawaited(audioService.playRevealSound());
       HapticFeedback.selectionClick();
 
@@ -833,6 +853,16 @@ class _HomeScreenState extends State<HomeScreen>
       finalColor,
       textOpacity,
     )!;
+    final currentRitualText = Text(
+      currentText,
+      textAlign: TextAlign.center,
+      style: wisdomStyle(
+        textSize,
+        color: wisdomRevealed ? animatedTextColor : finalColor,
+        glow: wisdomRevealed || onHeartScreen,
+        height: wisdomRevealed ? 1.48 : 1.28,
+      ),
+    );
 
     return Scaffold(
       backgroundColor:
@@ -946,7 +976,7 @@ class _HomeScreenState extends State<HomeScreen>
                             child: AnimatedOpacity(
                               key: const ValueKey('ritual-content-opacity'),
                               duration: Duration(
-                                milliseconds: wisdomRevealed ? 850 : 1250,
+                                milliseconds: wisdomRevealed ? 0 : 1250,
                               ),
                               curve: Curves.easeOutCubic,
                               opacity: textOpacity,
@@ -1047,21 +1077,16 @@ class _HomeScreenState extends State<HomeScreen>
                                               width: wisdomRevealed
                                                   ? revealedWisdomWidth
                                                   : ritualTextWidth,
-                                              child: Text(
-                                                currentText,
-                                                textAlign: TextAlign.center,
-                                                style: wisdomStyle(
-                                                  textSize,
-                                                  color: wisdomRevealed
-                                                      ? animatedTextColor
-                                                      : finalColor,
-                                                  glow: wisdomRevealed ||
-                                                      onHeartScreen,
-                                                  height: wisdomRevealed
-                                                      ? 1.48
-                                                      : 1.28,
-                                                ),
-                                              ),
+                                              child: wisdomRevealed
+                                                  ? FadeTransition(
+                                                      key: const ValueKey(
+                                                        'wisdom-reveal-fade',
+                                                      ),
+                                                      opacity:
+                                                          wisdomRevealAnimation,
+                                                      child: currentRitualText,
+                                                    )
+                                                  : currentRitualText,
                                             ),
                                           ),
                               ),
@@ -1082,39 +1107,45 @@ class _HomeScreenState extends State<HomeScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      tooltip: 'Settings',
-                      icon: Transform.translate(
-                        offset: const Offset(0, -4),
-                        child: const Text(
-                          '◎',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 29,
-                            fontWeight: FontWeight.w300,
-                            fontFamily: 'CormorantGaramond',
-                            height: 1,
+                    SizedBox.square(
+                      dimension: 48,
+                      child: IconButton(
+                        tooltip: 'Settings',
+                        icon: Transform.translate(
+                          offset: const Offset(0, -4),
+                          child: const Text(
+                            '◎',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 29,
+                              fontWeight: FontWeight.w300,
+                              fontFamily: 'CormorantGaramond',
+                              height: 1,
+                            ),
                           ),
                         ),
+                        onPressed: openSettings,
                       ),
-                      onPressed: openSettings,
                     ),
-                    IconButton(
-                      tooltip: 'Kept',
-                      icon: Transform.translate(
-                        offset: const Offset(0, -4),
-                        child: const Text(
-                          '○',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 29,
-                            fontWeight: FontWeight.w300,
-                            fontFamily: 'CormorantGaramond',
-                            height: 1,
+                    SizedBox.square(
+                      dimension: 48,
+                      child: IconButton(
+                        tooltip: 'Kept',
+                        icon: Transform.translate(
+                          offset: const Offset(0, -4),
+                          child: const Text(
+                            '○',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 33,
+                              fontWeight: FontWeight.w300,
+                              fontFamily: 'CormorantGaramond',
+                              height: 1,
+                            ),
                           ),
                         ),
+                        onPressed: openFavorites,
                       ),
-                      onPressed: openFavorites,
                     ),
                   ],
                 ),
