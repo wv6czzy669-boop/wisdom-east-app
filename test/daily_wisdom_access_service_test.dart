@@ -138,8 +138,7 @@ void main() {
     });
   }
 
-  test('Keeper receives one new wisdom and stays locked inside 24 hours',
-      () async {
+  test('rolling daily access remains locked inside 24 hours', () async {
     var selections = 0;
     String select() => 'Shared wisdom ${++selections}';
 

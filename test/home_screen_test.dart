@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
+import 'package:wisdom_app/services/keeper_daily_access_service.dart';
+import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
 
 void main() {
@@ -125,6 +127,7 @@ void main() {
       find.textContaining('Return when the silence opens again.'),
       findsOneWidget,
     );
+    expect(find.text('Reveal another'), findsOneWidget);
     expect(find.text('Pause.'), findsNothing);
     expect(find.text('Feel.'), findsNothing);
     expect(find.text('Ask from your heart.'), findsNothing);
@@ -155,7 +158,31 @@ void main() {
     expect(prefs.getStringList('daily_wisdom_archive'), isNull);
   });
 
-  testWidgets('Keeper reopens to the same existing locked wisdom',
+  testWidgets('free Reveal another opens the Keeper screen', (tester) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: 'Free received wisdom',
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.tap(find.text('Reveal another'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Keeper'), findsOneWidget);
+    expect(find.text('Enter the Circle'), findsOneWidget);
+  });
+
+  testWidgets('Keeper reopens to the last wisdom with another ritual available',
       (tester) async {
     final now = DateTime.now();
     SharedPreferences.setMockInitialValues({
@@ -174,13 +201,84 @@ void main() {
     await _openExistingWisdom(tester);
 
     expect(find.text('Keeper received wisdom'), findsOneWidget);
-    expect(
-      find.textContaining('Return when the silence opens again.'),
-      findsOneWidget,
-    );
+    expect(find.text('Reveal another'), findsOneWidget);
+    expect(find.textContaining('Return when the silence opens again.'),
+        findsNothing);
     expect(find.text('Pause.'), findsNothing);
     expect(find.text('Feel.'), findsNothing);
     expect(find.text('Ask from your heart.'), findsNothing);
+  });
+
+  testWidgets('Keeper sees Reveal another after the first reveal',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+    await _seedKeeperWisdoms(1);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(find.text('Keeper seeded wisdom 1'), findsOneWidget);
+    expect(find.text('Reveal another'), findsOneWidget);
+    expect(find.byTooltip('Keep reflection'), findsOneWidget);
+
+    await tester.tap(find.text('Reveal another'));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
+    expect(find.text('Keeper seeded wisdom 1'), findsNothing);
+
+    await _advanceFromLaunchToPause(tester);
+    expect(find.text('Pause.'), findsOneWidget);
+  });
+
+  testWidgets('Keeper sees Reveal another after the second reveal',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+    await _seedKeeperWisdoms(2);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(find.text('Keeper seeded wisdom 2'), findsOneWidget);
+    expect(find.text('Reveal another'), findsOneWidget);
+    expect(find.textContaining('Return when the silence opens again.'),
+        findsNothing);
+  });
+
+  testWidgets('Keeper third reveal leaves Save and local-midnight countdown',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+    await _seedKeeperWisdoms(3);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(find.text('Keeper seeded wisdom 3'), findsOneWidget);
+    expect(find.text('Reveal another'), findsNothing);
+    expect(find.byTooltip('Keep reflection'), findsOneWidget);
+
+    final countdown = tester.widget<Text>(
+      find.textContaining('Return when the silence opens again.'),
+    );
+    final countdownLines = countdown.data!.split('\n');
+    expect(countdownLines.first, 'Return when the silence opens again.');
+    expect(countdownLines, hasLength(2));
+    expect(
+      countdownLines.last,
+      anyOf(
+        matches(RegExp(r'^\d+h \d+m$')),
+        matches(RegExp(r'^\d+ min$')),
+      ),
+    );
   });
 
   testWidgets('corrupt locked state falls back to conservative countdown',
@@ -672,6 +770,18 @@ Future<void> _advanceToQuestion(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 850));
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 600));
+}
+
+Future<void> _seedKeeperWisdoms(int count) async {
+  final service = KeeperDailyAccessService(
+    storageService: StorageService(),
+  );
+
+  for (var index = 1; index <= count; index++) {
+    await service.reveal(
+      selectWisdom: () => 'Keeper seeded wisdom $index',
+    );
+  }
 }
 
 double _ritualOpacity(WidgetTester tester) {

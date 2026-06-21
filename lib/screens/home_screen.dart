@@ -9,6 +9,7 @@ import '../models/favorite_item.dart';
 import '../services/app_services.dart';
 import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
+import '../services/keeper_daily_access_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/storage_service.dart';
 import '../services/wisdom_selector.dart';
@@ -49,6 +50,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _dailyStatusResolved = false;
   bool _dailyLockActive = false;
   bool _showingLockedWisdom = false;
+  bool _keeperCanReveal = false;
+  bool _keeperRitualRequested = false;
   String? _lockedWisdomText;
 
   final ritualFlowController = const RitualFlowController();
@@ -126,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen>
   final AudioService audioService = AudioService();
   final StorageService storageService = StorageService();
   late final DailyWisdomAccessService dailyWisdomAccessService;
+  late final KeeperDailyAccessService keeperDailyAccessService;
   late final SavedReflectionsService savedReflectionsService;
 
   void startCountdownTimer() {
@@ -157,6 +161,9 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addObserver(this);
     purchaseService.addListener(_syncKeeperStatus);
     dailyWisdomAccessService = DailyWisdomAccessService(
+      storageService: storageService,
+    );
+    keeperDailyAccessService = KeeperDailyAccessService(
       storageService: storageService,
     );
     savedReflectionsService = SavedReflectionsService(
@@ -237,6 +244,7 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _syncKeeperStatus() async {
     if (!mounted) return;
     await loadKeeperStatus();
+    await updateNextWisdomMessage();
   }
 
   @override
@@ -331,6 +339,11 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!_dailyStatusResolved) return;
 
+      if (isKeeper && !_keeperRitualRequested && _lockedWisdomText != null) {
+        await transitionToExistingWisdom(_lockedWisdomText!);
+        return;
+      }
+
       if (_dailyLockActive) {
         final lockedWisdomText = _lockedWisdomText;
         if (lockedWisdomText == null) {
@@ -343,6 +356,8 @@ class _HomeScreenState extends State<HomeScreen>
         }
         return;
       }
+
+      _keeperRitualRequested = false;
 
       final callbackSession = delayedCallbackSession;
       final callbackFlowSession = flowSessionId + 1;
@@ -561,6 +576,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> updateNextWisdomMessage() async {
+    if (isKeeper) {
+      await _updateKeeperWisdomStatus();
+      return;
+    }
+
     final DailyWisdomStatus status;
 
     try {
@@ -580,6 +600,7 @@ class _HomeScreenState extends State<HomeScreen>
         setState(() {
           _dailyStatusResolved = true;
           _dailyLockActive = false;
+          _keeperCanReveal = false;
           _lockedWisdomText = null;
           nextWisdomMessage =
               status.unlockAt == null ? "" : "A new wisdom is ready.";
@@ -628,6 +649,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _dailyStatusResolved = true;
         _dailyLockActive = true;
+        _keeperCanReveal = false;
         _lockedWisdomText = lockedWisdomText;
         nextWisdomMessage = message;
         if (onLockedCountdown) {
@@ -637,7 +659,95 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _updateKeeperWisdomStatus() async {
+    final KeeperDailyStatus status;
+    String? existingWisdom;
+
+    try {
+      final record = await storageService.loadDailyWisdomRecord(
+        lockDuration: dailyWisdomAccessService.lockDuration,
+      );
+      final text = record?.text.trim();
+      if (record != null &&
+          text != null &&
+          text.isNotEmpty &&
+          text != DailyWisdomAccessService.corruptRecordRecoveryText) {
+        existingWisdom = record.text;
+        await keeperDailyAccessService.seedFromExistingWisdomIfNeeded(
+          text: record.text,
+          revealedAt: record.revealedAt,
+        );
+      }
+
+      status = await keeperDailyAccessService.status();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          nextWisdomMessage = "";
+          _dailyStatusResolved = false;
+          _keeperCanReveal = false;
+        });
+      }
+      return;
+    }
+
+    String? lastWisdom =
+        status.lastWisdom?.trim().isEmpty ?? true ? null : status.lastWisdom;
+
+    lastWisdom ??= existingWisdom;
+
+    final remaining = status.resetAt.difference(DateTime.now());
+    final safeRemaining = remaining.isNegative ? Duration.zero : remaining;
+    final hours = safeRemaining.inHours;
+    final minutes = safeRemaining.inMinutes % 60;
+    final message = hours <= 0
+        ? "Return when the silence opens again.\n${minutes + 1} min"
+        : "Return when the silence opens again.\n${hours}h ${minutes}m";
+
+    if (!mounted) return;
+
+    setState(() {
+      _dailyStatusResolved = true;
+      _dailyLockActive = !status.canReveal;
+      _keeperCanReveal = status.canReveal;
+      _lockedWisdomText = lastWisdom;
+      nextWisdomMessage = status.canReveal ? "" : message;
+
+      if (onLockedCountdown && status.canReveal) {
+        screenStep = 0;
+        currentText = "EAST.";
+        textOpacity = 1.0;
+        textScale = 1.0;
+        backgroundDepth = 0.0;
+      } else if (onLockedCountdown) {
+        currentText = message;
+      }
+    });
+  }
+
   Future<String> getLockedOrNewWisdom() async {
+    if (isKeeper) {
+      final access = await keeperDailyAccessService.reveal(
+        selectWisdom: () => wisdomSelector.select()["text"] as String,
+      );
+
+      if (access.isNew) {
+        try {
+          await saveDailyArchive(access.text);
+        } catch (_) {
+          // Archiving is best-effort and must never hide a persisted wisdom.
+        }
+      }
+
+      try {
+        await updateNextWisdomMessage();
+      } catch (_) {
+        // Keeper allowance copy is noncritical after the state is persisted.
+      }
+
+      return access.text;
+    }
+
     final access = await dailyWisdomAccessService.reveal(
       selectWisdom: () => wisdomSelector.select()["text"] as String,
     );
@@ -723,6 +833,7 @@ class _HomeScreenState extends State<HomeScreen>
         _isInBlackSilence = false;
         currentText = selectedText;
         screenStep = 4;
+        _keeperRitualRequested = false;
         _showingLockedWisdom = false;
         textOpacity = 1.0;
         textScale = 1.0;
@@ -777,10 +888,53 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!mounted) return;
       await loadKeeperStatus();
+      await updateNextWisdomMessage();
     } finally {
       if (mounted) {
         navigationInProgress = false;
       }
+    }
+  }
+
+  void beginAnotherRitual() {
+    if (!isKeeper ||
+        !_keeperCanReveal ||
+        navigationInProgress ||
+        transitionInProgress ||
+        _transitionLock) {
+      return;
+    }
+
+    flowSessionId++;
+    invalidateDelayedCallbacks();
+    unawaited(audioService.stop());
+    wisdomRevealController.stop();
+    wisdomRevealController.value = 0.0;
+    askFadeController.stop();
+    askFadeController.value = 1.0;
+
+    setState(() {
+      screenStep = 0;
+      currentText = "EAST.";
+      textOpacity = 1.0;
+      textScale = 1.0;
+      pauseFeelOpacity = 0.0;
+      saveControlOpacity = 0.0;
+      saveInteractionEnabled = false;
+      keeperPromptOpacity = 0.0;
+      revealGlowOpacity = 0.0;
+      backgroundDepth = 0.0;
+      _showingLockedWisdom = false;
+      _keeperRitualRequested = true;
+      _isInBlackSilence = false;
+    });
+  }
+
+  void handleRevealAnother() {
+    if (isKeeper) {
+      beginAnotherRitual();
+    } else {
+      openKeeperScreen();
     }
   }
 
@@ -1350,25 +1504,51 @@ class _HomeScreenState extends State<HomeScreen>
               Positioned(
                 left: 0,
                 right: 0,
-                top: MediaQuery.of(context).size.height / 2 + 124,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 900),
-                  curve: Curves.easeOutCubic,
-                  opacity: keeperPromptOpacity,
-                  child: Column(
-                    children: [
-                      if (nextWisdomMessage.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          nextWisdomMessage,
-                          textAlign: TextAlign.center,
-                          style: wisdomStyle(
-                            15,
-                            color: const Color(0x91FFFFFF),
+                top: MediaQuery.of(context).size.height / 2 + 156,
+                child: IgnorePointer(
+                  ignoring: keeperPromptOpacity < 1.0,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutCubic,
+                    opacity: keeperPromptOpacity,
+                    child: Column(
+                      children: [
+                        if (!isKeeper || _keeperCanReveal)
+                          Semantics(
+                            button: true,
+                            label: 'Reveal another',
+                            child: GestureDetector(
+                              key: const ValueKey('reveal-another'),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: handleRevealAnother,
+                              child: SizedBox(
+                                height: 44,
+                                child: Center(
+                                  child: Text(
+                                    'Reveal another',
+                                    textAlign: TextAlign.center,
+                                    style: wisdomStyle(
+                                      17,
+                                      color: const Color(0xB8F4F0E8),
+                                    ).copyWith(letterSpacing: 0.85),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                        if (nextWisdomMessage.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            nextWisdomMessage,
+                            textAlign: TextAlign.center,
+                            style: wisdomStyle(
+                              15,
+                              color: const Color(0x91FFFFFF),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),

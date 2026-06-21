@@ -2,7 +2,7 @@ name: wisdom_app
 description: A minimal wisdom app
 publish_to: "none"
 
-version: 1.0.0+15
+version: 1.0.0+16
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -20,6 +20,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  in_app_purchase_platform_interface: ^1.4.1
   flutter_launcher_icons: ^0.13.1
   flutter_lints: ^6.0.0
 
