@@ -31,13 +31,12 @@ class _HomeScreenState extends State<HomeScreen>
 
   String currentText = "EAST.";
 
-  double textOpacity = 0.0;
+  double textOpacity = 1.0;
   double saveControlOpacity = 0.0;
   double keeperPromptOpacity = 0.0;
-  double textScale = 0.985;
+  double textScale = 1.0;
   double revealGlowOpacity = 0.0;
   double backgroundDepth = 0.0;
-  double openingSubtitleOpacity = 0.0;
   double pauseFeelOpacity = 0.0;
 
   bool transitionInProgress = false;
@@ -83,10 +82,8 @@ class _HomeScreenState extends State<HomeScreen>
       textScale = 1.0;
 
       if (screenStep == 0) {
-        openingSubtitleOpacity = 1.0;
-        backgroundDepth = 0.06;
+        backgroundDepth = 0.0;
       } else {
-        openingSubtitleOpacity = 0.0;
         backgroundDepth = wisdomRevealed ? 0.30 : 0.0;
       }
 
@@ -175,19 +172,15 @@ class _HomeScreenState extends State<HomeScreen>
 
     wisdomRevealController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 850),
+      duration: const Duration(milliseconds: 1200),
     );
     wisdomRevealAnimation = CurvedAnimation(
       parent: wisdomRevealController,
       curve: Curves.easeOutCubic,
     );
 
-    loadInitialState().catchError((_) {
-      if (!mounted) return;
-      startCountdownTimer();
-    });
-
-    runOpeningIntro();
+    loadInitialState().catchError((_) {});
+    startCountdownTimer();
   }
 
   @override
@@ -261,34 +254,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool get onHeartScreen => ritualFlowController.isHeartScreen(screenStep);
   bool get onRevealScreen => ritualFlowController.isRevealScreen(screenStep);
   bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
-  Future<void> runOpeningIntro() async {
-    final currentFlow = ++flowSessionId;
-
-    await Future.delayed(const Duration(milliseconds: 420));
-
-    if (!mounted || currentFlow != flowSessionId) return;
-
-    setState(() {
-      textOpacity = 1.0;
-      textScale = 1.0;
-      backgroundDepth = 0.06;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 900));
-
-    if (!mounted || currentFlow != flowSessionId) return;
-
-    setState(() {
-      openingSubtitleOpacity = 1.0;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (!mounted || currentFlow != flowSessionId) return;
-
-    startCountdownTimer();
-  }
-
   Future<void> loadInitialState() async {
     await loadFavorites();
     await loadKeeperStatus();
@@ -358,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (screenStep == 1) {
-      HapticFeedback.selectionClick();
+      HapticFeedback.lightImpact();
 
       if (pauseFeelOpacity < 1.0) {
         final callbackSession = delayedCallbackSession;
@@ -446,7 +411,6 @@ class _HomeScreenState extends State<HomeScreen>
         backgroundDepth =
             ritualFlowController.transitionBackgroundDepth(nextStep);
         textScale = 0.985;
-        openingSubtitleOpacity = 0.0;
       });
 
       await Future.delayed(
@@ -563,7 +527,7 @@ class _HomeScreenState extends State<HomeScreen>
     transitionInProgress = true;
 
     try {
-      HapticFeedback.lightImpact();
+      HapticFeedback.mediumImpact();
 
       if (!mounted) return;
 
@@ -614,9 +578,12 @@ class _HomeScreenState extends State<HomeScreen>
         revealGlowOpacity = 0.16;
       });
 
-      wisdomRevealController.forward(from: 0.0);
       unawaited(audioService.playRevealSound());
       HapticFeedback.selectionClick();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!isCurrentFlow(currentFlow) || !wisdomRevealed) return;
+        wisdomRevealController.forward(from: 0.0);
+      });
 
       await Future.delayed(const Duration(milliseconds: 900));
 
@@ -647,7 +614,6 @@ class _HomeScreenState extends State<HomeScreen>
 
     navigationInProgress = true;
     interruptRitualForNavigation();
-    HapticFeedback.selectionClick();
 
     try {
       await Navigator.push(
@@ -671,7 +637,6 @@ class _HomeScreenState extends State<HomeScreen>
 
     navigationInProgress = true;
     interruptRitualForNavigation();
-    HapticFeedback.selectionClick();
 
     try {
       await Navigator.push(
@@ -732,8 +697,6 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> toggleFavorite() async {
     if (!wisdomRevealed) return;
 
-    HapticFeedback.selectionClick();
-
     try {
       final result = await savedReflectionsService.toggle(
         currentItems: favorites,
@@ -779,7 +742,6 @@ class _HomeScreenState extends State<HomeScreen>
 
     navigationInProgress = true;
     interruptRitualForNavigation();
-    HapticFeedback.selectionClick();
 
     try {
       await Navigator.push(
@@ -822,6 +784,47 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ]
           : null,
+    );
+  }
+
+  Widget buildLaunchMark(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final diameter = min(
+          MediaQuery.sizeOf(context).width * 0.55,
+          constraints.maxHeight,
+        );
+
+        return Semantics(
+          label: 'EAST.',
+          child: ExcludeSemantics(
+            child: Container(
+              key: const ValueKey('launch-ritual-mark'),
+              width: diameter,
+              height: diameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFF4F0E8).withValues(alpha: 0.70),
+                  width: 0.7,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Transform.translate(
+                offset: const Offset(0, -2.5),
+                child: Text(
+                  'EAST.',
+                  textAlign: TextAlign.center,
+                  style: wisdomStyle(
+                    20,
+                    color: const Color(0xFFF4F0E8),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -879,26 +882,27 @@ class _HomeScreenState extends State<HomeScreen>
                 backgroundDepth,
               ),
             ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: RepaintBoundary(
-                  child: AnimatedBuilder(
-                    animation: pulseController,
-                    builder: (context, child) {
-                      final pulse = pulseController.value;
+            if (screenStep != 0)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: pulseController,
+                      builder: (context, child) {
+                        final pulse = pulseController.value;
 
-                      return CustomPaint(
-                        painter: GrainPainter(
-                          movement: _reduceMotion ? 0.0 : pulse,
-                          intensity: wisdomRevealed ? 0.01625 : 0.01235,
-                        ),
-                      );
-                    },
+                        return CustomPaint(
+                          painter: GrainPainter(
+                            movement: _reduceMotion ? 0.0 : pulse,
+                            intensity: wisdomRevealed ? 0.01625 : 0.01235,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (wisdomRevealed || onPauseScreen)
+            if (wisdomRevealed || onPauseScreen || _transitionLock)
               Positioned.fill(
                 child: IgnorePointer(
                   child: AnimatedOpacity(
@@ -968,7 +972,7 @@ class _HomeScreenState extends State<HomeScreen>
                             );
                           },
                           child: AnimatedScale(
-                            scale: textScale,
+                            scale: screenStep == 0 ? 1.0 : textScale,
                             duration: const Duration(
                               milliseconds: 1000,
                             ),
@@ -976,7 +980,11 @@ class _HomeScreenState extends State<HomeScreen>
                             child: AnimatedOpacity(
                               key: const ValueKey('ritual-content-opacity'),
                               duration: Duration(
-                                milliseconds: wisdomRevealed ? 0 : 1250,
+                                milliseconds: screenStep == 0
+                                    ? 450
+                                    : wisdomRevealed
+                                        ? 0
+                                        : 1250,
                               ),
                               curve: Curves.easeOutCubic,
                               opacity: textOpacity,
@@ -991,44 +999,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   );
                                 },
                                 child: screenStep == 0
-                                    ? FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: SizedBox(
-                                          width: ritualTextWidth,
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                "EAST.",
-                                                textAlign: TextAlign.center,
-                                                style: wisdomStyle(
-                                                  44,
-                                                  color: finalColor,
-                                                  glow: true,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              AnimatedOpacity(
-                                                duration: const Duration(
-                                                  milliseconds: 1200,
-                                                ),
-                                                curve: Curves.easeOutCubic,
-                                                opacity: openingSubtitleOpacity,
-                                                child: Text(
-                                                  "where silence speaks",
-                                                  textAlign: TextAlign.center,
-                                                  style: wisdomStyle(
-                                                    20,
-                                                    color: const Color(
-                                                      0x91FFFFFF,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      )
+                                    ? buildLaunchMark(context)
                                     : onPauseScreen
                                         ? FittedBox(
                                             fit: BoxFit.scaleDown,
@@ -1099,7 +1070,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            if (!(screenStep == 2 && _transitionLock))
+            if (screenStep != 0 && !(screenStep == 2 && _transitionLock))
               Positioned(
                 key: const ValueKey('top-navigation'),
                 top: 0,
@@ -1137,7 +1108,7 @@ class _HomeScreenState extends State<HomeScreen>
                             '○',
                             style: TextStyle(
                               color: Colors.white70,
-                              fontSize: 33,
+                              fontSize: 36,
                               fontWeight: FontWeight.w300,
                               fontFamily: 'CormorantGaramond',
                               height: 1,

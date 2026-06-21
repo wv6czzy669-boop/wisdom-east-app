@@ -21,6 +21,7 @@ void main() {
     );
 
     expect(find.text('EAST.'), findsOneWidget);
+    expect(find.text('Where silence speaks.'), findsOneWidget);
     expect(
       find.text('Support the circle, keep what stays.'),
       findsOneWidget,
@@ -34,8 +35,16 @@ void main() {
     expect(find.text('Reach Out'), findsOneWidget);
     expect(find.text('Notifications'), findsNothing);
     expect(find.byType(ListView), findsNothing);
-    expect(find.byType(SingleChildScrollView), findsNothing);
-    expect(find.byType(Scrollable), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.byType(Scrollable), findsOneWidget);
+    expect(
+      tester
+          .widget<SingleChildScrollView>(
+            find.byKey(const ValueKey('settings-scroll')),
+          )
+          .physics,
+      isA<ClampingScrollPhysics>(),
+    );
     expect(find.text('○'), findsOneWidget);
   });
 
@@ -72,7 +81,7 @@ void main() {
     expect(find.text('Nothing kept yet.'), findsOneWidget);
   });
 
-  testWidgets('Settings remains fixed on iPhone SE at 3x text scale',
+  testWidgets('Settings scroll protects iPhone SE at 3x text scale',
       (tester) async {
     tester.view.physicalSize = const Size(640, 1136);
     tester.view.devicePixelRatio = 2;
@@ -87,9 +96,17 @@ void main() {
       const MaterialApp(home: SettingsScreen()),
     );
 
-    expect(find.byType(Scrollable), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text('Reach Out'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Reach Out'));
+    await tester.pump();
+
+    expect(
+      tester.getCenter(find.text('Reach Out')).dy,
+      lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
+    );
     expect(tester.takeException(), isNull);
   });
 }

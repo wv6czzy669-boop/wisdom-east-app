@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
@@ -8,6 +9,56 @@ import 'package:wisdom_app/widgets/grain_painter.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('launch ritual mark is static and geometrically restrained',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+
+    final markFinder = find.byKey(const ValueKey('launch-ritual-mark'));
+    final removedLaunchSubtitle = ['Where', 'silence', 'speaks.'].join(' ');
+    expect(markFinder, findsOneWidget);
+    expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
+    expect(_grainPainters(tester), isEmpty);
+    expect(find.text(removedLaunchSubtitle), findsNothing);
+    expect(_ritualOpacity(tester), 1.0);
+
+    final mark = tester.widget<Container>(markFinder);
+    final decoration = mark.decoration! as BoxDecoration;
+    expect(tester.getSize(markFinder).width, closeTo(214.5, 0.1));
+    expect(tester.getSize(markFinder).height, closeTo(214.5, 0.1));
+    expect(decoration.shape, BoxShape.circle);
+    expect(decoration.color, isNull);
+    expect(decoration.boxShadow, isNull);
+    expect(decoration.border!.top.width, 0.7);
+    expect(decoration.border!.top.color.a, closeTo(0.70, 0.001));
+
+    final launchText = tester.widget<Text>(
+      find.descendant(of: markFinder, matching: find.text('EAST.')),
+    );
+    expect(launchText.style?.fontFamily, 'CormorantGaramond');
+    expect(launchText.style?.fontSize, 20);
+    expect(launchText.style?.color, const Color(0xFFF4F0E8));
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_ritualOpacity(tester), 1.0);
+
+    await _tapCenter(tester);
+    await tester.pump();
+    final launchFade = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('ritual-content-opacity')),
+    );
+    expect(launchFade.opacity, 0.0);
+    expect(launchFade.duration, const Duration(milliseconds: 450));
+
+    await tester.pump(const Duration(milliseconds: 2000));
   });
 
   testWidgets('lifecycle interruption restores visible ritual content',
@@ -20,58 +71,8 @@ void main() {
       tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
       const Color(0xFF040404),
     );
-    expect(
-      tester
-          .widget<Positioned>(
-            find.byKey(const ValueKey('top-navigation')),
-          )
-          .top,
-      0,
-    );
-    expect(find.byTooltip('Settings'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byTooltip('Settings'),
-        matching: find.text('◎'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<Text>(
-            find.descendant(
-              of: find.byTooltip('Settings'),
-              matching: find.text('◎'),
-            ),
-          )
-          .style
-          ?.fontSize,
-      29,
-    );
-    expect(find.byTooltip('Kept'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byTooltip('Kept'),
-        matching: find.text('○'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<Text>(
-            find.descendant(
-              of: find.byTooltip('Kept'),
-              matching: find.text('○'),
-            ),
-          )
-          .style
-          ?.fontSize,
-      33,
-    );
-    expect(
-      tester.getSize(find.byTooltip('Settings')),
-      tester.getSize(find.byTooltip('Kept')),
-    );
+    expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
+    expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
 
     await _tapCenter(tester);
     await tester.pump();
@@ -83,12 +84,68 @@ void main() {
     await tester.pump();
 
     expect(_ritualOpacity(tester), 1.0);
-    expect(find.text('EAST.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
 
     tester.binding.handleAppLifecycleStateChanged(
       AppLifecycleState.resumed,
     );
     await tester.pump(const Duration(milliseconds: 1300));
+  });
+
+  testWidgets('ritual uses the restrained haptic sequence', (tester) async {
+    final haptics = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          haptics.add(call.arguments);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+
+    await _tapCenter(tester);
+    await tester.pump();
+    expect(haptics.last, 'HapticFeedbackType.selectionClick');
+    await tester.pump(const Duration(milliseconds: 850));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 850));
+
+    await _tapCenter(tester);
+    await tester.pump();
+    expect(haptics.last, 'HapticFeedbackType.lightImpact');
+    await tester.pump(const Duration(milliseconds: 1300));
+
+    await _tapCenter(tester);
+    await tester.pump();
+    expect(haptics.last, 'HapticFeedbackType.lightImpact');
+    await tester.pump(const Duration(milliseconds: 850));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    await _tapCenter(tester);
+    await tester.pump();
+    expect(haptics.last, 'HapticFeedbackType.mediumImpact');
+    expect(haptics, hasLength(4));
+
+    await tester.pump(const Duration(milliseconds: 1250));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(haptics, hasLength(4));
+
+    await tester.pump(const Duration(milliseconds: 1800));
+    expect(haptics, hasLength(5));
+    expect(haptics.last, 'HapticFeedbackType.selectionClick');
+
+    await tester.pump(const Duration(milliseconds: 1420));
   });
 
   testWidgets('ritual remains overflow-safe on iPhone SE at 3x text scale',
@@ -123,6 +180,45 @@ void main() {
 
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 850));
+
+    expect(
+      tester
+          .widget<Positioned>(
+            find.byKey(const ValueKey('top-navigation')),
+          )
+          .top,
+      0,
+    );
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byTooltip('Settings'),
+              matching: find.text('◎'),
+            ),
+          )
+          .style
+          ?.fontSize,
+      29,
+    );
+    expect(find.byTooltip('Kept'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byTooltip('Kept'),
+              matching: find.text('○'),
+            ),
+          )
+          .style
+          ?.fontSize,
+      36,
+    );
+    expect(
+      tester.getSize(find.byTooltip('Settings')),
+      tester.getSize(find.byTooltip('Kept')),
+    );
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 850));
 
@@ -161,6 +257,7 @@ void main() {
     );
 
     await _tapCenter(tester);
+    await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1799));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
     expect(find.text(longWisdom), findsNothing);
@@ -187,14 +284,21 @@ void main() {
     final revealCurve = revealFade.opacity as CurvedAnimation;
     final revealController = revealCurve.parent as AnimationController;
     expect(revealFade.opacity.value, 0.0);
-    expect(revealController.duration, const Duration(milliseconds: 850));
+    expect(
+      revealController.duration,
+      greaterThanOrEqualTo(const Duration(milliseconds: 1100)),
+    );
+    expect(revealController.duration, const Duration(milliseconds: 1200));
     expect(revealCurve.curve, Curves.easeOutCubic);
 
-    await tester.pump(const Duration(milliseconds: 425));
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(revealFade.opacity.value, lessThan(0.01));
+
+    await tester.pump(const Duration(milliseconds: 600));
     expect(revealFade.opacity.value, greaterThan(0.0));
     expect(revealFade.opacity.value, lessThan(1.0));
 
-    await tester.pump(const Duration(milliseconds: 425));
+    await tester.pump(const Duration(milliseconds: 600));
     expect(revealFade.opacity.value, 1.0);
     final countdown = tester.widget<Text>(
       find.textContaining('Return when the silence opens again.'),
@@ -283,6 +387,10 @@ void main() {
       ),
     );
     await _finishOpeningIntro(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 850));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 850));
 
     expect(_grainPainter(tester).movement, 0.0);
     expect(_grainPainter(tester).intensity, 0.01235);
@@ -333,9 +441,12 @@ IgnorePointer _keptGuard(WidgetTester tester) {
 }
 
 GrainPainter _grainPainter(WidgetTester tester) {
+  return _grainPainters(tester).single;
+}
+
+Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
   return tester
       .widgetList<CustomPaint>(find.byType(CustomPaint))
       .map((widget) => widget.painter)
-      .whereType<GrainPainter>()
-      .single;
+      .whereType<GrainPainter>();
 }

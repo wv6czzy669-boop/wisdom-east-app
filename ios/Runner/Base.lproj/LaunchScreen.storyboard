@@ -23,7 +23,7 @@
                                 <rect key="frame" x="196.33333333333334" y="426" width="0.33333333333334281" height="0.33333333333331439"/>
                             </imageView>
                         </subviews>
-                        <color key="backgroundColor" red="0.01176470588" green="0.01176470588" blue="0.01176470588" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.01568627451" green="0.01568627451" blue="0.01568627451" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="1a2-6s-vTC"/>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="4X2-HB-R7a"/>

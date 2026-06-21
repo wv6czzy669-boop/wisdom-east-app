@@ -145,123 +145,140 @@ class SettingsScreen extends StatelessWidget {
         shadowColor: Colors.transparent,
         scrolledUnderElevation: 0,
         elevation: 0,
-        title: Text(
-          "EAST.",
-          style: eastStyle(26),
-        ),
       ),
-      body: SizedBox.expand(
-        child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: SizedBox(
-              width: MediaQuery.sizeOf(context).width - 48,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Divider(
-                    color: Colors.white24,
-                    thickness: 0.5,
-                  ),
-                  settingsItem(
-                    symbol: const Text(
-                      '○',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w300,
-                        fontFamily: 'CormorantGaramond',
-                        height: 1,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            key: const ValueKey('settings-scroll'),
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 52,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'EAST.',
+                      textAlign: TextAlign.center,
+                      style: eastStyle(27),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Where silence speaks.',
+                      textAlign: TextAlign.center,
+                      style: eastStyle(
+                        17,
+                        color: const Color(0x91FFFFFF),
                       ),
                     ),
-                    title: "Keeper",
-                    subtitle: "Support the circle, keep what stays.",
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const KeeperScreen(),
+                    const SizedBox(height: 28),
+                    const Divider(
+                      color: Colors.white24,
+                      thickness: 0.5,
+                    ),
+                    settingsItem(
+                      symbol: const Text(
+                        '○',
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w300,
+                          fontFamily: 'CormorantGaramond',
+                          height: 1,
                         ),
-                      );
-                    },
-                  ),
-                  const Divider(
-                    color: Colors.white24,
-                    thickness: 0.5,
-                  ),
-                  settingsItem(
-                    symbol: const Icon(
-                      Icons.restore,
-                      color: Colors.white60,
-                      size: 22,
-                      weight: 300,
+                      ),
+                      title: "Keeper",
+                      subtitle: "Support the circle, keep what stays.",
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const KeeperScreen(),
+                          ),
+                        );
+                      },
                     ),
-                    title: "Restore Purchases",
-                    subtitle: "Restore what belongs with you.",
-                    onTap: () async {
-                      if (purchaseService.isLoading) return;
-
-                      var restoreStarted = false;
-                      try {
-                        restoreStarted =
-                            await purchaseService.restorePurchases();
-                      } catch (_) {}
-
-                      if (!context.mounted) return;
-                      showInfoDialog(
-                        context,
-                        "Restore Purchases",
-                        restoreStarted
-                            ? "Restore request sent. Keeper access will update automatically."
-                            : purchaseService.restoreNeedsRecovery
-                                ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
-                                : "Restore is not available right now. Please try again shortly.",
-                      );
-                    },
-                  ),
-                  const Divider(
-                    color: Colors.white24,
-                    thickness: 0.5,
-                  ),
-                  settingsItem(
-                    symbol: const Icon(
-                      Icons.privacy_tip_outlined,
-                      color: Colors.white60,
-                      size: 22,
-                      weight: 300,
+                    const Divider(
+                      color: Colors.white24,
+                      thickness: 0.5,
                     ),
-                    title: "Privacy Policy",
-                    subtitle: "What stays private.",
-                    onTap: () async {
-                      await openPrivacyPolicy();
+                    settingsItem(
+                      symbol: const Icon(
+                        Icons.restore,
+                        color: Colors.white60,
+                        size: 22,
+                        weight: 300,
+                      ),
+                      title: "Restore Purchases",
+                      subtitle: "Restore what belongs with you.",
+                      onTap: () async {
+                        if (purchaseService.isLoading) return;
 
-                      if (!context.mounted) return;
-                    },
-                  ),
-                  const Divider(
-                    color: Colors.white24,
-                    thickness: 0.5,
-                  ),
-                  settingsItem(
-                    symbol: const Icon(
-                      Icons.mail_outline,
-                      color: Colors.white60,
-                      size: 22,
-                      weight: 300,
+                        var restoreStarted = false;
+                        try {
+                          restoreStarted =
+                              await purchaseService.restorePurchases();
+                        } catch (_) {}
+
+                        if (!context.mounted) return;
+                        showInfoDialog(
+                          context,
+                          "Restore Purchases",
+                          restoreStarted
+                              ? "Restore request sent. Keeper access will update automatically."
+                              : purchaseService.restoreNeedsRecovery
+                                  ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
+                                  : "Restore is not available right now. Please try again shortly.",
+                        );
+                      },
                     ),
-                    title: "Reach Out",
-                    subtitle: "For thoughts and questions.",
-                    onTap: sendEmail,
-                  ),
-                  const Divider(
-                    color: Colors.white24,
-                    thickness: 0.5,
-                  ),
-                ],
+                    const Divider(
+                      color: Colors.white24,
+                      thickness: 0.5,
+                    ),
+                    settingsItem(
+                      symbol: const Icon(
+                        Icons.privacy_tip_outlined,
+                        color: Colors.white60,
+                        size: 22,
+                        weight: 300,
+                      ),
+                      title: "Privacy Policy",
+                      subtitle: "What stays private.",
+                      onTap: () async {
+                        await openPrivacyPolicy();
+
+                        if (!context.mounted) return;
+                      },
+                    ),
+                    const Divider(
+                      color: Colors.white24,
+                      thickness: 0.5,
+                    ),
+                    settingsItem(
+                      symbol: const Icon(
+                        Icons.mail_outline,
+                        color: Colors.white60,
+                        size: 22,
+                        weight: 300,
+                      ),
+                      title: "Reach Out",
+                      subtitle: "For thoughts and questions.",
+                      onTap: sendEmail,
+                    ),
+                    const Divider(
+                      color: Colors.white24,
+                      thickness: 0.5,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
