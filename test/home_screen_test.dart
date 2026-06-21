@@ -95,6 +95,45 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
   });
 
+  testWidgets(
+      'Keeper reveal persisted before pause resumes with the same wisdom',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final keeperAccess = KeeperDailyAccessService(
+      storageService: StorageService(),
+    );
+    final persistedBeforePause = await keeperAccess.status();
+    expect(persistedBeforePause.revealCount, 1);
+    expect(persistedBeforePause.hasPendingReveal, isTrue);
+    final selectedWisdom = persistedBeforePause.lastWisdom!;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 850));
+    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 550));
+
+    expect(find.text(selectedWisdom), findsOneWidget);
+    expect(find.text('Ask from your heart.'), findsNothing);
+
+    final persistedAfterResume = await keeperAccess.status();
+    expect(persistedAfterResume.revealCount, 1);
+    expect(persistedAfterResume.lastWisdom, selectedWisdom);
+    expect(persistedAfterResume.hasPendingReveal, isFalse);
+  });
+
   testWidgets('active lock reopens to the existing wisdom without revealing',
       (tester) async {
     final now = DateTime.now();
@@ -698,6 +737,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1100));
   });
 
+  testWidgets('rapid save taps persist one consistent reflection',
+      (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'One reflection under rapid taps';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await tester.pump();
+
+    final save = find.byTooltip('Keep reflection');
+    expect(save, findsOneWidget);
+    expect(_keptGuard(tester).ignoring, isFalse);
+    final saveButton = tester.widget<IconButton>(
+      find.ancestor(of: save, matching: find.byType(IconButton)),
+    );
+    saveButton.onPressed!();
+    saveButton.onPressed!();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final persisted = await StorageService().loadFavorites(
+      fallbackDate: 'June 21, 2026',
+    );
+    expect(persisted, hasLength(1));
+    expect(persisted.single.text, wisdom);
+    expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
+  });
+
   testWidgets('reduce motion freezes continuous grain movement',
       (tester) async {
     await tester.pumpWidget(
@@ -778,9 +854,10 @@ Future<void> _seedKeeperWisdoms(int count) async {
   );
 
   for (var index = 1; index <= count; index++) {
-    await service.reveal(
+    final access = await service.reveal(
       selectWisdom: () => 'Keeper seeded wisdom $index',
     );
+    await service.markDisplayed(access.text);
   }
 }
 

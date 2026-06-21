@@ -4,8 +4,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/app_services.dart';
 import 'keeper_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _keeperNavigationInProgress = false;
 
   TextStyle eastStyle(
     double size, {
@@ -119,6 +126,22 @@ class SettingsScreen extends StatelessWidget {
     } catch (_) {}
   }
 
+  Future<void> _openKeeper() async {
+    if (_keeperNavigationInProgress || !mounted) return;
+
+    _keeperNavigationInProgress = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const KeeperScreen(),
+        ),
+      );
+    } finally {
+      _keeperNavigationInProgress = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -176,14 +199,7 @@ class SettingsScreen extends StatelessWidget {
                       settingsItem(
                         title: "Keeper",
                         subtitle: "Support the circle, keep what stays.",
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const KeeperScreen(),
-                            ),
-                          );
-                        },
+                        onTap: _openKeeper,
                       ),
                       const Divider(
                         color: Colors.white24,

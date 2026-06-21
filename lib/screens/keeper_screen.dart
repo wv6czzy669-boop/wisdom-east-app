@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_services.dart';
@@ -16,6 +18,9 @@ class _KeeperScreenState extends State<KeeperScreen> {
   void initState() {
     super.initState();
     purchaseService.addListener(_refresh);
+    if (purchaseService.isInitialized) {
+      unawaited(purchaseService.refreshStoreIfNeeded());
+    }
   }
 
   void _refresh() {

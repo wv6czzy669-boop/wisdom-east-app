@@ -131,6 +131,113 @@ void main() {
     expect(await service.buyKeeper(), isFalse);
   });
 
+  test('purchase watchdog recovers loading and accepts a late success',
+      () async {
+    service.dispose();
+    service = PurchaseService(
+      purchaseResponseTimeout: const Duration(milliseconds: 20),
+    );
+    await service.init();
+
+    expect(await service.buyKeeper(), isTrue);
+    expect(service.isLoading, isTrue);
+
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(service.isLoading, isFalse);
+    expect(service.purchaseNeedsRecovery, isTrue);
+    expect(service.isKeeper, isFalse);
+
+    platform.emitPurchase(PurchaseStatus.pending);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(service.isLoading, isFalse);
+    expect(service.purchaseNeedsRecovery, isTrue);
+
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(service.isKeeper, isTrue);
+    expect(service.purchaseNeedsRecovery, isFalse);
+    expect(platform.completedPurchases, 1);
+  });
+
+  test('duplicate purchase events serialize persistence and completion',
+      () async {
+    service.dispose();
+    final writer = Completer<bool>();
+    var writerCalls = 0;
+    var activeWriters = 0;
+    var maximumActiveWriters = 0;
+    service = PurchaseService(
+      entitlementWriter: () async {
+        writerCalls++;
+        activeWriters++;
+        maximumActiveWriters = activeWriters > maximumActiveWriters
+            ? activeWriters
+            : maximumActiveWriters;
+        final result = await writer.future;
+        activeWriters--;
+        return result;
+      },
+    );
+    await service.init();
+    expect(await service.buyKeeper(), isTrue);
+
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(writerCalls, 1);
+    expect(maximumActiveWriters, 1);
+    expect(platform.completedPurchases, 0);
+
+    writer.complete(true);
+    await _flushEvents();
+
+    expect(service.isKeeper, isTrue);
+    expect(writerCalls, 1);
+    expect(maximumActiveWriters, 1);
+    expect(platform.completedPurchases, 1);
+  });
+
+  test('buy reloads StoreKit product state after startup unavailability',
+      () async {
+    service.dispose();
+    platform.productQueryCalls = 0;
+    platform.available = false;
+    service = PurchaseService(storeRetryCooldown: Duration.zero);
+    await service.init();
+
+    expect(service.isAvailable, isFalse);
+    expect(service.keeperProduct, isNull);
+
+    platform.available = true;
+    expect(await service.buyKeeper(), isTrue);
+    expect(service.isAvailable, isTrue);
+    expect(service.keeperProduct, isNotNull);
+    expect(platform.productQueryCalls, 1);
+  });
+
+  test('restore reloads StoreKit availability after startup failure', () async {
+    service.dispose();
+    platform.available = false;
+    service = PurchaseService(storeRetryCooldown: Duration.zero);
+    await service.init();
+
+    platform.available = true;
+    expect(await service.restorePurchases(), isTrue);
+    expect(service.isAvailable, isTrue);
+    expect(platform.restoreCalls, 1);
+  });
+
   test('restore timeout blocks overlap until a late response is reconciled',
       () async {
     service.dispose();
@@ -168,8 +275,10 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
 
   Completer<bool>? buyCompleter;
   Completer<void>? restoreCompleter;
+  bool available = true;
   int completedPurchases = 0;
   int restoreCalls = 0;
+  int productQueryCalls = 0;
 
   final ProductDetails keeperProduct = ProductDetails(
     id: PurchaseService.keeperProductId,
@@ -185,15 +294,16 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
       _purchaseController.stream;
 
   @override
-  Future<bool> isAvailable() async => true;
+  Future<bool> isAvailable() async => available;
 
   @override
   Future<ProductDetailsResponse> queryProductDetails(
     Set<String> identifiers,
   ) async {
+    productQueryCalls++;
     return ProductDetailsResponse(
-      productDetails: [keeperProduct],
-      notFoundIDs: const [],
+      productDetails: available ? [keeperProduct] : const [],
+      notFoundIDs: available ? const [] : [PurchaseService.keeperProductId],
     );
   }
 

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../controllers/latest_request_guard.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
 import '../services/app_services.dart';
@@ -13,6 +14,7 @@ import '../services/keeper_daily_access_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/storage_service.dart';
 import '../services/wisdom_selector.dart';
+import '../utils/countdown_formatter.dart';
 import '../utils/date_formatter.dart';
 import '../widgets/grain_painter.dart';
 import 'keeper_screen.dart';
@@ -52,9 +54,12 @@ class _HomeScreenState extends State<HomeScreen>
   bool _showingLockedWisdom = false;
   bool _keeperCanReveal = false;
   bool _keeperRitualRequested = false;
+  bool _saveOperationInProgress = false;
   String? _lockedWisdomText;
+  String? _pendingKeeperWisdomText;
 
   final ritualFlowController = const RitualFlowController();
+  final accessRefreshGuard = LatestRequestGuard();
 
   int delayedCallbackSession = 0;
 
@@ -118,7 +123,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool isKeeper = false;
 
   late AnimationController pulseController;
-  late Animation<double> pulseAnimation;
   late final AnimationController wisdomRevealController;
   late final Animation<double> wisdomRevealAnimation;
   late final AnimationController askFadeController;
@@ -175,16 +179,6 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(milliseconds: 5200),
     )..repeat(reverse: true);
 
-    pulseAnimation = Tween<double>(
-      begin: 0.70,
-      end: 1.0,
-    ).animate(
-      CurvedAnimation(
-        parent: pulseController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
     wisdomRevealController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -230,6 +224,7 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     flowSessionId++;
     invalidateDelayedCallbacks();
+    accessRefreshGuard.invalidate();
 
     WidgetsBinding.instance.removeObserver(this);
     purchaseService.removeListener(_syncKeeperStatus);
@@ -273,13 +268,12 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       startCountdownTimer();
-      updateNextWisdomMessage();
+      unawaited(_resumeAccessState());
     }
   }
 
   bool get onPauseScreen => ritualFlowController.isPauseScreen(screenStep);
   bool get onHeartScreen => ritualFlowController.isHeartScreen(screenStep);
-  bool get onRevealScreen => ritualFlowController.isRevealScreen(screenStep);
   bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
   bool get onLockedCountdown => screenStep == 5;
   Future<void> loadInitialState() async {
@@ -296,6 +290,23 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       isKeeper = keeperValue;
     });
+  }
+
+  Future<void> _resumeAccessState() async {
+    await updateNextWisdomMessage();
+
+    if (!mounted ||
+        !isKeeper ||
+        !onHeartScreen ||
+        transitionInProgress ||
+        _transitionLock) {
+      return;
+    }
+
+    final pendingWisdom = _pendingKeeperWisdomText;
+    if (pendingWisdom == null) return;
+
+    await transitionToExistingWisdom(pendingWisdom);
   }
 
   void showEastSnack(String message) {
@@ -542,11 +553,18 @@ class _HomeScreenState extends State<HomeScreen>
         currentText = text;
         screenStep = 4;
         _showingLockedWisdom = true;
+        if (_pendingKeeperWisdomText == text) {
+          _pendingKeeperWisdomText = null;
+        }
         textOpacity = 1.0;
         textScale = 1.0;
         backgroundDepth = 0.30;
         revealGlowOpacity = 0.10;
       });
+
+      if (isKeeper) {
+        unawaited(_markKeeperWisdomDisplayed(text));
+      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!isCurrentFlow(currentFlow) || !wisdomRevealed) return;
@@ -576,8 +594,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> updateNextWisdomMessage() async {
+    final refreshGeneration = accessRefreshGuard.begin();
+
     if (isKeeper) {
-      await _updateKeeperWisdomStatus();
+      await _updateKeeperWisdomStatus(refreshGeneration);
       return;
     }
 
@@ -586,7 +606,7 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       status = await dailyWisdomAccessService.status();
     } catch (_) {
-      if (mounted) {
+      if (_canCommitAccessRefresh(refreshGeneration)) {
         setState(() {
           nextWisdomMessage = "";
           _dailyStatusResolved = false;
@@ -596,12 +616,13 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (status.isReady) {
-      if (mounted) {
+      if (_canCommitAccessRefresh(refreshGeneration)) {
         setState(() {
           _dailyStatusResolved = true;
           _dailyLockActive = false;
           _keeperCanReveal = false;
           _lockedWisdomText = null;
+          _pendingKeeperWisdomText = null;
           nextWisdomMessage =
               status.unlockAt == null ? "" : "A new wisdom is ready.";
 
@@ -633,24 +654,15 @@ class _HomeScreenState extends State<HomeScreen>
       // Without a trustworthy stored wisdom, remain on the countdown.
     }
 
-    final remaining = status.remaining!;
-    final hours = remaining.inHours;
-    final minutes = remaining.inMinutes % 60;
+    final message = CountdownFormatter.silenceMessage(status.remaining!);
 
-    String message;
-
-    if (hours <= 0) {
-      message = "Return when the silence opens again.\n${minutes + 1} min";
-    } else {
-      message = "Return when the silence opens again.\n${hours}h ${minutes}m";
-    }
-
-    if (mounted) {
+    if (_canCommitAccessRefresh(refreshGeneration)) {
       setState(() {
         _dailyStatusResolved = true;
         _dailyLockActive = true;
         _keeperCanReveal = false;
         _lockedWisdomText = lockedWisdomText;
+        _pendingKeeperWisdomText = null;
         nextWisdomMessage = message;
         if (onLockedCountdown) {
           currentText = message;
@@ -659,7 +671,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> _updateKeeperWisdomStatus() async {
+  Future<void> _updateKeeperWisdomStatus(int refreshGeneration) async {
     final KeeperDailyStatus status;
     String? existingWisdom;
 
@@ -681,7 +693,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       status = await keeperDailyAccessService.status();
     } catch (_) {
-      if (mounted) {
+      if (_canCommitAccessRefresh(refreshGeneration)) {
         setState(() {
           nextWisdomMessage = "";
           _dailyStatusResolved = false;
@@ -697,20 +709,17 @@ class _HomeScreenState extends State<HomeScreen>
     lastWisdom ??= existingWisdom;
 
     final remaining = status.resetAt.difference(DateTime.now());
-    final safeRemaining = remaining.isNegative ? Duration.zero : remaining;
-    final hours = safeRemaining.inHours;
-    final minutes = safeRemaining.inMinutes % 60;
-    final message = hours <= 0
-        ? "Return when the silence opens again.\n${minutes + 1} min"
-        : "Return when the silence opens again.\n${hours}h ${minutes}m";
+    final message = CountdownFormatter.silenceMessage(remaining);
 
-    if (!mounted) return;
+    if (!_canCommitAccessRefresh(refreshGeneration)) return;
 
     setState(() {
       _dailyStatusResolved = true;
       _dailyLockActive = !status.canReveal;
       _keeperCanReveal = status.canReveal;
       _lockedWisdomText = lastWisdom;
+      _pendingKeeperWisdomText =
+          status.hasPendingReveal ? status.lastWisdom : null;
       nextWisdomMessage = status.canReveal ? "" : message;
 
       if (onLockedCountdown && status.canReveal) {
@@ -723,6 +732,10 @@ class _HomeScreenState extends State<HomeScreen>
         currentText = message;
       }
     });
+  }
+
+  bool _canCommitAccessRefresh(int generation) {
+    return mounted && accessRefreshGuard.isCurrent(generation);
   }
 
   Future<String> getLockedOrNewWisdom() async {
@@ -841,6 +854,11 @@ class _HomeScreenState extends State<HomeScreen>
         revealGlowOpacity = 0.16;
       });
 
+      if (isKeeper) {
+        _pendingKeeperWisdomText = null;
+        unawaited(_markKeeperWisdomDisplayed(selectedText));
+      }
+
       unawaited(audioService.playRevealSound());
       HapticFeedback.selectionClick();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -869,6 +887,14 @@ class _HomeScreenState extends State<HomeScreen>
         transitionInProgress = false;
         _transitionLock = false;
       }
+    }
+  }
+
+  Future<void> _markKeeperWisdomDisplayed(String text) async {
+    try {
+      await keeperDailyAccessService.markDisplayed(text);
+    } catch (_) {
+      // A pending marker is fail-safe: the same wisdom will be shown again.
     }
   }
 
@@ -1001,7 +1027,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> toggleFavorite() async {
-    if (!wisdomRevealed) return;
+    if (!wisdomRevealed || _saveOperationInProgress) return;
+
+    _saveOperationInProgress = true;
 
     try {
       final result = await savedReflectionsService.toggle(
@@ -1022,6 +1050,8 @@ class _HomeScreenState extends State<HomeScreen>
       });
     } catch (_) {
       showEastSnack("Reflection could not be kept. Please try again.");
+    } finally {
+      _saveOperationInProgress = false;
     }
   }
 
@@ -1301,28 +1331,34 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                               curve: Curves.easeOutCubic,
                               opacity: textOpacity,
-                              child: AnimatedBuilder(
-                                animation: pulseAnimation,
-                                builder: (context, child) {
-                                  return Opacity(
-                                    opacity: onRevealScreen && !_reduceMotion
-                                        ? pulseAnimation.value
-                                        : 1.0,
-                                    child: child,
-                                  );
-                                },
-                                child: screenStep == 0
-                                    ? buildLaunchMark(context)
-                                    : onPauseScreen
-                                        ? FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Text(
-                                                  "Pause.",
+                              child: screenStep == 0
+                                  ? buildLaunchMark(context)
+                                  : onPauseScreen
+                                      ? FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                "Pause.",
+                                                textAlign: TextAlign.center,
+                                                style: wisdomStyle(
+                                                  textSize,
+                                                  color: finalColor,
+                                                  glow: true,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 28),
+                                              AnimatedOpacity(
+                                                duration: const Duration(
+                                                  milliseconds: 1250,
+                                                ),
+                                                curve: Curves.easeOutCubic,
+                                                opacity: pauseFeelOpacity,
+                                                child: Text(
+                                                  "Feel.",
                                                   textAlign: TextAlign.center,
                                                   style: wisdomStyle(
                                                     textSize,
@@ -1330,62 +1366,45 @@ class _HomeScreenState extends State<HomeScreen>
                                                     glow: true,
                                                   ),
                                                 ),
-                                                const SizedBox(width: 28),
-                                                AnimatedOpacity(
-                                                  duration: const Duration(
-                                                    milliseconds: 1250,
-                                                  ),
-                                                  curve: Curves.easeOutCubic,
-                                                  opacity: pauseFeelOpacity,
-                                                  child: Text(
-                                                    "Feel.",
-                                                    textAlign: TextAlign.center,
-                                                    style: wisdomStyle(
-                                                      textSize,
-                                                      color: finalColor,
-                                                      glow: true,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                        : onHeartScreen
-                                            ? SizedBox(
-                                                width: ritualTextWidth,
-                                                child: FadeTransition(
-                                                  key: const ValueKey(
-                                                    'ask-fade',
-                                                  ),
-                                                  opacity: askFadeAnimation,
-                                                  child: currentRitualText,
-                                                ),
-                                              )
-                                            : FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                child: SizedBox(
-                                                  key: wisdomRevealed
-                                                      ? const ValueKey(
-                                                          'revealed-wisdom-layout',
-                                                        )
-                                                      : null,
-                                                  width: wisdomRevealed
-                                                      ? revealedWisdomWidth
-                                                      : ritualTextWidth,
-                                                  child: wisdomRevealed
-                                                      ? FadeTransition(
-                                                          key: const ValueKey(
-                                                            'wisdom-reveal-fade',
-                                                          ),
-                                                          opacity:
-                                                              wisdomRevealAnimation,
-                                                          child:
-                                                              currentRitualText,
-                                                        )
-                                                      : currentRitualText,
-                                                ),
                                               ),
-                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : onHeartScreen
+                                          ? SizedBox(
+                                              width: ritualTextWidth,
+                                              child: FadeTransition(
+                                                key: const ValueKey(
+                                                  'ask-fade',
+                                                ),
+                                                opacity: askFadeAnimation,
+                                                child: currentRitualText,
+                                              ),
+                                            )
+                                          : FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: SizedBox(
+                                                key: wisdomRevealed
+                                                    ? const ValueKey(
+                                                        'revealed-wisdom-layout',
+                                                      )
+                                                    : null,
+                                                width: wisdomRevealed
+                                                    ? revealedWisdomWidth
+                                                    : ritualTextWidth,
+                                                child: wisdomRevealed
+                                                    ? FadeTransition(
+                                                        key: const ValueKey(
+                                                          'wisdom-reveal-fade',
+                                                        ),
+                                                        opacity:
+                                                            wisdomRevealAnimation,
+                                                        child:
+                                                            currentRitualText,
+                                                      )
+                                                    : currentRitualText,
+                                              ),
+                                            ),
                             ),
                           ),
                         ),

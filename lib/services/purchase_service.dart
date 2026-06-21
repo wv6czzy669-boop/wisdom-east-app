@@ -8,8 +8,10 @@ class PurchaseService extends ChangeNotifier {
   PurchaseService({
     Future<bool> Function()? entitlementWriter,
     this.purchaseInitiationTimeout = const Duration(seconds: 12),
+    this.purchaseResponseTimeout = const Duration(seconds: 45),
     this.restoreInitiationTimeout = const Duration(seconds: 12),
     this.restoreResponseWindow = const Duration(seconds: 8),
+    this.storeRetryCooldown = const Duration(seconds: 3),
   }) : _entitlementWriter = entitlementWriter;
 
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
@@ -19,17 +21,27 @@ class PurchaseService extends ChangeNotifier {
   final InAppPurchase _iap = InAppPurchase.instance;
   final Future<bool> Function()? _entitlementWriter;
   final Duration purchaseInitiationTimeout;
+  final Duration purchaseResponseTimeout;
   final Duration restoreInitiationTimeout;
   final Duration restoreResponseWindow;
+  final Duration storeRetryCooldown;
 
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   Completer<void>? _restoreStreamSignal;
+  Future<void> _purchaseEventTail = Future<void>.value();
+  Future<bool>? _storeRefreshInProgress;
+  DateTime? _lastStoreRefreshAttempt;
+  Timer? _purchaseWatchdog;
+  Timer? _restoreWindowTimer;
+  final Set<String> _persistedTransactions = <String>{};
+  final Set<String> _completedTransactions = <String>{};
 
   bool isAvailable = false;
   bool isKeeper = false;
   bool isLoading = false;
   bool entitlementPersistenceFailed = false;
   bool _disposed = false;
+  bool _initialized = false;
   bool _purchasePending = false;
   bool _purchaseUncertain = false;
   bool _restorePending = false;
@@ -42,6 +54,7 @@ class PurchaseService extends ChangeNotifier {
   bool get purchaseNeedsRecovery =>
       _purchaseUncertain || entitlementPersistenceFailed;
   bool get restoreNeedsRecovery => _restoreUncertain;
+  bool get isInitialized => _initialized;
 
   void safeNotifyListeners() {
     if (_disposed) return;
@@ -64,55 +77,92 @@ class PurchaseService extends ChangeNotifier {
       await _subscription?.cancel();
 
       _subscription = _iap.purchaseStream.listen(
-        _handlePurchases,
-        onError: (_) {
-          if (_purchasePending) {
-            _purchaseUncertain = true;
-          }
-          if (_restorePending) {
-            _restoreUncertain = true;
-          }
-          _purchasePending = false;
-          _signalRestoreStream();
-          _restorePending = false;
-          _refreshLoadingState();
-        },
+        (purchases) => _enqueuePurchaseEvent(
+          () => _handlePurchases(purchases),
+        ),
+        onError: (_) => _enqueuePurchaseEvent(_handlePurchaseStreamError),
       );
 
-      isAvailable = await _iap
-          .isAvailable()
-          .timeout(const Duration(seconds: 8), onTimeout: () => false);
-
-      if (_disposed) return;
-
-      if (!isAvailable) {
-        safeNotifyListeners();
-        return;
-      }
-
-      await _loadProducts();
+      await refreshStoreIfNeeded(force: true);
     } catch (_) {
       isAvailable = false;
       isLoading = false;
       safeNotifyListeners();
+    } finally {
+      if (!_disposed) {
+        _initialized = true;
+      }
     }
   }
 
-  Future<void> _loadProducts() async {
+  Future<bool> refreshStoreIfNeeded({bool force = false}) {
+    if (_disposed) return Future<bool>.value(false);
+    if (isAvailable && keeperProduct != null) {
+      return Future<bool>.value(true);
+    }
+
+    final inProgress = _storeRefreshInProgress;
+    if (inProgress != null) return inProgress;
+
+    final now = DateTime.now();
+    final lastAttempt = _lastStoreRefreshAttempt;
+    if (!force &&
+        lastAttempt != null &&
+        now.difference(lastAttempt) < storeRetryCooldown) {
+      return Future<bool>.value(false);
+    }
+
+    _lastStoreRefreshAttempt = now;
+    final refresh = _refreshStore();
+    _storeRefreshInProgress = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_storeRefreshInProgress, refresh)) {
+        _storeRefreshInProgress = null;
+      }
+    });
+  }
+
+  Future<bool> _refreshStore() async {
+    try {
+      isAvailable = await _iap
+          .isAvailable()
+          .timeout(const Duration(seconds: 8), onTimeout: () => false);
+      if (_disposed) return false;
+
+      if (!isAvailable) {
+        keeperProduct = null;
+        safeNotifyListeners();
+        return false;
+      }
+
+      return _loadProducts();
+    } catch (_) {
+      if (_disposed) return false;
+      isAvailable = false;
+      keeperProduct = null;
+      safeNotifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> _loadProducts() async {
     try {
       final response = await _iap.queryProductDetails(
           {keeperProductId}).timeout(const Duration(seconds: 10));
 
-      if (_disposed) return;
+      if (_disposed) return false;
 
-      if (response.productDetails.isNotEmpty) {
-        keeperProduct = response.productDetails.first;
-      }
+      keeperProduct = response.productDetails.isEmpty
+          ? null
+          : response.productDetails.first;
 
       safeNotifyListeners();
+      return keeperProduct != null;
     } catch (_) {
+      if (_disposed) return false;
       keeperProduct = null;
       safeNotifyListeners();
+      return false;
     }
   }
 
@@ -126,6 +176,16 @@ class PurchaseService extends ChangeNotifier {
     }
 
     if (!isAvailable || keeperProduct == null) {
+      await refreshStoreIfNeeded();
+    }
+
+    if (_disposed ||
+        isKeeper ||
+        isLoading ||
+        _purchaseUncertain ||
+        entitlementPersistenceFailed ||
+        !isAvailable ||
+        keeperProduct == null) {
       return false;
     }
 
@@ -147,7 +207,12 @@ class PurchaseService extends ChangeNotifier {
       if (!started && currentBuySessionId == _buySessionId) {
         _purchasePending = false;
         _purchaseUncertain = false;
+        _cancelPurchaseWatchdog();
         _refreshLoadingState();
+      } else if (started &&
+          currentBuySessionId == _buySessionId &&
+          _purchasePending) {
+        _startPurchaseWatchdog(currentBuySessionId);
       }
 
       return started;
@@ -156,12 +221,21 @@ class PurchaseService extends ChangeNotifier {
 
       _purchasePending = false;
       _purchaseUncertain = true;
+      _cancelPurchaseWatchdog();
       _refreshLoadingState();
       return false;
     }
   }
 
   Future<bool> restorePurchases() async {
+    if (_disposed || _restorePending || _restoreUncertain || _purchasePending) {
+      return false;
+    }
+
+    if (!isAvailable) {
+      await refreshStoreIfNeeded();
+    }
+
     if (_disposed ||
         _restorePending ||
         _restoreUncertain ||
@@ -215,10 +289,20 @@ class PurchaseService extends ChangeNotifier {
     int sessionId,
     Completer<void> streamSignal,
   ) async {
+    final timeoutSignal = Completer<void>();
+    _restoreWindowTimer?.cancel();
+    final timer = Timer(restoreResponseWindow, timeoutSignal.complete);
+    _restoreWindowTimer = timer;
+
     await Future.any([
       streamSignal.future,
-      Future<void>.delayed(restoreResponseWindow),
+      timeoutSignal.future,
     ]);
+
+    timer.cancel();
+    if (identical(_restoreWindowTimer, timer)) {
+      _restoreWindowTimer = null;
+    }
 
     if (_disposed || sessionId != _restoreSessionId) return;
 
@@ -240,17 +324,26 @@ class PurchaseService extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.pending) {
         _purchaseUncertain = false;
         _purchasePending = true;
+        _startPurchaseWatchdog(_buySessionId);
         _refreshLoadingState();
         continue;
       }
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
-        final persisted = await _persistKeeperEntitlement();
+        final transactionKey = _transactionKey(purchase);
+        var persisted = _persistedTransactions.contains(transactionKey);
+        if (!persisted) {
+          persisted = await _persistKeeperEntitlement();
+          if (persisted) {
+            _persistedTransactions.add(transactionKey);
+          }
+        }
         shouldComplete = persisted;
         entitlementPersistenceFailed = !persisted;
         _purchaseUncertain = false;
         _purchasePending = false;
+        _cancelPurchaseWatchdog();
         _restoreUncertain = false;
         _signalRestoreStream();
       } else if (purchase.status == PurchaseStatus.error ||
@@ -258,13 +351,18 @@ class PurchaseService extends ChangeNotifier {
         shouldComplete = true;
         _purchaseUncertain = false;
         _purchasePending = false;
+        _cancelPurchaseWatchdog();
         _restoreUncertain = false;
         _signalRestoreStream();
       }
 
-      if (shouldComplete && purchase.pendingCompletePurchase) {
+      final transactionKey = _transactionKey(purchase);
+      if (shouldComplete &&
+          purchase.pendingCompletePurchase &&
+          !_completedTransactions.contains(transactionKey)) {
         try {
           await _iap.completePurchase(purchase);
+          _completedTransactions.add(transactionKey);
         } catch (_) {
           // StoreKit will redeliver unfinished transactions for another attempt.
         }
@@ -272,6 +370,51 @@ class PurchaseService extends ChangeNotifier {
 
       _refreshLoadingState();
     }
+  }
+
+  void _enqueuePurchaseEvent(Future<void> Function() operation) {
+    final next = _purchaseEventTail.then((_) => operation());
+    _purchaseEventTail = next.catchError((_) {});
+  }
+
+  Future<void> _handlePurchaseStreamError() async {
+    if (_disposed) return;
+
+    if (_purchasePending) {
+      _purchaseUncertain = true;
+    }
+    if (_restorePending) {
+      _restoreUncertain = true;
+    }
+    _purchasePending = false;
+    _cancelPurchaseWatchdog();
+    _signalRestoreStream();
+    _restorePending = false;
+    _refreshLoadingState();
+  }
+
+  void _startPurchaseWatchdog(int sessionId) {
+    _purchaseWatchdog?.cancel();
+    _purchaseWatchdog = Timer(purchaseResponseTimeout, () {
+      if (_disposed || sessionId != _buySessionId || !_purchasePending) return;
+
+      _purchasePending = false;
+      _purchaseUncertain = true;
+      _refreshLoadingState();
+    });
+  }
+
+  void _cancelPurchaseWatchdog() {
+    _purchaseWatchdog?.cancel();
+    _purchaseWatchdog = null;
+  }
+
+  String _transactionKey(PurchaseDetails purchase) {
+    final purchaseId = purchase.purchaseID;
+    if (purchaseId != null && purchaseId.isNotEmpty) return purchaseId;
+
+    return '${purchase.productID}|${purchase.transactionDate ?? ''}|'
+        '${purchase.verificationData.serverVerificationData}';
   }
 
   Future<bool> _persistKeeperEntitlement() async {
@@ -307,6 +450,9 @@ class PurchaseService extends ChangeNotifier {
     _disposed = true;
     _restoreSessionId += 1;
     _buySessionId += 1;
+    _cancelPurchaseWatchdog();
+    _restoreWindowTimer?.cancel();
+    _restoreWindowTimer = null;
     _signalRestoreStream();
     _subscription?.cancel();
     super.dispose();

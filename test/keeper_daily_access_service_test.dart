@@ -21,8 +21,11 @@ void main() {
     String select() => 'Keeper wisdom ${++selections}';
 
     final first = await service.reveal(selectWisdom: select);
+    await service.markDisplayed(first.text);
     final second = await service.reveal(selectWisdom: select);
+    await service.markDisplayed(second.text);
     final third = await service.reveal(selectWisdom: select);
+    await service.markDisplayed(third.text);
     final locked = await service.reveal(selectWisdom: select);
 
     expect(first.text, 'Keeper wisdom 1');
@@ -40,9 +43,10 @@ void main() {
     var selections = 0;
     String select() => 'Keeper wisdom ${++selections}';
 
-    await service.reveal(selectWisdom: select);
-    await service.reveal(selectWisdom: select);
-    await service.reveal(selectWisdom: select);
+    for (var index = 0; index < 3; index++) {
+      final access = await service.reveal(selectWisdom: select);
+      await service.markDisplayed(access.text);
+    }
     expect((await service.status()).canReveal, isFalse);
 
     now = DateTime(2026, 6, 21, 0, 0, 1);
@@ -116,10 +120,86 @@ void main() {
     expect((await service.status()).revealCount, 1);
   });
 
+  test(
+      'interrupted persisted reveal returns exact wisdom without count increase',
+      () async {
+    var selections = 0;
+    String select() => 'Interrupted Keeper wisdom ${++selections}';
+
+    final selected = await service.reveal(selectWisdom: select);
+    expect(selected.status.revealCount, 1);
+    expect(selected.status.hasPendingReveal, isTrue);
+
+    final recreated = KeeperDailyAccessService(
+      storageService: StorageService(),
+      clock: () => now,
+    );
+    final resumed = await recreated.reveal(selectWisdom: select);
+
+    expect(resumed.text, selected.text);
+    expect(resumed.isNew, isFalse);
+    expect(resumed.status.revealCount, 1);
+    expect(selections, 1);
+
+    await recreated.markDisplayed(resumed.text);
+    final afterDisplay = await recreated.status();
+    expect(afterDisplay.revealCount, 1);
+    expect(afterDisplay.hasPendingReveal, isFalse);
+
+    final next = await recreated.reveal(selectWisdom: select);
+    expect(next.text, 'Interrupted Keeper wisdom 2');
+    expect(next.status.revealCount, 2);
+  });
+
+  test('serialized seed status and reveal cannot reduce the reveal count',
+      () async {
+    final seed = service.seedFromExistingWisdomIfNeeded(
+      text: 'Existing free wisdom',
+      revealedAt: now.subtract(const Duration(hours: 1)),
+    );
+    final reveal = service.reveal(selectWisdom: () => 'Keeper wisdom');
+    final status = service.status();
+
+    await seed;
+    final access = await reveal;
+    final observed = await status;
+    final persisted = await service.status();
+
+    expect(access.status.revealCount, 2);
+    expect(observed.revealCount, 2);
+    expect(persisted.revealCount, 2);
+    expect(persisted.lastWisdom, 'Keeper wisdom');
+  });
+
+  test('pending wisdom survives local midnight before the new allowance',
+      () async {
+    now = DateTime(2026, 6, 20, 23, 59, 59);
+    final selected = await service.reveal(
+      selectWisdom: () => 'Wisdom across midnight',
+    );
+
+    now = DateTime(2026, 6, 21, 0, 0, 1);
+    final resumed = await service.reveal(
+      selectWisdom: () => 'Must not be selected',
+    );
+
+    expect(resumed.text, selected.text);
+    expect(resumed.isNew, isFalse);
+    expect(resumed.status.revealCount, 1);
+    expect(resumed.status.hasPendingReveal, isTrue);
+
+    await service.markDisplayed(resumed.text);
+    final newDay = await service.status();
+    expect(newDay.revealCount, 0);
+    expect(newDay.canReveal, isTrue);
+    expect(newDay.lastWisdom, resumed.text);
+  });
+
   test('clock rollback does not reset the Keeper allowance', () async {
-    await service.reveal(selectWisdom: () => 'One');
-    await service.reveal(selectWisdom: () => 'Two');
-    await service.reveal(selectWisdom: () => 'Three');
+    for (final text in ['One', 'Two', 'Three']) {
+      final access = await service.reveal(selectWisdom: () => text);
+      await service.markDisplayed(access.text);
+    }
 
     now = DateTime(2026, 6, 19, 10);
     final status = await service.status();

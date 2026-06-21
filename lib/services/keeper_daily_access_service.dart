@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'storage_service.dart';
@@ -10,11 +11,13 @@ class KeeperDailyStatus {
     required this.revealCount,
     required this.resetAt,
     required this.lastWisdom,
+    required this.hasPendingReveal,
   });
 
   final int revealCount;
   final DateTime resetAt;
   final String? lastWisdom;
+  final bool hasPendingReveal;
 
   bool get canReveal => revealCount < KeeperDailyAccessService.maxReveals;
   Duration remaining(DateTime now) => resetAt.difference(now);
@@ -45,31 +48,37 @@ class KeeperDailyAccessService {
   final StorageService _storageService;
   final KeeperWisdomClock _clock;
 
+  Future<void> _operationTail = Future<void>.value();
   Future<KeeperDailyAccess>? _revealInProgress;
 
-  Future<KeeperDailyStatus> status() async {
-    final now = _clock();
-    final record = await _loadNormalizedRecord(now);
-    return _statusFor(record, now);
+  Future<KeeperDailyStatus> status() {
+    return _serialize(() async {
+      final now = _clock();
+      final record = await _loadNormalizedRecord(now);
+      return _statusFor(record, now);
+    });
   }
 
   Future<void> seedFromExistingWisdomIfNeeded({
     required String text,
     required DateTime revealedAt,
-  }) async {
-    final now = _clock();
-    if (_localDate(revealedAt) != _localDate(now)) return;
+  }) {
+    return _serialize(() async {
+      final now = _clock();
+      if (_localDate(revealedAt) != _localDate(now)) return;
 
-    final prefs = await _storageService.getPrefs();
-    if (prefs.containsKey(storageKey)) return;
+      final prefs = await _storageService.getPrefs();
+      if (prefs.containsKey(storageKey)) return;
 
-    await _saveRecord(
-      _KeeperDailyRecord(
-        localDate: _localDate(now),
-        revealCount: 1,
-        lastWisdom: text,
-      ),
-    );
+      await _saveRecord(
+        _KeeperDailyRecord(
+          localDate: _localDate(now),
+          revealCount: 1,
+          lastWisdom: text,
+          hasPendingReveal: false,
+        ),
+      );
+    });
   }
 
   Future<KeeperDailyAccess> reveal({
@@ -78,7 +87,7 @@ class KeeperDailyAccessService {
     final inProgress = _revealInProgress;
     if (inProgress != null) return inProgress;
 
-    final request = _reveal(selectWisdom);
+    final request = _serialize(() => _reveal(selectWisdom));
     _revealInProgress = request;
 
     return request.whenComplete(() {
@@ -93,6 +102,19 @@ class KeeperDailyAccessService {
   ) async {
     final now = _clock();
     final record = await _loadNormalizedRecord(now);
+
+    if (record.hasPendingReveal) {
+      final pendingWisdom = record.lastWisdom;
+      if (pendingWisdom == null || pendingWisdom.trim().isEmpty) {
+        throw StateError('Pending Keeper wisdom state is unavailable.');
+      }
+
+      return KeeperDailyAccess(
+        text: pendingWisdom,
+        isNew: false,
+        status: _statusFor(record, now),
+      );
+    }
 
     if (record.revealCount >= maxReveals) {
       final lastWisdom = record.lastWisdom;
@@ -112,6 +134,7 @@ class KeeperDailyAccessService {
       localDate: record.localDate,
       revealCount: record.revealCount + 1,
       lastWisdom: text,
+      hasPendingReveal: true,
     );
 
     await _saveRecord(nextRecord);
@@ -121,6 +144,23 @@ class KeeperDailyAccessService {
       isNew: true,
       status: _statusFor(nextRecord, now),
     );
+  }
+
+  Future<void> markDisplayed(String text) {
+    return _serialize(() async {
+      final now = _clock();
+      final record = await _loadNormalizedRecord(now);
+      if (!record.hasPendingReveal || record.lastWisdom != text) return;
+
+      await _saveRecord(
+        _KeeperDailyRecord(
+          localDate: record.localDate,
+          revealCount: record.revealCount,
+          lastWisdom: record.lastWisdom,
+          hasPendingReveal: false,
+        ),
+      );
+    });
   }
 
   Future<_KeeperDailyRecord> _loadNormalizedRecord(DateTime now) async {
@@ -139,6 +179,7 @@ class KeeperDailyAccessService {
         localDate: localDate,
         revealCount: 0,
         lastWisdom: null,
+        hasPendingReveal: false,
       );
     }
 
@@ -154,10 +195,16 @@ class KeeperDailyAccessService {
     // A clock rollback must not create a fresh local-calendar allowance.
     if (localDate.compareTo(record.localDate) < 0) return record;
 
+    // A selected wisdom must be displayed before the allowance can roll over.
+    // Keeping the prior date here preserves that exact wisdom across midnight;
+    // the next status read resets the new day after it is acknowledged.
+    if (record.hasPendingReveal) return record;
+
     final resetRecord = _KeeperDailyRecord(
       localDate: localDate,
       revealCount: 0,
       lastWisdom: record.lastWisdom,
+      hasPendingReveal: record.hasPendingReveal,
     );
     await _saveRecord(resetRecord);
     return resetRecord;
@@ -168,6 +215,7 @@ class KeeperDailyAccessService {
       localDate: localDate,
       revealCount: maxReveals,
       lastWisdom: null,
+      hasPendingReveal: false,
     );
     await _saveRecord(recovery);
     return recovery;
@@ -178,7 +226,22 @@ class KeeperDailyAccessService {
       revealCount: record.revealCount,
       resetAt: DateTime(now.year, now.month, now.day + 1),
       lastWisdom: record.lastWisdom,
+      hasPendingReveal: record.hasPendingReveal,
     );
+  }
+
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+
+    return completer.future;
   }
 
   Future<void> _saveRecord(_KeeperDailyRecord record) async {
@@ -201,17 +264,20 @@ class _KeeperDailyRecord {
     required this.localDate,
     required this.revealCount,
     required this.lastWisdom,
+    required this.hasPendingReveal,
   });
 
   final String localDate;
   final int revealCount;
   final String? lastWisdom;
+  final bool hasPendingReveal;
 
   String encode() {
     return jsonEncode({
       'localDate': localDate,
       'revealCount': revealCount,
       'lastWisdom': lastWisdom,
+      'hasPendingReveal': hasPendingReveal,
     });
   }
 
@@ -224,6 +290,7 @@ class _KeeperDailyRecord {
     final localDate = decoded['localDate'];
     final revealCount = decoded['revealCount'];
     final lastWisdom = decoded['lastWisdom'];
+    final hasPendingReveal = decoded['hasPendingReveal'] ?? false;
 
     if (localDate is! String ||
         !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(localDate) ||
@@ -231,8 +298,13 @@ class _KeeperDailyRecord {
         revealCount < 0 ||
         revealCount > KeeperDailyAccessService.maxReveals ||
         (lastWisdom != null && lastWisdom is! String) ||
+        hasPendingReveal is! bool ||
         (revealCount > 0 &&
-            (lastWisdom is! String || lastWisdom.trim().isEmpty))) {
+            (lastWisdom is! String || lastWisdom.trim().isEmpty)) ||
+        (hasPendingReveal &&
+            (revealCount == 0 ||
+                lastWisdom is! String ||
+                lastWisdom.trim().isEmpty))) {
       throw const FormatException('Invalid Keeper daily state.');
     }
 
@@ -240,6 +312,7 @@ class _KeeperDailyRecord {
       localDate: localDate,
       revealCount: revealCount,
       lastWisdom: lastWisdom as String?,
+      hasPendingReveal: hasPendingReveal,
     );
   }
 }

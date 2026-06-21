@@ -131,4 +131,26 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('rapid Keeper taps push only one Keeper route', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsScreen()),
+    );
+
+    final keeperRow = find.text('Keeper');
+    final keeperTapTarget = tester.widget<InkWell>(
+      find.ancestor(of: keeperRow, matching: find.byType(InkWell)),
+    );
+    keeperTapTarget.onTap!();
+    keeperTapTarget.onTap!();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter the Circle'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter the Circle'), findsNothing);
+    expect(find.text('Support the circle, keep what stays.'), findsOneWidget);
+  });
 }
