@@ -34,6 +34,15 @@ void main() {
     expect(find.text('For thoughts and questions.'), findsOneWidget);
     expect(find.text('Reach Out'), findsOneWidget);
     expect(find.text('Notifications'), findsNothing);
+    expect(
+      tester
+          .widget<Align>(
+            find.byKey(const ValueKey('settings-content')),
+          )
+          .alignment,
+      Alignment.topCenter,
+    );
+    expect(tester.getTopLeft(find.text('EAST.')).dy, lessThan(140));
     expect(find.byType(ListView), findsNothing);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byType(Scrollable), findsOneWidget);
@@ -45,7 +54,11 @@ void main() {
           .physics,
       isA<ClampingScrollPhysics>(),
     );
-    expect(find.text('○'), findsOneWidget);
+    final keeperSymbol = tester.widget<Text>(find.text('○'));
+    expect(keeperSymbol.style?.fontFamily, 'CormorantGaramond');
+    expect(keeperSymbol.style?.fontWeight, FontWeight.w300);
+    expect(keeperSymbol.style?.fontSize, 24);
+    expect(keeperSymbol.style?.shadows, hasLength(1));
   });
 
   testWidgets('Kept omits the stored year without changing its data',

@@ -32,19 +32,19 @@ void main() {
 
     final mark = tester.widget<Container>(markFinder);
     final decoration = mark.decoration! as BoxDecoration;
-    expect(tester.getSize(markFinder).width, closeTo(214.5, 0.1));
-    expect(tester.getSize(markFinder).height, closeTo(214.5, 0.1));
+    expect(tester.getSize(markFinder).width, closeTo(228.15, 0.1));
+    expect(tester.getSize(markFinder).height, closeTo(228.15, 0.1));
     expect(decoration.shape, BoxShape.circle);
     expect(decoration.color, isNull);
     expect(decoration.boxShadow, isNull);
-    expect(decoration.border!.top.width, 0.7);
+    expect(decoration.border!.top.width, 0.85);
     expect(decoration.border!.top.color.a, closeTo(0.70, 0.001));
 
     final launchText = tester.widget<Text>(
       find.descendant(of: markFinder, matching: find.text('EAST.')),
     );
     expect(launchText.style?.fontFamily, 'CormorantGaramond');
-    expect(launchText.style?.fontSize, 20);
+    expect(launchText.style?.fontSize, 21.5);
     expect(launchText.style?.color, const Color(0xFFF4F0E8));
 
     await tester.pump(const Duration(milliseconds: 300));
@@ -56,7 +56,7 @@ void main() {
       find.byKey(const ValueKey('ritual-content-opacity')),
     );
     expect(launchFade.opacity, 0.0);
-    expect(launchFade.duration, const Duration(milliseconds: 450));
+    expect(launchFade.duration, const Duration(milliseconds: 750));
 
     await tester.pump(const Duration(milliseconds: 2000));
   });
@@ -90,6 +90,136 @@ void main() {
       AppLifecycleState.resumed,
     );
     await tester.pump(const Duration(milliseconds: 1300));
+  });
+
+  testWidgets('active lock reopens directly into the two-line countdown',
+      (tester) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: 'Already received wisdom',
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
+
+    await _openLockedCountdown(tester);
+
+    final countdown = tester.widget<Text>(
+      find.textContaining('Return when the silence opens again.'),
+    );
+    final countdownLines = countdown.data!.split('\n');
+    expect(countdownLines, hasLength(2));
+    expect(countdownLines.first, 'Return when the silence opens again.');
+    expect(countdownLines.last, matches(RegExp(r'^\d+h \d+m$')));
+    expect(find.text('Pause.'), findsNothing);
+    expect(find.text('Feel.'), findsNothing);
+    expect(find.text('Ask from your heart.'), findsNothing);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text(countdown.data!), findsOneWidget);
+    expect(find.text('Pause.'), findsNothing);
+  });
+
+  testWidgets('Keeper cannot bypass the locked reopen countdown',
+      (tester) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'is_premium': true,
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: 'Keeper received wisdom',
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openLockedCountdown(tester);
+
+    expect(
+      find.textContaining('Return when the silence opens again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Pause.'), findsNothing);
+    expect(find.text('Feel.'), findsNothing);
+    expect(find.text('Ask from your heart.'), findsNothing);
+  });
+
+  testWidgets('expired lock returns launch tap to the normal ritual',
+      (tester) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: 'Expired wisdom',
+        revealedAt: now.subtract(const Duration(hours: 25)),
+        unlockAt: now.subtract(const Duration(hours: 1)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceFromLaunchToPause(tester);
+
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(
+      find.textContaining('Return when the silence opens again.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('locked countdown returns to launch after expiry refresh',
+      (tester) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: 'Nearly unlocked wisdom',
+        revealedAt: now.subtract(
+          const Duration(hours: 23, minutes: 59, seconds: 30),
+        ),
+        unlockAt: now.add(const Duration(seconds: 30)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _openLockedCountdown(tester);
+    expect(
+      find.textContaining('Return when the silence opens again.'),
+      findsOneWidget,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'daily_wisdom_access',
+      DailyWisdomRecord(
+        text: 'Now expired wisdom',
+        revealedAt: now.subtract(const Duration(hours: 25)),
+        unlockAt: now.subtract(const Duration(hours: 1)),
+      ).encode(),
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
+    expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
   });
 
   testWidgets('ritual uses the restrained haptic sequence', (tester) async {
@@ -141,7 +271,7 @@ void main() {
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
     expect(haptics, hasLength(4));
 
-    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 550));
     expect(haptics, hasLength(5));
     expect(haptics.last, 'HapticFeedbackType.selectionClick');
 
@@ -160,18 +290,6 @@ void main() {
     addTearDown(
       tester.platformDispatcher.clearTextScaleFactorTestValue,
     );
-
-    final now = DateTime.now();
-    const longWisdom =
-        'Stillness does not ask you to become smaller; it asks you to notice '
-        'the quiet horizon already opening within every unfinished question.';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: longWisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
 
     await tester.pumpWidget(
       const MaterialApp(home: HomeScreen()),
@@ -238,14 +356,25 @@ void main() {
 
     await _tapCenter(tester);
     await tester.pump();
-    expect(find.byTooltip('Settings'), findsNothing);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
+    final askFade = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('ritual-content-opacity')),
+    );
+    expect(askFade.opacity, 0.0);
+    expect(askFade.duration, const Duration(milliseconds: 1250));
+    expect(askFade.curve, Curves.easeOutCubic);
 
     await tester.pump(const Duration(milliseconds: 1249));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(
       tester
@@ -258,16 +387,23 @@ void main() {
 
     await _tapCenter(tester);
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1799));
+    await tester.pump(const Duration(milliseconds: 549));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-    expect(find.text(longWisdom), findsNothing);
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
 
-    expect(find.text(longWisdom), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
-    final wisdomText = tester.widget<Text>(find.text(longWisdom));
+    final revealFadeFinder = find.byKey(
+      const ValueKey('wisdom-reveal-fade'),
+    );
+    final wisdomText = tester.widget<Text>(
+      find.descendant(
+        of: revealFadeFinder,
+        matching: find.byType(Text),
+      ),
+    );
     expect(wisdomText.style?.fontSize, 32);
     expect(wisdomText.style?.height, 1.48);
     expect(
@@ -279,7 +415,7 @@ void main() {
       192,
     );
     final revealFade = tester.widget<FadeTransition>(
-      find.byKey(const ValueKey('wisdom-reveal-fade')),
+      revealFadeFinder,
     );
     final revealCurve = revealFade.opacity as CurvedAnimation;
     final revealController = revealCurve.parent as AnimationController;
@@ -323,6 +459,18 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byTooltip('Keep reflection'),
+              matching: find.text('○'),
+            ),
+          )
+          .style
+          ?.fontSize,
+      31,
+    );
 
     await tester.tap(find.byTooltip('Keep reflection'));
     await tester.pump();
@@ -351,7 +499,7 @@ void main() {
 
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 550));
 
     final prefs = await SharedPreferences.getInstance();
     final persisted = DailyWisdomRecord.decode(
@@ -411,11 +559,22 @@ Future<void> _tapCenter(WidgetTester tester) {
   return tester.tapAt(size.center(Offset.zero));
 }
 
-Future<void> _advanceToQuestion(WidgetTester tester) async {
+Future<void> _advanceFromLaunchToPause(WidgetTester tester) async {
   await _tapCenter(tester);
   await tester.pump(const Duration(milliseconds: 850));
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 850));
+}
+
+Future<void> _openLockedCountdown(WidgetTester tester) async {
+  await _tapCenter(tester);
+  await tester.pump(const Duration(milliseconds: 850));
+  await tester.pump(const Duration(milliseconds: 250));
+  await tester.pump(const Duration(milliseconds: 600));
+}
+
+Future<void> _advanceToQuestion(WidgetTester tester) async {
+  await _advanceFromLaunchToPause(tester);
 
   await _tapCenter(tester);
   await tester.pump(const Duration(milliseconds: 1300));

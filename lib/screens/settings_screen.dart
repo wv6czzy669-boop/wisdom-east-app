@@ -151,12 +151,14 @@ class SettingsScreen extends StatelessWidget {
           return SingleChildScrollView(
             key: const ValueKey('settings-scroll'),
             physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
+            padding: const EdgeInsets.fromLTRB(24, 22, 24, 36),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: constraints.maxHeight - 52,
               ),
-              child: Center(
+              child: Align(
+                key: const ValueKey('settings-content'),
+                alignment: Alignment.topCenter,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -188,6 +190,12 @@ class SettingsScreen extends StatelessWidget {
                           fontWeight: FontWeight.w300,
                           fontFamily: 'CormorantGaramond',
                           height: 1,
+                          shadows: [
+                            Shadow(
+                              color: Colors.white60,
+                              blurRadius: 0.35,
+                            ),
+                          ],
                         ),
                       ),
                       title: "Keeper",
