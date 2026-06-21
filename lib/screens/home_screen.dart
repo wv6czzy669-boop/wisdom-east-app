@@ -691,7 +691,7 @@ class _HomeScreenState extends State<HomeScreen>
         pauseFeelOpacity = 0.0;
         revealGlowOpacity = 0.0;
         backgroundDepth = 1.0;
-        textScale = 0.975;
+        textScale = 1.0;
       });
 
       final silenceComplete =
@@ -1129,7 +1129,8 @@ class _HomeScreenState extends State<HomeScreen>
                               child: child,
                             );
                           },
-                          child: AnimatedScale(
+                          child: _RitualScaleTransition(
+                            enabled: !onHeartScreen,
                             scale: screenStep == 0 ? 1.0 : textScale,
                             duration: const Duration(
                               milliseconds: 1000,
@@ -1195,39 +1196,41 @@ class _HomeScreenState extends State<HomeScreen>
                                               ],
                                             ),
                                           )
-                                        : FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: SizedBox(
-                                              key: wisdomRevealed
-                                                  ? const ValueKey(
-                                                      'revealed-wisdom-layout',
-                                                    )
-                                                  : null,
-                                              width: wisdomRevealed
-                                                  ? revealedWisdomWidth
-                                                  : ritualTextWidth,
-                                              child: wisdomRevealed
-                                                  ? FadeTransition(
-                                                      key: const ValueKey(
-                                                        'wisdom-reveal-fade',
-                                                      ),
-                                                      opacity:
-                                                          wisdomRevealAnimation,
-                                                      child: currentRitualText,
-                                                    )
-                                                  : onHeartScreen
+                                        : onHeartScreen
+                                            ? SizedBox(
+                                                width: ritualTextWidth,
+                                                child: FadeTransition(
+                                                  key: const ValueKey(
+                                                    'ask-fade',
+                                                  ),
+                                                  opacity: askFadeAnimation,
+                                                  child: currentRitualText,
+                                                ),
+                                              )
+                                            : FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: SizedBox(
+                                                  key: wisdomRevealed
+                                                      ? const ValueKey(
+                                                          'revealed-wisdom-layout',
+                                                        )
+                                                      : null,
+                                                  width: wisdomRevealed
+                                                      ? revealedWisdomWidth
+                                                      : ritualTextWidth,
+                                                  child: wisdomRevealed
                                                       ? FadeTransition(
                                                           key: const ValueKey(
-                                                            'ask-fade',
+                                                            'wisdom-reveal-fade',
                                                           ),
                                                           opacity:
-                                                              askFadeAnimation,
+                                                              wisdomRevealAnimation,
                                                           child:
                                                               currentRitualText,
                                                         )
                                                       : currentRitualText,
-                                            ),
-                                          ),
+                                                ),
+                                              ),
                               ),
                             ),
                           ),
@@ -1372,6 +1375,34 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RitualScaleTransition extends StatelessWidget {
+  const _RitualScaleTransition({
+    required this.enabled,
+    required this.scale,
+    required this.duration,
+    required this.curve,
+    required this.child,
+  });
+
+  final bool enabled;
+  final double scale;
+  final Duration duration;
+  final Curve curve;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+
+    return AnimatedScale(
+      scale: scale,
+      duration: duration,
+      curve: curve,
+      child: child,
     );
   }
 }

@@ -42,7 +42,7 @@ void main() {
           .alignment,
       Alignment.topCenter,
     );
-    expect(tester.getTopLeft(find.text('EAST.')).dy, lessThan(120));
+    expect(tester.getTopLeft(find.text('EAST.')).dy, lessThan(100));
     expect(find.byType(ListView), findsNothing);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byType(Scrollable), findsOneWidget);
@@ -54,13 +54,20 @@ void main() {
           .physics,
       isA<ClampingScrollPhysics>(),
     );
-    final keeperCircle = find.byKey(
-      const ValueKey('keeper-circle-symbol'),
+    final settingsScroll = find.byKey(
+      const ValueKey('settings-scroll'),
     );
-    expect(keeperCircle, findsOneWidget);
-    expect(tester.widget(keeperCircle), isA<CustomPaint>());
-    expect(tester.getSize(keeperCircle), const Size.square(22));
+    expect(
+      find.descendant(of: settingsScroll, matching: find.byType(Icon)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: settingsScroll, matching: find.byType(CustomPaint)),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('keeper-circle-symbol')), findsNothing);
     expect(find.text('○'), findsNothing);
+    expect(tester.getTopLeft(find.text('Keeper')).dx, 24);
   });
 
   testWidgets('Kept omits the stored year without changing its data',

@@ -22,48 +22,38 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget settingsItem({
-    required Widget symbol,
     required String title,
     required String subtitle,
     VoidCallback? onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      splashColor: Colors.white10,
-      highlightColor: Colors.white10,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: 17,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Center(child: symbol),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: eastStyle(21),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: eastStyle(
-                      15,
-                      color: const Color(0x91FFFFFF),
-                    ),
-                  ),
-                ],
+    return SizedBox(
+      width: double.infinity,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: Colors.white10,
+        highlightColor: Colors.white10,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: 17,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: eastStyle(21),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: eastStyle(
+                  15,
+                  color: const Color(0x91FFFFFF),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -146,167 +136,117 @@ class SettingsScreen extends StatelessWidget {
         scrolledUnderElevation: 0,
         elevation: 0,
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            key: const ValueKey('settings-scroll'),
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 36),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: constraints.maxHeight - 52,
-              ),
-              child: Align(
-                key: const ValueKey('settings-content'),
-                alignment: Alignment.topCenter,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'EAST.',
-                      textAlign: TextAlign.center,
-                      style: eastStyle(27),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Where silence speaks.',
-                      textAlign: TextAlign.center,
-                      style: eastStyle(
-                        17,
-                        color: const Color(0x91FFFFFF),
+      body: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              key: const ValueKey('settings-scroll'),
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 36,
+                ),
+                child: Align(
+                  key: const ValueKey('settings-content'),
+                  alignment: Alignment.topCenter,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'EAST.',
+                        textAlign: TextAlign.center,
+                        style: eastStyle(27),
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    const Divider(
-                      color: Colors.white24,
-                      thickness: 0.5,
-                    ),
-                    settingsItem(
-                      symbol: const _KeeperCircleSymbol(),
-                      title: "Keeper",
-                      subtitle: "Support the circle, keep what stays.",
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const KeeperScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(
-                      color: Colors.white24,
-                      thickness: 0.5,
-                    ),
-                    settingsItem(
-                      symbol: const Icon(
-                        Icons.restore,
-                        color: Colors.white60,
-                        size: 22,
-                        weight: 300,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Where silence speaks.',
+                        textAlign: TextAlign.center,
+                        style: eastStyle(
+                          17,
+                          color: const Color(0x91FFFFFF),
+                        ),
                       ),
-                      title: "Restore Purchases",
-                      subtitle: "Restore what belongs with you.",
-                      onTap: () async {
-                        if (purchaseService.isLoading) return;
+                      const SizedBox(height: 28),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Keeper",
+                        subtitle: "Support the circle, keep what stays.",
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const KeeperScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Restore Purchases",
+                        subtitle: "Restore what belongs with you.",
+                        onTap: () async {
+                          if (purchaseService.isLoading) return;
 
-                        var restoreStarted = false;
-                        try {
-                          restoreStarted =
-                              await purchaseService.restorePurchases();
-                        } catch (_) {}
+                          var restoreStarted = false;
+                          try {
+                            restoreStarted =
+                                await purchaseService.restorePurchases();
+                          } catch (_) {}
 
-                        if (!context.mounted) return;
-                        showInfoDialog(
-                          context,
-                          "Restore Purchases",
-                          restoreStarted
-                              ? "Restore request sent. Keeper access will update automatically."
-                              : purchaseService.restoreNeedsRecovery
-                                  ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
-                                  : "Restore is not available right now. Please try again shortly.",
-                        );
-                      },
-                    ),
-                    const Divider(
-                      color: Colors.white24,
-                      thickness: 0.5,
-                    ),
-                    settingsItem(
-                      symbol: const Icon(
-                        Icons.privacy_tip_outlined,
-                        color: Colors.white60,
-                        size: 22,
-                        weight: 300,
+                          if (!context.mounted) return;
+                          showInfoDialog(
+                            context,
+                            "Restore Purchases",
+                            restoreStarted
+                                ? "Restore request sent. Keeper access will update automatically."
+                                : purchaseService.restoreNeedsRecovery
+                                    ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
+                                    : "Restore is not available right now. Please try again shortly.",
+                          );
+                        },
                       ),
-                      title: "Privacy Policy",
-                      subtitle: "What stays private.",
-                      onTap: () async {
-                        await openPrivacyPolicy();
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Privacy Policy",
+                        subtitle: "What stays private.",
+                        onTap: () async {
+                          await openPrivacyPolicy();
 
-                        if (!context.mounted) return;
-                      },
-                    ),
-                    const Divider(
-                      color: Colors.white24,
-                      thickness: 0.5,
-                    ),
-                    settingsItem(
-                      symbol: const Icon(
-                        Icons.mail_outline,
-                        color: Colors.white60,
-                        size: 22,
-                        weight: 300,
+                          if (!context.mounted) return;
+                        },
                       ),
-                      title: "Reach Out",
-                      subtitle: "For thoughts and questions.",
-                      onTap: sendEmail,
-                    ),
-                    const Divider(
-                      color: Colors.white24,
-                      thickness: 0.5,
-                    ),
-                  ],
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Reach Out",
+                        subtitle: "For thoughts and questions.",
+                        onTap: sendEmail,
+                      ),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
-}
-
-class _KeeperCircleSymbol extends StatelessWidget {
-  const _KeeperCircleSymbol();
-
-  @override
-  Widget build(BuildContext context) {
-    return const CustomPaint(
-      key: ValueKey('keeper-circle-symbol'),
-      size: Size.square(22),
-      painter: _KeeperCirclePainter(),
-    );
-  }
-}
-
-class _KeeperCirclePainter extends CustomPainter {
-  const _KeeperCirclePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white60
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.25;
-
-    canvas.drawCircle(
-      size.center(Offset.zero),
-      (size.shortestSide - paint.strokeWidth) / 2,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _KeeperCirclePainter oldDelegate) => false;
 }

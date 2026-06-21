@@ -404,13 +404,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Ask from your heart.'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
+    final askTextFinder = find.text('Ask from your heart.');
+    final askSizeBeforeFade = tester.getSize(askTextFinder);
+    final askStyleBeforeFade = tester.widget<Text>(askTextFinder).style;
 
     await _tapCenter(tester);
     await tester.pump();
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
-    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(askTextFinder, findsOneWidget);
+    expect(
+      find.ancestor(
+        of: askTextFinder,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(
+        of: askTextFinder,
+        matching: find.byType(FittedBox),
+      ),
+      findsNothing,
+    );
     expect(_ritualOpacity(tester), 1.0);
     final askFade = tester.widget<FadeTransition>(
       find.byKey(const ValueKey('ask-fade')),
@@ -422,7 +439,11 @@ void main() {
     expect(askCurve.reverseCurve, Curves.easeInCubic);
 
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(askTextFinder, findsOneWidget);
+    expect(tester.getSize(askTextFinder), askSizeBeforeFade);
+    final askStyleDuringFade = tester.widget<Text>(askTextFinder).style;
+    expect(askStyleDuringFade?.fontSize, askStyleBeforeFade?.fontSize);
+    expect(askStyleDuringFade?.height, askStyleBeforeFade?.height);
     expect(askFade.opacity.value, greaterThan(0.0));
     expect(askFade.opacity.value, lessThan(1.0));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
