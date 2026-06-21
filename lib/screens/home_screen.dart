@@ -29,10 +29,10 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int screenStep = 0;
 
-  String currentText = "East";
+  String currentText = "EAST.";
 
   double textOpacity = 0.0;
-  double heartOpacity = 0.0;
+  double saveControlOpacity = 0.0;
   double keeperPromptOpacity = 0.0;
   double textScale = 0.985;
   double revealGlowOpacity = 0.0;
@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _transitionLock = false;
   int flowSessionId = 0;
   bool navigationInProgress = false;
-  bool heartInteractionEnabled = false;
+  bool saveInteractionEnabled = false;
   bool _reduceMotion = false;
 
   final ritualFlowController = const RitualFlowController();
@@ -89,12 +89,12 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       if (wisdomRevealed) {
-        heartOpacity = 1.0;
+        saveControlOpacity = 1.0;
         keeperPromptOpacity = 1.0;
         revealGlowOpacity = 0.10;
       } else {
-        heartOpacity = 0.0;
-        heartInteractionEnabled = false;
+        saveControlOpacity = 0.0;
+        saveInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
         revealGlowOpacity = 0.0;
       }
@@ -431,8 +431,8 @@ class _HomeScreenState extends State<HomeScreen>
 
       setState(() {
         textOpacity = 0.0;
-        heartOpacity = 0.0;
-        heartInteractionEnabled = false;
+        saveControlOpacity = 0.0;
+        saveInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
         revealGlowOpacity = 0.0;
         backgroundDepth =
@@ -561,8 +561,8 @@ class _HomeScreenState extends State<HomeScreen>
 
       setState(() {
         textOpacity = 0.0;
-        heartOpacity = 0.0;
-        heartInteractionEnabled = false;
+        saveControlOpacity = 0.0;
+        saveInteractionEnabled = false;
         keeperPromptOpacity = 0.0;
         pauseFeelOpacity = 0.0;
         revealGlowOpacity = 0.0;
@@ -612,7 +612,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
-        heartOpacity = 1.0;
+        saveControlOpacity = 1.0;
         revealGlowOpacity = 0.10;
       });
 
@@ -629,15 +629,6 @@ class _HomeScreenState extends State<HomeScreen>
         _transitionLock = false;
       }
     }
-  }
-
-  Future<void> resetToRevealScreen() async {
-    HapticFeedback.selectionClick();
-
-    await transitionToText(
-      "Tap to Reveal",
-      nextStep: 3,
-    );
   }
 
   Future<void> openKeeperScreen() async {
@@ -703,11 +694,11 @@ class _HomeScreenState extends State<HomeScreen>
         return AlertDialog(
           backgroundColor: const Color(0xFF111111),
           title: Text(
-            "Saved Reflection Limit",
+            "Kept Limit",
             style: wisdomStyle(22),
           ),
           content: Text(
-            "Free users can save up to 3 reflections.",
+            "Free users can keep up to 3 reflections.",
             style: wisdomStyle(18),
           ),
           actions: [
@@ -750,7 +741,7 @@ class _HomeScreenState extends State<HomeScreen>
         favorites = result.items;
       });
     } catch (_) {
-      showEastSnack("Reflection could not be saved. Please try again.");
+      showEastSnack("Reflection could not be kept. Please try again.");
     }
   }
 
@@ -979,7 +970,7 @@ class _HomeScreenState extends State<HomeScreen>
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Text(
-                                                "East",
+                                                "EAST.",
                                                 textAlign: TextAlign.center,
                                                 style: wisdomStyle(
                                                   44,
@@ -1087,11 +1078,15 @@ class _HomeScreenState extends State<HomeScreen>
                     onPressed: openSettings,
                   ),
                   IconButton(
-                    tooltip: 'Saved reflections',
-                    icon: const Icon(
-                      Icons.star_border,
-                      color: Colors.white70,
-                      size: 29,
+                    tooltip: 'Kept',
+                    icon: const Text(
+                      '○',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w300,
+                        height: 1,
+                      ),
                     ),
                     onPressed: openFavorites,
                   ),
@@ -1100,54 +1095,42 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             if (wisdomRevealed)
               Positioned(
-                top: 10,
-                left: 8,
-                child: IconButton(
-                  tooltip: 'Back',
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.white70,
-                    size: 23,
-                  ),
-                  onPressed: resetToRevealScreen,
-                ),
-              ),
-            if (wisdomRevealed)
-              Positioned(
                 left: 0,
                 right: 0,
                 top: MediaQuery.of(context).size.height / 2 + 72,
                 child: Center(
                   child: IgnorePointer(
-                    key: const ValueKey('favorite-interaction-guard'),
-                    ignoring: !heartInteractionEnabled,
+                    key: const ValueKey('kept-interaction-guard'),
+                    ignoring: !saveInteractionEnabled,
                     child: AnimatedOpacity(
                       duration: const Duration(
                         milliseconds: 1000,
                       ),
-                      opacity: heartOpacity,
+                      opacity: saveControlOpacity,
                       onEnd: () {
                         if (!mounted ||
-                            heartInteractionEnabled ||
-                            heartOpacity < 1.0 ||
+                            saveInteractionEnabled ||
+                            saveControlOpacity < 1.0 ||
                             !wisdomRevealed) {
                           return;
                         }
 
                         setState(() {
-                          heartInteractionEnabled = true;
+                          saveInteractionEnabled = true;
                         });
                       },
                       child: IconButton(
                         tooltip: isCurrentFavorite()
-                            ? 'Remove saved reflection'
-                            : 'Save reflection',
-                        icon: Icon(
-                          isCurrentFavorite()
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          color: const Color(0xFFF4F0E8),
-                          size: 28,
+                            ? 'Remove kept reflection'
+                            : 'Keep reflection',
+                        icon: Text(
+                          isCurrentFavorite() ? '●' : '○',
+                          style: const TextStyle(
+                            color: Color(0xFFF4F0E8),
+                            fontSize: 29,
+                            fontWeight: FontWeight.w300,
+                            height: 1,
+                          ),
                         ),
                         onPressed: toggleFavorite,
                       ),

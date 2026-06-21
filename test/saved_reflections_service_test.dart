@@ -66,7 +66,7 @@ void main() {
         replacement.items.map((item) => item.text), ['One', 'Three', 'Four']);
   });
 
-  test('Keeper users have unlimited saved reflections', () async {
+  test('Keeper users have unlimited kept reflections', () async {
     var items = <FavoriteItem>[];
 
     for (var index = 0; index < 12; index++) {
@@ -151,7 +151,7 @@ void main() {
     await expectLater(
       service.toggle(
         currentItems: originalItems,
-        text: 'Unsaved reflection',
+        text: 'Unpersisted reflection',
         date: 'Today',
         isKeeper: false,
       ),

@@ -17,7 +17,14 @@ void main() {
     );
     await _finishOpeningIntro(tester);
     expect(find.byTooltip('Settings'), findsOneWidget);
-    expect(find.byTooltip('Saved reflections'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byTooltip('Kept'),
+        matching: find.text('○'),
+      ),
+      findsOneWidget,
+    );
 
     await _tapCenter(tester);
     await tester.pump();
@@ -29,7 +36,7 @@ void main() {
     await tester.pump();
 
     expect(_ritualOpacity(tester), 1.0);
-    expect(find.text('East'), findsOneWidget);
+    expect(find.text('EAST.'), findsOneWidget);
 
     tester.binding.handleAppLifecycleStateChanged(
       AppLifecycleState.resumed,
@@ -92,17 +99,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 950));
 
     expect(find.text(longWisdom), findsOneWidget);
-    expect(_favoriteGuard(tester).ignoring, isTrue);
+    expect(_keptGuard(tester).ignoring, isTrue);
     expect(tester.takeException(), isNull);
 
     await tester.pump(const Duration(milliseconds: 1100));
-    expect(_favoriteGuard(tester).ignoring, isFalse);
-    expect(find.byTooltip('Back'), findsOneWidget);
-    expect(find.byTooltip('Save reflection'), findsOneWidget);
+    expect(_keptGuard(tester).ignoring, isFalse);
+    expect(find.byTooltip('Back'), findsNothing);
+    expect(find.byTooltip('Keep reflection'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byTooltip('Keep reflection'),
+        matching: find.text('○'),
+      ),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byTooltip('Save reflection'));
+    await tester.tap(find.byTooltip('Keep reflection'));
     await tester.pump();
-    expect(find.byTooltip('Remove saved reflection'), findsOneWidget);
+    expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byTooltip('Remove kept reflection'),
+        matching: find.text('●'),
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -203,9 +224,9 @@ double _ritualOpacity(WidgetTester tester) {
       .opacity;
 }
 
-IgnorePointer _favoriteGuard(WidgetTester tester) {
+IgnorePointer _keptGuard(WidgetTester tester) {
   return tester.widget<IgnorePointer>(
-    find.byKey(const ValueKey('favorite-interaction-guard')),
+    find.byKey(const ValueKey('kept-interaction-guard')),
   );
 }
 

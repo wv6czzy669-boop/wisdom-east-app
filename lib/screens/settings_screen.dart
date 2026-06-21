@@ -5,7 +5,12 @@ import '../services/app_services.dart';
 import 'keeper_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.notificationsEnabled = false,
+  });
+
+  final bool notificationsEnabled;
 
   TextStyle eastStyle(
     double size, {
@@ -24,7 +29,8 @@ class SettingsScreen extends StatelessWidget {
   Widget settingsItem({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
+    Widget? trailing,
     VoidCallback? onTap,
   }) {
     return InkWell(
@@ -52,17 +58,23 @@ class SettingsScreen extends StatelessWidget {
                     title,
                     style: eastStyle(21),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: eastStyle(
-                      15,
-                      color: Colors.white54,
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: eastStyle(
+                        15,
+                        color: Colors.white54,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: 16),
+              trailing,
+            ],
           ],
         ),
       ),
@@ -121,7 +133,7 @@ class SettingsScreen extends StatelessWidget {
     final uri = Uri(
       scheme: 'mailto',
       path: 'dailywisdomeast@gmail.com',
-      query: 'subject=East Support',
+      query: 'subject=EAST. Support',
     );
 
     try {
@@ -141,7 +153,7 @@ class SettingsScreen extends StatelessWidget {
         scrolledUnderElevation: 0,
         elevation: 0,
         title: Text(
-          "East",
+          "EAST.",
           style: eastStyle(26),
         ),
       ),
@@ -173,7 +185,7 @@ class SettingsScreen extends StatelessWidget {
           settingsItem(
             icon: Icons.workspace_premium_outlined,
             title: "Keeper",
-            subtitle: "Unlimited saved reflections and support for East.",
+            subtitle: "Unlimited kept reflections and support for EAST.",
             onTap: () {
               Navigator.push(
                 context,
@@ -182,6 +194,17 @@ class SettingsScreen extends StatelessWidget {
                 ),
               );
             },
+          ),
+          const Divider(
+            color: Colors.white24,
+            thickness: 0.5,
+          ),
+          settingsItem(
+            icon: Icons.notifications_none,
+            title: "Notifications",
+            trailing: _NotificationStateIndicator(
+              isEnabled: notificationsEnabled,
+            ),
           ),
           const Divider(
             color: Colors.white24,
@@ -206,7 +229,7 @@ class SettingsScreen extends StatelessWidget {
                 restoreStarted
                     ? "Restore request sent. Keeper access will update automatically."
                     : purchaseService.restoreNeedsRecovery
-                        ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen East before trying again."
+                        ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
                         : "Restore is not available right now. Please try again shortly.",
               );
             },
@@ -218,7 +241,7 @@ class SettingsScreen extends StatelessWidget {
           settingsItem(
             icon: Icons.privacy_tip_outlined,
             title: "Privacy Policy",
-            subtitle: "How East handles your information.",
+            subtitle: "How EAST. handles your information.",
             onTap: () async {
               await openPrivacyPolicy();
 
@@ -250,6 +273,31 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NotificationStateIndicator extends StatelessWidget {
+  const _NotificationStateIndicator({required this.isEnabled});
+
+  final bool isEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: isEnabled ? 'Notifications enabled' : 'Notifications disabled',
+      child: ExcludeSemantics(
+        child: Text(
+          isEnabled ? '●' : '○',
+          style: const TextStyle(
+            color: Color(0xFFF4F0E8),
+            fontSize: 23,
+            fontWeight: FontWeight.w300,
+            fontFamily: 'CormorantGaramond',
+            height: 1,
+          ),
+        ),
       ),
     );
   }

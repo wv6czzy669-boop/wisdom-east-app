@@ -8,7 +8,7 @@ class WisdomApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Daily Wisdom: East',
+      title: 'Daily Wisdom: EAST.',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

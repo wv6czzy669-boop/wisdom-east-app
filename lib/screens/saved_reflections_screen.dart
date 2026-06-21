@@ -40,14 +40,14 @@ class SavedReflectionsScreen extends StatelessWidget {
         foregroundColor: const Color(0xFFF4F0E8),
         elevation: 0,
         title: Text(
-          "Saved Reflections",
+          "Kept",
           style: reflectionStyle(24),
         ),
       ),
       body: reflections.isEmpty
           ? Center(
               child: Text(
-                "No wisdom saved yet.",
+                "Nothing kept yet.",
                 style: reflectionStyle(21).copyWith(color: Colors.white54),
               ),
             )

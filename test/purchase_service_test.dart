@@ -174,7 +174,7 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
   final ProductDetails keeperProduct = ProductDetails(
     id: PurchaseService.keeperProductId,
     title: 'Keeper',
-    description: 'Support East',
+    description: 'Support EAST.',
     price: r'$4.99',
     rawPrice: 4.99,
     currencyCode: 'USD',

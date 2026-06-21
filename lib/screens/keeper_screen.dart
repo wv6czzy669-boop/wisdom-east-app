@@ -198,7 +198,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                     ),
                     const SizedBox(height: 11),
                     Text(
-                      "Help keep East alive.",
+                      "Help keep EAST. alive.",
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         13,

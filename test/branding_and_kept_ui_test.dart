@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wisdom_app/app.dart';
+import 'package:wisdom_app/screens/saved_reflections_screen.dart';
+import 'package:wisdom_app/screens/settings_screen.dart';
+
+void main() {
+  testWidgets('application and settings use EAST. branding', (tester) async {
+    await tester.pumpWidget(const WisdomApp());
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.title, 'Daily Wisdom: EAST.');
+
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 550));
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsScreen()),
+    );
+
+    expect(find.text('EAST.'), findsOneWidget);
+    expect(
+      find.text('Unlimited kept reflections and support for EAST.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Kept screen uses the new feature title', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SavedReflectionsScreen(reflections: []),
+      ),
+    );
+
+    expect(find.text('Kept'), findsOneWidget);
+    expect(find.text('Nothing kept yet.'), findsOneWidget);
+  });
+
+  testWidgets('notification visual state is disabled without interaction',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsScreen()),
+    );
+
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('○'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Notifications disabled')),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SettingsScreen(notificationsEnabled: true),
+      ),
+    );
+
+    expect(find.text('●'), findsOneWidget);
+    expect(find.text('○'), findsNothing);
+    expect(
+      find.bySemanticsLabel(RegExp('Notifications enabled')),
+      findsOneWidget,
+    );
+    semantics.dispose();
+  });
+}

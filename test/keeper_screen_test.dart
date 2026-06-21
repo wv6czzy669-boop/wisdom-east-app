@@ -14,7 +14,7 @@ void main() {
       'Keep what stays.',
       'Enter the Circle',
       'Preserve what stays with you.',
-      'Help keep East alive.',
+      'Help keep EAST. alive.',
     ];
 
     for (final line in lockedCopy) {
@@ -46,7 +46,7 @@ void main() {
 
     expect(find.byType(SingleChildScrollView), findsNothing);
     expect(find.text('Keeper'), findsOneWidget);
-    expect(find.text('Help keep East alive.'), findsOneWidget);
+    expect(find.text('Help keep EAST. alive.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
