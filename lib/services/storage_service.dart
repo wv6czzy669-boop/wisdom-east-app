@@ -1,8 +1,32 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/favorite_item.dart';
+import '../models/daily_wisdom_record.dart';
+
+class CorruptDailyWisdomRecordException implements Exception {
+  const CorruptDailyWisdomRecordException();
+}
 
 class StorageService {
+  StorageService({
+    Future<void> Function(SharedPreferences prefs, String key)?
+        obsoleteKeyRemover,
+  }) : _obsoleteKeyRemover = obsoleteKeyRemover;
+
+  static const String _dailyWisdomAccessKey = 'daily_wisdom_access';
+  static const String _legacyDailyWisdomTextKey = 'daily_wisdom_text';
+  static const String _legacyWisdomUnlockTimeKey = 'wisdom_unlock_time_ms';
+  static const String _obsoleteKeeperDailyWisdomKey =
+      'keeper_daily_wisdom_state';
+  static const List<String> _obsoleteAccessKeys = [
+    _legacyDailyWisdomTextKey,
+    _legacyWisdomUnlockTimeKey,
+    _obsoleteKeeperDailyWisdomKey,
+  ];
+
+  final Future<void> Function(SharedPreferences prefs, String key)?
+      _obsoleteKeyRemover;
+
   SharedPreferences? _cachedPrefs;
 
   Future<SharedPreferences> getPrefs() async {
@@ -15,10 +39,13 @@ class StorageService {
 
     final encodedFavorites = favorites.map((item) => item.encode()).toList();
 
-    await prefs.setStringList(
+    final saved = await prefs.setStringList(
       'favorites',
       encodedFavorites,
     );
+    if (!saved) {
+      throw StateError('Saved reflections could not be persisted.');
+    }
   }
 
   Future<List<FavoriteItem>> loadFavorites({
@@ -69,52 +96,61 @@ class StorageService {
     }
   }
 
-  Future<void> saveRewardedWisdom({
-    required String text,
-    required DateTime unlockTime,
+  Future<DailyWisdomRecord?> loadDailyWisdomRecord({
+    required Duration lockDuration,
   }) async {
     final prefs = await getPrefs();
+    final String? encodedRecord;
+    try {
+      encodedRecord = prefs.getString(_dailyWisdomAccessKey);
+    } catch (_) {
+      throw const CorruptDailyWisdomRecordException();
+    }
 
-    await prefs.setString(
-      "daily_wisdom_text",
-      text,
-    );
+    if (encodedRecord != null) {
+      try {
+        final record = DailyWisdomRecord.decode(encodedRecord);
+        await _removeObsoleteAccessStateBestEffort(prefs);
+        return record;
+      } catch (_) {
+        throw const CorruptDailyWisdomRecordException();
+      }
+    }
 
-    await prefs.setInt(
-      "wisdom_unlock_time_ms",
-      unlockTime.millisecondsSinceEpoch,
-    );
+    await _removeObsoleteAccessStateBestEffort(prefs);
+    return null;
   }
 
-  Future<String?> getDailyWisdomText() async {
+  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) async {
     final prefs = await getPrefs();
-    return prefs.getString("daily_wisdom_text");
+    final saved = await prefs.setString(_dailyWisdomAccessKey, record.encode());
+    if (!saved) {
+      throw StateError('Daily wisdom lock could not be persisted.');
+    }
+
+    await _removeObsoleteAccessStateBestEffort(prefs);
   }
 
-  Future<void> saveDailyWisdom({
-    required String text,
-    required DateTime unlockTime,
-  }) async {
-    final prefs = await getPrefs();
-
-    await prefs.setString(
-      "daily_wisdom_text",
-      text,
-    );
-
-    await prefs.setInt(
-      "wisdom_unlock_time_ms",
-      unlockTime.millisecondsSinceEpoch,
-    );
-  }
-
-  Future<int?> getWisdomUnlockTimeMs() async {
-    final prefs = await getPrefs();
-    return prefs.getInt("wisdom_unlock_time_ms");
-  }
-
-  Future<bool> getPremiumStatus() async {
+  Future<bool> getKeeperStatus() async {
     final prefs = await getPrefs();
     return prefs.getBool("is_premium") ?? false;
+  }
+
+  Future<void> _removeObsoleteAccessStateBestEffort(
+    SharedPreferences prefs,
+  ) async {
+    for (final key in _obsoleteAccessKeys) {
+      try {
+        final remover = _obsoleteKeyRemover;
+        if (remover == null) {
+          await prefs.remove(key);
+        } else {
+          await remover(prefs, key);
+        }
+      } catch (_) {
+        // Obsolete access state must never block the authoritative daily
+        // record from loading.
+      }
+    }
   }
 }

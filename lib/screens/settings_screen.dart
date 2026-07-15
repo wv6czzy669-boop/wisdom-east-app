@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../main.dart' show purchaseService;
-import 'premium_screen.dart';
+import '../services/app_services.dart';
+import 'keeper_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _keeperNavigationInProgress = false;
 
   TextStyle eastStyle(
     double size, {
@@ -22,48 +29,38 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget settingsItem({
-    required IconData icon,
     required String title,
     required String subtitle,
     VoidCallback? onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      splashColor: Colors.white10,
-      highlightColor: Colors.white10,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: 17,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              icon,
-              color: Colors.white60,
-              size: 22,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: eastStyle(21),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: eastStyle(
-                      15,
-                      color: Colors.white54,
-                    ),
-                  ),
-                ],
+    return SizedBox(
+      width: double.infinity,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: Colors.white10,
+        highlightColor: Colors.white10,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: 17,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: eastStyle(21),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: eastStyle(
+                  15,
+                  color: const Color(0x91FFFFFF),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -121,7 +118,7 @@ class SettingsScreen extends StatelessWidget {
     final uri = Uri(
       scheme: 'mailto',
       path: 'dailywisdomeast@gmail.com',
-      query: 'subject=East Support',
+      query: 'subject=EAST. Support',
     );
 
     try {
@@ -129,122 +126,142 @@ class SettingsScreen extends StatelessWidget {
     } catch (_) {}
   }
 
+  Future<void> _openKeeper() async {
+    if (_keeperNavigationInProgress || !mounted) return;
+
+    _keeperNavigationInProgress = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const KeeperScreen(),
+        ),
+      );
+    } finally {
+      _keeperNavigationInProgress = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF030303),
+      backgroundColor: const Color(0xFF040404),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF030303),
+        backgroundColor: const Color(0xFF040404),
         foregroundColor: const Color(0xFFF4F0E8),
+        iconTheme: const IconThemeData(
+          color: Color(0xFFF4F0E8),
+          size: 22,
+          weight: 300,
+        ),
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         scrolledUnderElevation: 0,
         elevation: 0,
-        title: Text(
-          "East",
-          style: eastStyle(26),
-        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          24,
-          16,
-          24,
-          36,
-        ),
-        children: [
-          Text(
-            "Daily Wisdom",
-            style: eastStyle(34),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "A quiet space for reflection, stillness, and timeless Eastern wisdom.",
-            style: eastStyle(
-              20,
-              color: Colors.white60,
-            ),
-          ),
-          const SizedBox(height: 34),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.workspace_premium_outlined,
-            title: "Premium",
-            subtitle: "Unlimited reveals, unlimited favorites, and no ads.",
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const PremiumScreen(),
+      body: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              key: const ValueKey('settings-scroll'),
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 36,
                 ),
-              );
-            },
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.restore,
-            title: "Restore Purchases",
-            subtitle: "Restore your Premium access on this device.",
-            onTap: () async {
-              try {
-                await purchaseService.restorePurchases();
-              } catch (_) {}
+                child: Align(
+                  key: const ValueKey('settings-content'),
+                  alignment: Alignment.topCenter,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'EAST.',
+                        textAlign: TextAlign.center,
+                        style: eastStyle(27),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Where silence speaks.',
+                        textAlign: TextAlign.center,
+                        style: eastStyle(
+                          17,
+                          color: const Color(0x91FFFFFF),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Keeper",
+                        subtitle: "Support the circle, keep what stays.",
+                        onTap: _openKeeper,
+                      ),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Restore Purchases",
+                        subtitle: "Restore what belongs with you.",
+                        onTap: () async {
+                          if (purchaseService.isLoading) return;
 
-              if (!context.mounted) return;
-              showInfoDialog(
-                context,
-                "Restore Purchases",
-                purchaseService.isPremium
-                    ? "Your Premium access has been restored."
-                    : "No previous Premium purchase was found.",
-              );
-            },
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.privacy_tip_outlined,
-            title: "Privacy Policy",
-            subtitle: "Required for App Store release.",
-            onTap: () async {
-              await openPrivacyPolicy();
+                          var restoreStarted = false;
+                          try {
+                            restoreStarted =
+                                await purchaseService.restorePurchases();
+                          } catch (_) {}
 
-              if (!context.mounted) return;
-            },
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          settingsItem(
-            icon: Icons.mail_outline,
-            title: "Contact",
-            subtitle: "Support and feedback.",
-            onTap: sendEmail,
-          ),
-          const Divider(
-            color: Colors.white24,
-            thickness: 0.5,
-          ),
-          const SizedBox(height: 34),
-          Center(
-            child: Text(
-              "Version 1.0.0",
-              style: eastStyle(
-                15,
-                color: Colors.white38,
+                          if (!context.mounted) return;
+                          showInfoDialog(
+                            context,
+                            "Restore Purchases",
+                            restoreStarted
+                                ? "Restore request sent. Keeper access will update automatically."
+                                : purchaseService.restoreNeedsRecovery
+                                    ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
+                                    : "Restore is not available right now. Please try again shortly.",
+                          );
+                        },
+                      ),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Privacy Policy",
+                        subtitle: "What stays private.",
+                        onTap: () async {
+                          await openPrivacyPolicy();
+
+                          if (!context.mounted) return;
+                        },
+                      ),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        title: "Reach Out",
+                        subtitle: "For thoughts and questions.",
+                        onTap: sendEmail,
+                      ),
+                      const Divider(
+                        color: Colors.white24,
+                        thickness: 0.5,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

@@ -1,0 +1,98 @@
+import 'package:flutter/material.dart';
+
+import '../models/favorite_item.dart';
+
+class SavedReflectionsScreen extends StatelessWidget {
+  const SavedReflectionsScreen({
+    super.key,
+    required this.reflections,
+  });
+
+  final List<FavoriteItem> reflections;
+
+  TextStyle reflectionStyle(double size) {
+    return TextStyle(
+      color: const Color(0xFFF4F0E8),
+      fontSize: size,
+      fontWeight: FontWeight.w300,
+      fontFamily: 'CormorantGaramond',
+      height: 1.35,
+      letterSpacing: 0.3,
+    );
+  }
+
+  TextStyle dateStyle() {
+    return const TextStyle(
+      color: Color(0x91FFFFFF),
+      fontSize: 15,
+      fontWeight: FontWeight.w300,
+      fontFamily: 'CormorantGaramond',
+      letterSpacing: 0.4,
+    );
+  }
+
+  String displayDate(String storedDate) {
+    final commaIndex = storedDate.lastIndexOf(',');
+    if (commaIndex < 0) return storedDate;
+
+    final possibleYear = storedDate.substring(commaIndex + 1).trim();
+    if (!RegExp(r'^\d{4}$').hasMatch(possibleYear)) return storedDate;
+
+    return storedDate.substring(0, commaIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF040404),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF040404),
+        foregroundColor: const Color(0xFFF4F0E8),
+        iconTheme: const IconThemeData(
+          color: Color(0xFFF4F0E8),
+          size: 22,
+          weight: 300,
+        ),
+        elevation: 0,
+        title: Text(
+          "Kept",
+          style: reflectionStyle(24),
+        ),
+      ),
+      body: reflections.isEmpty
+          ? Center(
+              child: Text(
+                "Nothing kept yet.",
+                style: reflectionStyle(21).copyWith(
+                  color: const Color(0x91FFFFFF),
+                ),
+              ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
+              itemCount: reflections.length,
+              separatorBuilder: (context, index) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Divider(
+                    color: Colors.white24,
+                    thickness: 0.5,
+                  ),
+                );
+              },
+              itemBuilder: (context, index) {
+                final item = reflections[index];
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(displayDate(item.date), style: dateStyle()),
+                    const SizedBox(height: 8),
+                    Text(item.text, style: reflectionStyle(24)),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+}

@@ -5,14 +5,10 @@ class RitualFlowController {
 
   bool isHeartScreen(int screenStep) => screenStep == 2;
 
-  bool isRevealScreen(int screenStep) => screenStep == 3;
-
   bool isWisdomRevealed(int screenStep) => screenStep == 4;
 
-  bool isPostAdBlackScreen(int screenStep) => screenStep == 5;
-
-  Duration transitionFadeOutDuration(int nextStep) =>
-      Duration(milliseconds: nextStep == 3 ? 980 : 820);
+  Duration transitionFadeOutDuration(int _) =>
+      const Duration(milliseconds: 820);
 
   Duration transitionSettleDuration(int nextStep) =>
       Duration(milliseconds: nextStep == 1 ? 820 : 560);
