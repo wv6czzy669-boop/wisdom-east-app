@@ -52,18 +52,25 @@ class PendingDailyWisdomReveal {
       });
 
   static PendingDailyWisdomReveal decode(String value) {
-    final data = jsonDecode(value) as Map<String, dynamic>;
-    final version = data['schemaVersion'] as int;
-    final text = data['text'] as String;
-    final preparedAtMs = data['preparedAtMs'] as int;
+    final decoded = jsonDecode(value);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Invalid pending daily wisdom reveal.');
+    }
+
+    final version = _readInt(decoded, 'schemaVersion');
+    final text = _readString(decoded, 'text');
+    final preparedAtMs = _readInt(decoded, 'preparedAtMs');
     if (preparedAtMs < 0) {
       throw const FormatException('Invalid pending reveal timestamp.');
     }
     final phase = PendingDailyWisdomRevealPhase.decode(
-      data['phase'] as String? ?? PendingDailyWisdomRevealPhase.prepared.value,
+      _readString(decoded, 'phase'),
     );
-    final confirmedRevealBoundaryMs = data['confirmedRevealBoundaryMs'] as int?;
-    if (data.containsKey('reservedBoundaryMs')) {
+    final confirmedRevealBoundaryMs = _readOptionalInt(
+      decoded,
+      'confirmedRevealBoundaryMs',
+    );
+    if (decoded.containsKey('reservedBoundaryMs')) {
       throw const FormatException(
           'Reserved reveal boundaries are unsupported.');
     }
@@ -72,8 +79,8 @@ class PendingDailyWisdomReveal {
     }
     final confirmedRevealBoundary = confirmedRevealBoundaryMs == null
         ? null
-        : DateTime.fromMillisecondsSinceEpoch(confirmedRevealBoundaryMs);
-    final preparedAt = DateTime.fromMillisecondsSinceEpoch(preparedAtMs);
+        : _readDate(confirmedRevealBoundaryMs);
+    final preparedAt = _readDate(preparedAtMs);
 
     if (version != schemaVersion) {
       throw const FormatException('Invalid pending daily wisdom reveal.');
@@ -138,6 +145,34 @@ class PendingDailyWisdomReveal {
       throw const FormatException(
         'Confirmed reveal boundary cannot be before preparation.',
       );
+    }
+  }
+
+  static String _readString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value is String) return value;
+    throw const FormatException('Invalid pending daily wisdom reveal.');
+  }
+
+  static int _readInt(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if (value is int) return value;
+    throw const FormatException('Invalid pending daily wisdom reveal.');
+  }
+
+  static int? _readOptionalInt(Map<String, dynamic> data, String key) {
+    if (!data.containsKey(key)) return null;
+
+    final value = data[key];
+    if (value is int) return value;
+    throw const FormatException('Invalid pending daily wisdom reveal.');
+  }
+
+  static DateTime _readDate(int millisecondsSinceEpoch) {
+    try {
+      return DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch);
+    } catch (_) {
+      throw const FormatException('Invalid pending daily wisdom reveal.');
     }
   }
 }

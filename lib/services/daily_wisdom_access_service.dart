@@ -49,7 +49,7 @@ class DailyWisdomAccessService {
   DailyWisdomAccessService({
     required StorageService storageService,
     WisdomClock? clock,
-    this.lockDuration = const Duration(hours: 24),
+    this.lockDuration = DailyWisdomRecord.lockDuration,
     this.operationTimeout = const Duration(seconds: 8),
   })  : _storageService = storageService,
         _clock = clock ?? DateTime.now;
@@ -119,7 +119,7 @@ class DailyWisdomAccessService {
   Future<DailyWisdomPreparedReveal> _prepareReveal(
     WisdomSelector selectWisdom,
   ) async {
-    final record = await _loadRecordFailClosed();
+    final record = await _loadRecordRecoveringCorruption();
     final now = _clock();
 
     if (_isActive(record, now)) {
@@ -159,7 +159,7 @@ class DailyWisdomAccessService {
   }
 
   Future<DailyWisdomAccess?> recoverIncompleteReveal() async {
-    final record = await _loadRecordFailClosed();
+    final record = await _loadRecordRecoveringCorruption();
     final now = _clock();
 
     if (_isActive(record, now)) {
@@ -215,7 +215,7 @@ class DailyWisdomAccessService {
     required String text,
     required DateTime revealBoundary,
   }) async {
-    final record = await _loadRecordFailClosed();
+    final record = await _loadRecordRecoveringCorruption();
     final now = _clock();
 
     if (_isActive(record, now)) {
@@ -251,7 +251,33 @@ class DailyWisdomAccessService {
       );
     }
 
-    final unlockAt = confirmedBoundary.add(lockDuration);
+    return _writePendingRevealAsDaily(
+      pendingReveal: pendingReveal,
+      confirmedBoundary: confirmedBoundary,
+    );
+  }
+
+  Future<DailyWisdomAccess> _writePendingRevealAsDaily({
+    required PendingDailyWisdomReveal pendingReveal,
+    required DateTime confirmedBoundary,
+  }) async {
+    final nextRecord = await _writePendingRevealRecordAsDaily(
+      pendingReveal: pendingReveal,
+      confirmedBoundary: confirmedBoundary,
+    );
+
+    return DailyWisdomAccess(
+      text: nextRecord.text,
+      isNew: true,
+      unlockAt: nextRecord.unlockAt,
+    );
+  }
+
+  Future<DailyWisdomRecord> _writePendingRevealRecordAsDaily({
+    required PendingDailyWisdomReveal pendingReveal,
+    required DateTime confirmedBoundary,
+  }) async {
+    final unlockAt = confirmedBoundary.add(DailyWisdomRecord.lockDuration);
     final nextRecord = DailyWisdomRecord(
       text: pendingReveal.text,
       revealedAt: confirmedBoundary,
@@ -261,11 +287,7 @@ class DailyWisdomAccessService {
     await _storageService.saveDailyWisdomRecord(nextRecord);
     await _clearPendingBestEffort();
 
-    return DailyWisdomAccess(
-      text: nextRecord.text,
-      isNew: true,
-      unlockAt: unlockAt,
-    );
+    return nextRecord;
   }
 
   Future<DailyWisdomAccess> commitPreparedRevealAt(DateTime revealedAt) async {
@@ -297,7 +319,7 @@ class DailyWisdomAccessService {
   Future<DailyWisdomStatus> status() async {
     await recoverIncompleteReveal();
 
-    final record = await _loadRecordFailClosed();
+    final record = await _loadRecordRecoveringCorruption();
     if (record == null) {
       return const DailyWisdomStatus(isReady: true);
     }
@@ -361,21 +383,42 @@ class DailyWisdomAccessService {
     }
   }
 
-  Future<DailyWisdomRecord?> _loadRecordFailClosed() async {
+  Future<DailyWisdomRecord?> _loadRecordRecoveringCorruption() async {
     try {
-      return await _storageService.loadDailyWisdomRecord(
-        lockDuration: lockDuration,
-      );
+      return await _loadRecord();
     } on CorruptDailyWisdomRecordException {
-      final recoveredAt = _clock();
-      final recoveryRecord = DailyWisdomRecord(
-        text: corruptRecordRecoveryText,
-        revealedAt: recoveredAt,
-        unlockAt: recoveredAt.add(lockDuration),
-      );
+      final recoveredRecord = await _recoverRecordFromCorruptDailyRecord();
+      if (recoveredRecord != null) return recoveredRecord;
 
-      await _storageService.saveDailyWisdomRecord(recoveryRecord);
-      return recoveryRecord;
+      await _clearCorruptDailyRecordBestEffort();
+      return null;
+    }
+  }
+
+  Future<DailyWisdomRecord?> _loadRecord() async {
+    return _storageService.loadDailyWisdomRecord(
+      lockDuration: lockDuration,
+    );
+  }
+
+  Future<DailyWisdomRecord?> _recoverRecordFromCorruptDailyRecord() async {
+    final pendingReveal = await _storageService.loadPendingDailyWisdomReveal();
+    if (pendingReveal != null && pendingReveal.isRevealedPendingCommit) {
+      await _clearCorruptDailyRecordBestEffort();
+      return _writePendingRevealRecordAsDaily(
+        pendingReveal: pendingReveal,
+        confirmedBoundary: pendingReveal.confirmedRevealBoundary!,
+      );
+    }
+
+    return null;
+  }
+
+  Future<void> _clearCorruptDailyRecordBestEffort() async {
+    try {
+      await _storageService.clearDailyWisdomRecordBestEffort();
+    } catch (_) {
+      // Corrupt authoritative state must not invent a lock or block launch.
     }
   }
 }

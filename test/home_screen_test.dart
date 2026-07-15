@@ -694,7 +694,7 @@ void main() {
     expect(prefs.containsKey('keeper_daily_wisdom_state'), isFalse);
   });
 
-  testWidgets('corrupt locked state falls back to conservative countdown',
+  testWidgets('corrupt locked state returns ready without synthetic wisdom',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_access': '{',
@@ -704,21 +704,17 @@ void main() {
       const MaterialApp(home: HomeScreen()),
     );
     await _finishOpeningIntro(tester);
-    await _openLockedCountdown(tester);
+    await _advanceFromLaunchToPause(tester);
 
-    final countdown = tester.widget<Text>(
+    expect(
       find.textContaining('Return when the silence opens again.'),
+      findsNothing,
     );
-    final countdownLines = countdown.data!.split('\n');
-    expect(countdownLines, hasLength(2));
-    expect(countdownLines.first, 'Return when the silence opens again.');
-    expect(countdownLines.last, matches(RegExp(r'^\d+h \d+m$')));
     expect(
       find.text('Silence is still available.'),
       findsNothing,
     );
-    expect(find.text('Pause.'), findsNothing);
-    expect(find.text('Feel.'), findsNothing);
+    expect(find.text('Pause.'), findsOneWidget);
     expect(find.text('Ask from your heart.'), findsNothing);
   });
 
@@ -1199,13 +1195,6 @@ Future<void> _advanceFromLaunchToPause(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 850));
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 850));
-}
-
-Future<void> _openLockedCountdown(WidgetTester tester) async {
-  await _tapCenter(tester);
-  await tester.pump(const Duration(milliseconds: 850));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.pump(const Duration(milliseconds: 600));
 }
 
 Future<void> _openExistingWisdom(WidgetTester tester) async {

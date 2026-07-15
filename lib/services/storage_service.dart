@@ -61,18 +61,22 @@ class StorageService {
   }) async {
     final prefs = await getPrefs();
 
-    final saved = prefs.getStringList('favorites') ?? [];
+    final List<String> saved;
+    try {
+      saved = prefs.getStringList('favorites') ?? [];
+    } catch (_) {
+      return [];
+    }
 
     final List<FavoriteItem> validFavorites = [];
 
     for (final item in saved) {
       try {
-        validFavorites.add(
-          FavoriteItem.decode(
-            item,
-            fallbackDate: fallbackDate,
-          ),
+        final favorite = FavoriteItem.decode(
+          item,
+          fallbackDate: fallbackDate,
         );
+        validFavorites.add(favorite);
       } catch (_) {
         continue;
       }
@@ -87,7 +91,12 @@ class StorageService {
   }) async {
     final prefs = await getPrefs();
 
-    final archive = prefs.getStringList("daily_wisdom_archive") ?? [];
+    late final List<String> archive;
+    try {
+      archive = prefs.getStringList("daily_wisdom_archive") ?? [];
+    } catch (_) {
+      archive = [];
+    }
     final entry = "$today|||$text";
 
     final alreadySavedToday = archive.any(
@@ -97,10 +106,13 @@ class StorageService {
     if (!alreadySavedToday) {
       archive.insert(0, entry);
 
-      await prefs.setStringList(
+      final saved = await prefs.setStringList(
         "daily_wisdom_archive",
         archive.take(90).toList(),
       );
+      if (!saved) {
+        throw StateError('Daily wisdom archive could not be persisted.');
+      }
     }
   }
 
@@ -137,6 +149,15 @@ class StorageService {
     }
 
     await _removeObsoleteAccessStateBestEffort(prefs);
+  }
+
+  Future<void> clearDailyWisdomRecordBestEffort() async {
+    final prefs = await getPrefs();
+    try {
+      await prefs.remove(_dailyWisdomAccessKey);
+    } catch (_) {
+      // Corrupt authoritative state should not crash recovery.
+    }
   }
 
   Future<PendingDailyWisdomReveal?> loadPendingDailyWisdomReveal() async {
@@ -177,8 +198,9 @@ class StorageService {
     final prefs = await getPrefs();
     final remover = _pendingRevealRemover;
     if (remover == null) {
+      if (!prefs.containsKey(_pendingDailyWisdomRevealKey)) return;
       final removed = await prefs.remove(_pendingDailyWisdomRevealKey);
-      if (!removed) {
+      if (!removed && prefs.containsKey(_pendingDailyWisdomRevealKey)) {
         throw StateError('Pending daily wisdom reveal could not be cleared.');
       }
     } else {
@@ -188,7 +210,11 @@ class StorageService {
 
   Future<bool> getKeeperStatus() async {
     final prefs = await getPrefs();
-    return prefs.getBool("is_premium") ?? false;
+    try {
+      return prefs.getBool("is_premium") ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _clearPendingDailyWisdomRevealBestEffort(

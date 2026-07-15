@@ -10,13 +10,27 @@ class FavoriteItem {
   String encode() => "$date|||$text";
 
   static FavoriteItem decode(String value, {required String fallbackDate}) {
+    if (value.trim().isEmpty) {
+      throw const FormatException('Saved reflection cannot be empty.');
+    }
+
     final parts = value.split("|||");
 
     if (parts.length >= 2) {
+      final date = parts.first;
+      final text = parts.sublist(1).join("|||");
+      if (date.trim().isEmpty || text.trim().isEmpty) {
+        throw const FormatException('Invalid saved reflection.');
+      }
+
       return FavoriteItem(
-        date: parts.first,
-        text: parts.sublist(1).join("|||"),
+        date: date,
+        text: text,
       );
+    }
+
+    if (fallbackDate.trim().isEmpty) {
+      throw const FormatException('Invalid saved reflection fallback date.');
     }
 
     return FavoriteItem(

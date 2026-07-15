@@ -97,16 +97,22 @@ void main() {
 
   final corruptRecords = <String, Object>{
     'malformed JSON': '{',
+    'non-map JSON': '[]',
     'missing fields': '{"text":"Incomplete wisdom"}',
     'invalid timestamp type':
         '{"text":"Invalid wisdom","revealedAtMs":"now","unlockAtMs":2}',
     'invalid timestamp order':
         '{"text":"Invalid wisdom","revealedAtMs":2,"unlockAtMs":1}',
+    'invalid short interval':
+        '{"text":"Invalid wisdom","revealedAtMs":1000,"unlockAtMs":301000}',
+    'invalid long interval':
+        '{"text":"Invalid wisdom","revealedAtMs":1000,"unlockAtMs":90001000}',
+    'empty text': '{"text":"   ","revealedAtMs":1000,"unlockAtMs":86401000}',
     'invalid stored value type': 42,
   };
 
   for (final corruptRecord in corruptRecords.entries) {
-    test('corrupt daily record fails closed: ${corruptRecord.key}', () async {
+    test('corrupt daily record returns ready: ${corruptRecord.key}', () async {
       SharedPreferences.setMockInitialValues({
         'daily_wisdom_access': corruptRecord.value,
       });
@@ -117,6 +123,7 @@ void main() {
       );
       var selected = false;
 
+      final status = await service.status();
       final result = await service.reveal(
         selectWisdom: () {
           selected = true;
@@ -127,21 +134,279 @@ void main() {
         lockDuration: const Duration(hours: 24),
       );
 
-      expect(selected, isFalse);
-      expect(result.isNew, isFalse);
-      expect(
-        result.text,
-        DailyWisdomAccessService.corruptRecordRecoveryText,
-      );
-      expect(result.unlockAt, now.add(const Duration(hours: 24)));
+      expect(selected, isTrue);
+      expect(status.isReady, isTrue);
+      expect(result.text, 'New wisdom');
+      expect(result.isNew, isTrue);
       expect(recovered, isNotNull);
-      expect(recovered!.text, result.text);
-      expect(
-        recovered.unlockAt.millisecondsSinceEpoch,
-        result.unlockAt!.millisecondsSinceEpoch,
-      );
+      expect(recovered!.text, 'New wisdom');
     });
   }
+
+  test('corrupt daily relaunch remains ready without recovery window',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': '{',
+    });
+    storage = StorageService();
+    service = DailyWisdomAccessService(
+      storageService: storage,
+      clock: () => now,
+    );
+
+    final first = await service.status();
+    final recreated = DailyWisdomAccessService(
+      storageService: StorageService(),
+      clock: () => now.add(const Duration(minutes: 5)),
+    );
+    final relaunched = await recreated.status();
+    final repeated = await service.status();
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(first.isReady, isTrue);
+    expect(relaunched.isReady, isTrue);
+    expect(repeated.isReady, isTrue);
+    expect(prefs.containsKey('daily_wisdom_access'), isFalse);
+  });
+
+  test('corrupt daily record preserves prepared pending without lock',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': '{',
+      'pending_daily_wisdom_reveal': PendingDailyWisdomReveal(
+        text: 'Prepared interrupted wisdom',
+        preparedAt: now,
+      ).encode(),
+    });
+    storage = StorageService();
+    service = DailyWisdomAccessService(
+      storageService: storage,
+      clock: () => now,
+    );
+
+    final status = await service.status();
+    final prepared = await service.prepareReveal(
+      selectWisdom: () => 'Different wisdom',
+    );
+    final pending = await storage.loadPendingDailyWisdomReveal();
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(status.isReady, isTrue);
+    expect(prepared.text, 'Prepared interrupted wisdom');
+    expect(prepared.hasAuthoritativeRecord, isFalse);
+    expect(pending, isNotNull);
+    expect(pending!.text, 'Prepared interrupted wisdom');
+    expect(pending.phase, PendingDailyWisdomRevealPhase.prepared);
+    expect(prefs.containsKey('daily_wisdom_access'), isFalse);
+  });
+
+  test('corrupt daily cleanup failure does not fabricate lock or wisdom',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': '{',
+    });
+    storage = _FailingDailyClearStorageService();
+    service = DailyWisdomAccessService(
+      storageService: storage,
+      clock: () => now,
+    );
+
+    final status = await service.status();
+    final result = await service.reveal(
+      selectWisdom: () => 'Wisdom after cleanup failure',
+    );
+    final recovered = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+
+    expect(status.isReady, isTrue);
+    expect(result.text, 'Wisdom after cleanup failure');
+    expect(result.isNew, isTrue);
+    expect(recovered, isNotNull);
+    expect(recovered!.text, 'Wisdom after cleanup failure');
+  });
+
+  test('corrupt daily record recovers from durable revealed pending commit',
+      () async {
+    final revealAt = now.subtract(const Duration(minutes: 5));
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': '{',
+      'pending_daily_wisdom_reveal': PendingDailyWisdomReveal(
+        text: 'Interrupted committed wisdom',
+        preparedAt: revealAt.subtract(const Duration(seconds: 2)),
+        confirmedRevealBoundary: revealAt,
+        phase: PendingDailyWisdomRevealPhase.revealedPendingCommit,
+      ).encode(),
+    });
+    storage = StorageService();
+    service = DailyWisdomAccessService(
+      storageService: storage,
+      clock: () => now,
+    );
+
+    final status = await service.status();
+    final recovered = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+    final pending = await storage.loadPendingDailyWisdomReveal();
+
+    expect(status.isReady, isFalse);
+    expect(recovered, isNotNull);
+    expect(recovered!.text, 'Interrupted committed wisdom');
+    expect(
+      recovered.revealedAt.millisecondsSinceEpoch,
+      revealAt.millisecondsSinceEpoch,
+    );
+    expect(
+      recovered.unlockAt.millisecondsSinceEpoch,
+      revealAt.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+    );
+    expect(pending, isNull);
+  });
+
+  test('daily record decoder enforces exact 24-hour records', () {
+    final hugeTimestamp = 1 << 62;
+    final revealedAt = now;
+
+    String encodeRecord({
+      required String text,
+      required DateTime revealedAt,
+      required DateTime unlockAt,
+    }) {
+      return jsonEncode({
+        'text': text,
+        'revealedAtMs': revealedAt.millisecondsSinceEpoch,
+        'unlockAtMs': unlockAt.millisecondsSinceEpoch,
+      });
+    }
+
+    final exact = DailyWisdomRecord.decode(
+      encodeRecord(
+        text: 'Exact wisdom',
+        revealedAt: revealedAt,
+        unlockAt: revealedAt.add(const Duration(hours: 24)),
+      ),
+    );
+
+    expect(exact.text, 'Exact wisdom');
+    expect(
+      exact.unlockAt.difference(exact.revealedAt),
+      const Duration(hours: 24),
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        encodeRecord(
+          text: 'Too short wisdom',
+          revealedAt: revealedAt,
+          unlockAt: revealedAt.add(const Duration(minutes: 5)),
+        ),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        encodeRecord(
+          text: 'Twenty-three hour wisdom',
+          revealedAt: revealedAt,
+          unlockAt: revealedAt.add(const Duration(hours: 23)),
+        ),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        encodeRecord(
+          text: 'Twenty-five hour wisdom',
+          revealedAt: revealedAt,
+          unlockAt: revealedAt.add(const Duration(hours: 25)),
+        ),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        encodeRecord(
+          text: 'Ten-year wisdom',
+          revealedAt: revealedAt,
+          unlockAt: DateTime.utc(2036, 6, 20, 12),
+        ),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        encodeRecord(
+          text: 'Equal boundary wisdom',
+          revealedAt: revealedAt,
+          unlockAt: revealedAt,
+        ),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode('[]'),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 7,
+          'revealedAtMs': revealedAt.millisecondsSinceEpoch,
+          'unlockAtMs':
+              revealedAt.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        }),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Missing unlock wisdom',
+          'revealedAtMs': revealedAt.millisecondsSinceEpoch,
+        }),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Negative wisdom',
+          'revealedAtMs': -1,
+          'unlockAtMs': const Duration(hours: 24).inMilliseconds - 1,
+        }),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Overflow wisdom',
+          'revealedAtMs': hugeTimestamp,
+          'unlockAtMs': hugeTimestamp + 1,
+        }),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Underflow wisdom',
+          'revealedAtMs': -hugeTimestamp,
+          'unlockAtMs': -hugeTimestamp + 1,
+        }),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('wrong-type Keeper preference fails closed as non-Keeper', () async {
+    SharedPreferences.setMockInitialValues({'is_premium': 'true'});
+    storage = StorageService();
+
+    final keeper = await storage.getKeeperStatus();
+
+    expect(keeper, isFalse);
+  });
 
   test('rolling daily access remains locked inside 24 hours', () async {
     var selections = 0;
@@ -275,6 +540,7 @@ void main() {
     final preparedAt = now.millisecondsSinceEpoch;
     final confirmedAt =
         now.add(const Duration(seconds: 1)).millisecondsSinceEpoch;
+    final hugeTimestamp = 1 << 62;
 
     String encodePending(Map<String, Object?> fields) => jsonEncode({
           'schemaVersion': 1,
@@ -331,6 +597,32 @@ void main() {
     expect(
       () => PendingDailyWisdomReveal.decode(
         encodePending({'reservedBoundaryMs': confirmedAt}),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => PendingDailyWisdomReveal.decode('[]'),
+      throwsFormatException,
+    );
+    expect(
+      () => PendingDailyWisdomReveal.decode(
+        jsonEncode({
+          'schemaVersion': 1,
+          'text': 'Missing phase wisdom',
+          'preparedAtMs': preparedAt,
+        }),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => PendingDailyWisdomReveal.decode(
+        encodePending({'confirmedRevealBoundaryMs': 'later'}),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => PendingDailyWisdomReveal.decode(
+        encodePending({'preparedAtMs': hugeTimestamp}),
       ),
       throwsFormatException,
     );
@@ -1008,6 +1300,13 @@ class _FailingDailyWriteStorageService extends StorageService {
   @override
   Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) async {
     throw StateError('Simulated daily wisdom persistence failure.');
+  }
+}
+
+class _FailingDailyClearStorageService extends StorageService {
+  @override
+  Future<void> clearDailyWisdomRecordBestEffort() async {
+    throw StateError('Simulated daily wisdom cleanup failure.');
   }
 }
 

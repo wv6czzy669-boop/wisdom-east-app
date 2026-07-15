@@ -160,6 +160,75 @@ void main() {
 
     expect(originalItems.map((item) => item.text), ['Existing reflection']);
   });
+
+  test('corrupted persisted reflections are skipped without deletion',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'favorites': [
+        'June 20, 2026|||Valid reflection',
+        '',
+        'June 21, 2026|||',
+        'June 22, 2026|||Valid reflection',
+        'Legacy valid reflection',
+      ],
+    });
+    service = SavedReflectionsService(storageService: StorageService());
+
+    final loaded = await service.load(fallbackDate: 'June 20, 2026');
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(
+      loaded.map((item) => item.text),
+      ['Valid reflection', 'Valid reflection', 'Legacy valid reflection'],
+    );
+    expect(prefs.getStringList('favorites'), hasLength(5));
+  });
+
+  test('same text reflections are preserved as separate entries', () async {
+    SharedPreferences.setMockInitialValues({
+      'favorites': [
+        'June 20, 2026|||Repeated reflection',
+        'June 20, 2026|||Repeated reflection',
+        'June 21, 2026|||Repeated reflection',
+      ],
+    });
+    service = SavedReflectionsService(storageService: StorageService());
+
+    final loaded = await service.load(fallbackDate: 'June 20, 2026');
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(loaded, hasLength(3));
+    expect(
+      loaded.map((item) => item.date),
+      ['June 20, 2026', 'June 20, 2026', 'June 21, 2026'],
+    );
+    expect(
+      loaded.map((item) => item.text),
+      [
+        'Repeated reflection',
+        'Repeated reflection',
+        'Repeated reflection',
+      ],
+    );
+    expect(prefs.getStringList('favorites'), hasLength(3));
+  });
+
+  test('delimiter inside reflection text remains decodable', () async {
+    SharedPreferences.setMockInitialValues({
+      'favorites': [
+        'June 20, 2026|||A reflection ||| with delimiter',
+        '   ',
+      ],
+    });
+    service = SavedReflectionsService(storageService: StorageService());
+
+    final loaded = await service.load(fallbackDate: 'June 20, 2026');
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(loaded, hasLength(1));
+    expect(loaded.single.text, 'A reflection ||| with delimiter');
+    expect(prefs.getStringList('favorites'), hasLength(2));
+  });
 }
 
 class _FailingFavoritesStorageService extends StorageService {
