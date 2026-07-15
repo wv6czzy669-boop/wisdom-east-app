@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
+import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
 import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
@@ -96,7 +99,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
   });
 
-  testWidgets('Keeper reveal persisted before pause remains the same wisdom',
+  testWidgets('Ask-fade interruption keeps pending wisdom without daily lock',
       (tester) async {
     SharedPreferences.setMockInitialValues({'is_premium': true});
 
@@ -109,31 +112,407 @@ void main() {
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 20));
 
-    final persistedBeforePause = await StorageService().loadDailyWisdomRecord(
+    final storage = StorageService();
+    final pendingBeforePause = await storage.loadPendingDailyWisdomReveal();
+    final persistedBeforePause = await storage.loadDailyWisdomRecord(
       lockDuration: const Duration(hours: 24),
     );
-    expect(persistedBeforePause, isNotNull);
-    final selectedWisdom = persistedBeforePause!.text;
+    expect(pendingBeforePause, isNotNull);
+    expect(persistedBeforePause, isNull);
+    final selectedWisdom = pendingBeforePause!.text;
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump(const Duration(milliseconds: 50));
 
+    final persistedAfterResumeBeforeReveal =
+        await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+    expect(persistedAfterResumeBeforeReveal, isNull);
+
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
 
     expect(find.text(selectedWisdom), findsOneWidget);
     expect(find.text('Ask from your heart.'), findsNothing);
 
-    final persistedAfterResume = await StorageService().loadDailyWisdomRecord(
+    final persistedAfterResume = await storage.loadDailyWisdomRecord(
       lockDuration: const Duration(hours: 24),
     );
     expect(persistedAfterResume!.text, selectedWisdom);
+    expect(await storage.loadPendingDailyWisdomReveal(), isNull);
 
     await tester.pump(const Duration(milliseconds: 950));
     await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets(
+      'black-silence interruption keeps pending wisdom without daily lock',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen()),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+
+    final storage = StorageService();
+    final pendingDuringBlackSilence =
+        await storage.loadPendingDailyWisdomReveal();
+    final persistedDuringBlackSilence = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(pendingDuringBlackSilence, isNotNull);
+    expect(persistedDuringBlackSilence, isNull);
+    final selectedWisdom = pendingDuringBlackSilence!.text;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      ),
+      isNull,
+    );
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+
+    final committed = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+
+    expect(committed, isNotNull);
+    expect(committed!.text, selectedWisdom);
+    expect(find.text(selectedWisdom), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('final Ask tap fades immediately while pending save is delayed',
+      (tester) async {
+    final storage = _DelayedPendingStorageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          storageService: storage,
+          dailyWisdomOperationTimeout: const Duration(seconds: 5),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    final askTextFinder = find.text('Ask from your heart.');
+    expect(askTextFinder, findsOneWidget);
+
+    await _tapCenter(tester);
+    await tester.pump();
+    expect(storage.pendingSaveStarted, isTrue);
+    expect(_askFadeValue(tester), 1.0);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(askTextFinder, findsOneWidget);
+    expect(_askFadeValue(tester), lessThan(1.0));
+    expect(_askFadeValue(tester), greaterThan(0.0));
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(
+      await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      ),
+      isNull,
+    );
+
+    storage.releasePendingSave();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 949));
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 549));
+    final pendingBeforeReveal = await storage.loadPendingDailyWisdomReveal();
+    expect(pendingBeforeReveal, isNotNull);
+    expect(
+      pendingBeforeReveal!.phase,
+      PendingDailyWisdomRevealPhase.prepared,
+    );
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('never-completing prepare times out to a retryable Ask state',
+      (tester) async {
+    final storage = _HangingPendingStorageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          storageService: storage,
+          dailyWisdomOperationTimeout: const Duration(milliseconds: 100),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(_askFadeValue(tester), lessThan(1.0));
+    expect(_askFadeValue(tester), greaterThan(0.0));
+
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 550));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 101));
+
+    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(
+      await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      ),
+      isNull,
+    );
+
+    await _tapCenter(tester);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(_askFadeValue(tester), lessThan(1.0));
+    expect(_askFadeValue(tester), greaterThan(0.0));
+
+    await tester.pump(const Duration(milliseconds: 2000));
+  });
+
+  testWidgets('commit timeout keeps revealed wisdom unsaved and retryable',
+      (tester) async {
+    final storage = _HangingDailyWriteStorageService();
+    final revealBoundary = DateTime.utc(2026, 6, 20, 12);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          storageService: storage,
+          clock: () => revealBoundary,
+          dailyWisdomOperationTimeout: const Duration(milliseconds: 100),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
+    expect(storage.dailyWriteStarted, isTrue);
+    await tester.pump(const Duration(milliseconds: 101));
+
+    expect(_keptGuard(tester).ignoring, isTrue);
+    expect(
+      await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      ),
+      isNull,
+    );
+    final pending = await storage.loadPendingDailyWisdomReveal();
+    expect(pending, isNotNull);
+    expect(pending!.phase, PendingDailyWisdomRevealPhase.revealedPendingCommit);
+    expect(
+      pending.confirmedRevealBoundary!.millisecondsSinceEpoch,
+      revealBoundary.millisecondsSinceEpoch,
+    );
+  });
+
+  testWidgets('event-loop delayed reveal uses actual callback clock time',
+      (tester) async {
+    final storage = StorageService();
+    var clockNow = DateTime.utc(2026, 6, 20, 12);
+    final delayedCallbackTime = clockNow.add(const Duration(milliseconds: 37));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          storageService: storage,
+          clock: () => clockNow,
+          dailyWisdomOperationTimeout: const Duration(seconds: 5),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
+
+    clockNow = delayedCallbackTime;
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
+    final persisted = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+    expect(persisted, isNotNull);
+    expect(
+      persisted!.revealedAt.millisecondsSinceEpoch,
+      delayedCallbackTime.millisecondsSinceEpoch,
+    );
+
+    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets(
+      'slow authoritative write does not delay reveal animation but gates save',
+      (tester) async {
+    final storage = _DelayedDailyWriteStorageService();
+    final revealBoundary = DateTime.utc(2026, 6, 20, 12, 30);
+    final expectedBoundary = revealBoundary;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          storageService: storage,
+          clock: () => revealBoundary,
+          dailyWisdomOperationTimeout: const Duration(seconds: 5),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
+    expect(storage.dailyWriteStarted, isTrue);
+    expect(storage.attemptedRecord, isNotNull);
+    expect(
+      storage.attemptedRecord!.revealedAt.millisecondsSinceEpoch,
+      expectedBoundary.millisecondsSinceEpoch,
+    );
+    expect(_keptGuard(tester).ignoring, isTrue);
+    expect(
+      await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      ),
+      isNull,
+    );
+
+    await tester.pump(const Duration(milliseconds: 600));
+    final revealFade = tester.widget<FadeTransition>(
+      find.byKey(const ValueKey('wisdom-reveal-fade')),
+    );
+    expect(revealFade.opacity.value, greaterThan(0.0));
+    expect(_keptGuard(tester).ignoring, isTrue);
+
+    storage.releaseDailyWrite();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump();
+    expect(_keptGuard(tester).ignoring, isTrue);
+    await tester.pump(const Duration(milliseconds: 1000));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2000));
+
+    final persisted = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+    expect(persisted, isNotNull);
+    expect(
+      persisted!.revealedAt.millisecondsSinceEpoch,
+      expectedBoundary.millisecondsSinceEpoch,
+    );
+    expect(_keptGuard(tester).ignoring, isFalse);
+  });
+
+  testWidgets('retry after failed finalization uses original reveal boundary',
+      (tester) async {
+    final storage = _FailingFirstBoundaryMarkStorageService();
+    final revealBoundary = DateTime.utc(2026, 6, 20, 14, 45);
+    final expectedBoundary = revealBoundary;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          storageService: storage,
+          clock: () => revealBoundary,
+          dailyWisdomOperationTimeout: const Duration(seconds: 5),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
+    expect(storage.failedBoundaryMarkOnce, isTrue);
+    expect(_keptGuard(tester).ignoring, isTrue);
+    expect(
+      await storage.loadDailyWisdomRecord(
+        lockDuration: const Duration(hours: 24),
+      ),
+      isNull,
+    );
+    final pendingBeforeRetry = await storage.loadPendingDailyWisdomReveal();
+    expect(pendingBeforeRetry, isNotNull);
+    expect(
+      pendingBeforeRetry!.phase,
+      PendingDailyWisdomRevealPhase.prepared,
+    );
+    expect(pendingBeforeRetry.confirmedRevealBoundary, isNull);
+
+    await _tapCenter(tester);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final persisted = await storage.loadDailyWisdomRecord(
+      lockDuration: const Duration(hours: 24),
+    );
+    expect(persisted, isNotNull);
+    expect(
+      persisted!.revealedAt.millisecondsSinceEpoch,
+      expectedBoundary.millisecondsSinceEpoch,
+    );
+    expect(
+      persisted.unlockAt.millisecondsSinceEpoch,
+      expectedBoundary.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+    );
   });
 
   testWidgets('active lock reopens to the existing wisdom without revealing',
@@ -455,6 +834,7 @@ void main() {
     expect(haptics, hasLength(4));
 
     await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
     expect(haptics, hasLength(5));
     expect(haptics.last, 'HapticFeedbackType.selectionClick');
 
@@ -601,9 +981,12 @@ void main() {
 
     await _tapCenter(tester);
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 549));
+    await tester.pump(const Duration(milliseconds: 548));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
@@ -714,6 +1097,7 @@ void main() {
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
 
     final prefs = await SharedPreferences.getInstance();
     final persisted = DailyWisdomRecord.decode(
@@ -851,6 +1235,15 @@ double _ritualOpacity(WidgetTester tester) {
       .opacity;
 }
 
+double _askFadeValue(WidgetTester tester) {
+  return tester
+      .widget<FadeTransition>(
+        find.byKey(const ValueKey('ask-fade')),
+      )
+      .opacity
+      .value;
+}
+
 IgnorePointer _keptGuard(WidgetTester tester) {
   return tester.widget<IgnorePointer>(
     find.byKey(const ValueKey('kept-interaction-guard')),
@@ -866,4 +1259,79 @@ Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
       .widgetList<CustomPaint>(find.byType(CustomPaint))
       .map((widget) => widget.painter)
       .whereType<GrainPainter>();
+}
+
+class _DelayedPendingStorageService extends StorageService {
+  final Completer<void> _pendingSaveGate = Completer<void>();
+  bool pendingSaveStarted = false;
+
+  void releasePendingSave() {
+    if (!_pendingSaveGate.isCompleted) {
+      _pendingSaveGate.complete();
+    }
+  }
+
+  @override
+  Future<void> savePendingDailyWisdomReveal(
+    PendingDailyWisdomReveal reveal,
+  ) async {
+    pendingSaveStarted = true;
+    await _pendingSaveGate.future;
+    await super.savePendingDailyWisdomReveal(reveal);
+  }
+}
+
+class _HangingPendingStorageService extends StorageService {
+  @override
+  Future<void> savePendingDailyWisdomReveal(
+    PendingDailyWisdomReveal reveal,
+  ) {
+    return Completer<void>().future;
+  }
+}
+
+class _DelayedDailyWriteStorageService extends StorageService {
+  final Completer<void> _dailyWriteGate = Completer<void>();
+  bool dailyWriteStarted = false;
+  DailyWisdomRecord? attemptedRecord;
+
+  void releaseDailyWrite() {
+    if (!_dailyWriteGate.isCompleted) {
+      _dailyWriteGate.complete();
+    }
+  }
+
+  @override
+  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) async {
+    dailyWriteStarted = true;
+    attemptedRecord = record;
+    await _dailyWriteGate.future;
+    await super.saveDailyWisdomRecord(record);
+  }
+}
+
+class _HangingDailyWriteStorageService extends StorageService {
+  bool dailyWriteStarted = false;
+
+  @override
+  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) {
+    dailyWriteStarted = true;
+    return Completer<void>().future;
+  }
+}
+
+class _FailingFirstBoundaryMarkStorageService extends StorageService {
+  bool failedBoundaryMarkOnce = false;
+
+  @override
+  Future<void> savePendingDailyWisdomReveal(
+    PendingDailyWisdomReveal reveal,
+  ) {
+    if (reveal.isRevealedPendingCommit && !failedBoundaryMarkOnce) {
+      failedBoundaryMarkOnce = true;
+      throw StateError('Boundary mark failed once.');
+    }
+
+    return super.savePendingDailyWisdomReveal(reveal);
+  }
 }

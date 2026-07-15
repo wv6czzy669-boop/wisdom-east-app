@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/favorite_item.dart';
 import '../models/daily_wisdom_record.dart';
+import '../models/pending_daily_wisdom_reveal.dart';
 
 class CorruptDailyWisdomRecordException implements Exception {
   const CorruptDailyWisdomRecordException();
@@ -11,9 +12,14 @@ class StorageService {
   StorageService({
     Future<void> Function(SharedPreferences prefs, String key)?
         obsoleteKeyRemover,
-  }) : _obsoleteKeyRemover = obsoleteKeyRemover;
+    Future<void> Function(SharedPreferences prefs, String key)?
+        pendingRevealRemover,
+  })  : _obsoleteKeyRemover = obsoleteKeyRemover,
+        _pendingRevealRemover = pendingRevealRemover;
 
   static const String _dailyWisdomAccessKey = 'daily_wisdom_access';
+  static const String _pendingDailyWisdomRevealKey =
+      'pending_daily_wisdom_reveal';
   static const String _legacyDailyWisdomTextKey = 'daily_wisdom_text';
   static const String _legacyWisdomUnlockTimeKey = 'wisdom_unlock_time_ms';
   static const String _obsoleteKeeperDailyWisdomKey =
@@ -26,6 +32,8 @@ class StorageService {
 
   final Future<void> Function(SharedPreferences prefs, String key)?
       _obsoleteKeyRemover;
+  final Future<void> Function(SharedPreferences prefs, String key)?
+      _pendingRevealRemover;
 
   SharedPreferences? _cachedPrefs;
 
@@ -131,9 +139,71 @@ class StorageService {
     await _removeObsoleteAccessStateBestEffort(prefs);
   }
 
+  Future<PendingDailyWisdomReveal?> loadPendingDailyWisdomReveal() async {
+    final prefs = await getPrefs();
+    final String? encodedReveal;
+
+    try {
+      encodedReveal = prefs.getString(_pendingDailyWisdomRevealKey);
+    } catch (_) {
+      await _clearPendingDailyWisdomRevealBestEffort(prefs);
+      return null;
+    }
+
+    if (encodedReveal == null) return null;
+
+    try {
+      return PendingDailyWisdomReveal.decode(encodedReveal);
+    } catch (_) {
+      await _clearPendingDailyWisdomRevealBestEffort(prefs);
+      return null;
+    }
+  }
+
+  Future<void> savePendingDailyWisdomReveal(
+    PendingDailyWisdomReveal reveal,
+  ) async {
+    final prefs = await getPrefs();
+    final saved = await prefs.setString(
+      _pendingDailyWisdomRevealKey,
+      reveal.encode(),
+    );
+    if (!saved) {
+      throw StateError('Pending daily wisdom reveal could not be persisted.');
+    }
+  }
+
+  Future<void> clearPendingDailyWisdomReveal() async {
+    final prefs = await getPrefs();
+    final remover = _pendingRevealRemover;
+    if (remover == null) {
+      final removed = await prefs.remove(_pendingDailyWisdomRevealKey);
+      if (!removed) {
+        throw StateError('Pending daily wisdom reveal could not be cleared.');
+      }
+    } else {
+      await remover(prefs, _pendingDailyWisdomRevealKey);
+    }
+  }
+
   Future<bool> getKeeperStatus() async {
     final prefs = await getPrefs();
     return prefs.getBool("is_premium") ?? false;
+  }
+
+  Future<void> _clearPendingDailyWisdomRevealBestEffort(
+    SharedPreferences prefs,
+  ) async {
+    try {
+      final remover = _pendingRevealRemover;
+      if (remover == null) {
+        await prefs.remove(_pendingDailyWisdomRevealKey);
+      } else {
+        await remover(prefs, _pendingDailyWisdomRevealKey);
+      }
+    } catch (_) {
+      // Corrupt pending reveal state is never authoritative access state.
+    }
   }
 
   Future<void> _removeObsoleteAccessStateBestEffort(

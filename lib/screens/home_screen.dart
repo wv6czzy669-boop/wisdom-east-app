@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../controllers/latest_request_guard.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
+import '../models/pending_daily_wisdom_reveal.dart';
 import '../services/app_services.dart';
 import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
@@ -21,7 +22,16 @@ import 'saved_reflections_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.clock,
+    this.storageService,
+    this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
+  });
+
+  final WisdomClock? clock;
+  final StorageService? storageService;
+  final Duration dailyWisdomOperationTimeout;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -52,6 +62,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _dailyLockActive = false;
   bool _showingLockedWisdom = false;
   bool _saveOperationInProgress = false;
+  bool _revealPersistenceNeedsRetry = false;
+  DateTime? _pendingRevealBoundaryForRetry;
   String? _lockedWisdomText;
 
   final ritualFlowController = const RitualFlowController();
@@ -127,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? countdownTimer;
 
   final AudioService audioService = AudioService();
-  final StorageService storageService = StorageService();
+  late final StorageService storageService;
   late final DailyWisdomAccessService dailyWisdomAccessService;
   late final SavedReflectionsService savedReflectionsService;
 
@@ -159,8 +171,11 @@ class _HomeScreenState extends State<HomeScreen>
 
     WidgetsBinding.instance.addObserver(this);
     purchaseService.addListener(_syncKeeperStatus);
+    storageService = widget.storageService ?? StorageService();
     dailyWisdomAccessService = DailyWisdomAccessService(
       storageService: storageService,
+      clock: widget.clock,
+      operationTimeout: widget.dailyWisdomOperationTimeout,
     );
     savedReflectionsService = SavedReflectionsService(
       storageService: storageService,
@@ -406,6 +421,11 @@ class _HomeScreenState extends State<HomeScreen>
       await revealWisdom();
       return;
     }
+
+    if (wisdomRevealed && _revealPersistenceNeedsRetry) {
+      await retryRevealedWisdomCommit();
+      return;
+    }
   }
 
   Future<void> revealFeelBesidePause() async {
@@ -631,26 +651,56 @@ class _HomeScreenState extends State<HomeScreen>
     return mounted && accessRefreshGuard.isCurrent(generation);
   }
 
-  Future<String> getLockedOrNewWisdom() async {
-    final access = await dailyWisdomAccessService.reveal(
+  Future<DailyWisdomPreparedReveal> prepareDailyWisdomReveal() {
+    return dailyWisdomAccessService.prepareReveal(
       selectWisdom: () => wisdomSelector.select()["text"] as String,
     );
+  }
 
+  void finishCommittedDailyWisdom(DailyWisdomAccess access) {
     if (access.isNew) {
-      try {
-        await saveDailyArchive(access.text);
-      } catch (_) {
-        // Archiving is best-effort and must never hide a persisted wisdom.
-      }
+      unawaited(
+        saveDailyArchive(access.text).catchError((_) {
+          // Archiving is best-effort and must never hide a persisted wisdom.
+        }),
+      );
     }
 
-    try {
-      await updateNextWisdomMessage();
-    } catch (_) {
-      // Countdown copy is noncritical after the daily wisdom is persisted.
-    }
+    unawaited(
+      updateNextWisdomMessage().catchError((_) {
+        // Countdown copy is noncritical after the daily wisdom is persisted.
+      }),
+    );
+  }
 
-    return access.text;
+  void restoreAskAfterRevealPersistenceFailure() {
+    if (!mounted) return;
+
+    wisdomRevealController.stop();
+    wisdomRevealController.value = 0.0;
+    askFadeController.stop();
+    askFadeController.value = 1.0;
+
+    setState(() {
+      _isInBlackSilence = false;
+      currentText = "Ask from your heart.";
+      screenStep = 2;
+      _showingLockedWisdom = false;
+      _revealPersistenceNeedsRetry = false;
+      _pendingRevealBoundaryForRetry = null;
+      textOpacity = 1.0;
+      saveControlOpacity = 0.0;
+      saveInteractionEnabled = false;
+      postRevealMessageOpacity = 0.0;
+      pauseFeelOpacity = 0.0;
+      revealGlowOpacity = 0.0;
+      backgroundDepth = 0.0;
+      textScale = 1.0;
+    });
+  }
+
+  DateTime revealBoundaryNow() {
+    return widget.clock?.call() ?? DateTime.now();
   }
 
   Future<void> revealWisdom() async {
@@ -676,6 +726,15 @@ class _HomeScreenState extends State<HomeScreen>
       askFadeController.stop();
       askFadeController.value = 1.0;
       askFadeController.reverse();
+      Object? prepareFailure;
+      final prepareFuture =
+          prepareDailyWisdomReveal().then<DailyWisdomPreparedReveal?>(
+        (prepared) => prepared,
+        onError: (Object error, StackTrace stackTrace) {
+          prepareFailure = error;
+          return null;
+        },
+      );
 
       setState(() {
         textOpacity = 1.0;
@@ -686,20 +745,14 @@ class _HomeScreenState extends State<HomeScreen>
         revealGlowOpacity = 0.0;
         backgroundDepth = 1.0;
         textScale = 1.0;
+        _revealPersistenceNeedsRetry = false;
+        _pendingRevealBoundaryForRetry = null;
       });
 
       final silenceComplete =
           Future<void>.delayed(const Duration(milliseconds: 1800));
       final askFadeComplete =
           Future<void>.delayed(const Duration(milliseconds: 1250));
-
-      String selectedText;
-
-      try {
-        selectedText = await getLockedOrNewWisdom();
-      } catch (_) {
-        selectedText = "Silence is still available.";
-      }
 
       await askFadeComplete;
 
@@ -713,11 +766,55 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!mounted || currentFlow != flowSessionId) return;
 
+      final DailyWisdomPreparedReveal? maybePreparedReveal;
+      try {
+        maybePreparedReveal = await prepareFuture.timeout(
+          widget.dailyWisdomOperationTimeout,
+        );
+      } catch (_) {
+        if (currentFlow == flowSessionId) {
+          restoreAskAfterRevealPersistenceFailure();
+        }
+        return;
+      }
+      if (maybePreparedReveal == null || prepareFailure != null) {
+        if (currentFlow == flowSessionId) {
+          restoreAskAfterRevealPersistenceFailure();
+        }
+        return;
+      }
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      final revealReady = maybePreparedReveal;
+      final revealBoundary = revealReady.phase ==
+              PendingDailyWisdomRevealPhase.revealedPendingCommit
+          ? revealReady.confirmedRevealBoundary!
+          : revealBoundaryNow();
+
+      final revealedAccess = revealReady.hasAuthoritativeRecord
+          ? DailyWisdomAccess(
+              text: revealReady.text,
+              isNew: false,
+              unlockAt: revealReady.unlockAt,
+            )
+          : DailyWisdomAccess(
+              text: revealReady.text,
+              isNew: true,
+              unlockAt: revealBoundary.add(
+                dailyWisdomAccessService.lockDuration,
+              ),
+            );
+
+      if (!revealReady.hasAuthoritativeRecord) {
+        _pendingRevealBoundaryForRetry = revealBoundary;
+      }
+
       setState(() {
         _isInBlackSilence = false;
-        currentText = selectedText;
+        currentText = revealedAccess.text;
         screenStep = 4;
-        _showingLockedWisdom = false;
+        _showingLockedWisdom = !revealedAccess.isNew;
         textOpacity = 1.0;
         textScale = 1.0;
         backgroundDepth = 0.30;
@@ -731,11 +828,76 @@ class _HomeScreenState extends State<HomeScreen>
         wisdomRevealController.forward(from: 0.0);
       });
 
+      final commitFuture = revealReady.hasAuthoritativeRecord
+          ? Future<DailyWisdomAccess>.value(revealedAccess)
+          : dailyWisdomAccessService.finalizeVisualReveal(
+              text: revealReady.text,
+              revealBoundary: revealBoundary,
+            );
+      final DailyWisdomAccess committedAccess;
+      try {
+        committedAccess = await commitFuture.timeout(
+          widget.dailyWisdomOperationTimeout,
+        );
+      } on TimeoutException {
+        if (!mounted || currentFlow != flowSessionId) return;
+        setState(() {
+          _revealPersistenceNeedsRetry = true;
+          saveControlOpacity = 0.0;
+          saveInteractionEnabled = false;
+          postRevealMessageOpacity = 0.0;
+          revealGlowOpacity = 0.10;
+        });
+        unawaited(
+          commitFuture.then(
+            (lateAccess) {
+              if (!mounted || currentFlow != flowSessionId) return;
+              finishCommittedDailyWisdom(lateAccess);
+              _pendingRevealBoundaryForRetry = null;
+              setState(() {
+                _revealPersistenceNeedsRetry = false;
+                _showingLockedWisdom = !lateAccess.isNew;
+                saveControlOpacity = 1.0;
+                saveInteractionEnabled = true;
+                postRevealMessageOpacity = 1.0;
+                revealGlowOpacity = 0.10;
+              });
+            },
+            onError: (_) {
+              if (!mounted || currentFlow != flowSessionId) return;
+              setState(() {
+                _revealPersistenceNeedsRetry = true;
+                saveControlOpacity = 0.0;
+                saveInteractionEnabled = false;
+                postRevealMessageOpacity = 0.0;
+              });
+            },
+          ),
+        );
+        return;
+      } catch (_) {
+        if (!mounted || currentFlow != flowSessionId) return;
+        setState(() {
+          _revealPersistenceNeedsRetry = true;
+          saveControlOpacity = 0.0;
+          saveInteractionEnabled = false;
+          postRevealMessageOpacity = 0.0;
+          revealGlowOpacity = 0.10;
+        });
+        return;
+      }
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      finishCommittedDailyWisdom(committedAccess);
+      _pendingRevealBoundaryForRetry = null;
+
       await Future.delayed(const Duration(milliseconds: 900));
 
       if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
+        _revealPersistenceNeedsRetry = false;
         saveControlOpacity = 1.0;
         revealGlowOpacity = 0.10;
       });
@@ -750,6 +912,92 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (currentFlow == flowSessionId) {
         transitionInProgress = false;
+        _transitionLock = false;
+      }
+    }
+  }
+
+  Future<void> retryRevealedWisdomCommit() async {
+    if (_transitionLock) return;
+
+    _transitionLock = true;
+    final currentFlow = flowSessionId;
+    Future<DailyWisdomAccess>? finalization;
+
+    try {
+      final retryBoundary = _pendingRevealBoundaryForRetry;
+      if (retryBoundary == null) {
+        setState(() {
+          _revealPersistenceNeedsRetry = true;
+          saveControlOpacity = 0.0;
+          saveInteractionEnabled = false;
+          postRevealMessageOpacity = 0.0;
+        });
+        return;
+      }
+      finalization = dailyWisdomAccessService.finalizeVisualReveal(
+        text: currentText,
+        revealBoundary: retryBoundary,
+      );
+      final committedAccess = await finalization.timeout(
+        widget.dailyWisdomOperationTimeout,
+      );
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      finishCommittedDailyWisdom(committedAccess);
+      _pendingRevealBoundaryForRetry = null;
+
+      setState(() {
+        _revealPersistenceNeedsRetry = false;
+        _showingLockedWisdom = !committedAccess.isNew;
+        saveControlOpacity = 1.0;
+        revealGlowOpacity = 0.10;
+      });
+    } on TimeoutException {
+      if (!mounted || currentFlow != flowSessionId) return;
+      setState(() {
+        _revealPersistenceNeedsRetry = true;
+        saveControlOpacity = 0.0;
+        saveInteractionEnabled = false;
+        postRevealMessageOpacity = 0.0;
+      });
+      unawaited(
+        finalization!.then(
+          (lateAccess) {
+            if (!mounted || currentFlow != flowSessionId) return;
+            finishCommittedDailyWisdom(lateAccess);
+            _pendingRevealBoundaryForRetry = null;
+            setState(() {
+              _revealPersistenceNeedsRetry = false;
+              _showingLockedWisdom = !lateAccess.isNew;
+              saveControlOpacity = 1.0;
+              saveInteractionEnabled = true;
+              postRevealMessageOpacity = 1.0;
+              revealGlowOpacity = 0.10;
+            });
+          },
+          onError: (_) {
+            if (!mounted || currentFlow != flowSessionId) return;
+            setState(() {
+              _revealPersistenceNeedsRetry = true;
+              saveControlOpacity = 0.0;
+              saveInteractionEnabled = false;
+              postRevealMessageOpacity = 0.0;
+            });
+          },
+        ),
+      );
+    } catch (_) {
+      if (!mounted || currentFlow != flowSessionId) return;
+      setState(() {
+        _revealPersistenceNeedsRetry = true;
+        saveControlOpacity = 0.0;
+        saveInteractionEnabled = false;
+        postRevealMessageOpacity = 0.0;
+      });
+    } finally {
+      if (currentFlow == flowSessionId) {
         _transitionLock = false;
       }
     }
