@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -71,6 +72,111 @@ void main() {
     expect(launchFade.duration, const Duration(milliseconds: 750));
 
     await tester.pump(const Duration(milliseconds: 2000));
+  });
+
+  testWidgets('Home unresolved launch has one disabled EAST semantic node',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        _homeApp(),
+      );
+
+      _expectSemanticNode(
+        label: 'EAST.',
+        isButton: false,
+        isEnabled: Tristate.isFalse,
+        hasTap: false,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('Home semantics expose ritual action without hidden duplicates',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final dailyGraph = DailyAccessTestGraph();
+      await tester.pumpWidget(
+        _homeApp(dailyGraph: dailyGraph),
+      );
+      await _finishOpeningIntro(tester);
+
+      _expectSemanticNode(
+        label: 'EAST.',
+        isButton: true,
+        isEnabled: Tristate.isTrue,
+        hasTap: true,
+      );
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 820));
+      await tester.pump(const Duration(milliseconds: 220));
+
+      _expectSemanticNode(
+        label: 'Pause.',
+        isButton: false,
+        isEnabled: Tristate.isFalse,
+        hasTap: false,
+      );
+
+      await tester.pump(const Duration(milliseconds: 820));
+
+      expect(find.semantics.byLabel('EAST.'), findsNothing);
+
+      expect(find.byTooltip('Settings'), findsOneWidget);
+      final settingsNode = tester.getSemantics(find.byTooltip('Settings'));
+      expect(
+        settingsNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      expect(find.byTooltip('Kept'), findsOneWidget);
+      final keptNode = tester.getSemantics(find.byTooltip('Kept'));
+      expect(
+        keptNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1300));
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 850));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      _expectSemanticNode(
+        label: 'Ask from your heart.',
+        isButton: true,
+        isEnabled: Tristate.isTrue,
+        hasTap: true,
+      );
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+
+      expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+      expect(find.semantics.byLabel('Ask from your heart.'), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 550));
+      await tester.pump();
+
+      final record = await dailyGraph.repository.loadDailyWisdomRecord();
+      expect(record, isNotNull);
+      await tester.pump(const Duration(milliseconds: 950));
+      expect(find.text(record!.text), findsOneWidget);
+      _expectSemanticNode(
+        label: record.text,
+        isButton: false,
+        isEnabled: Tristate.none,
+        hasTap: false,
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('lifecycle interruption restores visible ritual content',
@@ -1185,6 +1291,25 @@ void main() {
     expect(_grainPainter(tester).movement, 0.0);
     expect(tester.takeException(), isNull);
   });
+}
+
+void _expectSemanticNode({
+  required String label,
+  required bool isButton,
+  required Tristate isEnabled,
+  required bool hasTap,
+}) {
+  final matches = find.semantics.byLabel(label).evaluate();
+  expect(matches, hasLength(1));
+  final data = matches.single.getSemanticsData();
+  final actualIsButton = data.flagsCollection.isButton;
+  final actualIsEnabled = data.flagsCollection.isEnabled;
+  final actualHasTap = data.hasAction(SemanticsAction.tap);
+  final reason = 'Semantics for "$label": button=$actualIsButton, '
+      'enabled=$actualIsEnabled, tap=$actualHasTap';
+  expect(actualIsButton, isButton, reason: reason);
+  expect(actualIsEnabled, isEnabled, reason: reason);
+  expect(actualHasTap, hasTap, reason: reason);
 }
 
 Widget _homeApp({

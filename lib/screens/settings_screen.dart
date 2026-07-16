@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../services/app_services.dart';
+import '../services/app_services.dart' as app_services;
+import '../services/purchase_service.dart';
 import 'keeper_screen.dart';
 
+typedef SettingsUrlLauncher = Future<bool> Function(
+  Uri uri, {
+  required LaunchMode mode,
+});
+
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.urlLauncher,
+    this.purchaseService,
+  });
+
+  final SettingsUrlLauncher? urlLauncher;
+  final PurchaseService? purchaseService;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -13,6 +26,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _keeperNavigationInProgress = false;
+  bool _privacyPolicyLaunchInProgress = false;
+  bool _reachOutLaunchInProgress = false;
+  bool _restoreInProgress = false;
+
+  PurchaseService get _purchaseService =>
+      widget.purchaseService ?? app_services.purchaseService;
 
   TextStyle eastStyle(
     double size, {
@@ -32,38 +51,182 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String title,
     required String subtitle,
     VoidCallback? onTap,
+    String? semanticLabel,
   }) {
-    return SizedBox(
-      width: double.infinity,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: Colors.white10,
-        highlightColor: Colors.white10,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: 17,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: eastStyle(21),
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: semanticLabel ?? '$title. $subtitle',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: SizedBox(
+          width: double.infinity,
+          child: InkWell(
+            onTap: onTap,
+            splashColor: Colors.white10,
+            highlightColor: Colors.white10,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                vertical: 17,
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: eastStyle(
-                  15,
-                  color: const Color(0x91FFFFFF),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: eastStyle(21),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: eastStyle(
+                      15,
+                      color: const Color(0x91FFFFFF),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<bool> _launchExternal(
+    Uri uri, {
+    required LaunchMode mode,
+  }) {
+    final launcher = widget.urlLauncher;
+    if (launcher != null) {
+      return launcher(uri, mode: mode);
+    }
+
+    return launchUrl(uri, mode: mode);
+  }
+
+  void showSettingsSnack(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF111111),
+        duration: const Duration(milliseconds: 1600),
+        content: Text(
+          message,
+          style: eastStyle(17),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runExternalAction({
+    required bool inProgress,
+    required void Function(bool value) setInProgress,
+    required Uri uri,
+    required LaunchMode mode,
+    required String failureMessage,
+  }) async {
+    if (inProgress || !mounted) return;
+
+    setState(() {
+      setInProgress(true);
+    });
+
+    try {
+      final launched = await _launchExternal(uri, mode: mode);
+      if (!mounted) return;
+
+      if (!launched) {
+        showSettingsSnack(failureMessage);
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      showSettingsSnack(failureMessage);
+    } finally {
+      if (mounted) {
+        setState(() {
+          setInProgress(false);
+        });
+      }
+    }
+  }
+
+  Future<void> restorePurchasesFromSettings() async {
+    if (_restoreInProgress || _purchaseService.isLoading || !mounted) return;
+
+    setState(() {
+      _restoreInProgress = true;
+    });
+
+    var restoreStarted = false;
+    try {
+      restoreStarted = await _purchaseService.restorePurchases();
+    } catch (_) {
+      restoreStarted = false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _restoreInProgress = false;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    showInfoDialog(
+      context,
+      "Restore Purchases",
+      restoreStarted
+          ? "Restore request sent. Keeper access will update automatically."
+          : _purchaseService.restoreNeedsRecovery
+              ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
+              : "Restore is not available right now. Please try again shortly.",
+    );
+  }
+
+  VoidCallback? get restoreAction {
+    if (_restoreInProgress || _purchaseService.isLoading) return null;
+
+    return restorePurchasesFromSettings;
+  }
+
+  String get restoreSemanticLabel {
+    if (_restoreInProgress || _purchaseService.isLoading) {
+      return 'Restore Purchases. Restore in progress.';
+    }
+
+    return 'Restore Purchases. Restore what belongs with you.';
+  }
+
+  VoidCallback? get privacyPolicyAction {
+    if (_privacyPolicyLaunchInProgress) return null;
+
+    return openPrivacyPolicy;
+  }
+
+  VoidCallback? get reachOutAction {
+    if (_reachOutLaunchInProgress) return null;
+
+    return sendEmail;
+  }
+
+  String get privacyPolicySemanticLabel {
+    if (_privacyPolicyLaunchInProgress) {
+      return 'Privacy Policy. Opening.';
+    }
+
+    return 'Privacy Policy. What stays private.';
+  }
+
+  String get reachOutSemanticLabel {
+    if (_reachOutLaunchInProgress) {
+      return 'Reach Out. Opening.';
+    }
+
+    return 'Reach Out. For thoughts and questions.';
   }
 
   void showInfoDialog(
@@ -106,12 +269,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
     );
 
-    try {
-      await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (_) {}
+    await _runExternalAction(
+      inProgress: _privacyPolicyLaunchInProgress,
+      setInProgress: (value) {
+        _privacyPolicyLaunchInProgress = value;
+      },
+      uri: uri,
+      mode: LaunchMode.externalApplication,
+      failureMessage: "Privacy Policy could not be opened.",
+    );
   }
 
   Future<void> sendEmail() async {
@@ -121,9 +287,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       query: 'subject=EAST. Support',
     );
 
-    try {
-      await launchUrl(uri);
-    } catch (_) {}
+    await _runExternalAction(
+      inProgress: _reachOutLaunchInProgress,
+      setInProgress: (value) {
+        _reachOutLaunchInProgress = value;
+      },
+      uri: uri,
+      mode: LaunchMode.platformDefault,
+      failureMessage: "Reach Out could not be opened.",
+    );
   }
 
   Future<void> _openKeeper() async {
@@ -208,26 +380,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       settingsItem(
                         title: "Restore Purchases",
                         subtitle: "Restore what belongs with you.",
-                        onTap: () async {
-                          if (purchaseService.isLoading) return;
-
-                          var restoreStarted = false;
-                          try {
-                            restoreStarted =
-                                await purchaseService.restorePurchases();
-                          } catch (_) {}
-
-                          if (!context.mounted) return;
-                          showInfoDialog(
-                            context,
-                            "Restore Purchases",
-                            restoreStarted
-                                ? "Restore request sent. Keeper access will update automatically."
-                                : purchaseService.restoreNeedsRecovery
-                                    ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
-                                    : "Restore is not available right now. Please try again shortly.",
-                          );
-                        },
+                        semanticLabel: restoreSemanticLabel,
+                        onTap: restoreAction,
                       ),
                       const Divider(
                         color: Colors.white24,
@@ -236,11 +390,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       settingsItem(
                         title: "Privacy Policy",
                         subtitle: "What stays private.",
-                        onTap: () async {
-                          await openPrivacyPolicy();
-
-                          if (!context.mounted) return;
-                        },
+                        semanticLabel: privacyPolicySemanticLabel,
+                        onTap: privacyPolicyAction,
                       ),
                       const Divider(
                         color: Colors.white24,
@@ -249,7 +400,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       settingsItem(
                         title: "Reach Out",
                         subtitle: "For thoughts and questions.",
-                        onTap: sendEmail,
+                        semanticLabel: reachOutSemanticLabel,
+                        onTap: reachOutAction,
                       ),
                       const Divider(
                         color: Colors.white24,

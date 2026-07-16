@@ -164,53 +164,59 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       button: !isKeeper,
                       enabled: purchaseEnabled,
                       label: isKeeper
-                          ? 'Keeper'
-                          : purchaseAvailable
-                              ? 'Enter the Circle, ${keeperProduct.price}, one-time offering'
-                              : 'Enter the Circle, temporarily unavailable',
-                      child: GestureDetector(
-                        key: const ValueKey('keeper-purchase-action'),
-                        onTap: purchaseEnabled ? buyKeeper : null,
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 500),
-                          curve: Curves.easeOutCubic,
-                          opacity: _purchaseService.isLoading ? 0.72 : 1.0,
-                          child: Container(
-                            width: 238,
-                            height: 238,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(0xFFF4F0E8)
-                                  .withValues(alpha: 0.012),
-                              border: Border.all(
+                          ? 'Keeper access active'
+                          : _purchaseService.isLoading && purchaseAvailable
+                              ? 'Enter the Circle, ${keeperProduct.price}. Purchase in progress.'
+                              : purchaseAvailable
+                                  ? 'Enter the Circle, ${keeperProduct.price}, one-time offering'
+                                  : 'Enter the Circle, temporarily unavailable',
+                      onTap: purchaseEnabled ? buyKeeper : null,
+                      child: ExcludeSemantics(
+                        child: GestureDetector(
+                          key: const ValueKey('keeper-purchase-action'),
+                          excludeFromSemantics: true,
+                          onTap: purchaseEnabled ? buyKeeper : null,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeOutCubic,
+                            opacity: _purchaseService.isLoading ? 0.72 : 1.0,
+                            child: Container(
+                              width: 238,
+                              height: 238,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
                                 color: const Color(0xFFF4F0E8)
-                                    .withValues(alpha: 0.38),
-                                width: 0.7,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFD9B86F)
-                                      .withValues(alpha: 0.05),
-                                  blurRadius: 122,
-                                  spreadRadius: 5,
-                                ),
-                                BoxShadow(
+                                    .withValues(alpha: 0.012),
+                                border: Border.all(
                                   color: const Color(0xFFF4F0E8)
-                                      .withValues(alpha: 0.02),
-                                  blurRadius: 78,
-                                  spreadRadius: 2,
+                                      .withValues(alpha: 0.38),
+                                  width: 0.7,
                                 ),
-                              ],
-                            ),
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 22),
-                              child: Text(
-                                "Enter the Circle",
-                                textAlign: TextAlign.center,
-                                style: keeperStyle(22)
-                                    .copyWith(letterSpacing: 0.85),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFD9B86F)
+                                        .withValues(alpha: 0.05),
+                                    blurRadius: 122,
+                                    spreadRadius: 5,
+                                  ),
+                                  BoxShadow(
+                                    color: const Color(0xFFF4F0E8)
+                                        .withValues(alpha: 0.02),
+                                    blurRadius: 78,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 22),
+                                child: Text(
+                                  "Enter the Circle",
+                                  textAlign: TextAlign.center,
+                                  style: keeperStyle(22)
+                                      .copyWith(letterSpacing: 0.85),
+                                ),
                               ),
                             ),
                           ),

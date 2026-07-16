@@ -63,20 +63,22 @@ class _HomeGrainLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: IgnorePointer(
-        child: RepaintBoundary(
-          child: AnimatedBuilder(
-            animation: pulseController,
-            builder: (context, child) {
-              final pulse = pulseController.value;
+      child: ExcludeSemantics(
+        child: IgnorePointer(
+          child: RepaintBoundary(
+            child: AnimatedBuilder(
+              animation: pulseController,
+              builder: (context, child) {
+                final pulse = pulseController.value;
 
-              return CustomPaint(
-                painter: GrainPainter(
-                  movement: reduceMotion ? 0.0 : pulse,
-                  intensity: wisdomRevealed ? 0.01625 : 0.01235,
-                ),
-              );
-            },
+                return CustomPaint(
+                  painter: GrainPainter(
+                    movement: reduceMotion ? 0.0 : pulse,
+                    intensity: wisdomRevealed ? 0.01625 : 0.01235,
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -94,28 +96,30 @@ class _HomeRevealGlow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: IgnorePointer(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 1400),
-          opacity: opacity,
-          child: Center(
-            child: Container(
-              width: 285,
-              height: 285,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFD9B86F).withValues(alpha: 0.085),
-                    blurRadius: 85,
-                    spreadRadius: 1,
-                  ),
-                  BoxShadow(
-                    color: const Color(0xFFF4F0E8).withValues(alpha: 0.035),
-                    blurRadius: 55,
-                    spreadRadius: 1,
-                  ),
-                ],
+      child: ExcludeSemantics(
+        child: IgnorePointer(
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 1400),
+            opacity: opacity,
+            child: Center(
+              child: Container(
+                width: 285,
+                height: 285,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD9B86F).withValues(alpha: 0.085),
+                      blurRadius: 85,
+                      spreadRadius: 1,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFFF4F0E8).withValues(alpha: 0.035),
+                      blurRadius: 55,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -128,17 +132,25 @@ class _HomeRevealGlow extends StatelessWidget {
 class _HomeMainRitualGesture extends StatelessWidget {
   const _HomeMainRitualGesture({
     required this.navigationDisabled,
+    required this.semanticLabel,
+    required this.semanticActionEnabled,
+    required this.hideContentSemantics,
     required this.onTap,
     required this.content,
   });
 
   final bool navigationDisabled;
+  final String? semanticLabel;
+  final bool semanticActionEnabled;
+  final bool hideContentSemantics;
   final VoidCallback onTap;
   final Widget content;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final label = semanticLabel;
+    final gesture = GestureDetector(
+      excludeFromSemantics: true,
       behavior: HitTestBehavior.opaque,
       onTap: navigationDisabled ? null : onTap,
       onLongPress: null,
@@ -158,6 +170,23 @@ class _HomeMainRitualGesture extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    final semanticsChild = ExcludeSemantics(
+      excluding: hideContentSemantics || label != null,
+      child: gesture,
+    );
+
+    if (label == null) return semanticsChild;
+
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      button: semanticActionEnabled,
+      enabled: semanticActionEnabled,
+      label: label,
+      onTap: semanticActionEnabled ? onTap : null,
+      child: semanticsChild,
     );
   }
 }
@@ -504,31 +533,34 @@ class _HomeSaveControl extends StatelessWidget {
       right: 0,
       top: MediaQuery.of(context).size.height / 2 + 72,
       child: Center(
-        child: IgnorePointer(
-          key: const ValueKey('kept-interaction-guard'),
-          ignoring: !interactionEnabled,
-          child: AnimatedOpacity(
-            duration: const Duration(
-              milliseconds: 1000,
-            ),
-            curve: Curves.easeOutCubic,
-            opacity: opacity,
-            onEnd: onFullyVisible,
-            child: IconButton(
-              tooltip: isCurrentFavorite
-                  ? 'Remove kept reflection'
-                  : 'Keep reflection',
-              icon: Text(
-                isCurrentFavorite ? '●' : '○',
-                style: const TextStyle(
-                  color: Color(0xFFF4F0E8),
-                  fontSize: 31,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
-                  height: 1,
-                ),
+        child: ExcludeSemantics(
+          excluding: opacity <= 0.0,
+          child: IgnorePointer(
+            key: const ValueKey('kept-interaction-guard'),
+            ignoring: !interactionEnabled,
+            child: AnimatedOpacity(
+              duration: const Duration(
+                milliseconds: 1000,
               ),
-              onPressed: onPressed,
+              curve: Curves.easeOutCubic,
+              opacity: opacity,
+              onEnd: onFullyVisible,
+              child: IconButton(
+                tooltip: isCurrentFavorite
+                    ? 'Remove kept reflection'
+                    : 'Keep reflection',
+                icon: Text(
+                  isCurrentFavorite ? '●' : '○',
+                  style: const TextStyle(
+                    color: Color(0xFFF4F0E8),
+                    fontSize: 31,
+                    fontWeight: FontWeight.w300,
+                    fontFamily: 'CormorantGaramond',
+                    height: 1,
+                  ),
+                ),
+                onPressed: onPressed,
+              ),
             ),
           ),
         ),
@@ -552,25 +584,28 @@ class _HomePostRevealMessage extends StatelessWidget {
       left: 0,
       right: 0,
       top: MediaQuery.of(context).size.height / 2 + 156,
-      child: IgnorePointer(
-        ignoring: opacity < 1.0,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 900),
-          curve: Curves.easeOutCubic,
-          opacity: opacity,
-          child: Column(
-            children: [
-              if (message.isNotEmpty) ...[
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: _homeWisdomStyle(
-                    15,
-                    color: const Color(0x91FFFFFF),
+      child: ExcludeSemantics(
+        excluding: opacity <= 0.0,
+        child: IgnorePointer(
+          ignoring: opacity < 1.0,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeOutCubic,
+            opacity: opacity,
+            child: Column(
+              children: [
+                if (message.isNotEmpty) ...[
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: _homeWisdomStyle(
+                      15,
+                      color: const Color(0x91FFFFFF),
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

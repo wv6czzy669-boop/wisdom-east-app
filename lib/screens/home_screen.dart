@@ -291,6 +291,32 @@ class _HomeScreenState extends State<HomeScreen>
   bool get onHeartScreen => ritualFlowController.isHeartScreen(screenStep);
   bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
   bool get onLockedCountdown => screenStep == 5;
+  bool get mainRitualActionSemanticsEnabled {
+    if (navigationInProgress || transitionInProgress || _transitionLock) {
+      return false;
+    }
+    if (screenStep == 0) return _dailyStatusResolved;
+    if (screenStep == 1 || screenStep == 2) return true;
+    return wisdomRevealed && _revealPersistenceNeedsRetry;
+  }
+
+  bool get hideMainRitualContentSemantics {
+    return _isInBlackSilence || textOpacity <= 0.01;
+  }
+
+  String? get mainRitualSemanticLabel {
+    if (hideMainRitualContentSemantics) return null;
+    if (screenStep == 0) return 'EAST.';
+    if (onPauseScreen) {
+      return pauseFeelOpacity < 1.0 ? 'Pause.' : 'Pause. Feel.';
+    }
+    if (onHeartScreen) return 'Ask from your heart.';
+    if (wisdomRevealed && _revealPersistenceNeedsRetry) {
+      return 'Try keeping this wisdom again.';
+    }
+    return null;
+  }
+
   Future<void> loadInitialState() async {
     await loadFavorites();
     await loadKeeperStatus();
@@ -453,8 +479,10 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!isCurrentFlow(currentFlow)) return;
     } finally {
-      if (currentFlow == flowSessionId) {
-        transitionInProgress = false;
+      if (mounted && currentFlow == flowSessionId) {
+        setState(() {
+          transitionInProgress = false;
+        });
       }
     }
   }
@@ -516,8 +544,10 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!isCurrentFlow(currentFlow)) return;
     } finally {
-      if (currentFlow == flowSessionId) {
-        transitionInProgress = false;
+      if (mounted && currentFlow == flowSessionId) {
+        setState(() {
+          transitionInProgress = false;
+        });
       }
     }
   }
@@ -580,8 +610,10 @@ class _HomeScreenState extends State<HomeScreen>
         postRevealMessageOpacity = 1.0;
       });
     } finally {
-      if (currentFlow == flowSessionId) {
-        transitionInProgress = false;
+      if (mounted && currentFlow == flowSessionId) {
+        setState(() {
+          transitionInProgress = false;
+        });
       }
     }
   }
@@ -911,9 +943,11 @@ class _HomeScreenState extends State<HomeScreen>
         postRevealMessageOpacity = 1.0;
       });
     } finally {
-      if (currentFlow == flowSessionId) {
-        transitionInProgress = false;
-        _transitionLock = false;
+      if (mounted && currentFlow == flowSessionId) {
+        setState(() {
+          transitionInProgress = false;
+          _transitionLock = false;
+        });
       }
     }
   }
@@ -1188,6 +1222,9 @@ class _HomeScreenState extends State<HomeScreen>
             Positioned.fill(
               child: _HomeMainRitualGesture(
                 navigationDisabled: navigationInProgress || _transitionLock,
+                semanticLabel: mainRitualSemanticLabel,
+                semanticActionEnabled: mainRitualActionSemanticsEnabled,
+                hideContentSemantics: hideMainRitualContentSemantics,
                 onTap: handleMainTap,
                 content: _HomeRitualContent(
                   screenStep: screenStep,

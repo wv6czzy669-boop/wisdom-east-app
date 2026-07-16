@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -149,16 +150,146 @@ void main() {
     expect(find.text('Support EAST.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Keeper purchase semantics expose action and localized price',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      service = _StaticPurchaseService(
+        product: ProductDetails(
+          id: PurchaseService.keeperProductId,
+          title: 'Keeper',
+          description: 'Support EAST.',
+          price: 'CA\$6.99',
+          rawPrice: 6.99,
+          currencyCode: 'CAD',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: KeeperScreen(purchaseService: service)),
+      );
+
+      final purchaseNode = find.semantics
+          .byLabel('Enter the Circle, CA\$6.99, one-time offering')
+          .evaluate()
+          .single;
+      expect(
+        purchaseNode.getSemanticsData().flagsCollection.isButton,
+        isTrue,
+      );
+      expect(
+        purchaseNode.getSemanticsData().flagsCollection.isEnabled,
+        Tristate.isTrue,
+      );
+      expect(
+        purchaseNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('Keeper loading and unavailable states are not enabled actions',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      service = _StaticPurchaseService(
+        loading: true,
+        product: ProductDetails(
+          id: PurchaseService.keeperProductId,
+          title: 'Keeper',
+          description: 'Support EAST.',
+          price: '£59.99',
+          rawPrice: 59.99,
+          currencyCode: 'GBP',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: KeeperScreen(purchaseService: service)),
+      );
+
+      final loadingNode = find.semantics
+          .byLabel('Enter the Circle, £59.99. Purchase in progress.')
+          .evaluate()
+          .single;
+      expect(
+        loadingNode.getSemanticsData().flagsCollection.isButton,
+        isTrue,
+      );
+      expect(
+        loadingNode.getSemanticsData().flagsCollection.isEnabled,
+        Tristate.isFalse,
+      );
+      expect(
+        loadingNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isFalse,
+      );
+
+      service = _StaticPurchaseService();
+      await tester.pumpWidget(
+        MaterialApp(home: KeeperScreen(purchaseService: service)),
+      );
+
+      final unavailableNode = find.semantics
+          .byLabel('Enter the Circle, temporarily unavailable')
+          .evaluate()
+          .single;
+      expect(
+        unavailableNode.getSemanticsData().flagsCollection.isButton,
+        isTrue,
+      );
+      expect(
+        unavailableNode.getSemanticsData().flagsCollection.isEnabled,
+        Tristate.isFalse,
+      );
+      expect(
+        unavailableNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isFalse,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('Existing Keeper state has non-actionable semantics',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      service = _StaticPurchaseService(keeper: true);
+
+      await tester.pumpWidget(
+        MaterialApp(home: KeeperScreen(purchaseService: service)),
+      );
+
+      final keeperNode =
+          find.semantics.byLabel('Keeper access active').evaluate().single;
+      expect(
+        keeperNode.getSemanticsData().flagsCollection.isButton,
+        isFalse,
+      );
+      expect(
+        keeperNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isFalse,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
 }
 
 class _StaticPurchaseService extends PurchaseService {
   _StaticPurchaseService({
     this.loading = false,
     this.product,
+    this.keeper = false,
   });
 
   final bool loading;
   final ProductDetails? product;
+  final bool keeper;
 
   @override
   bool get isInitialized => false;
@@ -170,7 +301,7 @@ class _StaticPurchaseService extends PurchaseService {
   ProductDetails? get keeperProduct => product;
 
   @override
-  bool get isKeeper => false;
+  bool get isKeeper => keeper;
 
   @override
   bool get isLoading => loading;
