@@ -1,6 +1,9 @@
+import 'dart:async';
+
+import '../models/daily_access_snapshot.dart';
 import '../models/daily_wisdom_record.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
-import 'storage_service.dart';
+import '../repositories/daily_access_repository.dart' hide WisdomSelector;
 
 typedef WisdomSelector = String Function();
 typedef WisdomClock = DateTime Function();
@@ -22,11 +25,13 @@ class DailyWisdomStatus {
     required this.isReady,
     this.unlockAt,
     this.remaining,
+    this.lockedText,
   });
 
   final bool isReady;
   final DateTime? unlockAt;
   final Duration? remaining;
+  final String? lockedText;
 }
 
 class DailyWisdomPreparedReveal {
@@ -45,46 +50,39 @@ class DailyWisdomPreparedReveal {
   final PendingDailyWisdomRevealPhase phase;
 }
 
+class DailyWisdomStatusUnavailableException implements Exception {
+  const DailyWisdomStatusUnavailableException([this.cause]);
+
+  final Object? cause;
+
+  @override
+  String toString() {
+    final cause = this.cause;
+    if (cause == null) return 'DailyWisdomStatusUnavailableException';
+    return 'DailyWisdomStatusUnavailableException: $cause';
+  }
+}
+
 class DailyWisdomAccessService {
   DailyWisdomAccessService({
-    required StorageService storageService,
+    required DailyAccessRepository repository,
     WisdomClock? clock,
     this.lockDuration = DailyWisdomRecord.lockDuration,
-    this.operationTimeout = const Duration(seconds: 8),
-  })  : _storageService = storageService,
+    this.statusTimeout = defaultStatusTimeout,
+  })  : _repository = repository,
         _clock = clock ?? DateTime.now;
 
-  final StorageService _storageService;
+  final DailyAccessRepository _repository;
   final WisdomClock _clock;
   final Duration lockDuration;
-  final Duration operationTimeout;
+  final Duration statusTimeout;
 
+  static const Duration defaultStatusTimeout = Duration(seconds: 4);
   static const String corruptRecordRecoveryText = 'Silence is still available.';
-
-  Future<DailyWisdomAccess>? _revealInProgress;
-  Future<DailyWisdomPreparedReveal>? _prepareInProgress;
-  Future<DailyWisdomAccess>? _finalizeInProgress;
-  String? _finalizeInProgressText;
 
   Future<DailyWisdomAccess> reveal({
     required WisdomSelector selectWisdom,
-  }) {
-    final inProgress = _revealInProgress;
-    if (inProgress != null) return inProgress;
-
-    final request = _revealLockedWisdom(selectWisdom);
-    _revealInProgress = request;
-
-    return request.whenComplete(() {
-      if (identical(_revealInProgress, request)) {
-        _revealInProgress = null;
-      }
-    });
-  }
-
-  Future<DailyWisdomAccess> _revealLockedWisdom(
-    WisdomSelector selectWisdom,
-  ) async {
+  }) async {
     final prepared = await prepareReveal(selectWisdom: selectWisdom);
     if (prepared.hasAuthoritativeRecord) {
       return DailyWisdomAccess(
@@ -102,196 +100,55 @@ class DailyWisdomAccessService {
 
   Future<DailyWisdomPreparedReveal> prepareReveal({
     required WisdomSelector selectWisdom,
-  }) {
-    final inProgress = _prepareInProgress;
-    if (inProgress != null) return inProgress;
-
-    late final Future<DailyWisdomPreparedReveal> request;
-    request = _prepareReveal(selectWisdom).whenComplete(() {
-      if (identical(_prepareInProgress, request)) {
-        _prepareInProgress = null;
-      }
-    });
-    _prepareInProgress = request;
-    return request;
-  }
-
-  Future<DailyWisdomPreparedReveal> _prepareReveal(
-    WisdomSelector selectWisdom,
-  ) async {
-    final record = await _loadRecordRecoveringCorruption();
+  }) async {
     final now = _clock();
-
-    if (_isActive(record, now)) {
-      await _clearPendingBestEffort();
-      return DailyWisdomPreparedReveal(
-        text: record!.text,
-        unlockAt: record.unlockAt,
-        hasAuthoritativeRecord: true,
-      );
-    }
-
-    final pendingReveal = await _loadUsablePendingReveal(record);
-    if (pendingReveal != null) {
-      return DailyWisdomPreparedReveal(
-        text: pendingReveal.text,
-        hasAuthoritativeRecord: false,
-        confirmedRevealBoundary: pendingReveal.confirmedRevealBoundary,
-        phase: pendingReveal.phase,
-      );
-    }
-
-    final text = selectWisdom();
-    if (text.trim().isEmpty) {
-      throw StateError('Selected daily wisdom text cannot be empty.');
-    }
-
-    final pending = PendingDailyWisdomReveal(
-      text: text,
+    final prepared = await _repository.prepareReveal(
+      selectWisdom: selectWisdom,
       preparedAt: now,
+      now: now,
     );
-    await _storageService.savePendingDailyWisdomReveal(pending);
-
     return DailyWisdomPreparedReveal(
-      text: text,
-      hasAuthoritativeRecord: false,
+      text: prepared.text,
+      hasAuthoritativeRecord: prepared.hasAuthoritativeRecord,
+      unlockAt: prepared.unlockAt,
+      confirmedRevealBoundary: prepared.confirmedRevealBoundary,
+      phase: prepared.phase,
     );
   }
 
   Future<DailyWisdomAccess?> recoverIncompleteReveal() async {
-    final record = await _loadRecordRecoveringCorruption();
     final now = _clock();
-
-    if (_isActive(record, now)) {
-      await _clearPendingBestEffort();
-      return DailyWisdomAccess(
-        text: record!.text,
-        isNew: false,
-        unlockAt: record.unlockAt,
-      );
-    }
-
-    final pendingReveal = await _loadUsablePendingReveal(record);
-    if (pendingReveal == null || !pendingReveal.isRevealedPendingCommit) {
+    final record = await _repository.recoverIncompleteReveal(now: now);
+    if (record == null) {
       return null;
     }
 
-    return finalizeVisualReveal(
-      text: pendingReveal.text,
-      revealBoundary: pendingReveal.confirmedRevealBoundary!,
+    return DailyWisdomAccess(
+      text: record.text,
+      isNew: _isSameMoment(record.revealedAt, now),
+      unlockAt: record.unlockAt,
     );
   }
 
   Future<DailyWisdomAccess> finalizeVisualReveal({
     required String text,
     required DateTime revealBoundary,
-  }) {
-    final inProgress = _finalizeInProgress;
-    if (inProgress != null) {
-      if (_finalizeInProgressText != text) {
-        return Future<DailyWisdomAccess>.error(
-          StateError('Finalized wisdom must match in-flight wisdom.'),
-        );
-      }
-      return inProgress;
-    }
-
-    late final Future<DailyWisdomAccess> request;
-    request = _finalizeVisualReveal(
+  }) async {
+    final record = await _repository.finalizeVisualReveal(
       text: text,
       revealBoundary: revealBoundary,
-    ).whenComplete(() {
-      if (identical(_finalizeInProgress, request)) {
-        _finalizeInProgress = null;
-        _finalizeInProgressText = null;
-      }
-    });
-    _finalizeInProgress = request;
-    _finalizeInProgressText = text;
-    return request;
-  }
-
-  Future<DailyWisdomAccess> _finalizeVisualReveal({
-    required String text,
-    required DateTime revealBoundary,
-  }) async {
-    final record = await _loadRecordRecoveringCorruption();
-    final now = _clock();
-
-    if (_isActive(record, now)) {
-      await _clearPendingBestEffort();
-      return DailyWisdomAccess(
-        text: record!.text,
-        isNew: false,
-        unlockAt: record.unlockAt,
-      );
-    }
-
-    final pendingReveal = await _loadUsablePendingReveal(record);
-    if (pendingReveal == null) {
-      throw StateError('No prepared daily wisdom reveal to finalize.');
-    }
-    if (pendingReveal.text != text) {
-      throw StateError('Finalized wisdom must match prepared wisdom.');
-    }
-
-    final confirmedBoundary = pendingReveal.isRevealedPendingCommit
-        ? pendingReveal.confirmedRevealBoundary!
-        : revealBoundary;
-    if (confirmedBoundary.isBefore(pendingReveal.preparedAt)) {
-      throw StateError('Reveal boundary cannot be before preparation.');
-    }
-
-    if (!pendingReveal.isRevealedPendingCommit) {
-      await _storageService.savePendingDailyWisdomReveal(
-        pendingReveal.copyWith(
-          confirmedRevealBoundary: confirmedBoundary,
-          phase: PendingDailyWisdomRevealPhase.revealedPendingCommit,
-        ),
-      );
-    }
-
-    return _writePendingRevealAsDaily(
-      pendingReveal: pendingReveal,
-      confirmedBoundary: confirmedBoundary,
+      now: _clock(),
     );
-  }
-
-  Future<DailyWisdomAccess> _writePendingRevealAsDaily({
-    required PendingDailyWisdomReveal pendingReveal,
-    required DateTime confirmedBoundary,
-  }) async {
-    final nextRecord = await _writePendingRevealRecordAsDaily(
-      pendingReveal: pendingReveal,
-      confirmedBoundary: confirmedBoundary,
-    );
-
     return DailyWisdomAccess(
-      text: nextRecord.text,
-      isNew: true,
-      unlockAt: nextRecord.unlockAt,
+      text: record.text,
+      isNew: record.text == text &&
+          _isSameMoment(record.revealedAt, revealBoundary),
+      unlockAt: record.unlockAt,
     );
-  }
-
-  Future<DailyWisdomRecord> _writePendingRevealRecordAsDaily({
-    required PendingDailyWisdomReveal pendingReveal,
-    required DateTime confirmedBoundary,
-  }) async {
-    final unlockAt = confirmedBoundary.add(DailyWisdomRecord.lockDuration);
-    final nextRecord = DailyWisdomRecord(
-      text: pendingReveal.text,
-      revealedAt: confirmedBoundary,
-      unlockAt: unlockAt,
-    );
-
-    await _storageService.saveDailyWisdomRecord(nextRecord);
-    await _clearPendingBestEffort();
-
-    return nextRecord;
   }
 
   Future<DailyWisdomAccess> commitPreparedRevealAt(DateTime revealedAt) async {
-    final pendingReveal = await _storageService.loadPendingDailyWisdomReveal();
+    final pendingReveal = await _repository.loadPendingDailyWisdomReveal();
     if (pendingReveal == null) {
       throw StateError('No prepared daily wisdom reveal to commit.');
     }
@@ -303,7 +160,7 @@ class DailyWisdomAccessService {
   }
 
   Future<DailyWisdomAccess> commitVisuallyRevealedPending() async {
-    final pendingReveal = await _storageService.loadPendingDailyWisdomReveal();
+    final pendingReveal = await _repository.loadPendingDailyWisdomReveal();
     if (pendingReveal == null || !pendingReveal.isRevealedPendingCommit) {
       throw StateError(
         'Daily wisdom cannot be committed before confirmed visual reveal.',
@@ -317,32 +174,44 @@ class DailyWisdomAccessService {
   }
 
   Future<DailyWisdomStatus> status() async {
-    await recoverIncompleteReveal();
-
-    final record = await _loadRecordRecoveringCorruption();
-    if (record == null) {
-      return const DailyWisdomStatus(isReady: true);
-    }
-
-    final now = _effectiveNow(_clock(), record);
-    if (!now.isBefore(record.unlockAt)) {
-      return DailyWisdomStatus(
-        isReady: true,
-        unlockAt: record.unlockAt,
-        remaining: Duration.zero,
+    try {
+      await _observeForStatus(
+        _repository.recoverIncompleteReveal(now: _clock()),
       );
-    }
 
-    return DailyWisdomStatus(
-      isReady: false,
-      unlockAt: record.unlockAt,
-      remaining: record.unlockAt.difference(now),
-    );
+      final snapshot = await _observeForStatus(
+        _repository.snapshot(now: _clock()),
+      );
+      if (snapshot is! DailyAccessLocked) {
+        return const DailyWisdomStatus(isReady: true);
+      }
+
+      final record = snapshot.record;
+      final now = _effectiveNow(_clock(), record);
+      if (!now.isBefore(record.unlockAt)) {
+        return DailyWisdomStatus(
+          isReady: true,
+          unlockAt: record.unlockAt,
+          remaining: Duration.zero,
+        );
+      }
+
+      return DailyWisdomStatus(
+        isReady: false,
+        unlockAt: record.unlockAt,
+        remaining: record.unlockAt.difference(now),
+        lockedText: record.text,
+      );
+    } on TimeoutException catch (error) {
+      throw DailyWisdomStatusUnavailableException(error);
+    }
   }
 
-  bool _isActive(DailyWisdomRecord? record, DateTime now) {
-    return record != null &&
-        _effectiveNow(now, record).isBefore(record.unlockAt);
+  Future<T> _observeForStatus<T>(Future<T> operation) {
+    return _repository.observeWithUiTimeout(
+      operation: operation,
+      timeout: statusTimeout,
+    );
   }
 
   DateTime _effectiveNow(DateTime now, DailyWisdomRecord record) {
@@ -350,75 +219,7 @@ class DailyWisdomAccessService {
     return now.isBefore(record.revealedAt) ? record.revealedAt : now;
   }
 
-  Future<PendingDailyWisdomReveal?> _loadUsablePendingReveal(
-    DailyWisdomRecord? record,
-  ) async {
-    final pendingReveal = await _storageService.loadPendingDailyWisdomReveal();
-    if (pendingReveal == null) return null;
-
-    if (record != null && !_pendingBelongsToNextWindow(pendingReveal, record)) {
-      await _clearPendingBestEffort();
-      return null;
-    }
-
-    return pendingReveal;
-  }
-
-  bool _pendingBelongsToNextWindow(
-    PendingDailyWisdomReveal pendingReveal,
-    DailyWisdomRecord record,
-  ) {
-    final pendingBoundary = pendingReveal.isRevealedPendingCommit
-        ? pendingReveal.confirmedRevealBoundary!
-        : pendingReveal.preparedAt;
-
-    return !pendingBoundary.isBefore(record.unlockAt);
-  }
-
-  Future<void> _clearPendingBestEffort() async {
-    try {
-      await _storageService.clearPendingDailyWisdomReveal();
-    } catch (_) {
-      // Pending reveal cleanup is best-effort once authoritative state wins.
-    }
-  }
-
-  Future<DailyWisdomRecord?> _loadRecordRecoveringCorruption() async {
-    try {
-      return await _loadRecord();
-    } on CorruptDailyWisdomRecordException {
-      final recoveredRecord = await _recoverRecordFromCorruptDailyRecord();
-      if (recoveredRecord != null) return recoveredRecord;
-
-      await _clearCorruptDailyRecordBestEffort();
-      return null;
-    }
-  }
-
-  Future<DailyWisdomRecord?> _loadRecord() async {
-    return _storageService.loadDailyWisdomRecord(
-      lockDuration: lockDuration,
-    );
-  }
-
-  Future<DailyWisdomRecord?> _recoverRecordFromCorruptDailyRecord() async {
-    final pendingReveal = await _storageService.loadPendingDailyWisdomReveal();
-    if (pendingReveal != null && pendingReveal.isRevealedPendingCommit) {
-      await _clearCorruptDailyRecordBestEffort();
-      return _writePendingRevealRecordAsDaily(
-        pendingReveal: pendingReveal,
-        confirmedBoundary: pendingReveal.confirmedRevealBoundary!,
-      );
-    }
-
-    return null;
-  }
-
-  Future<void> _clearCorruptDailyRecordBestEffort() async {
-    try {
-      await _storageService.clearDailyWisdomRecordBestEffort();
-    } catch (_) {
-      // Corrupt authoritative state must not invent a lock or block launch.
-    }
+  bool _isSameMoment(DateTime first, DateTime second) {
+    return first.millisecondsSinceEpoch == second.millisecondsSinceEpoch;
   }
 }

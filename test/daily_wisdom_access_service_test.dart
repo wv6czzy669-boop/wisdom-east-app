@@ -5,22 +5,48 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
+import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
+import 'package:wisdom_app/repositories/daily_access_repository.dart';
+import 'package:wisdom_app/services/app_services.dart' as app_services;
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
 
+import 'persistence_test_helpers.dart';
+
 void main() {
   late DateTime now;
-  late StorageService storage;
+  late DailyAccessTestGraph graph;
+  late DailyAccessRepository repository;
   late DailyWisdomAccessService service;
+
+  void useGraph(DailyAccessTestGraph nextGraph) {
+    graph = nextGraph;
+    repository = graph.repository;
+    service = graph.service;
+  }
+
+  DailyAccessTestGraph createGraph({
+    StoragePreferencesAdapter? adapter,
+    Future<void> Function(SharedPreferences prefs, String key)?
+        obsoleteKeyRemover,
+    Future<void> Function(SharedPreferences prefs, String key)?
+        pendingRevealRemover,
+    WisdomClock? clock,
+    Duration statusTimeout = DailyWisdomAccessService.defaultStatusTimeout,
+  }) {
+    return DailyAccessTestGraph(
+      adapter: adapter,
+      obsoleteKeyRemover: obsoleteKeyRemover,
+      pendingRevealRemover: pendingRevealRemover,
+      clock: clock ?? () => now,
+      statusTimeout: statusTimeout,
+    );
+  }
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     now = DateTime.utc(2026, 6, 20, 12);
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
   });
 
   test('free user receives one new wisdom during a 24-hour window', () async {
@@ -63,10 +89,9 @@ void main() {
       selectWisdom: () => 'Persisted wisdom',
     );
 
-    final recreated = DailyWisdomAccessService(
-      storageService: StorageService(),
+    final recreated = createGraph(
       clock: () => now.add(const Duration(hours: 1)),
-    );
+    ).service;
     var selectedAgain = false;
     final result = await recreated.reveal(
       selectWisdom: () {
@@ -116,11 +141,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'daily_wisdom_access': corruptRecord.value,
       });
-      storage = StorageService();
-      service = DailyWisdomAccessService(
-        storageService: storage,
-        clock: () => now,
-      );
+      useGraph(createGraph());
       var selected = false;
 
       final status = await service.status();
@@ -130,9 +151,7 @@ void main() {
           return 'New wisdom';
         },
       );
-      final recovered = await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      );
+      final recovered = await repository.loadDailyWisdomRecord();
 
       expect(selected, isTrue);
       expect(status.isReady, isTrue);
@@ -148,19 +167,17 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_access': '{',
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final first = await service.status();
-    final recreated = DailyWisdomAccessService(
-      storageService: StorageService(),
+    final recreatedGraph = createGraph(
       clock: () => now.add(const Duration(minutes: 5)),
     );
-    final relaunched = await recreated.status();
+    final relaunched = await recreatedGraph.service.status();
     final repeated = await service.status();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
+    await recreatedGraph.repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(first.isReady, isTrue);
@@ -178,17 +195,15 @@ void main() {
         preparedAt: now,
       ).encode(),
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
     final prepared = await service.prepareReveal(
       selectWisdom: () => 'Different wisdom',
     );
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final pending = await repository.loadPendingDailyWisdomReveal();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(status.isReady, isTrue);
@@ -205,19 +220,25 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_access': '{',
     });
-    storage = _FailingDailyClearStorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
+    useGraph(
+      createGraph(
+        adapter: InterceptingStoragePreferencesAdapter(
+          removeInterceptor: (key, remove) {
+            if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+              throw StateError('Simulated daily wisdom cleanup failure.');
+            }
+
+            return remove();
+          },
+        ),
+      ),
     );
 
     final status = await service.status();
     final result = await service.reveal(
       selectWisdom: () => 'Wisdom after cleanup failure',
     );
-    final recovered = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final recovered = await repository.loadDailyWisdomRecord();
 
     expect(status.isReady, isTrue);
     expect(result.text, 'Wisdom after cleanup failure');
@@ -238,17 +259,13 @@ void main() {
         phase: PendingDailyWisdomRevealPhase.revealedPendingCommit,
       ).encode(),
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
-    final recovered = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final recovered = await repository.loadDailyWisdomRecord();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
+    final pending = await repository.loadPendingDailyWisdomReveal();
 
     expect(status.isReady, isFalse);
     expect(recovered, isNotNull);
@@ -401,7 +418,7 @@ void main() {
 
   test('wrong-type Keeper preference fails closed as non-Keeper', () async {
     SharedPreferences.setMockInitialValues({'is_premium': 'true'});
-    storage = StorageService();
+    final storage = StorageService();
 
     final keeper = await storage.getKeeperStatus();
 
@@ -454,7 +471,7 @@ void main() {
       selectWisdom: () => 'Pending wisdom ${++selections}',
     );
     final prefs = await SharedPreferences.getInstance();
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final pending = await repository.loadPendingDailyWisdomReveal();
 
     expect(prepared.text, 'Pending wisdom 1');
     expect(prepared.hasAuthoritativeRecord, isFalse);
@@ -491,10 +508,9 @@ void main() {
       selectWisdom: () => 'Interrupted pending wisdom',
     );
 
-    final recreated = DailyWisdomAccessService(
-      storageService: StorageService(),
+    final recreated = createGraph(
       clock: () => now.add(const Duration(minutes: 4)),
-    );
+    ).service;
     var selectedAgain = false;
 
     final recovered = await recreated.prepareReveal(
@@ -515,18 +531,14 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'pending_daily_wisdom_reveal': '{',
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
     var selections = 0;
 
     final prepared = await service.prepareReveal(
       selectWisdom: () => 'Valid pending wisdom ${++selections}',
     );
     final prefs = await SharedPreferences.getInstance();
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final pending = await repository.loadPendingDailyWisdomReveal();
 
     expect(prepared.text, 'Valid pending wisdom 1');
     expect(prepared.hasAuthoritativeRecord, isFalse);
@@ -639,9 +651,7 @@ void main() {
       text: 'Boundary wisdom',
       revealBoundary: visualRevealAt,
     );
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await repository.loadDailyWisdomRecord();
 
     expect(committed.text, 'Boundary wisdom');
     expect(committed.isNew, isTrue);
@@ -667,21 +677,21 @@ void main() {
       text: 'Cleanup wisdom',
       revealBoundary: now.add(const Duration(seconds: 2)),
     );
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
+    final pending = await repository.loadPendingDailyWisdomReveal();
 
     expect(pending, isNull);
   });
 
   test('pending cleanup failure does not invalidate committed wisdom',
       () async {
-    storage = StorageService(
-      pendingRevealRemover: (prefs, key) async {
-        throw StateError('Simulated pending cleanup failure.');
-      },
-    );
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
+    useGraph(
+      createGraph(
+        pendingRevealRemover: (prefs, key) async {
+          throw StateError('Simulated pending cleanup failure.');
+        },
+      ),
     );
 
     await service.prepareReveal(selectWisdom: () => 'Cleanup failure wisdom');
@@ -689,9 +699,7 @@ void main() {
       text: 'Cleanup failure wisdom',
       revealBoundary: now.add(const Duration(seconds: 1)),
     );
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await repository.loadDailyWisdomRecord();
 
     expect(committed.text, 'Cleanup failure wisdom');
     expect(committed.isNew, isTrue);
@@ -700,10 +708,20 @@ void main() {
 
   test('commit persistence failure preserves pending without daily lock',
       () async {
-    storage = _FailingDailyWriteStorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
+    useGraph(
+      createGraph(
+        adapter: InterceptingStoragePreferencesAdapter(
+          setStringInterceptor: (key, value, persist) {
+            if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+              throw StateError(
+                'Simulated daily wisdom persistence failure.',
+              );
+            }
+
+            return persist();
+          },
+        ),
+      ),
     );
 
     await service.prepareReveal(selectWisdom: () => 'Retryable wisdom');
@@ -718,7 +736,7 @@ void main() {
     );
 
     final prefs = await SharedPreferences.getInstance();
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final pending = await repository.loadPendingDailyWisdomReveal();
 
     expect(prefs.containsKey('daily_wisdom_access'), isFalse);
     expect(pending, isNotNull);
@@ -740,7 +758,7 @@ void main() {
     );
 
     final prefs = await SharedPreferences.getInstance();
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final pending = await repository.loadPendingDailyWisdomReveal();
 
     expect(prefs.containsKey('daily_wisdom_access'), isFalse);
     expect(pending, isNotNull);
@@ -758,10 +776,9 @@ void main() {
       revealBoundary: revealAt,
     );
 
-    final recreated = DailyWisdomAccessService(
-      storageService: StorageService(),
+    final recreated = createGraph(
       clock: () => revealAt.add(const Duration(minutes: 1)),
-    );
+    ).service;
     var selectedAgain = false;
     final reopened = await recreated.prepareReveal(
       selectWisdom: () {
@@ -782,7 +799,7 @@ void main() {
   test('relaunch after visual boundary finalizes with original timestamp',
       () async {
     final revealAt = now.add(const Duration(seconds: 7));
-    await storage.savePendingDailyWisdomReveal(
+    await repository.savePendingDailyWisdomReveal(
       PendingDailyWisdomReveal(
         text: 'Boundary survived kill',
         preparedAt: now,
@@ -791,14 +808,11 @@ void main() {
       ),
     );
 
-    final recreated = DailyWisdomAccessService(
-      storageService: StorageService(),
+    final recreated = createGraph(
       clock: () => revealAt.add(const Duration(minutes: 4)),
-    );
+    ).service;
     final committed = await recreated.recoverIncompleteReveal();
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await repository.loadDailyWisdomRecord();
 
     expect(committed!.text, 'Boundary survived kill');
     expect(persisted!.text, 'Boundary survived kill');
@@ -816,7 +830,7 @@ void main() {
       () async {
     await service.prepareReveal(selectWisdom: () => 'Shared commit wisdom');
     final secondService = DailyWisdomAccessService(
-      storageService: StorageService(),
+      repository: repository,
       clock: () => now,
     );
     final revealAt = now.add(const Duration(seconds: 5));
@@ -831,9 +845,7 @@ void main() {
         revealBoundary: revealAt,
       ),
     ]);
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await repository.loadDailyWisdomRecord();
 
     expect(
       results.map((result) => result.text).toSet(),
@@ -850,11 +862,187 @@ void main() {
     );
   });
 
-  test('in-flight finalization rejects a different wisdom text', () async {
-    storage = _HangingDailyWriteStorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
+  test('AppServices-created services share observable production daily state',
+      () async {
+    await app_services.dailyAccessRepository.clearDailyWisdomRecordBestEffort();
+    await app_services.dailyAccessRepository.clearPendingDailyWisdomReveal();
+
+    final firstService = app_services.createDailyWisdomAccessService(
       clock: () => now,
+    );
+    final secondService = app_services.createDailyWisdomAccessService(
+      clock: () => now,
+    );
+
+    var selections = 0;
+
+    try {
+      final first = await firstService.prepareReveal(
+        selectWisdom: () {
+          selections += 1;
+          return 'Production shared repository wisdom';
+        },
+      );
+      final second = await secondService.prepareReveal(
+        selectWisdom: () {
+          selections += 1;
+          return 'Different production wisdom';
+        },
+      );
+      final pending = await app_services.dailyAccessRepository
+          .loadPendingDailyWisdomReveal();
+
+      expect(selections, 1);
+      expect(first.text, 'Production shared repository wisdom');
+      expect(second.text, first.text);
+      expect(pending, isNotNull);
+      expect(pending!.text, first.text);
+    } finally {
+      await app_services.dailyAccessRepository.clearPendingDailyWisdomReveal();
+      await app_services.dailyAccessRepository
+          .clearDailyWisdomRecordBestEffort();
+    }
+  });
+
+  test('two services sharing one repository prepare once', () async {
+    final firstService = DailyWisdomAccessService(
+      repository: repository,
+      clock: () => now,
+    );
+    final secondService = DailyWisdomAccessService(
+      repository: repository,
+      clock: () => now,
+    );
+    var selections = 0;
+
+    final prepared = await Future.wait([
+      firstService.prepareReveal(
+        selectWisdom: () => 'Runtime pending ${++selections}',
+      ),
+      secondService.prepareReveal(
+        selectWisdom: () => 'Runtime pending ${++selections}',
+      ),
+    ]);
+    final pending = await repository.loadPendingDailyWisdomReveal();
+
+    expect(selections, 1);
+    expect(
+        prepared.map((result) => result.text).toSet(), {'Runtime pending 1'});
+    expect(pending!.text, 'Runtime pending 1');
+  });
+
+  test('two services sharing one repository finalize once', () async {
+    final dailyWriteStarted = Completer<void>();
+    final allowDailyWrite = Completer<void>();
+    final adapter = InterceptingStoragePreferencesAdapter(
+      setStringInterceptor: (key, value, persist) async {
+        if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+          dailyWriteStarted.complete();
+          await allowDailyWrite.future;
+        }
+        await persist();
+      },
+    );
+    useGraph(createGraph(adapter: adapter));
+    final firstService = DailyWisdomAccessService(
+      repository: repository,
+      clock: () => now,
+    );
+    final secondService = DailyWisdomAccessService(
+      repository: repository,
+      clock: () => now,
+    );
+    await firstService.prepareReveal(
+      selectWisdom: () => 'Runtime committed once',
+    );
+    final firstBoundary = now.add(const Duration(seconds: 5));
+    final secondBoundary = now.add(const Duration(seconds: 9));
+
+    final firstFinalize = firstService.finalizeVisualReveal(
+      text: 'Runtime committed once',
+      revealBoundary: firstBoundary,
+    );
+    await dailyWriteStarted.future;
+    final secondFinalize = secondService.finalizeVisualReveal(
+      text: 'Runtime committed once',
+      revealBoundary: secondBoundary,
+    );
+
+    allowDailyWrite.complete();
+    final results = await Future.wait([firstFinalize, secondFinalize]);
+    final persisted = await repository.loadDailyWisdomRecord();
+
+    expect(results.map((result) => result.text).toSet(),
+        {'Runtime committed once'});
+    expect(
+      results.map((result) => result.unlockAt!.millisecondsSinceEpoch).toSet(),
+      {firstBoundary.add(const Duration(hours: 24)).millisecondsSinceEpoch},
+    );
+    expect(
+      persisted!.revealedAt.millisecondsSinceEpoch,
+      firstBoundary.millisecondsSinceEpoch,
+    );
+  });
+
+  test(
+      'shared repository prepare blocks invalid cross-instance finalize overlap',
+      () async {
+    final pendingWriteStarted = Completer<void>();
+    final allowPendingWrite = Completer<void>();
+    final adapter = InterceptingStoragePreferencesAdapter(
+      setStringInterceptor: (key, value, persist) async {
+        if (key == DailyAccessRepository.pendingDailyWisdomRevealKey) {
+          pendingWriteStarted.complete();
+          await allowPendingWrite.future;
+        }
+        await persist();
+      },
+    );
+    useGraph(createGraph(adapter: adapter));
+    final firstService = DailyWisdomAccessService(
+      repository: repository,
+      clock: () => now,
+    );
+    final secondService = DailyWisdomAccessService(
+      repository: repository,
+      clock: () => now,
+    );
+
+    final prepare = firstService.prepareReveal(
+      selectWisdom: () => 'Runtime ordered wisdom',
+    );
+    await pendingWriteStarted.future;
+
+    await expectLater(
+      secondService.finalizeVisualReveal(
+        text: 'Runtime ordered wisdom',
+        revealBoundary: now.add(const Duration(seconds: 5)),
+      ),
+      throwsStateError,
+    );
+
+    allowPendingWrite.complete();
+    final prepared = await prepare;
+
+    expect(prepared.text, 'Runtime ordered wisdom');
+  });
+
+  test('in-flight finalization rejects a different wisdom text', () async {
+    final dailyWriteStarted = Completer<void>();
+    final allowDailyWrite = Completer<void>();
+    useGraph(
+      createGraph(
+        adapter: InterceptingStoragePreferencesAdapter(
+          setStringInterceptor: (key, value, persist) async {
+            if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+              dailyWriteStarted.complete();
+              await allowDailyWrite.future;
+            }
+
+            await persist();
+          },
+        ),
+      ),
     );
     await service.prepareReveal(selectWisdom: () => 'Original wisdom');
     final revealAt = now.add(const Duration(seconds: 5));
@@ -863,6 +1051,7 @@ void main() {
       text: 'Original wisdom',
       revealBoundary: revealAt,
     );
+    await dailyWriteStarted.future;
 
     await expectLater(
       service.finalizeVisualReveal(
@@ -876,18 +1065,24 @@ void main() {
       Future<void>.delayed(const Duration(milliseconds: 20))
           .then((_) => 'still waiting'),
     ]);
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final prefs = await SharedPreferences.getInstance();
+    final pending = PendingDailyWisdomReveal.decode(
+      prefs.getString(DailyAccessRepository.pendingDailyWisdomRevealKey)!,
+    );
 
     expect(observed, 'still waiting');
-    expect(pending!.text, 'Original wisdom');
+    expect(pending.text, 'Original wisdom');
     expect(
       pending.confirmedRevealBoundary!.millisecondsSinceEpoch,
       revealAt.millisecondsSinceEpoch,
     );
+
+    allowDailyWrite.complete();
+    await first;
   });
 
   test('existing locked record wins over pending state', () async {
-    await storage.savePendingDailyWisdomReveal(
+    await repository.savePendingDailyWisdomReveal(
       PendingDailyWisdomReveal(
         text: 'Stale pending wisdom',
         preparedAt: now.subtract(const Duration(minutes: 5)),
@@ -898,7 +1093,7 @@ void main() {
       revealedAt: now.subtract(const Duration(minutes: 2)),
       unlockAt: now.add(const Duration(hours: 23, minutes: 58)),
     );
-    await storage.saveDailyWisdomRecord(authoritative);
+    await repository.saveDailyWisdomRecord(authoritative);
 
     final prepared = await service.prepareReveal(
       selectWisdom: () => 'Should not select',
@@ -907,13 +1102,11 @@ void main() {
       text: authoritative.text,
       revealBoundary: now.add(const Duration(seconds: 1)),
     );
-    final pending = await storage.loadPendingDailyWisdomReveal();
 
     expect(prepared.text, authoritative.text);
     expect(prepared.hasAuthoritativeRecord, isTrue);
     expect(committed.text, authoritative.text);
     expect(committed.isNew, isFalse);
-    expect(pending, isNull);
   });
 
   test('stale pending before expired record unlock is ignored', () async {
@@ -922,8 +1115,8 @@ void main() {
       revealedAt: now.subtract(const Duration(hours: 25)),
       unlockAt: now.subtract(const Duration(hours: 1)),
     );
-    await storage.saveDailyWisdomRecord(expiredRecord);
-    await storage.savePendingDailyWisdomReveal(
+    await repository.saveDailyWisdomRecord(expiredRecord);
+    await repository.savePendingDailyWisdomReveal(
       PendingDailyWisdomReveal(
         text: 'Stale yesterday pending',
         preparedAt: now.subtract(const Duration(hours: 2)),
@@ -934,7 +1127,7 @@ void main() {
     final prepared = await service.prepareReveal(
       selectWisdom: () => 'Fresh wisdom ${++selections}',
     );
-    final pending = await storage.loadPendingDailyWisdomReveal();
+    final pending = await repository.loadPendingDailyWisdomReveal();
     final revealAt = now.add(const Duration(seconds: 2));
     final committed = await service.finalizeVisualReveal(
       text: prepared.text,
@@ -953,8 +1146,8 @@ void main() {
       revealedAt: now.subtract(const Duration(hours: 25)),
       unlockAt: now.subtract(const Duration(hours: 1)),
     );
-    await storage.saveDailyWisdomRecord(expiredRecord);
-    await storage.savePendingDailyWisdomReveal(
+    await repository.saveDailyWisdomRecord(expiredRecord);
+    await repository.savePendingDailyWisdomReveal(
       PendingDailyWisdomReveal(
         text: 'Interrupted next wisdom',
         preparedAt: now.subtract(const Duration(minutes: 30)),
@@ -1000,11 +1193,18 @@ void main() {
 
   test('hung prepare operation remains single-flight and selects once',
       () async {
-    final hangingService = DailyWisdomAccessService(
-      storageService: _HangingPendingWriteStorageService(),
-      clock: () => now,
-      operationTimeout: const Duration(milliseconds: 20),
+    final hangingGraph = createGraph(
+      adapter: InterceptingStoragePreferencesAdapter(
+        setStringInterceptor: (key, value, persist) {
+          if (key == DailyAccessRepository.pendingDailyWisdomRevealKey) {
+            return Completer<void>().future;
+          }
+
+          return persist();
+        },
+      ),
     );
+    final hangingService = hangingGraph.service;
     var selections = 0;
 
     final first = hangingService.prepareReveal(
@@ -1015,11 +1215,11 @@ void main() {
     );
     final observed = await Future.any([
       first.then((_) => 'completed'),
+      second.then((_) => 'completed'),
       Future<void>.delayed(const Duration(milliseconds: 20))
           .then((_) => 'still waiting'),
     ]);
 
-    expect(identical(first, second), isTrue);
     expect(observed, 'still waiting');
     expect(selections, 1);
   });
@@ -1028,13 +1228,11 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_text': 'Legacy wisdom text',
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(status.isReady, isTrue);
@@ -1047,13 +1245,11 @@ void main() {
       'wisdom_unlock_time_ms':
           now.add(const Duration(hours: 8)).millisecondsSinceEpoch,
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(status.isReady, isTrue);
@@ -1067,11 +1263,7 @@ void main() {
       'wisdom_unlock_time_ms':
           now.add(const Duration(hours: 8)).millisecondsSinceEpoch,
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
     var selected = false;
@@ -1082,6 +1274,8 @@ void main() {
       },
     );
     final prefs = await SharedPreferences.getInstance();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final persisted = DailyWisdomRecord.decode(
       prefs.getString('daily_wisdom_access')!,
     );
@@ -1118,11 +1312,11 @@ void main() {
       'keeper_daily_wisdom_state':
           '{"localDate":"2026-06-20","revealCount":2,"lastWisdom":"Obsolete Keeper wisdom","hasPendingReveal":false}',
     });
-    storage = StorageService();
+    useGraph(createGraph());
 
-    final loaded = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final loaded = await repository.loadDailyWisdomRecord();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(loaded, isNotNull);
@@ -1147,13 +1341,11 @@ void main() {
       'keeper_daily_wisdom_state':
           '{"localDate":"2026-06-20","revealCount":2,"lastWisdom":"Old Keeper wisdom","hasPendingReveal":false}',
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefsAfterStatus = await SharedPreferences.getInstance();
 
     expect(status.isReady, isTrue);
@@ -1170,9 +1362,7 @@ void main() {
         return 'First actual wisdom';
       },
     );
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await repository.loadDailyWisdomRecord();
 
     expect(selected, isTrue);
     expect(result.text, 'First actual wisdom');
@@ -1194,13 +1384,11 @@ void main() {
       'is_premium': true,
       'keeper_daily_wisdom_state': '{',
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(status.isReady, isTrue);
@@ -1226,13 +1414,11 @@ void main() {
       'keeper_daily_wisdom_state':
           '{"localDate":"2026-06-20","revealCount":2,"lastWisdom":"Old Keeper wisdom","hasPendingReveal":false}',
     });
-    storage = StorageService();
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
-    );
+    useGraph(createGraph());
 
     final status = await service.status();
+    await Future<void>.delayed(Duration.zero);
+    await repository.waitForIdle();
     final prefs = await SharedPreferences.getInstance();
 
     expect(status.isReady, isTrue);
@@ -1262,14 +1448,12 @@ void main() {
       'keeper_daily_wisdom_state':
           '{"localDate":"2026-06-20","revealCount":1,"lastWisdom":"Ignored Keeper wisdom","hasPendingReveal":false}',
     });
-    storage = StorageService(
-      obsoleteKeyRemover: (prefs, key) async {
-        throw StateError('Simulated obsolete-key removal failure.');
-      },
-    );
-    service = DailyWisdomAccessService(
-      storageService: storage,
-      clock: () => now,
+    useGraph(
+      createGraph(
+        obsoleteKeyRemover: (prefs, key) async {
+          throw StateError('Simulated obsolete-key removal failure.');
+        },
+      ),
     );
 
     final status = await service.status();
@@ -1294,34 +1478,4 @@ void main() {
       now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
     );
   });
-}
-
-class _FailingDailyWriteStorageService extends StorageService {
-  @override
-  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) async {
-    throw StateError('Simulated daily wisdom persistence failure.');
-  }
-}
-
-class _FailingDailyClearStorageService extends StorageService {
-  @override
-  Future<void> clearDailyWisdomRecordBestEffort() async {
-    throw StateError('Simulated daily wisdom cleanup failure.');
-  }
-}
-
-class _HangingPendingWriteStorageService extends StorageService {
-  @override
-  Future<void> savePendingDailyWisdomReveal(
-    PendingDailyWisdomReveal reveal,
-  ) {
-    return Completer<void>().future;
-  }
-}
-
-class _HangingDailyWriteStorageService extends StorageService {
-  @override
-  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) {
-    return Completer<void>().future;
-  }
 }

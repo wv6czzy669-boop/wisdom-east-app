@@ -8,7 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
-import 'package:wisdom_app/services/storage_service.dart';
+
+import 'persistence_test_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -287,7 +288,7 @@ void main() {
     await _flushEvents();
 
     final dailyAccess = DailyWisdomAccessService(
-      storageService: StorageService(),
+      repository: DailyAccessTestGraph().repository,
       clock: () => now.add(const Duration(hours: 1)),
     );
     var selected = false;
@@ -324,7 +325,7 @@ void main() {
     await _flushEvents();
 
     final dailyAccess = DailyWisdomAccessService(
-      storageService: StorageService(),
+      repository: DailyAccessTestGraph().repository,
       clock: () => now.add(const Duration(hours: 1)),
     );
     var selected = false;

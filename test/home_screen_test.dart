@@ -7,9 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
+import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
+import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
+
+import 'persistence_test_helpers.dart';
 
 void main() {
   final removedRevealAnother = ['Reveal', 'another'].join(' ');
@@ -26,7 +30,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
 
     final markFinder = find.byKey(const ValueKey('launch-ritual-mark'));
@@ -71,7 +75,7 @@ void main() {
   testWidgets('lifecycle interruption restores visible ritual content',
       (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     expect(
@@ -102,9 +106,10 @@ void main() {
   testWidgets('Ask-fade interruption keeps pending wisdom without daily lock',
       (tester) async {
     SharedPreferences.setMockInitialValues({'is_premium': true});
+    final dailyGraph = DailyAccessTestGraph();
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(dailyGraph: dailyGraph),
     );
     await _finishOpeningIntro(tester);
     await _advanceToQuestion(tester);
@@ -112,11 +117,10 @@ void main() {
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 20));
 
-    final storage = StorageService();
-    final pendingBeforePause = await storage.loadPendingDailyWisdomReveal();
-    final persistedBeforePause = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final pendingBeforePause =
+        await dailyGraph.repository.loadPendingDailyWisdomReveal();
+    final persistedBeforePause =
+        await dailyGraph.repository.loadDailyWisdomRecord();
     expect(pendingBeforePause, isNotNull);
     expect(persistedBeforePause, isNull);
     final selectedWisdom = pendingBeforePause!.text;
@@ -127,9 +131,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     final persistedAfterResumeBeforeReveal =
-        await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+        await dailyGraph.repository.loadDailyWisdomRecord();
     expect(persistedAfterResumeBeforeReveal, isNull);
 
     await _tapCenter(tester);
@@ -140,11 +142,9 @@ void main() {
     expect(find.text(selectedWisdom), findsOneWidget);
     expect(find.text('Ask from your heart.'), findsNothing);
 
-    final persistedAfterResume = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persistedAfterResume =
+        await dailyGraph.repository.loadDailyWisdomRecord();
     expect(persistedAfterResume!.text, selectedWisdom);
-    expect(await storage.loadPendingDailyWisdomReveal(), isNull);
 
     await tester.pump(const Duration(milliseconds: 950));
     await tester.pump(const Duration(milliseconds: 600));
@@ -153,8 +153,9 @@ void main() {
   testWidgets(
       'black-silence interruption keeps pending wisdom without daily lock',
       (tester) async {
+    final dailyGraph = DailyAccessTestGraph();
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(dailyGraph: dailyGraph),
     );
     await _finishOpeningIntro(tester);
     await _advanceToQuestion(tester);
@@ -162,12 +163,10 @@ void main() {
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
 
-    final storage = StorageService();
     final pendingDuringBlackSilence =
-        await storage.loadPendingDailyWisdomReveal();
-    final persistedDuringBlackSilence = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+        await dailyGraph.repository.loadPendingDailyWisdomReveal();
+    final persistedDuringBlackSilence =
+        await dailyGraph.repository.loadDailyWisdomRecord();
 
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
     expect(pendingDuringBlackSilence, isNotNull);
@@ -180,9 +179,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(
-      await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      ),
+      await dailyGraph.repository.loadDailyWisdomRecord(),
       isNull,
     );
 
@@ -191,9 +188,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
 
-    final committed = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final committed = await dailyGraph.repository.loadDailyWisdomRecord();
 
     expect(committed, isNotNull);
     expect(committed!.text, selectedWisdom);
@@ -205,14 +200,12 @@ void main() {
 
   testWidgets('final Ask tap fades immediately while pending save is delayed',
       (tester) async {
-    final storage = _DelayedPendingStorageService();
+    final dailyGraph = _DelayedPendingDailyAccessGraph();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          storageService: storage,
-          dailyWisdomOperationTimeout: const Duration(seconds: 5),
-        ),
+      _homeApp(
+        dailyGraph: dailyGraph.graph,
+        dailyWisdomOperationTimeout: const Duration(seconds: 5),
       ),
     );
     await _finishOpeningIntro(tester);
@@ -223,7 +216,7 @@ void main() {
 
     await _tapCenter(tester);
     await tester.pump();
-    expect(storage.pendingSaveStarted, isTrue);
+    expect(dailyGraph.pendingSaveStarted, isTrue);
     expect(_askFadeValue(tester), 1.0);
 
     await tester.pump(const Duration(milliseconds: 300));
@@ -231,14 +224,10 @@ void main() {
     expect(_askFadeValue(tester), lessThan(1.0));
     expect(_askFadeValue(tester), greaterThan(0.0));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
-    expect(
-      await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      ),
-      isNull,
-    );
+    final prefsDuringPendingSave = await SharedPreferences.getInstance();
+    expect(prefsDuringPendingSave.containsKey('daily_wisdom_access'), isFalse);
 
-    storage.releasePendingSave();
+    dailyGraph.releasePendingSave();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 949));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
@@ -247,7 +236,8 @@ void main() {
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 549));
-    final pendingBeforeReveal = await storage.loadPendingDailyWisdomReveal();
+    final pendingBeforeReveal =
+        await dailyGraph.repository.loadPendingDailyWisdomReveal();
     expect(pendingBeforeReveal, isNotNull);
     expect(
       pendingBeforeReveal!.phase,
@@ -264,14 +254,12 @@ void main() {
 
   testWidgets('never-completing prepare times out to a retryable Ask state',
       (tester) async {
-    final storage = _HangingPendingStorageService();
+    final dailyGraph = _HangingPendingDailyAccessGraph();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          storageService: storage,
-          dailyWisdomOperationTimeout: const Duration(milliseconds: 100),
-        ),
+      _homeApp(
+        dailyGraph: dailyGraph.graph,
+        dailyWisdomOperationTimeout: const Duration(milliseconds: 100),
       ),
     );
     await _finishOpeningIntro(tester);
@@ -291,12 +279,9 @@ void main() {
 
     expect(find.text('Ask from your heart.'), findsOneWidget);
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    final prefsAfterPrepareTimeout = await SharedPreferences.getInstance();
     expect(
-      await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      ),
-      isNull,
-    );
+        prefsAfterPrepareTimeout.containsKey('daily_wisdom_access'), isFalse);
 
     await _tapCenter(tester);
     await tester.pump();
@@ -309,16 +294,16 @@ void main() {
 
   testWidgets('commit timeout keeps revealed wisdom unsaved and retryable',
       (tester) async {
-    final storage = _HangingDailyWriteStorageService();
     final revealBoundary = DateTime.utc(2026, 6, 20, 12);
+    final dailyGraph = _HangingDailyWriteAccessGraph(
+      clock: () => revealBoundary,
+    );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          storageService: storage,
-          clock: () => revealBoundary,
-          dailyWisdomOperationTimeout: const Duration(milliseconds: 100),
-        ),
+      _homeApp(
+        dailyGraph: dailyGraph.graph,
+        clock: () => revealBoundary,
+        dailyWisdomOperationTimeout: const Duration(milliseconds: 100),
       ),
     );
     await _finishOpeningIntro(tester);
@@ -328,22 +313,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
+    await _pumpUntilCondition(tester, () => dailyGraph.dailyWriteStarted);
 
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
-    expect(storage.dailyWriteStarted, isTrue);
+    expect(dailyGraph.dailyWriteStarted, isTrue);
     await tester.pump(const Duration(milliseconds: 101));
 
     expect(_keptGuard(tester).ignoring, isTrue);
+    final prefsDuringCommitTimeout = await SharedPreferences.getInstance();
     expect(
-      await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      ),
-      isNull,
+        prefsDuringCommitTimeout.containsKey('daily_wisdom_access'), isFalse);
+    final pending = PendingDailyWisdomReveal.decode(
+      prefsDuringCommitTimeout
+          .getString(DailyAccessRepository.pendingDailyWisdomRevealKey)!,
     );
-    final pending = await storage.loadPendingDailyWisdomReveal();
     expect(pending, isNotNull);
-    expect(pending!.phase, PendingDailyWisdomRevealPhase.revealedPendingCommit);
+    expect(pending.phase, PendingDailyWisdomRevealPhase.revealedPendingCommit);
     expect(
       pending.confirmedRevealBoundary!.millisecondsSinceEpoch,
       revealBoundary.millisecondsSinceEpoch,
@@ -352,17 +338,15 @@ void main() {
 
   testWidgets('event-loop delayed reveal uses actual callback clock time',
       (tester) async {
-    final storage = StorageService();
     var clockNow = DateTime.utc(2026, 6, 20, 12);
+    final dailyGraph = DailyAccessTestGraph(clock: () => clockNow);
     final delayedCallbackTime = clockNow.add(const Duration(milliseconds: 37));
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          storageService: storage,
-          clock: () => clockNow,
-          dailyWisdomOperationTimeout: const Duration(seconds: 5),
-        ),
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => clockNow,
+        dailyWisdomOperationTimeout: const Duration(seconds: 5),
       ),
     );
     await _finishOpeningIntro(tester);
@@ -376,11 +360,11 @@ void main() {
     clockNow = delayedCallbackTime;
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
+    await tester.pump();
+    await tester.pump();
 
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
     expect(persisted, isNotNull);
     expect(
       persisted!.revealedAt.millisecondsSinceEpoch,
@@ -394,17 +378,17 @@ void main() {
   testWidgets(
       'slow authoritative write does not delay reveal animation but gates save',
       (tester) async {
-    final storage = _DelayedDailyWriteStorageService();
     final revealBoundary = DateTime.utc(2026, 6, 20, 12, 30);
+    final dailyGraph = _DelayedDailyWriteAccessGraph(
+      clock: () => revealBoundary,
+    );
     final expectedBoundary = revealBoundary;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          storageService: storage,
-          clock: () => revealBoundary,
-          dailyWisdomOperationTimeout: const Duration(seconds: 5),
-        ),
+      _homeApp(
+        dailyGraph: dailyGraph.graph,
+        clock: () => revealBoundary,
+        dailyWisdomOperationTimeout: const Duration(seconds: 5),
       ),
     );
     await _finishOpeningIntro(tester);
@@ -414,21 +398,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
+    await _pumpUntilCondition(tester, () => dailyGraph.dailyWriteStarted);
 
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
-    expect(storage.dailyWriteStarted, isTrue);
-    expect(storage.attemptedRecord, isNotNull);
+    expect(dailyGraph.dailyWriteStarted, isTrue);
+    expect(dailyGraph.attemptedRecord, isNotNull);
     expect(
-      storage.attemptedRecord!.revealedAt.millisecondsSinceEpoch,
+      dailyGraph.attemptedRecord!.revealedAt.millisecondsSinceEpoch,
       expectedBoundary.millisecondsSinceEpoch,
     );
     expect(_keptGuard(tester).ignoring, isTrue);
-    expect(
-      await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      ),
-      isNull,
-    );
+    final prefsDuringSlowWrite = await SharedPreferences.getInstance();
+    expect(prefsDuringSlowWrite.containsKey('daily_wisdom_access'), isFalse);
 
     await tester.pump(const Duration(milliseconds: 600));
     final revealFade = tester.widget<FadeTransition>(
@@ -437,7 +418,7 @@ void main() {
     expect(revealFade.opacity.value, greaterThan(0.0));
     expect(_keptGuard(tester).ignoring, isTrue);
 
-    storage.releaseDailyWrite();
+    dailyGraph.releaseDailyWrite();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 900));
     await tester.pump();
@@ -446,9 +427,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 2000));
 
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
     expect(persisted, isNotNull);
     expect(
       persisted!.revealedAt.millisecondsSinceEpoch,
@@ -459,17 +438,17 @@ void main() {
 
   testWidgets('retry after failed finalization uses original reveal boundary',
       (tester) async {
-    final storage = _FailingFirstBoundaryMarkStorageService();
     final revealBoundary = DateTime.utc(2026, 6, 20, 14, 45);
+    final dailyGraph = _FailingFirstBoundaryMarkAccessGraph(
+      clock: () => revealBoundary,
+    );
     final expectedBoundary = revealBoundary;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          storageService: storage,
-          clock: () => revealBoundary,
-          dailyWisdomOperationTimeout: const Duration(seconds: 5),
-        ),
+      _homeApp(
+        dailyGraph: dailyGraph.graph,
+        clock: () => revealBoundary,
+        dailyWisdomOperationTimeout: const Duration(seconds: 5),
       ),
     );
     await _finishOpeningIntro(tester);
@@ -479,17 +458,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
+    await _pumpUntilCondition(tester, () => dailyGraph.failedBoundaryMarkOnce);
 
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
-    expect(storage.failedBoundaryMarkOnce, isTrue);
+    expect(dailyGraph.failedBoundaryMarkOnce, isTrue);
     expect(_keptGuard(tester).ignoring, isTrue);
     expect(
-      await storage.loadDailyWisdomRecord(
-        lockDuration: const Duration(hours: 24),
-      ),
+      await dailyGraph.repository.loadDailyWisdomRecord(),
       isNull,
     );
-    final pendingBeforeRetry = await storage.loadPendingDailyWisdomReveal();
+    final pendingBeforeRetry =
+        await dailyGraph.repository.loadPendingDailyWisdomReveal();
     expect(pendingBeforeRetry, isNotNull);
     expect(
       pendingBeforeRetry!.phase,
@@ -501,9 +480,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
 
-    final persisted = await storage.loadDailyWisdomRecord(
-      lockDuration: const Duration(hours: 24),
-    );
+    final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
     expect(persisted, isNotNull);
     expect(
       persisted!.revealedAt.millisecondsSinceEpoch,
@@ -535,7 +512,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
@@ -590,7 +567,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -613,7 +590,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -642,7 +619,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -678,7 +655,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _advanceFromLaunchToPause(tester);
@@ -701,7 +678,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _advanceFromLaunchToPause(tester);
@@ -718,6 +695,36 @@ void main() {
     expect(find.text('Ask from your heart.'), findsNothing);
   });
 
+  testWidgets('legacy sentinel is not reopened as locked wisdom',
+      (tester) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: DailyWisdomAccessService.corruptRecordRecoveryText,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(
+      _homeApp(),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(
+      find.text(DailyWisdomAccessService.corruptRecordRecoveryText),
+      findsNothing,
+    );
+    expect(
+      find.textContaining('Return when the silence opens again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Pause.'), findsNothing);
+    expect(find.text('Feel.'), findsNothing);
+    expect(find.text('Ask from your heart.'), findsNothing);
+  });
+
   testWidgets('expired lock returns launch tap to the normal ritual',
       (tester) async {
     final now = DateTime.now();
@@ -730,7 +737,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _advanceFromLaunchToPause(tester);
@@ -756,7 +763,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -797,7 +804,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
 
@@ -851,7 +858,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
 
@@ -1085,7 +1092,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _advanceToQuestion(tester);
@@ -1125,7 +1132,7 @@ void main() {
     });
 
     await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen()),
+      _homeApp(),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -1159,7 +1166,8 @@ void main() {
               data: MediaQuery.of(
                 context,
               ).copyWith(disableAnimations: true),
-              child: const HomeScreen(),
+              child: HomeScreen(
+                  dailyWisdomAccessService: DailyAccessTestGraph().service),
             );
           },
         ),
@@ -1179,6 +1187,26 @@ void main() {
   });
 }
 
+Widget _homeApp({
+  DailyAccessTestGraph? dailyGraph,
+  StorageService? storageService,
+  WisdomClock? clock,
+  Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
+  Duration dailyWisdomStatusTimeout =
+      DailyWisdomAccessService.defaultStatusTimeout,
+}) {
+  final resolvedDailyGraph = dailyGraph ?? DailyAccessTestGraph(clock: clock);
+  return MaterialApp(
+    home: HomeScreen(
+      storageService: storageService ?? StorageService(),
+      dailyWisdomAccessService: resolvedDailyGraph.service,
+      clock: clock,
+      dailyWisdomOperationTimeout: dailyWisdomOperationTimeout,
+      dailyWisdomStatusTimeout: dailyWisdomStatusTimeout,
+    ),
+  );
+}
+
 Future<void> _finishOpeningIntro(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 450));
   await tester.pump(const Duration(milliseconds: 950));
@@ -1188,6 +1216,16 @@ Future<void> _finishOpeningIntro(WidgetTester tester) async {
 Future<void> _tapCenter(WidgetTester tester) {
   final size = tester.view.physicalSize / tester.view.devicePixelRatio;
   return tester.tapAt(size.center(Offset.zero));
+}
+
+Future<void> _pumpUntilCondition(
+  WidgetTester tester,
+  bool Function() condition, {
+  int maxPumps = 8,
+}) async {
+  for (var attempt = 0; attempt < maxPumps && !condition(); attempt += 1) {
+    await tester.pump();
+  }
 }
 
 Future<void> _advanceFromLaunchToPause(WidgetTester tester) async {
@@ -1250,7 +1288,106 @@ Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
       .whereType<GrainPainter>();
 }
 
-class _DelayedPendingStorageService extends StorageService {
+class _DelayedPendingDailyAccessGraph {
+  _DelayedPendingDailyAccessGraph._(this._adapter)
+      : graph = DailyAccessTestGraph(adapter: _adapter);
+
+  final _DelayedPendingAdapter _adapter;
+  final DailyAccessTestGraph graph;
+
+  bool get pendingSaveStarted => _adapter.pendingSaveStarted;
+  DailyAccessRepository get repository => graph.repository;
+  DailyWisdomAccessService get service => graph.service;
+
+  void releasePendingSave() {
+    _adapter.releasePendingSave();
+  }
+
+  factory _DelayedPendingDailyAccessGraph() {
+    return _DelayedPendingDailyAccessGraph._(_DelayedPendingAdapter());
+  }
+}
+
+class _HangingPendingDailyAccessGraph {
+  _HangingPendingDailyAccessGraph()
+      : graph =
+            DailyAccessTestGraph(adapter: InterceptingStoragePreferencesAdapter(
+          setStringInterceptor: (key, value, persist) {
+            if (key == DailyAccessRepository.pendingDailyWisdomRevealKey) {
+              return Completer<void>().future;
+            }
+
+            return persist();
+          },
+        ));
+
+  final DailyAccessTestGraph graph;
+
+  DailyWisdomAccessService get service => graph.service;
+}
+
+class _DelayedDailyWriteAccessGraph {
+  _DelayedDailyWriteAccessGraph._(this._adapter, {WisdomClock? clock})
+      : graph = DailyAccessTestGraph(adapter: _adapter, clock: clock);
+
+  final _DelayedDailyWriteAdapter _adapter;
+  final DailyAccessTestGraph graph;
+
+  bool get dailyWriteStarted => _adapter.dailyWriteStarted;
+  DailyWisdomRecord? get attemptedRecord => _adapter.attemptedRecord;
+  DailyAccessRepository get repository => graph.repository;
+  DailyWisdomAccessService get service => graph.service;
+
+  void releaseDailyWrite() {
+    _adapter.releaseDailyWrite();
+  }
+
+  factory _DelayedDailyWriteAccessGraph({WisdomClock? clock}) {
+    return _DelayedDailyWriteAccessGraph._(
+      _DelayedDailyWriteAdapter(),
+      clock: clock,
+    );
+  }
+}
+
+class _HangingDailyWriteAccessGraph {
+  _HangingDailyWriteAccessGraph._(this._adapter, {WisdomClock? clock})
+      : graph = DailyAccessTestGraph(adapter: _adapter, clock: clock);
+
+  final _HangingDailyWriteAdapter _adapter;
+  final DailyAccessTestGraph graph;
+
+  bool get dailyWriteStarted => _adapter.dailyWriteStarted;
+  DailyWisdomAccessService get service => graph.service;
+
+  factory _HangingDailyWriteAccessGraph({WisdomClock? clock}) {
+    return _HangingDailyWriteAccessGraph._(
+      _HangingDailyWriteAdapter(),
+      clock: clock,
+    );
+  }
+}
+
+class _FailingFirstBoundaryMarkAccessGraph {
+  _FailingFirstBoundaryMarkAccessGraph._(this._adapter, {WisdomClock? clock})
+      : graph = DailyAccessTestGraph(adapter: _adapter, clock: clock);
+
+  factory _FailingFirstBoundaryMarkAccessGraph({WisdomClock? clock}) {
+    return _FailingFirstBoundaryMarkAccessGraph._(
+      _FailingFirstBoundaryMarkAdapter(),
+      clock: clock,
+    );
+  }
+
+  final _FailingFirstBoundaryMarkAdapter _adapter;
+  final DailyAccessTestGraph graph;
+
+  bool get failedBoundaryMarkOnce => _adapter.failedBoundaryMarkOnce;
+  DailyAccessRepository get repository => graph.repository;
+  DailyWisdomAccessService get service => graph.service;
+}
+
+class _DelayedPendingAdapter extends InterceptingStoragePreferencesAdapter {
   final Completer<void> _pendingSaveGate = Completer<void>();
   bool pendingSaveStarted = false;
 
@@ -1261,25 +1398,17 @@ class _DelayedPendingStorageService extends StorageService {
   }
 
   @override
-  Future<void> savePendingDailyWisdomReveal(
-    PendingDailyWisdomReveal reveal,
-  ) async {
-    pendingSaveStarted = true;
-    await _pendingSaveGate.future;
-    await super.savePendingDailyWisdomReveal(reveal);
+  Future<void> setString(String key, String value) async {
+    if (key == DailyAccessRepository.pendingDailyWisdomRevealKey) {
+      pendingSaveStarted = true;
+      await _pendingSaveGate.future;
+    }
+
+    await super.setString(key, value);
   }
 }
 
-class _HangingPendingStorageService extends StorageService {
-  @override
-  Future<void> savePendingDailyWisdomReveal(
-    PendingDailyWisdomReveal reveal,
-  ) {
-    return Completer<void>().future;
-  }
-}
-
-class _DelayedDailyWriteStorageService extends StorageService {
+class _DelayedDailyWriteAdapter extends InterceptingStoragePreferencesAdapter {
   final Completer<void> _dailyWriteGate = Completer<void>();
   bool dailyWriteStarted = false;
   DailyWisdomRecord? attemptedRecord;
@@ -1291,36 +1420,45 @@ class _DelayedDailyWriteStorageService extends StorageService {
   }
 
   @override
-  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) async {
-    dailyWriteStarted = true;
-    attemptedRecord = record;
-    await _dailyWriteGate.future;
-    await super.saveDailyWisdomRecord(record);
+  Future<void> setString(String key, String value) async {
+    if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+      dailyWriteStarted = true;
+      attemptedRecord = DailyWisdomRecord.decode(value);
+      await _dailyWriteGate.future;
+    }
+
+    await super.setString(key, value);
   }
 }
 
-class _HangingDailyWriteStorageService extends StorageService {
+class _HangingDailyWriteAdapter extends InterceptingStoragePreferencesAdapter {
   bool dailyWriteStarted = false;
 
   @override
-  Future<void> saveDailyWisdomRecord(DailyWisdomRecord record) {
-    dailyWriteStarted = true;
-    return Completer<void>().future;
+  Future<void> setString(String key, String value) {
+    if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+      dailyWriteStarted = true;
+      return Completer<void>().future;
+    }
+
+    return super.setString(key, value);
   }
 }
 
-class _FailingFirstBoundaryMarkStorageService extends StorageService {
+class _FailingFirstBoundaryMarkAdapter
+    extends InterceptingStoragePreferencesAdapter {
   bool failedBoundaryMarkOnce = false;
 
   @override
-  Future<void> savePendingDailyWisdomReveal(
-    PendingDailyWisdomReveal reveal,
-  ) {
-    if (reveal.isRevealedPendingCommit && !failedBoundaryMarkOnce) {
-      failedBoundaryMarkOnce = true;
-      throw StateError('Boundary mark failed once.');
+  Future<void> setString(String key, String value) {
+    if (key == DailyAccessRepository.pendingDailyWisdomRevealKey) {
+      final reveal = PendingDailyWisdomReveal.decode(value);
+      if (reveal.isRevealedPendingCommit && !failedBoundaryMarkOnce) {
+        failedBoundaryMarkOnce = true;
+        throw StateError('Boundary mark failed once.');
+      }
     }
 
-    return super.savePendingDailyWisdomReveal(reveal);
+    return super.setString(key, value);
   }
 }

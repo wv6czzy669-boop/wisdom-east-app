@@ -8,7 +8,7 @@ import '../controllers/latest_request_guard.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
-import '../services/app_services.dart';
+import '../services/app_services.dart' as app_services;
 import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
 import '../services/saved_reflections_service.dart';
@@ -26,12 +26,17 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.clock,
     this.storageService,
+    this.dailyWisdomAccessService,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
+    this.dailyWisdomStatusTimeout =
+        DailyWisdomAccessService.defaultStatusTimeout,
   });
 
   final WisdomClock? clock;
   final StorageService? storageService;
+  final DailyWisdomAccessService? dailyWisdomAccessService;
   final Duration dailyWisdomOperationTimeout;
+  final Duration dailyWisdomStatusTimeout;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -170,13 +175,13 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
-    purchaseService.addListener(_syncKeeperStatus);
-    storageService = widget.storageService ?? StorageService();
-    dailyWisdomAccessService = DailyWisdomAccessService(
-      storageService: storageService,
-      clock: widget.clock,
-      operationTimeout: widget.dailyWisdomOperationTimeout,
-    );
+    app_services.purchaseService.addListener(_syncKeeperStatus);
+    storageService = widget.storageService ?? app_services.storageService;
+    dailyWisdomAccessService = widget.dailyWisdomAccessService ??
+        app_services.createDailyWisdomAccessService(
+          clock: widget.clock,
+          statusTimeout: widget.dailyWisdomStatusTimeout,
+        );
     savedReflectionsService = SavedReflectionsService(
       storageService: storageService,
     );
@@ -234,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen>
     accessRefreshGuard.invalidate();
 
     WidgetsBinding.instance.removeObserver(this);
-    purchaseService.removeListener(_syncKeeperStatus);
+    app_services.purchaseService.removeListener(_syncKeeperStatus);
     stopCountdownTimer();
     pulseController.dispose();
     wisdomRevealController.dispose();
@@ -618,18 +623,11 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     String? lockedWisdomText;
-    try {
-      final record = await storageService.loadDailyWisdomRecord(
-        lockDuration: dailyWisdomAccessService.lockDuration,
-      );
-      final text = record?.text.trim();
-      if (text != null &&
-          text.isNotEmpty &&
-          text != DailyWisdomAccessService.corruptRecordRecoveryText) {
-        lockedWisdomText = record!.text;
-      }
-    } catch (_) {
-      // Without a trustworthy stored wisdom, remain on the countdown.
+    final text = status.lockedText?.trim();
+    if (text != null &&
+        text.isNotEmpty &&
+        text != DailyWisdomAccessService.corruptRecordRecoveryText) {
+      lockedWisdomText = status.lockedText;
     }
 
     final message = CountdownFormatter.silenceMessage(status.remaining!);
