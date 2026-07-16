@@ -3,10 +3,13 @@ import '../persistence/storage_preferences_adapter.dart';
 import '../repositories/daily_access_repository.dart';
 import 'daily_wisdom_access_service.dart';
 import 'purchase_service.dart';
+import 'saved_reflections_service.dart';
 import 'storage_service.dart';
 
 final PurchaseService purchaseService = PurchaseService();
 final StorageService storageService = StorageService();
+final SavedReflectionsService savedReflectionsService =
+    SavedReflectionsService();
 
 final StoragePreferencesAdapter dailyAccessPreferencesAdapter =
     StoragePreferencesAdapter();

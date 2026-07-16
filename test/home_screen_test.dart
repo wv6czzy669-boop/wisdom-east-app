@@ -10,6 +10,7 @@ import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
 import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
+import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
 
@@ -505,6 +506,7 @@ void main() {
       'daily_wisdom_access': originalRecord.encode(),
       'favorites': [
         FavoriteItem(
+          id: 'existing-locked-reflection',
           text: existingWisdom,
           date: 'June 21, 2026',
         ).encode(),
@@ -1148,9 +1150,7 @@ void main() {
     saveButton.onPressed!();
     await tester.pump(const Duration(milliseconds: 20));
 
-    final persisted = await StorageService().loadFavorites(
-      fallbackDate: 'June 21, 2026',
-    );
+    final persisted = await SavedReflectionsService().load();
     expect(persisted, hasLength(1));
     expect(persisted.single.text, wisdom);
     expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
@@ -1190,6 +1190,7 @@ void main() {
 Widget _homeApp({
   DailyAccessTestGraph? dailyGraph,
   StorageService? storageService,
+  SavedReflectionsService? savedReflectionsService,
   WisdomClock? clock,
   Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
   Duration dailyWisdomStatusTimeout =
@@ -1199,6 +1200,8 @@ Widget _homeApp({
   return MaterialApp(
     home: HomeScreen(
       storageService: storageService ?? StorageService(),
+      savedReflectionsService:
+          savedReflectionsService ?? SavedReflectionsService(),
       dailyWisdomAccessService: resolvedDailyGraph.service,
       clock: clock,
       dailyWisdomOperationTimeout: dailyWisdomOperationTimeout,

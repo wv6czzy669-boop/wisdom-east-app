@@ -1,4 +1,3 @@
-import '../models/favorite_item.dart';
 import '../persistence/storage_preferences_adapter.dart';
 
 class StorageService {
@@ -7,46 +6,6 @@ class StorageService {
   }) : _preferencesAdapter = preferencesAdapter ?? StoragePreferencesAdapter();
 
   final StoragePreferencesAdapter _preferencesAdapter;
-
-  Future<void> saveFavorites(List<FavoriteItem> favorites) async {
-    final encodedFavorites = favorites.map((item) => item.encode()).toList();
-
-    try {
-      await _preferencesAdapter.setStringList(
-        'favorites',
-        encodedFavorites,
-      );
-    } catch (_) {
-      throw StateError('Saved reflections could not be persisted.');
-    }
-  }
-
-  Future<List<FavoriteItem>> loadFavorites({
-    required String fallbackDate,
-  }) async {
-    final List<String> saved;
-    try {
-      saved = await _preferencesAdapter.getStringList('favorites') ?? [];
-    } catch (_) {
-      return [];
-    }
-
-    final List<FavoriteItem> validFavorites = [];
-
-    for (final item in saved) {
-      try {
-        final favorite = FavoriteItem.decode(
-          item,
-          fallbackDate: fallbackDate,
-        );
-        validFavorites.add(favorite);
-      } catch (_) {
-        continue;
-      }
-    }
-
-    return validFavorites;
-  }
 
   Future<void> saveDailyArchive({
     required String text,

@@ -74,6 +74,7 @@ void main() {
       (tester) async {
     const storedDate = 'June 21, 2026';
     final reflection = FavoriteItem(
+      id: 'kept-year-test',
       text: 'A quiet reflection.',
       date: storedDate,
     );

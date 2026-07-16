@@ -27,6 +27,7 @@ class HomeScreen extends StatefulWidget {
     this.clock,
     this.storageService,
     this.dailyWisdomAccessService,
+    this.savedReflectionsService,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
     this.dailyWisdomStatusTimeout =
         DailyWisdomAccessService.defaultStatusTimeout,
@@ -35,6 +36,7 @@ class HomeScreen extends StatefulWidget {
   final WisdomClock? clock;
   final StorageService? storageService;
   final DailyWisdomAccessService? dailyWisdomAccessService;
+  final SavedReflectionsService? savedReflectionsService;
   final Duration dailyWisdomOperationTimeout;
   final Duration dailyWisdomStatusTimeout;
 
@@ -182,9 +184,8 @@ class _HomeScreenState extends State<HomeScreen>
           clock: widget.clock,
           statusTimeout: widget.dailyWisdomStatusTimeout,
         );
-    savedReflectionsService = SavedReflectionsService(
-      storageService: storageService,
-    );
+    savedReflectionsService =
+        widget.savedReflectionsService ?? app_services.savedReflectionsService;
 
     pulseController = AnimationController(
       vsync: this,
@@ -1049,9 +1050,17 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   bool isCurrentFavorite() {
-    return favorites.any(
-      (item) => item.text == currentText,
-    );
+    return currentFavorite() != null;
+  }
+
+  FavoriteItem? currentFavorite() {
+    for (final item in favorites) {
+      if (item.text == currentText) {
+        return item;
+      }
+    }
+
+    return null;
   }
 
   void showFavoriteLimitDialog() {
@@ -1093,11 +1102,12 @@ class _HomeScreenState extends State<HomeScreen>
     _saveOperationInProgress = true;
 
     try {
+      final existing = currentFavorite();
       final result = await savedReflectionsService.toggle(
-        currentItems: favorites,
         text: currentText,
         date: formattedToday(),
         isKeeper: isKeeper,
+        existingId: existing?.id,
       );
 
       if (!mounted) return;
@@ -1120,9 +1130,7 @@ class _HomeScreenState extends State<HomeScreen>
     List<FavoriteItem> loadedFavorites;
 
     try {
-      loadedFavorites = await savedReflectionsService.load(
-        fallbackDate: formattedToday(),
-      );
+      loadedFavorites = await savedReflectionsService.load();
     } catch (_) {
       loadedFavorites = [];
     }
