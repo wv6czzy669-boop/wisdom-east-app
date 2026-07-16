@@ -21,6 +21,8 @@ import 'keeper_screen.dart';
 import 'saved_reflections_screen.dart';
 import 'settings_screen.dart';
 
+part '../widgets/home/home_ritual_widgets.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -319,7 +321,7 @@ class _HomeScreenState extends State<HomeScreen>
         duration: const Duration(milliseconds: 1400),
         content: Text(
           message,
-          style: wisdomStyle(17),
+          style: _homeWisdomStyle(17),
         ),
       ),
     );
@@ -1073,11 +1075,11 @@ class _HomeScreenState extends State<HomeScreen>
           backgroundColor: const Color(0xFF111111),
           title: Text(
             "Kept Limit",
-            style: wisdomStyle(22),
+            style: _homeWisdomStyle(22),
           ),
           content: Text(
             "Free users can keep up to 3 reflections.",
-            style: wisdomStyle(18),
+            style: _homeWisdomStyle(18),
           ),
           actions: [
             TextButton(
@@ -1087,7 +1089,7 @@ class _HomeScreenState extends State<HomeScreen>
               },
               child: Text(
                 "Become a Keeper",
-                style: wisdomStyle(17),
+                style: _homeWisdomStyle(17),
               ),
             ),
           ],
@@ -1164,322 +1166,43 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  TextStyle wisdomStyle(
-    double size, {
-    Color color = const Color(0xFFF4F0E8),
-    bool glow = false,
-    double height = 1.28,
-  }) {
-    return TextStyle(
-      color: color,
-      fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
-      height: height,
-      letterSpacing: 0.5,
-      shadows: glow
-          ? [
-              Shadow(
-                color: const Color(0xFFF4F0E8).withValues(alpha: 0.12),
-                blurRadius: 14,
-              ),
-              Shadow(
-                color: const Color(0xFFD9B86F).withValues(alpha: 0.045),
-                blurRadius: 24,
-              ),
-            ]
-          : null,
-    );
-  }
-
-  Widget buildLaunchMark(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final diameter = min(
-          MediaQuery.sizeOf(context).width * 0.585,
-          constraints.maxHeight,
-        );
-
-        return Semantics(
-          label: 'EAST.',
-          child: ExcludeSemantics(
-            child: Container(
-              key: const ValueKey('launch-ritual-mark'),
-              width: diameter,
-              height: diameter,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: const Color(0xFFF4F0E8).withValues(alpha: 0.70),
-                  width: 0.85,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Transform.translate(
-                offset: const Offset(0, -2.5),
-                child: Text(
-                  'EAST.',
-                  textAlign: TextAlign.center,
-                  style: wisdomStyle(
-                    21.5,
-                    color: const Color(0xFFF4F0E8),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final ritualTextWidth = max(
-      1.0,
-      MediaQuery.sizeOf(context).width - 68,
-    );
-    final revealedWisdomWidth = max(
-      1.0,
-      MediaQuery.sizeOf(context).width * 0.60,
-    );
-    final textSize = screenStep == 0
-        ? 42.0
-        : wisdomRevealed
-            ? 32.0
-            : onLockedCountdown
-                ? 22.0
-                : onPauseScreen
-                    ? 33.0
-                    : onHeartScreen
-                        ? 29.0
-                        : 34.0;
-
-    final finalColor = const Color(0xFFF4F0E8);
-    final darkColor = const Color(0xFF111111);
-
-    final animatedTextColor = Color.lerp(
-      darkColor,
-      finalColor,
-      textOpacity,
-    )!;
-    final currentRitualText = Text(
-      currentText,
-      textAlign: TextAlign.center,
-      style: wisdomStyle(
-        textSize,
-        color: wisdomRevealed ? animatedTextColor : finalColor,
-        glow: wisdomRevealed || onHeartScreen,
-        height: wisdomRevealed
-            ? 1.48
-            : onLockedCountdown
-                ? 1.5
-                : 1.28,
-      ),
-    );
-
     return Scaffold(
       backgroundColor:
           _isInBlackSilence ? Colors.black : const Color(0xFF040404),
       body: SafeArea(
         child: Stack(
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 1000),
-              curve: Curves.easeInOutCubic,
-              color: Color.lerp(
-                const Color(0xFF040404),
-                const Color(0xFF000000),
-                backgroundDepth,
-              ),
-            ),
+            _HomeBackgroundDepth(depth: backgroundDepth),
             if (screenStep != 0)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: RepaintBoundary(
-                    child: AnimatedBuilder(
-                      animation: pulseController,
-                      builder: (context, child) {
-                        final pulse = pulseController.value;
-
-                        return CustomPaint(
-                          painter: GrainPainter(
-                            movement: _reduceMotion ? 0.0 : pulse,
-                            intensity: wisdomRevealed ? 0.01625 : 0.01235,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
+              _HomeGrainLayer(
+                pulseController: pulseController,
+                reduceMotion: _reduceMotion,
+                wisdomRevealed: wisdomRevealed,
               ),
             if (wisdomRevealed || onPauseScreen || _transitionLock)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 1400),
-                    opacity: onPauseScreen ? 0.045 : revealGlowOpacity,
-                    child: Center(
-                      child: Container(
-                        width: 285,
-                        height: 285,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFD9B86F)
-                                  .withValues(alpha: 0.085),
-                              blurRadius: 85,
-                              spreadRadius: 1,
-                            ),
-                            BoxShadow(
-                              color: const Color(0xFFF4F0E8)
-                                  .withValues(alpha: 0.035),
-                              blurRadius: 55,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              _HomeRevealGlow(
+                opacity: onPauseScreen ? 0.045 : revealGlowOpacity,
               ),
             Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: navigationInProgress || _transitionLock
-                    ? null
-                    : handleMainTap,
-                onLongPress: null,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 34,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: 180,
-                        maxHeight: MediaQuery.of(context).size.height * 0.38,
-                      ),
-                      child: Center(
-                        child: AnimatedBuilder(
-                          animation: pulseController,
-                          builder: (context, child) {
-                            final floatingY = _reduceMotion
-                                ? 0.0
-                                : wisdomRevealed
-                                    ? sin(pulseController.value * pi * 2) * 0.8
-                                    : onPauseScreen
-                                        ? sin(pulseController.value * pi * 2) *
-                                            0.5
-                                        : 0.0;
-
-                            final liftedY = wisdomRevealed ? -18.0 : 0.0;
-
-                            return Transform.translate(
-                              offset: Offset(0, floatingY + liftedY),
-                              child: child,
-                            );
-                          },
-                          child: _RitualScaleTransition(
-                            enabled: !onHeartScreen,
-                            scale: screenStep == 0 ? 1.0 : textScale,
-                            duration: const Duration(
-                              milliseconds: 1000,
-                            ),
-                            curve: Curves.easeInOutCubic,
-                            child: AnimatedOpacity(
-                              key: const ValueKey('ritual-content-opacity'),
-                              duration: Duration(
-                                milliseconds: screenStep == 0
-                                    ? 750
-                                    : wisdomRevealed
-                                        ? 0
-                                        : 1250,
-                              ),
-                              curve: Curves.easeOutCubic,
-                              opacity: textOpacity,
-                              child: screenStep == 0
-                                  ? buildLaunchMark(context)
-                                  : onPauseScreen
-                                      ? FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                "Pause.",
-                                                textAlign: TextAlign.center,
-                                                style: wisdomStyle(
-                                                  textSize,
-                                                  color: finalColor,
-                                                  glow: true,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 28),
-                                              AnimatedOpacity(
-                                                duration: const Duration(
-                                                  milliseconds: 1250,
-                                                ),
-                                                curve: Curves.easeOutCubic,
-                                                opacity: pauseFeelOpacity,
-                                                child: Text(
-                                                  "Feel.",
-                                                  textAlign: TextAlign.center,
-                                                  style: wisdomStyle(
-                                                    textSize,
-                                                    color: finalColor,
-                                                    glow: true,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : onHeartScreen
-                                          ? SizedBox(
-                                              width: ritualTextWidth,
-                                              child: FadeTransition(
-                                                key: const ValueKey(
-                                                  'ask-fade',
-                                                ),
-                                                opacity: askFadeAnimation,
-                                                child: currentRitualText,
-                                              ),
-                                            )
-                                          : FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: SizedBox(
-                                                key: wisdomRevealed
-                                                    ? const ValueKey(
-                                                        'revealed-wisdom-layout',
-                                                      )
-                                                    : null,
-                                                width: wisdomRevealed
-                                                    ? revealedWisdomWidth
-                                                    : ritualTextWidth,
-                                                child: wisdomRevealed
-                                                    ? FadeTransition(
-                                                        key: const ValueKey(
-                                                          'wisdom-reveal-fade',
-                                                        ),
-                                                        opacity:
-                                                            wisdomRevealAnimation,
-                                                        child:
-                                                            currentRitualText,
-                                                      )
-                                                    : currentRitualText,
-                                              ),
-                                            ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+              child: _HomeMainRitualGesture(
+                navigationDisabled: navigationInProgress || _transitionLock,
+                onTap: handleMainTap,
+                content: _HomeRitualContent(
+                  screenStep: screenStep,
+                  currentText: currentText,
+                  textOpacity: textOpacity,
+                  textScale: textScale,
+                  pauseFeelOpacity: pauseFeelOpacity,
+                  pulseController: pulseController,
+                  askFadeAnimation: askFadeAnimation,
+                  wisdomRevealAnimation: wisdomRevealAnimation,
+                  reduceMotion: _reduceMotion,
+                  onPauseScreen: onPauseScreen,
+                  onHeartScreen: onHeartScreen,
+                  wisdomRevealed: wisdomRevealed,
+                  onLockedCountdown: onLockedCountdown,
                 ),
               ),
             ),
@@ -1491,162 +1214,37 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             if (screenStep != 0)
-              Positioned(
-                key: const ValueKey('top-navigation'),
-                top: 0,
-                right: 8,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox.square(
-                      dimension: 48,
-                      child: IconButton(
-                        tooltip: 'Settings',
-                        icon: Transform.translate(
-                          offset: const Offset(0, -4),
-                          child: const Text(
-                            '◎',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 29,
-                              fontWeight: FontWeight.w300,
-                              fontFamily: 'CormorantGaramond',
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                        onPressed: openSettings,
-                      ),
-                    ),
-                    SizedBox.square(
-                      dimension: 48,
-                      child: IconButton(
-                        tooltip: 'Kept',
-                        icon: Transform.translate(
-                          offset: const Offset(0, -4),
-                          child: const Text(
-                            '○',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 36,
-                              fontWeight: FontWeight.w300,
-                              fontFamily: 'CormorantGaramond',
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                        onPressed: openFavorites,
-                      ),
-                    ),
-                  ],
-                ),
+              _HomeTopNavigation(
+                onSettingsPressed: openSettings,
+                onKeptPressed: openFavorites,
               ),
             if (wisdomRevealed)
-              Positioned(
-                left: 0,
-                right: 0,
-                top: MediaQuery.of(context).size.height / 2 + 72,
-                child: Center(
-                  child: IgnorePointer(
-                    key: const ValueKey('kept-interaction-guard'),
-                    ignoring: !saveInteractionEnabled,
-                    child: AnimatedOpacity(
-                      duration: const Duration(
-                        milliseconds: 1000,
-                      ),
-                      curve: Curves.easeOutCubic,
-                      opacity: saveControlOpacity,
-                      onEnd: () {
-                        if (!mounted ||
-                            saveInteractionEnabled ||
-                            saveControlOpacity < 1.0 ||
-                            !wisdomRevealed) {
-                          return;
-                        }
+              _HomeSaveControl(
+                opacity: saveControlOpacity,
+                interactionEnabled: saveInteractionEnabled,
+                isCurrentFavorite: isCurrentFavorite(),
+                onPressed: toggleFavorite,
+                onFullyVisible: () {
+                  if (!mounted ||
+                      saveInteractionEnabled ||
+                      saveControlOpacity < 1.0 ||
+                      !wisdomRevealed) {
+                    return;
+                  }
 
-                        setState(() {
-                          saveInteractionEnabled = true;
-                        });
-                      },
-                      child: IconButton(
-                        tooltip: isCurrentFavorite()
-                            ? 'Remove kept reflection'
-                            : 'Keep reflection',
-                        icon: Text(
-                          isCurrentFavorite() ? '●' : '○',
-                          style: const TextStyle(
-                            color: Color(0xFFF4F0E8),
-                            fontSize: 31,
-                            fontWeight: FontWeight.w300,
-                            fontFamily: 'CormorantGaramond',
-                            height: 1,
-                          ),
-                        ),
-                        onPressed: toggleFavorite,
-                      ),
-                    ),
-                  ),
-                ),
+                  setState(() {
+                    saveInteractionEnabled = true;
+                  });
+                },
               ),
             if (wisdomRevealed)
-              Positioned(
-                left: 0,
-                right: 0,
-                top: MediaQuery.of(context).size.height / 2 + 156,
-                child: IgnorePointer(
-                  ignoring: postRevealMessageOpacity < 1.0,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 900),
-                    curve: Curves.easeOutCubic,
-                    opacity: postRevealMessageOpacity,
-                    child: Column(
-                      children: [
-                        if (nextWisdomMessage.isNotEmpty) ...[
-                          Text(
-                            nextWisdomMessage,
-                            textAlign: TextAlign.center,
-                            style: wisdomStyle(
-                              15,
-                              color: const Color(0x91FFFFFF),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
+              _HomePostRevealMessage(
+                opacity: postRevealMessageOpacity,
+                message: nextWisdomMessage,
               ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _RitualScaleTransition extends StatelessWidget {
-  const _RitualScaleTransition({
-    required this.enabled,
-    required this.scale,
-    required this.duration,
-    required this.curve,
-    required this.child,
-  });
-
-  final bool enabled;
-  final double scale;
-  final Duration duration;
-  final Curve curve;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!enabled) return child;
-
-    return AnimatedScale(
-      scale: scale,
-      duration: duration,
-      curve: curve,
-      child: child,
     );
   }
 }
