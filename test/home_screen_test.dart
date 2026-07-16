@@ -74,6 +74,62 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2000));
   });
 
+  testWidgets('ritual text transitions preserve fade frames', (tester) async {
+    await tester.pumpWidget(
+      _homeApp(),
+    );
+    await _finishOpeningIntro(tester);
+
+    final launchMark = find.byKey(const ValueKey('launch-ritual-mark'));
+    expect(launchMark, findsOneWidget);
+
+    await _tapCenter(tester);
+    await tester.pump();
+
+    final launchFade = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('ritual-content-opacity')),
+    );
+    expect(launchFade.opacity, 0.0);
+    expect(launchFade.duration, const Duration(milliseconds: 750));
+    expect(launchMark, findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(launchMark, findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 420));
+    await tester.pump();
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(_ritualOpacity(tester), 0.0);
+
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(_ritualOpacity(tester), 1.0);
+    await tester.pump(const Duration(milliseconds: 820));
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1300));
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(find.text('Feel.'), findsOneWidget);
+    expect(_ritualOpacity(tester), 1.0);
+
+    await _tapCenter(tester);
+    await tester.pump();
+    expect(_ritualOpacity(tester), 0.0);
+
+    await tester.pump(const Duration(milliseconds: 820));
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(find.text('Feel.'), findsOneWidget);
+    expect(find.text('Ask from your heart.'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 430));
+    await tester.pump();
+    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(_ritualOpacity(tester), 0.0);
+
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(_ritualOpacity(tester), 1.0);
+    await tester.pump(const Duration(milliseconds: 560));
+  });
+
   testWidgets('Home unresolved launch has one disabled EAST semantic node',
       (tester) async {
     final semantics = tester.ensureSemantics();
@@ -141,9 +197,9 @@ void main() {
       await _tapCenter(tester);
       await tester.pump(const Duration(milliseconds: 1300));
       await _tapCenter(tester);
-      await tester.pump(const Duration(milliseconds: 850));
-      await tester.pump(const Duration(milliseconds: 250));
-      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 560));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -931,9 +987,9 @@ void main() {
     await _tapCenter(tester);
     await tester.pump();
     expect(haptics.last, 'HapticFeedbackType.lightImpact');
-    await tester.pump(const Duration(milliseconds: 850));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 560));
 
     await _tapCenter(tester);
     await tester.pump();
@@ -1022,9 +1078,9 @@ void main() {
     expect(tester.widget<Text>(find.text('Feel.')).style?.fontSize, 33);
 
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 850));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 560));
     expect(find.text('Ask from your heart.'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
     final askTextFinder = find.text('Ask from your heart.');
@@ -1377,9 +1433,9 @@ Future<void> _advanceToQuestion(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 1300));
 
   await _tapCenter(tester);
-  await tester.pump(const Duration(milliseconds: 850));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.pump(const Duration(milliseconds: 600));
+  await tester.pump(const Duration(milliseconds: 1250));
+  await tester.pump(const Duration(milliseconds: 220));
+  await tester.pump(const Duration(milliseconds: 560));
 }
 
 double _ritualOpacity(WidgetTester tester) {

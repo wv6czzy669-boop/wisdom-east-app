@@ -47,13 +47,18 @@ void main() {
       'Keep what stays.',
       'Enter the Circle',
       'Keep reflections without limit.',
-      'Temporarily unavailable',
-      'Support EAST.',
+      'Preserve what stays with you.',
+      'Keep EAST. alive.',
     ];
 
     for (final line in lockedCopy) {
       expect(find.text(line), findsOneWidget);
     }
+
+    expect(find.text(removedThreeRevealCopy), findsNothing);
+    expect(find.text('Temporarily unavailable'), findsNothing);
+    expect(find.text('Support EAST.'), findsNothing);
+    expect(find.text('One-time offering.'), findsNothing);
 
     final renderedCopy = tester
         .widgetList<Text>(find.byType(Text))
@@ -63,7 +68,7 @@ void main() {
     expect(renderedCopy, lockedCopy.toSet());
   });
 
-  testWidgets('Keeper screen renders the localized StoreKit price',
+  testWidgets('Keeper keeps StoreKit price semantic but not visible',
       (tester) async {
     service = _StaticPurchaseService(
       product: ProductDetails(
@@ -80,8 +85,8 @@ void main() {
       MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
-    expect(find.text('CA\$6.99'), findsOneWidget);
-    expect(find.text('One-time offering.'), findsOneWidget);
+    expect(find.text('CA\$6.99'), findsNothing);
+    expect(find.text('One-time offering.'), findsNothing);
     expect(find.text('Temporarily unavailable'), findsNothing);
   });
 
@@ -125,7 +130,7 @@ void main() {
       find.byKey(const ValueKey('keeper-purchase-action')),
     );
     expect(action.onTap, isNull);
-    expect(find.text('£59.99'), findsOneWidget);
+    expect(find.text('£59.99'), findsNothing);
   });
 
   testWidgets('Keeper screen remains stable on iPhone SE with large text',
@@ -147,7 +152,9 @@ void main() {
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text(removedThreeRevealCopy), findsNothing);
     expect(find.text('Keep reflections without limit.'), findsOneWidget);
-    expect(find.text('Support EAST.'), findsOneWidget);
+    expect(find.text('Preserve what stays with you.'), findsOneWidget);
+    expect(find.text('Keep EAST. alive.'), findsOneWidget);
+    expect(find.text('Support EAST.'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

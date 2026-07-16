@@ -232,36 +232,18 @@ class _KeeperScreenState extends State<KeeperScreen> {
                         color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
                       ).copyWith(letterSpacing: 0.75),
                     ),
-                    if (!isKeeper) ...[
-                      const SizedBox(height: 18),
-                      Text(
-                        purchaseAvailable
-                            ? keeperProduct.price
-                            : "Temporarily unavailable",
-                        key: const ValueKey('keeper-purchase-price'),
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(
-                          16,
-                          color:
-                              const Color(0xFFF4F0E8).withValues(alpha: 0.66),
-                        ).copyWith(letterSpacing: 0.75),
-                      ),
-                      if (purchaseAvailable) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          "One-time offering.",
-                          textAlign: TextAlign.center,
-                          style: keeperStyle(
-                            14,
-                            color:
-                                const Color(0xFFF4F0E8).withValues(alpha: 0.55),
-                          ).copyWith(letterSpacing: 0.8),
-                        ),
-                      ],
-                    ],
+                    const SizedBox(height: 18),
+                    Text(
+                      "Preserve what stays with you.",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(
+                        14,
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
+                      ).copyWith(letterSpacing: 0.8),
+                    ),
                     const SizedBox(height: 11),
                     Text(
-                      "Support EAST.",
+                      "Keep EAST. alive.",
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         14,

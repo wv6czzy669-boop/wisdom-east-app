@@ -510,9 +510,11 @@ class _HomeScreenState extends State<HomeScreen>
         textScale = 0.985;
       });
 
-      await Future.delayed(
-        ritualFlowController.transitionFadeOutDuration(nextStep),
-      );
+      final fadeOutDuration = onPauseScreen && nextStep == 2
+          ? const Duration(milliseconds: 1250)
+          : ritualFlowController.transitionFadeOutDuration(nextStep);
+
+      await Future.delayed(fadeOutDuration);
 
       if (!isCurrentFlow(currentFlow)) return;
 
