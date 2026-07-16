@@ -9,7 +9,6 @@ import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/services/app_services.dart' as app_services;
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
-import 'package:wisdom_app/services/storage_service.dart';
 
 import 'persistence_test_helpers.dart';
 
@@ -414,15 +413,6 @@ void main() {
       ),
       throwsFormatException,
     );
-  });
-
-  test('wrong-type Keeper preference fails closed as non-Keeper', () async {
-    SharedPreferences.setMockInitialValues({'is_premium': 'true'});
-    final storage = StorageService();
-
-    final keeper = await storage.getKeeperStatus();
-
-    expect(keeper, isFalse);
   });
 
   test('rolling daily access remains locked inside 24 hours', () async {

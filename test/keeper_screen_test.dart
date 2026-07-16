@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
-import 'package:wisdom_app/services/app_services.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late _StaticPurchaseService service;
+
   final removedThreeRevealCopy = [
     'Three',
     'wisdom',
@@ -19,20 +23,22 @@ void main() {
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     try {
-      purchaseService.isAvailable = false;
+      InAppPurchase.instance;
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
-    purchaseService.keeperProduct = null;
-    purchaseService.isKeeper = false;
-    purchaseService.isLoading = false;
-    purchaseService.entitlementPersistenceFailed = false;
+    InAppPurchasePlatform.instance = _NoopInAppPurchasePlatform();
+    service = _StaticPurchaseService();
+  });
+
+  tearDown(() {
+    service.dispose();
   });
 
   testWidgets('Keeper screen preserves restrained product message',
       (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: KeeperScreen()),
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
     const lockedCopy = [
@@ -58,18 +64,19 @@ void main() {
 
   testWidgets('Keeper screen renders the localized StoreKit price',
       (tester) async {
-    purchaseService.isAvailable = true;
-    purchaseService.keeperProduct = ProductDetails(
-      id: PurchaseService.keeperProductId,
-      title: 'Keeper',
-      description: 'Support EAST.',
-      price: 'CA\$6.99',
-      rawPrice: 6.99,
-      currencyCode: 'CAD',
+    service = _StaticPurchaseService(
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: 'CA\$6.99',
+        rawPrice: 6.99,
+        currencyCode: 'CAD',
+      ),
     );
 
     await tester.pumpWidget(
-      const MaterialApp(home: KeeperScreen()),
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
     expect(find.text('CA\$6.99'), findsOneWidget);
@@ -80,7 +87,7 @@ void main() {
   testWidgets('Keeper purchase action is blocked when product is unavailable',
       (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: KeeperScreen()),
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
     final action = tester.widget<GestureDetector>(
@@ -92,24 +99,25 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SnackBar), findsNothing);
-    expect(purchaseService.isLoading, isFalse);
+    expect(service.isLoading, isFalse);
   });
 
   testWidgets('Keeper purchase action is blocked while a purchase is pending',
       (tester) async {
-    purchaseService.isAvailable = true;
-    purchaseService.keeperProduct = ProductDetails(
-      id: PurchaseService.keeperProductId,
-      title: 'Keeper',
-      description: 'Support EAST.',
-      price: '£59.99',
-      rawPrice: 59.99,
-      currencyCode: 'GBP',
+    service = _StaticPurchaseService(
+      loading: true,
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: '£59.99',
+        rawPrice: 59.99,
+        currencyCode: 'GBP',
+      ),
     );
-    purchaseService.isLoading = true;
 
     await tester.pumpWidget(
-      const MaterialApp(home: KeeperScreen()),
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
     final action = tester.widget<GestureDetector>(
@@ -131,7 +139,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(home: KeeperScreen()),
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
     expect(find.byType(SingleChildScrollView), findsNothing);
@@ -141,4 +149,66 @@ void main() {
     expect(find.text('Support EAST.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _StaticPurchaseService extends PurchaseService {
+  _StaticPurchaseService({
+    this.loading = false,
+    this.product,
+  });
+
+  final bool loading;
+  final ProductDetails? product;
+
+  @override
+  bool get isInitialized => false;
+
+  @override
+  bool get isAvailable => product != null;
+
+  @override
+  ProductDetails? get keeperProduct => product;
+
+  @override
+  bool get isKeeper => false;
+
+  @override
+  bool get isLoading => loading;
+
+  @override
+  Future<bool> buyKeeper() async => false;
+
+  @override
+  Future<bool> refreshStoreIfNeeded({bool force = false}) async =>
+      product != null;
+}
+
+class _NoopInAppPurchasePlatform extends InAppPurchasePlatform {
+  @override
+  Stream<List<PurchaseDetails>> get purchaseStream =>
+      Stream<List<PurchaseDetails>>.empty();
+
+  @override
+  Future<bool> isAvailable() async => false;
+
+  @override
+  Future<ProductDetailsResponse> queryProductDetails(
+    Set<String> identifiers,
+  ) async {
+    return ProductDetailsResponse(
+      productDetails: const [],
+      notFoundIDs: const [PurchaseService.keeperProductId],
+    );
+  }
+
+  @override
+  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) {
+    return Future<bool>.value(false);
+  }
+
+  @override
+  Future<void> restorePurchases({String? applicationUserName}) async {}
+
+  @override
+  Future<void> completePurchase(PurchaseDetails purchase) async {}
 }

@@ -2,10 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../services/app_services.dart';
+import '../services/app_services.dart' as app_services;
+import '../services/purchase_service.dart';
 
 class KeeperScreen extends StatefulWidget {
-  const KeeperScreen({super.key});
+  const KeeperScreen({
+    super.key,
+    this.purchaseService,
+  });
+
+  final PurchaseService? purchaseService;
 
   @override
   State<KeeperScreen> createState() => _KeeperScreenState();
@@ -14,21 +20,24 @@ class KeeperScreen extends StatefulWidget {
 class _KeeperScreenState extends State<KeeperScreen> {
   bool _persistenceErrorShown = false;
 
+  PurchaseService get _purchaseService =>
+      widget.purchaseService ?? app_services.purchaseService;
+
   @override
   void initState() {
     super.initState();
-    purchaseService.addListener(_refresh);
-    if (purchaseService.isInitialized) {
-      unawaited(purchaseService.refreshStoreIfNeeded());
+    _purchaseService.addListener(_refresh);
+    if (_purchaseService.isInitialized) {
+      unawaited(_purchaseService.refreshStoreIfNeeded());
     }
   }
 
   void _refresh() {
     if (mounted) {
       final showPersistenceError =
-          purchaseService.entitlementPersistenceFailed &&
+          _purchaseService.entitlementPersistenceFailed &&
               !_persistenceErrorShown;
-      if (!purchaseService.entitlementPersistenceFailed) {
+      if (!_purchaseService.entitlementPersistenceFailed) {
         _persistenceErrorShown = false;
       } else if (showPersistenceError) {
         _persistenceErrorShown = true;
@@ -56,7 +65,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
 
   @override
   void dispose() {
-    purchaseService.removeListener(_refresh);
+    _purchaseService.removeListener(_refresh);
     super.dispose();
   }
 
@@ -75,12 +84,12 @@ class _KeeperScreenState extends State<KeeperScreen> {
   }
 
   Future<void> buyKeeper() async {
-    if (purchaseService.isLoading) return;
+    if (_purchaseService.isLoading) return;
 
     bool started = false;
 
     try {
-      started = await purchaseService.buyKeeper();
+      started = await _purchaseService.buyKeeper();
     } catch (_) {
       started = false;
     }
@@ -93,7 +102,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
         SnackBar(
           backgroundColor: const Color(0xFF111111),
           content: Text(
-            purchaseService.purchaseNeedsRecovery
+            _purchaseService.purchaseNeedsRecovery
                 ? "Purchase status is still updating. Please use Restore Purchases in Settings."
                 : "Purchase is not ready yet. Please try again shortly.",
             style: keeperStyle(17),
@@ -105,12 +114,12 @@ class _KeeperScreenState extends State<KeeperScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isKeeper = purchaseService.isKeeper;
-    final keeperProduct = purchaseService.keeperProduct;
+    final isKeeper = _purchaseService.isKeeper;
+    final keeperProduct = _purchaseService.keeperProduct;
     final purchaseAvailable =
-        purchaseService.isAvailable && keeperProduct != null;
+        _purchaseService.isAvailable && keeperProduct != null;
     final purchaseEnabled =
-        !isKeeper && purchaseAvailable && !purchaseService.isLoading;
+        !isKeeper && purchaseAvailable && !_purchaseService.isLoading;
     return Scaffold(
       backgroundColor: const Color(0xFF040404),
       appBar: AppBar(
@@ -165,7 +174,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 500),
                           curve: Curves.easeOutCubic,
-                          opacity: purchaseService.isLoading ? 0.72 : 1.0,
+                          opacity: _purchaseService.isLoading ? 0.72 : 1.0,
                           child: Container(
                             width: 238,
                             height: 238,

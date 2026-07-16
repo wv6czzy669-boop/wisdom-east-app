@@ -296,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadKeeperStatus() async {
-    final keeperValue = await storageService.getKeeperStatus();
+    final keeperValue = app_services.purchaseService.isKeeper;
 
     if (!mounted) return;
 

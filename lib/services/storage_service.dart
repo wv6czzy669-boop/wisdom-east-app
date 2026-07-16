@@ -37,12 +37,4 @@ class StorageService {
       }
     }
   }
-
-  Future<bool> getKeeperStatus() async {
-    try {
-      return await _preferencesAdapter.getBool("is_premium") ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
 }
