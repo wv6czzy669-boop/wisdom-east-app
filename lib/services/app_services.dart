@@ -5,11 +5,16 @@ import 'daily_wisdom_access_service.dart';
 import 'purchase_service.dart';
 import 'saved_reflections_service.dart';
 import 'storage_service.dart';
+import 'wisdom_notification_service.dart';
+import 'wisdom_share_service.dart';
 
 final PurchaseService purchaseService = PurchaseService();
 final StorageService storageService = StorageService();
 final SavedReflectionsService savedReflectionsService =
     SavedReflectionsService();
+final WisdomShareHandler wisdomShareService = WisdomShareService();
+final WisdomNotificationService wisdomNotificationService =
+    WisdomNotificationService();
 
 final StoragePreferencesAdapter dailyAccessPreferencesAdapter =
     StoragePreferencesAdapter();

@@ -13,7 +13,9 @@ import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/storage_service.dart';
+import '../services/wisdom_notification_service.dart';
 import '../services/wisdom_selector.dart';
+import '../services/wisdom_share_service.dart';
 import '../utils/countdown_formatter.dart';
 import '../utils/date_formatter.dart';
 import '../widgets/grain_painter.dart';
@@ -30,6 +32,8 @@ class HomeScreen extends StatefulWidget {
     this.storageService,
     this.dailyWisdomAccessService,
     this.savedReflectionsService,
+    this.wisdomShareService,
+    this.wisdomNotificationService,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
     this.dailyWisdomStatusTimeout =
         DailyWisdomAccessService.defaultStatusTimeout,
@@ -39,6 +43,8 @@ class HomeScreen extends StatefulWidget {
   final StorageService? storageService;
   final DailyWisdomAccessService? dailyWisdomAccessService;
   final SavedReflectionsService? savedReflectionsService;
+  final WisdomShareHandler? wisdomShareService;
+  final WisdomNotificationService? wisdomNotificationService;
   final Duration dailyWisdomOperationTimeout;
   final Duration dailyWisdomStatusTimeout;
 
@@ -71,8 +77,12 @@ class _HomeScreenState extends State<HomeScreen>
   bool _dailyLockActive = false;
   bool _showingLockedWisdom = false;
   bool _saveOperationInProgress = false;
+  bool _shareInProgress = false;
+  bool _notificationPermissionOfferShowing = false;
+  bool _notificationPermissionOfferScheduled = false;
   bool _revealPersistenceNeedsRetry = false;
   DateTime? _pendingRevealBoundaryForRetry;
+  DateTime? _pendingNotificationUnlockAt;
   String? _lockedWisdomText;
 
   final ritualFlowController = const RitualFlowController();
@@ -151,6 +161,10 @@ class _HomeScreenState extends State<HomeScreen>
   late final StorageService storageService;
   late final DailyWisdomAccessService dailyWisdomAccessService;
   late final SavedReflectionsService savedReflectionsService;
+  late final WisdomShareHandler wisdomShareService;
+  late final WisdomNotificationService wisdomNotificationService;
+  final GlobalKey _wisdomShareOriginKey = GlobalKey();
+  Timer? _notificationPermissionOfferTimer;
 
   void startCountdownTimer() {
     if (countdownTimer?.isActive ?? false) return;
@@ -188,6 +202,10 @@ class _HomeScreenState extends State<HomeScreen>
         );
     savedReflectionsService =
         widget.savedReflectionsService ?? app_services.savedReflectionsService;
+    wisdomShareService =
+        widget.wisdomShareService ?? app_services.wisdomShareService;
+    wisdomNotificationService = widget.wisdomNotificationService ??
+        app_services.wisdomNotificationService;
 
     pulseController = AnimationController(
       vsync: this,
@@ -202,6 +220,7 @@ class _HomeScreenState extends State<HomeScreen>
       parent: wisdomRevealController,
       curve: Curves.easeOutCubic,
     );
+    wisdomRevealController.addStatusListener(_handleWisdomRevealStatus);
     askFadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1250),
@@ -244,6 +263,7 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.removeObserver(this);
     app_services.purchaseService.removeListener(_syncKeeperStatus);
     stopCountdownTimer();
+    _notificationPermissionOfferTimer?.cancel();
     pulseController.dispose();
     wisdomRevealController.dispose();
     askFadeController.dispose();
@@ -321,6 +341,7 @@ class _HomeScreenState extends State<HomeScreen>
     await loadFavorites();
     await loadKeeperStatus();
     await updateNextWisdomMessage();
+    await synchronizeUnlockNotification();
   }
 
   Future<void> loadKeeperStatus() async {
@@ -335,6 +356,11 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _resumeAccessState() async {
     await updateNextWisdomMessage();
+    await synchronizeUnlockNotification();
+    final unlockAt = _pendingNotificationUnlockAt;
+    if (unlockAt != null) {
+      _queueNotificationPermissionOffer(unlockAt);
+    }
   }
 
   void showEastSnack(String message) {
@@ -351,6 +377,13 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
+  }
+
+  void _handleWisdomRevealStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !mounted || !wisdomRevealed) {
+      return;
+    }
+    setState(() {});
   }
 
   Future<void> saveDailyArchive(String text) async {
@@ -507,7 +540,7 @@ class _HomeScreenState extends State<HomeScreen>
         revealGlowOpacity = 0.0;
         backgroundDepth =
             ritualFlowController.transitionBackgroundDepth(nextStep);
-        textScale = 0.985;
+        textScale = 1.0;
       });
 
       final fadeOutDuration = onPauseScreen && nextStep == 2
@@ -531,7 +564,10 @@ class _HomeScreenState extends State<HomeScreen>
         }
       });
 
-      await Future.delayed(const Duration(milliseconds: 220));
+      await Future.wait<void>([
+        WidgetsBinding.instance.endOfFrame,
+        Future<void>.delayed(const Duration(milliseconds: 220)),
+      ]);
 
       if (!isCurrentFlow(currentFlow)) return;
 
@@ -706,6 +742,152 @@ class _HomeScreenState extends State<HomeScreen>
         // Countdown copy is noncritical after the daily wisdom is persisted.
       }),
     );
+
+    final unlockAt = access.unlockAt;
+    if (unlockAt != null) {
+      unawaited(
+        wisdomNotificationService.scheduleFromAuthoritativeUnlock(unlockAt),
+      );
+      if (access.isNew) {
+        _pendingNotificationUnlockAt = unlockAt;
+        _queueNotificationPermissionOffer(unlockAt);
+      }
+    }
+  }
+
+  Future<void> synchronizeUnlockNotification() async {
+    try {
+      final status = await dailyWisdomAccessService.status();
+      await wisdomNotificationService.synchronizeWithStatus(status);
+    } catch (_) {
+      // Notification synchronization must not affect daily access.
+    }
+  }
+
+  void _queueNotificationPermissionOffer(DateTime unlockAt) {
+    _pendingNotificationUnlockAt = unlockAt;
+    if (_notificationPermissionOfferScheduled ||
+        _notificationPermissionOfferShowing) {
+      return;
+    }
+
+    _notificationPermissionOfferScheduled = true;
+    final offerFlow = flowSessionId;
+    _notificationPermissionOfferTimer = Timer(
+      const Duration(milliseconds: 3200),
+      () async {
+        _notificationPermissionOfferTimer = null;
+        _notificationPermissionOfferScheduled = false;
+        if (!mounted ||
+            offerFlow != flowSessionId ||
+            !wisdomRevealed ||
+            transitionInProgress ||
+            navigationInProgress ||
+            _isInBlackSilence) {
+          return;
+        }
+        await _showNotificationPermissionOffer(unlockAt);
+      },
+    );
+  }
+
+  Future<void> _showNotificationPermissionOffer(DateTime unlockAt) async {
+    if (_notificationPermissionOfferShowing || !mounted) return;
+    if (!await wisdomNotificationService.shouldOfferPermission()) {
+      _pendingNotificationUnlockAt = null;
+      return;
+    }
+    if (!mounted ||
+        !wisdomRevealed ||
+        transitionInProgress ||
+        navigationInProgress) {
+      return;
+    }
+
+    _notificationPermissionOfferShowing = true;
+    try {
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF111111),
+            content: Text(
+              'Return when the silence opens again.',
+              textAlign: TextAlign.center,
+              style: _homeWisdomStyle(19, height: 1.45),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(
+                  'Not now',
+                  style: _homeWisdomStyle(17),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(
+                  'Allow',
+                  style: _homeWisdomStyle(17),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (accepted == true) {
+        await wisdomNotificationService.requestPermissionAndSchedule(unlockAt);
+      } else {
+        await wisdomNotificationService.dismissPermissionOffer();
+      }
+      _pendingNotificationUnlockAt = null;
+    } catch (_) {
+      // Permission UI and native authorization are always optional.
+    } finally {
+      _notificationPermissionOfferShowing = false;
+    }
+  }
+
+  Future<void> shareCurrentWisdom() async {
+    if (_shareInProgress ||
+        !mounted ||
+        !wisdomRevealed ||
+        transitionInProgress ||
+        _transitionLock ||
+        _isInBlackSilence ||
+        _revealPersistenceNeedsRetry ||
+        wisdomRevealController.value < 1.0 ||
+        currentText.trim().isEmpty) {
+      return;
+    }
+
+    final renderBox = _wisdomShareOriginKey.currentContext?.findRenderObject();
+    final Rect shareOrigin;
+    if (renderBox is RenderBox && renderBox.hasSize) {
+      shareOrigin = renderBox.localToGlobal(Offset.zero) & renderBox.size;
+    } else {
+      final size = MediaQuery.sizeOf(context);
+      shareOrigin = Rect.fromCenter(
+        center: size.center(Offset.zero),
+        width: 1,
+        height: 1,
+      );
+    }
+
+    _shareInProgress = true;
+    HapticFeedback.mediumImpact();
+    try {
+      await wisdomShareService.shareWisdom(
+        wisdom: currentText,
+        sharePositionOrigin: shareOrigin,
+      );
+    } catch (_) {
+      // Dismissal and share failures must leave the ritual undisturbed.
+    } finally {
+      _shareInProgress = false;
+    }
   }
 
   void restoreAskAfterRevealPersistenceFailure() {
@@ -1242,6 +1424,14 @@ class _HomeScreenState extends State<HomeScreen>
                   onHeartScreen: onHeartScreen,
                   wisdomRevealed: wisdomRevealed,
                   onLockedCountdown: onLockedCountdown,
+                  wisdomShareEnabled: wisdomRevealed &&
+                      !transitionInProgress &&
+                      !_transitionLock &&
+                      !_isInBlackSilence &&
+                      !_revealPersistenceNeedsRetry &&
+                      wisdomRevealController.value >= 1.0,
+                  wisdomShareOriginKey: _wisdomShareOriginKey,
+                  onWisdomLongPress: shareCurrentWisdom,
                 ),
               ),
             ),

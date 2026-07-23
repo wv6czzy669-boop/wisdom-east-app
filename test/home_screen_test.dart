@@ -13,6 +13,8 @@ import 'package:wisdom_app/screens/home_screen.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
+import 'package:wisdom_app/services/wisdom_notification_service.dart';
+import 'package:wisdom_app/services/wisdom_share_service.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
 
 import 'persistence_test_helpers.dart';
@@ -62,6 +64,9 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 300));
     expect(_ritualOpacity(tester), 1.0);
+    expect(_renderedRitualOpacity(tester), 1.0);
+    final opacityElement =
+        find.byKey(const ValueKey('ritual-content-opacity')).evaluate().single;
 
     await _tapCenter(tester);
     await tester.pump();
@@ -70,8 +75,22 @@ void main() {
     );
     expect(launchFade.opacity, 0.0);
     expect(launchFade.duration, const Duration(milliseconds: 750));
+    expect(
+      find.byKey(const ValueKey('ritual-content-opacity')).evaluate().single,
+      same(opacityElement),
+    );
 
-    await tester.pump(const Duration(milliseconds: 2000));
+    expect(_renderedRitualOpacity(tester), 1.0);
+    await tester.pump(const Duration(milliseconds: 375));
+    expect(_renderedRitualOpacity(tester), inExclusiveRange(0.0, 1.0));
+    expect(markFinder, findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 445));
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(_renderedRitualOpacity(tester), 0.0);
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 820));
   });
 
   testWidgets('ritual text transitions preserve fade frames', (tester) async {
@@ -92,21 +111,34 @@ void main() {
     expect(launchFade.opacity, 0.0);
     expect(launchFade.duration, const Duration(milliseconds: 750));
     expect(launchMark, findsOneWidget);
+    expect(_renderedRitualOpacity(tester), 1.0);
 
     await tester.pump(const Duration(milliseconds: 400));
     expect(launchMark, findsOneWidget);
+    expect(_renderedRitualOpacity(tester), inExclusiveRange(0.0, 1.0));
 
     await tester.pump(const Duration(milliseconds: 420));
     await tester.pump();
     expect(find.text('Pause.'), findsOneWidget);
     expect(_ritualOpacity(tester), 0.0);
+    expect(_renderedRitualOpacity(tester), 0.0);
 
     await tester.pump(const Duration(milliseconds: 220));
     expect(_ritualOpacity(tester), 1.0);
+    expect(_renderedRitualOpacity(tester), 0.0);
+    await tester.pump(const Duration(milliseconds: 625));
+    expect(_renderedRitualOpacity(tester), inExclusiveRange(0.0, 1.0));
+    await tester.pump(const Duration(milliseconds: 625));
+    expect(_renderedRitualOpacity(tester), 1.0);
     await tester.pump(const Duration(milliseconds: 820));
 
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump();
+    expect(_feelVisualOpacity(tester), 0.0);
+    await tester.pump(const Duration(milliseconds: 625));
+    expect(_feelVisualOpacity(tester), inExclusiveRange(0.0, 1.0));
+    await tester.pump(const Duration(milliseconds: 625));
+    expect(_feelVisualOpacity(tester), 1.0);
     expect(find.text('Pause.'), findsOneWidget);
     expect(find.text('Feel.'), findsOneWidget);
     expect(_ritualOpacity(tester), 1.0);
@@ -114,19 +146,32 @@ void main() {
     await _tapCenter(tester);
     await tester.pump();
     expect(_ritualOpacity(tester), 0.0);
+    expect(_renderedRitualOpacity(tester), 1.0);
 
-    await tester.pump(const Duration(milliseconds: 820));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(find.text('Feel.'), findsOneWidget);
+    expect(find.text('Ask from your heart.'), findsNothing);
+    expect(_renderedRitualOpacity(tester), inExclusiveRange(0.0, 1.0));
+
+    await tester.pump(const Duration(milliseconds: 649));
     expect(find.text('Pause.'), findsOneWidget);
     expect(find.text('Feel.'), findsOneWidget);
     expect(find.text('Ask from your heart.'), findsNothing);
 
-    await tester.pump(const Duration(milliseconds: 430));
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pump();
     expect(find.text('Ask from your heart.'), findsOneWidget);
     expect(_ritualOpacity(tester), 0.0);
+    expect(_renderedRitualOpacity(tester), 0.0);
 
     await tester.pump(const Duration(milliseconds: 220));
     expect(_ritualOpacity(tester), 1.0);
+    expect(_renderedRitualOpacity(tester), 0.0);
+    await tester.pump(const Duration(milliseconds: 625));
+    expect(_renderedRitualOpacity(tester), inExclusiveRange(0.0, 1.0));
+    await tester.pump(const Duration(milliseconds: 625));
+    expect(_renderedRitualOpacity(tester), 1.0);
     await tester.pump(const Duration(milliseconds: 560));
   });
 
@@ -1249,6 +1294,321 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('wisdom sharing is unavailable before a reveal', (tester) async {
+    final shareService = _RecordingWisdomShareService();
+
+    await tester.pumpWidget(
+      _homeApp(wisdomShareService: shareService),
+    );
+    await _finishOpeningIntro(tester);
+
+    await tester.longPress(
+      find.byKey(const ValueKey('launch-ritual-mark')),
+    );
+    await tester.pump();
+
+    expect(shareService.calls, 0);
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
+  });
+
+  testWidgets(
+      'revealed wisdom shares exact text without changing access or notification',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    const wisdom = 'The current wisdom remains unchanged.';
+    final record = DailyWisdomRecord(
+      text: wisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    SharedPreferences.setMockInitialValues({
+      DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
+    });
+    final shareService = _RecordingWisdomShareService()..blockNext();
+    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomShareService: shareService,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await _pumpUntilWisdomShareEnabled(tester);
+
+    final semantics = tester.getSemantics(find.text(wisdom));
+    expect(semantics.label, wisdom);
+    expect(semantics.hint, 'Long press to share this wisdom.');
+    expect(
+      semantics.getSemanticsData().hasAction(SemanticsAction.longPress),
+      isTrue,
+    );
+
+    final schedulesBeforeShare = notificationPlatform.schedules.length;
+    await tester.longPress(find.text(wisdom));
+    _wisdomShareGesture(tester).onLongPress!();
+    await tester.pump();
+
+    expect(shareService.calls, 1);
+    expect(shareService.wisdoms, [wisdom]);
+    expect(shareService.origins.single.width, greaterThan(0));
+    expect(shareService.origins.single.height, greaterThan(0));
+
+    shareService.release();
+    await tester.pump();
+    _wisdomShareGesture(tester).onLongPress!();
+    await tester.pump();
+
+    expect(shareService.calls, 2);
+    expect(notificationPlatform.schedules.length, schedulesBeforeShare);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString(DailyAccessRepository.dailyWisdomAccessKey),
+      record.encode(),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('share guard resets after failure and disposal is safe',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    const wisdom = 'A quiet failure cannot disturb this wisdom.';
+    final record = DailyWisdomRecord(
+      text: wisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    SharedPreferences.setMockInitialValues({
+      DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
+    });
+    final shareService = _RecordingWisdomShareService()..failNext = true;
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomShareService: shareService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await _pumpUntilWisdomShareEnabled(tester);
+
+    _wisdomShareGesture(tester).onLongPress!();
+    await tester.pump();
+    expect(shareService.calls, 1);
+    expect(tester.takeException(), isNull);
+
+    shareService
+      ..failNext = false
+      ..blockNext();
+    _wisdomShareGesture(tester).onLongPress!();
+    await tester.pump();
+    expect(shareService.calls, 2);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    shareService.release();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('successful reveal schedules persisted unlock exactly once',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump();
+
+    final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
+    expect(persisted, isNotNull);
+    expect(notificationPlatform.schedules, hasLength(1));
+    expect(
+      notificationPlatform.schedules.single.unlockAt.millisecondsSinceEpoch,
+      persisted!.unlockAt.millisecondsSinceEpoch,
+    );
+    expect(notificationPlatform.schedules.single.title, 'EAST.');
+    expect(
+      notificationPlatform.schedules.single.body,
+      'Something waits in silence.',
+    );
+
+    await tester.pump(const Duration(milliseconds: 3200));
+  });
+
+  testWidgets(
+      'notification permission explanation is contextual and dismissible',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final notificationPlatform = _HomeNotificationPlatform(enabled: false);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    expect(
+      find.text('Return when the silence opens again.'),
+      findsNothing,
+    );
+    expect(notificationPlatform.permissionRequests, 0);
+
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3199));
+    expect(
+      find.text('Return when the silence opens again.'),
+      findsNothing,
+    );
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(
+      find.text('Return when the silence opens again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Not now'), findsOneWidget);
+    expect(find.text('Allow'), findsOneWidget);
+    expect(notificationPlatform.permissionRequests, 0);
+
+    await tester.tap(find.text('Not now'));
+    await tester.pump();
+    expect(
+      find.text('Return when the silence opens again.'),
+      findsNothing,
+    );
+    expect(await notificationService.shouldOfferPermission(), isFalse);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 3300));
+    expect(
+      find.text('Return when the silence opens again.'),
+      findsNothing,
+    );
+    expect(notificationPlatform.permissionRequests, 0);
+  });
+
+  testWidgets('accepting notification explanation requests and schedules once',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final notificationPlatform = _HomeNotificationPlatform(
+      enabled: false,
+      permissionResult: true,
+    );
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3200));
+    await tester.pump();
+
+    await tester.tap(find.text('Allow'));
+    await tester.pump();
+    await tester.pump();
+
+    final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
+    expect(notificationPlatform.permissionRequests, 1);
+    expect(notificationPlatform.schedules, hasLength(1));
+    expect(
+      notificationPlatform.schedules.single.unlockAt.millisecondsSinceEpoch,
+      persisted!.unlockAt.millisecondsSinceEpoch,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disposal during native notification permission is safe',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final permissionGate = Completer<bool>();
+    final notificationPlatform = _HomeNotificationPlatform(
+      enabled: false,
+      permissionGate: permissionGate,
+    );
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3200));
+    await tester.pump();
+
+    await tester.tap(find.text('Allow'));
+    await tester.pump();
+    expect(notificationPlatform.permissionRequests, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    permissionGate.complete(true);
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('archive failure cannot replace a persisted daily wisdom',
       (tester) async {
     SharedPreferences.setMockInitialValues({
@@ -1372,6 +1732,8 @@ Widget _homeApp({
   DailyAccessTestGraph? dailyGraph,
   StorageService? storageService,
   SavedReflectionsService? savedReflectionsService,
+  WisdomShareHandler? wisdomShareService,
+  WisdomNotificationService? wisdomNotificationService,
   WisdomClock? clock,
   Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
   Duration dailyWisdomStatusTimeout =
@@ -1384,6 +1746,8 @@ Widget _homeApp({
       savedReflectionsService:
           savedReflectionsService ?? SavedReflectionsService(),
       dailyWisdomAccessService: resolvedDailyGraph.service,
+      wisdomShareService: wisdomShareService,
+      wisdomNotificationService: wisdomNotificationService,
       clock: clock,
       dailyWisdomOperationTimeout: dailyWisdomOperationTimeout,
       dailyWisdomStatusTimeout: dailyWisdomStatusTimeout,
@@ -1446,6 +1810,39 @@ double _ritualOpacity(WidgetTester tester) {
       .opacity;
 }
 
+double _renderedRitualOpacity(WidgetTester tester) {
+  final animatedOpacity = find.byKey(const ValueKey('ritual-content-opacity'));
+  return tester
+      .widget<FadeTransition>(
+        find
+            .descendant(
+              of: animatedOpacity,
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      )
+      .opacity
+      .value;
+}
+
+double _feelVisualOpacity(WidgetTester tester) {
+  final feelOpacity = find.ancestor(
+    of: find.text('Feel.'),
+    matching: find.byType(AnimatedOpacity),
+  );
+  return tester
+      .widget<FadeTransition>(
+        find
+            .descendant(
+              of: feelOpacity.first,
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      )
+      .opacity
+      .value;
+}
+
 double _askFadeValue(WidgetTester tester) {
   return tester
       .widget<FadeTransition>(
@@ -1470,6 +1867,158 @@ Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
       .widgetList<CustomPaint>(find.byType(CustomPaint))
       .map((widget) => widget.painter)
       .whereType<GrainPainter>();
+}
+
+GestureDetector _wisdomShareGesture(WidgetTester tester) {
+  final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
+  return tester
+      .widgetList<GestureDetector>(
+        find.ancestor(
+          of: reveal,
+          matching: find.byType(GestureDetector),
+        ),
+      )
+      .firstWhere(
+        (gesture) => gesture.key is GlobalKey && gesture.onLongPress != null,
+      );
+}
+
+Future<void> _pumpUntilWisdomShareEnabled(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 40; attempt += 1) {
+    final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
+    if (reveal.evaluate().isNotEmpty) {
+      final gestures = tester.widgetList<GestureDetector>(
+        find.ancestor(
+          of: reveal,
+          matching: find.byType(GestureDetector),
+        ),
+      );
+      if (gestures.any(
+        (gesture) => gesture.key is GlobalKey && gesture.onLongPress != null,
+      )) {
+        return;
+      }
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
+  final revealOpacity = reveal.evaluate().isEmpty
+      ? null
+      : tester.widget<FadeTransition>(reveal).opacity.value;
+  final globalGestures = reveal.evaluate().isEmpty
+      ? const <GestureDetector>[]
+      : tester
+          .widgetList<GestureDetector>(
+            find.ancestor(
+              of: reveal,
+              matching: find.byType(GestureDetector),
+            ),
+          )
+          .where((gesture) => gesture.key is GlobalKey)
+          .toList();
+  fail(
+    'Revealed wisdom did not become shareable: opacity=$revealOpacity, '
+    'global gestures=${globalGestures.length}, '
+    'callbacks=${globalGestures.map((gesture) => gesture.onLongPress != null)}.',
+  );
+}
+
+class _RecordingWisdomShareService implements WisdomShareHandler {
+  int calls = 0;
+  bool failNext = false;
+  Completer<void>? _gate;
+  final List<String> wisdoms = [];
+  final List<Rect> origins = [];
+
+  void blockNext() {
+    _gate = Completer<void>();
+  }
+
+  void release() {
+    final gate = _gate;
+    _gate = null;
+    if (gate != null && !gate.isCompleted) {
+      gate.complete();
+    }
+  }
+
+  @override
+  Future<void> shareWisdom({
+    required String wisdom,
+    required Rect sharePositionOrigin,
+  }) async {
+    calls += 1;
+    wisdoms.add(wisdom);
+    origins.add(sharePositionOrigin);
+    final gate = _gate;
+    if (gate != null) {
+      await gate.future;
+    }
+    if (failNext) {
+      failNext = false;
+      throw StateError('share failed');
+    }
+  }
+}
+
+class _HomeNotificationPlatform implements WisdomNotificationPlatform {
+  _HomeNotificationPlatform({
+    required this.enabled,
+    this.permissionResult = false,
+    this.permissionGate,
+  });
+
+  bool enabled;
+  final bool permissionResult;
+  final Completer<bool>? permissionGate;
+  int permissionRequests = 0;
+  final List<_HomeScheduledNotification> schedules = [];
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<bool?> notificationsEnabled() async => enabled;
+
+  @override
+  Future<bool> requestPermission() async {
+    permissionRequests += 1;
+    final gate = permissionGate;
+    final result = gate == null ? permissionResult : await gate.future;
+    if (result) enabled = true;
+    return result;
+  }
+
+  @override
+  Future<void> cancel(int id) async {}
+
+  @override
+  Future<void> schedule({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime unlockAt,
+  }) async {
+    schedules.add(
+      _HomeScheduledNotification(
+        title: title,
+        body: body,
+        unlockAt: unlockAt,
+      ),
+    );
+  }
+}
+
+class _HomeScheduledNotification {
+  const _HomeScheduledNotification({
+    required this.title,
+    required this.body,
+    required this.unlockAt,
+  });
+
+  final String title;
+  final String body;
+  final DateTime unlockAt;
 }
 
 class _DelayedPendingDailyAccessGraph {

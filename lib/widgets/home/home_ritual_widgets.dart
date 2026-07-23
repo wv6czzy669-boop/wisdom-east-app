@@ -153,7 +153,7 @@ class _HomeMainRitualGesture extends StatelessWidget {
       excludeFromSemantics: true,
       behavior: HitTestBehavior.opaque,
       onTap: navigationDisabled ? null : onTap,
-      onLongPress: null,
+      onLongPress: () {},
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -177,13 +177,11 @@ class _HomeMainRitualGesture extends StatelessWidget {
       child: gesture,
     );
 
-    if (label == null) return semanticsChild;
-
     return Semantics(
-      container: true,
-      excludeSemantics: true,
-      button: semanticActionEnabled,
-      enabled: semanticActionEnabled,
+      container: label != null,
+      excludeSemantics: label != null,
+      button: label == null ? null : semanticActionEnabled,
+      enabled: label == null ? null : semanticActionEnabled,
       label: label,
       onTap: semanticActionEnabled ? onTap : null,
       child: semanticsChild,
@@ -206,6 +204,9 @@ class _HomeRitualContent extends StatelessWidget {
     required this.onHeartScreen,
     required this.wisdomRevealed,
     required this.onLockedCountdown,
+    required this.wisdomShareEnabled,
+    required this.wisdomShareOriginKey,
+    required this.onWisdomLongPress,
   });
 
   final int screenStep;
@@ -221,6 +222,9 @@ class _HomeRitualContent extends StatelessWidget {
   final bool onHeartScreen;
   final bool wisdomRevealed;
   final bool onLockedCountdown;
+  final bool wisdomShareEnabled;
+  final GlobalKey wisdomShareOriginKey;
+  final VoidCallback onWisdomLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -334,12 +338,30 @@ class _HomeRitualContent extends StatelessWidget {
                                 ? revealedWisdomWidth
                                 : ritualTextWidth,
                             child: wisdomRevealed
-                                ? FadeTransition(
-                                    key: const ValueKey(
-                                      'wisdom-reveal-fade',
+                                ? Semantics(
+                                    container: true,
+                                    excludeSemantics: true,
+                                    label: currentText,
+                                    hint: 'Long press to share this wisdom.',
+                                    onLongPress: wisdomShareEnabled
+                                        ? onWisdomLongPress
+                                        : null,
+                                    child: ExcludeSemantics(
+                                      child: GestureDetector(
+                                        key: wisdomShareOriginKey,
+                                        behavior: HitTestBehavior.translucent,
+                                        onLongPress: wisdomShareEnabled
+                                            ? onWisdomLongPress
+                                            : null,
+                                        child: FadeTransition(
+                                          key: const ValueKey(
+                                            'wisdom-reveal-fade',
+                                          ),
+                                          opacity: wisdomRevealAnimation,
+                                          child: currentRitualText,
+                                        ),
+                                      ),
                                     ),
-                                    opacity: wisdomRevealAnimation,
-                                    child: currentRitualText,
                                   )
                                 : currentRitualText,
                           ),

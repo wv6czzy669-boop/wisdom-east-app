@@ -232,15 +232,6 @@ class _KeeperScreenState extends State<KeeperScreen> {
                         color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
                       ).copyWith(letterSpacing: 0.75),
                     ),
-                    const SizedBox(height: 18),
-                    Text(
-                      "Preserve what stays with you.",
-                      textAlign: TextAlign.center,
-                      style: keeperStyle(
-                        14,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
-                      ).copyWith(letterSpacing: 0.8),
-                    ),
                     const SizedBox(height: 11),
                     Text(
                       "Keep EAST. alive.",

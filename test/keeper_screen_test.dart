@@ -47,7 +47,6 @@ void main() {
       'Keep what stays.',
       'Enter the Circle',
       'Keep reflections without limit.',
-      'Preserve what stays with you.',
       'Keep EAST. alive.',
     ];
 
@@ -59,6 +58,9 @@ void main() {
     expect(find.text('Temporarily unavailable'), findsNothing);
     expect(find.text('Support EAST.'), findsNothing);
     expect(find.text('One-time offering.'), findsNothing);
+    expect(find.text('Preserve what stays with you.'), findsNothing);
+    expect(find.text('Preserve what stay with you.'), findsNothing);
+    expect(find.text('Three reflections each day.'), findsNothing);
 
     final renderedCopy = tester
         .widgetList<Text>(find.byType(Text))
@@ -152,7 +154,7 @@ void main() {
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text(removedThreeRevealCopy), findsNothing);
     expect(find.text('Keep reflections without limit.'), findsOneWidget);
-    expect(find.text('Preserve what stays with you.'), findsOneWidget);
+    expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Keep EAST. alive.'), findsOneWidget);
     expect(find.text('Support EAST.'), findsNothing);
     expect(tester.takeException(), isNull);
