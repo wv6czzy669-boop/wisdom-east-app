@@ -786,6 +786,51 @@ void main() {
     expect(find.byKey(const ValueKey('reveal-another')), findsNothing);
   });
 
+  testWidgets('returning from Kept reloads a removed current wisdom',
+      (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A kept wisdom removed from its quiet list';
+    final kept = FavoriteItem(
+      id: 'remove-from-kept',
+      text: wisdom,
+      date: 'July 23, 2026',
+      reflection: 'A private reflection',
+    );
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+      'favorites': [kept.encode()],
+    });
+
+    await tester.pumpWidget(_homeApp());
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Kept'));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('kept-remove-from-kept')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(find.text(wisdom), findsNothing);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+
+    expect(find.text(wisdom), findsOneWidget);
+    expect(find.byTooltip('Keep reflection'), findsOneWidget);
+    expect(await SavedReflectionsService().load(), isEmpty);
+  });
+
   testWidgets('Keeper reopens to the shared locked wisdom without extra reveal',
       (tester) async {
     final now = DateTime.now();

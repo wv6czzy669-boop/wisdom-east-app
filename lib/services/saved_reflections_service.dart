@@ -6,10 +6,24 @@ class SavedReflectionsResult {
   const SavedReflectionsResult({
     required this.items,
     required this.limitReached,
+    this.reflectionLimitReached = false,
   });
 
   final List<FavoriteItem> items;
   final bool limitReached;
+  final bool reflectionLimitReached;
+}
+
+class RemovedSavedReflection {
+  const RemovedSavedReflection({
+    required this.item,
+    required this.originalIndex,
+    required this.items,
+  });
+
+  final FavoriteItem item;
+  final int originalIndex;
+  final List<FavoriteItem> items;
 }
 
 class SavedReflectionsService {
@@ -23,6 +37,8 @@ class SavedReflectionsService {
 
   static const String storageKey = 'favorites';
   static const String resourceKey = 'saved_reflections';
+  static const int maximumReflectionLength = 250;
+  static const int freeReflectionLimit = 1;
 
   final StoragePreferencesAdapter _preferencesAdapter;
   final PersistenceOperationCoordinator _operationCoordinator;
@@ -84,6 +100,123 @@ class SavedReflectionsService {
           items: List.unmodifiable(items),
           limitReached: false,
         );
+      },
+    );
+  }
+
+  Future<SavedReflectionsResult> saveReflection({
+    required String itemId,
+    required String reflection,
+    required bool isKeeper,
+    DateTime? reflectedAt,
+  }) {
+    return _operationCoordinator.runExclusive<SavedReflectionsResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final normalized = reflection.trim();
+        if (normalized.isEmpty) {
+          throw ArgumentError.value(
+            reflection,
+            'reflection',
+            'Reflection cannot be empty.',
+          );
+        }
+        if (normalized.length > maximumReflectionLength) {
+          throw ArgumentError.value(
+            reflection,
+            'reflection',
+            'Reflection cannot exceed $maximumReflectionLength characters.',
+          );
+        }
+
+        final items = await _loadAndMigrate();
+        final itemIndex = items.indexWhere((item) => item.id == itemId);
+        if (itemIndex < 0) {
+          throw StateError('The kept wisdom no longer exists.');
+        }
+
+        final existing = items[itemIndex];
+        if (!existing.hasReflection &&
+            !isKeeper &&
+            items.where((item) => item.hasReflection).length >=
+                freeReflectionLimit) {
+          return SavedReflectionsResult(
+            items: List.unmodifiable(items),
+            limitReached: false,
+            reflectionLimitReached: true,
+          );
+        }
+
+        items[itemIndex] = existing.copyWith(
+          reflection: normalized,
+          reflectedAt: (reflectedAt ?? DateTime.now()).toIso8601String(),
+        );
+        await _persist(items);
+        return SavedReflectionsResult(
+          items: List.unmodifiable(items),
+          limitReached: false,
+        );
+      },
+    );
+  }
+
+  Future<List<FavoriteItem>> deleteReflection({
+    required String itemId,
+  }) {
+    return _operationCoordinator.runExclusive<List<FavoriteItem>>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final items = await _loadAndMigrate();
+        final itemIndex = items.indexWhere((item) => item.id == itemId);
+        if (itemIndex < 0) {
+          throw StateError('The kept wisdom no longer exists.');
+        }
+
+        if (!items[itemIndex].hasReflection) {
+          return List.unmodifiable(items);
+        }
+
+        items[itemIndex] = items[itemIndex].copyWith(clearReflection: true);
+        await _persist(items);
+        return List.unmodifiable(items);
+      },
+    );
+  }
+
+  Future<RemovedSavedReflection?> remove({
+    required String itemId,
+  }) {
+    return _operationCoordinator.runExclusive<RemovedSavedReflection?>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final items = await _loadAndMigrate();
+        final itemIndex = items.indexWhere((item) => item.id == itemId);
+        if (itemIndex < 0) return null;
+
+        final removed = items.removeAt(itemIndex);
+        await _persist(items);
+        return RemovedSavedReflection(
+          item: removed,
+          originalIndex: itemIndex,
+          items: List.unmodifiable(items),
+        );
+      },
+    );
+  }
+
+  Future<List<FavoriteItem>> restore(RemovedSavedReflection removed) {
+    return _operationCoordinator.runExclusive<List<FavoriteItem>>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final items = await _loadAndMigrate();
+        if (items.any((item) => item.id == removed.item.id)) {
+          return List.unmodifiable(items);
+        }
+
+        final insertionIndex = removed.originalIndex.clamp(0, items.length);
+        items.insert(insertionIndex, removed.item);
+        await _persist(items);
+        return List.unmodifiable(items);
       },
     );
   }

@@ -46,7 +46,8 @@ void main() {
       'Keeper',
       'Keep what stays.',
       'Enter the Circle',
-      'Keep reflections without limit.',
+      'Unlimited Kept Wisdoms',
+      'Unlimited Reflections',
       'Keep EAST. alive.',
     ];
 
@@ -58,6 +59,7 @@ void main() {
     expect(find.text('Temporarily unavailable'), findsNothing);
     expect(find.text('Support EAST.'), findsNothing);
     expect(find.text('One-time offering.'), findsNothing);
+    expect(find.text('Keep reflections without limit.'), findsNothing);
     expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Preserve what stay with you.'), findsNothing);
     expect(find.text('Three reflections each day.'), findsNothing);
@@ -153,7 +155,9 @@ void main() {
     expect(find.byType(SingleChildScrollView), findsNothing);
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text(removedThreeRevealCopy), findsNothing);
-    expect(find.text('Keep reflections without limit.'), findsOneWidget);
+    expect(find.text('Unlimited Kept Wisdoms'), findsOneWidget);
+    expect(find.text('Unlimited Reflections'), findsOneWidget);
+    expect(find.text('Keep reflections without limit.'), findsNothing);
     expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Keep EAST. alive.'), findsOneWidget);
     expect(find.text('Support EAST.'), findsNothing);

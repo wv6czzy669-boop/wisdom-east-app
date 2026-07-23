@@ -1301,7 +1301,7 @@ class _HomeScreenState extends State<HomeScreen>
             style: _homeWisdomStyle(22),
           ),
           content: Text(
-            "Free users can keep up to 3 reflections.",
+            "Free users can keep up to 3 wisdoms.",
             style: _homeWisdomStyle(18),
           ),
           actions: [
@@ -1345,7 +1345,7 @@ class _HomeScreenState extends State<HomeScreen>
         favorites = result.items;
       });
     } catch (_) {
-      showEastSnack("Reflection could not be kept. Please try again.");
+      showEastSnack("Wisdom could not be kept. Please try again.");
     } finally {
       _saveOperationInProgress = false;
     }
@@ -1379,9 +1379,13 @@ class _HomeScreenState extends State<HomeScreen>
         MaterialPageRoute(
           builder: (context) => SavedReflectionsScreen(
             reflections: List<FavoriteItem>.from(favorites),
+            isKeeper: isKeeper,
+            savedReflectionsService: savedReflectionsService,
           ),
         ),
       );
+      if (!mounted) return;
+      await loadFavorites();
     } finally {
       if (mounted) {
         navigationInProgress = false;

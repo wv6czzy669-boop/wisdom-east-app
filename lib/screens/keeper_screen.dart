@@ -225,7 +225,16 @@ class _KeeperScreenState extends State<KeeperScreen> {
                     ),
                     const SizedBox(height: 108),
                     Text(
-                      "Keep reflections without limit.",
+                      "Unlimited Kept Wisdoms",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(
+                        16,
+                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
+                      ).copyWith(letterSpacing: 0.75),
+                    ),
+                    const SizedBox(height: 11),
+                    Text(
+                      "Unlimited Reflections",
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         16,

@@ -75,8 +75,7 @@ void main() {
     expect(tester.getTopLeft(find.text('Keeper')).dx, 24);
   });
 
-  testWidgets('Kept omits the stored year without changing its data',
-      (tester) async {
+  testWidgets('Kept displays the full stored date with year', (tester) async {
     const storedDate = 'June 21, 2026';
     final reflection = FavoriteItem(
       id: 'kept-year-test',
@@ -91,14 +90,13 @@ void main() {
       ),
     );
 
-    expect(find.text('June 21'), findsOneWidget);
-    expect(find.text(storedDate), findsNothing);
-    final displayedDate = tester.widget<Text>(find.text('June 21'));
+    expect(find.text('JUNE 21, 2026'), findsOneWidget);
+    final displayedDate = tester.widget<Text>(find.text('JUNE 21, 2026'));
     expect(displayedDate.style?.color, const Color(0x91FFFFFF));
     expect(reflection.date, storedDate);
   });
 
-  testWidgets('Kept screen uses the new feature title', (tester) async {
+  testWidgets('Kept screen uses the quiet empty state', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: SavedReflectionsScreen(reflections: []),
@@ -106,7 +104,7 @@ void main() {
     );
 
     expect(find.text('Kept'), findsOneWidget);
-    expect(find.text('Nothing kept yet.'), findsOneWidget);
+    expect(find.text('Nothing has stayed yet.'), findsOneWidget);
   });
 
   testWidgets('Settings scroll protects iPhone SE at 3x text scale',
