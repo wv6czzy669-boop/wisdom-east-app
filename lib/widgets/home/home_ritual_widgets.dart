@@ -635,6 +635,82 @@ class _HomePostRevealMessage extends StatelessWidget {
   }
 }
 
+class _HomeNotificationPermissionOffer extends StatelessWidget {
+  const _HomeNotificationPermissionOffer({
+    required this.onNotNow,
+    required this.onAllow,
+  });
+
+  final VoidCallback onNotNow;
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Align(
+        alignment: const Alignment(0, -0.18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              key: const ValueKey('notification-permission-offer-surface'),
+              width: double.infinity,
+              constraints: const BoxConstraints(maxWidth: 352),
+              clipBehavior: Clip.antiAlias,
+              decoration: const BoxDecoration(
+                borderRadius: BorderRadius.all(Radius.circular(28)),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF181817),
+                    Color(0xFF121211),
+                  ],
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 28, 16, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      'Return when the silence opens again.',
+                      textAlign: TextAlign.center,
+                      style: _homeWisdomStyle(19, height: 1.45),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: onNotNow,
+                        child: Text(
+                          'Not now',
+                          style: _homeWisdomStyle(17),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: onAllow,
+                        child: Text(
+                          'Allow',
+                          style: _homeWisdomStyle(17),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RitualScaleTransition extends StatelessWidget {
   const _RitualScaleTransition({
     required this.enabled,

@@ -157,6 +157,12 @@ void main() {
       prefs.getBool(WisdomNotificationService.permissionPromptHandledKey),
       isTrue,
     );
+
+    final relaunchedService = WisdomNotificationService(
+      platform: _FakeNotificationPlatform(enabled: false),
+      clock: () => now,
+    );
+    expect(await relaunchedService.shouldOfferPermission(), isFalse);
   });
 
   test('accepting permission requests once and schedules exact unlock',

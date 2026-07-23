@@ -750,7 +750,6 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (access.isNew) {
         _pendingNotificationUnlockAt = unlockAt;
-        _queueNotificationPermissionOffer(unlockAt);
       }
     }
   }
@@ -764,8 +763,10 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void _queueNotificationPermissionOffer(DateTime unlockAt) {
-    _pendingNotificationUnlockAt = unlockAt;
+  void _queueNotificationPermissionOffer(
+    DateTime unlockAt, {
+    Duration delay = const Duration(seconds: 6),
+  }) {
     if (_notificationPermissionOfferScheduled ||
         _notificationPermissionOfferShowing) {
       return;
@@ -774,12 +775,13 @@ class _HomeScreenState extends State<HomeScreen>
     _notificationPermissionOfferScheduled = true;
     final offerFlow = flowSessionId;
     _notificationPermissionOfferTimer = Timer(
-      const Duration(milliseconds: 3200),
+      delay,
       () async {
         _notificationPermissionOfferTimer = null;
         _notificationPermissionOfferScheduled = false;
         if (!mounted ||
             offerFlow != flowSessionId ||
+            _pendingNotificationUnlockAt != unlockAt ||
             !wisdomRevealed ||
             transitionInProgress ||
             navigationInProgress ||
@@ -806,33 +808,25 @@ class _HomeScreenState extends State<HomeScreen>
 
     _notificationPermissionOfferShowing = true;
     try {
-      final accepted = await showDialog<bool>(
+      final accepted = await showGeneralDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF111111),
-            content: Text(
-              'Return when the silence opens again.',
-              textAlign: TextAlign.center,
-              style: _homeWisdomStyle(19, height: 1.45),
+        barrierLabel: 'Notification permission',
+        barrierColor: Colors.black.withValues(alpha: 0.54),
+        transitionDuration: const Duration(milliseconds: 800),
+        pageBuilder: (dialogContext, _, __) {
+          return _HomeNotificationPermissionOffer(
+            onNotNow: () => Navigator.pop(dialogContext, false),
+            onAllow: () => Navigator.pop(dialogContext, true),
+          );
+        },
+        transitionBuilder: (context, animation, _, child) {
+          return FadeTransition(
+            key: const ValueKey('notification-permission-offer-fade'),
+            opacity: animation.drive(
+              CurveTween(curve: Curves.easeOutCubic),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(
-                  'Not now',
-                  style: _homeWisdomStyle(17),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(
-                  'Allow',
-                  style: _homeWisdomStyle(17),
-                ),
-              ),
-            ],
+            child: child,
           );
         },
       );
@@ -1040,9 +1034,20 @@ class _HomeScreenState extends State<HomeScreen>
 
       unawaited(audioService.playRevealSound());
       HapticFeedback.selectionClick();
+      final revealSchedulingZone = Zone.current;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!isCurrentFlow(currentFlow) || !wisdomRevealed) return;
         wisdomRevealController.forward(from: 0.0);
+        final unlockAt = revealedAccess.unlockAt;
+        if (revealedAccess.isNew && unlockAt != null) {
+          revealSchedulingZone.run(() {
+            _queueNotificationPermissionOffer(
+              unlockAt,
+              delay:
+                  wisdomRevealController.duration! + const Duration(seconds: 6),
+            );
+          });
+        }
       });
 
       final commitFuture = revealReady.hasAuthoritativeRecord

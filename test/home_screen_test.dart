@@ -1458,7 +1458,8 @@ void main() {
       'Something waits in silence.',
     );
 
-    await tester.pump(const Duration(milliseconds: 3200));
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await tester.pump(const Duration(seconds: 6));
   });
 
   testWidgets(
@@ -1490,14 +1491,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 3199));
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await _pumpInSteps(tester, const Duration(milliseconds: 5999));
     expect(
       find.text('Return when the silence opens again.'),
       findsNothing,
     );
 
     await tester.pump(const Duration(milliseconds: 1));
-    await tester.pump();
+    await _pumpUntilNotificationOfferMounted(tester);
     expect(
       find.text('Return when the silence opens again.'),
       findsOneWidget,
@@ -1506,8 +1508,44 @@ void main() {
     expect(find.text('Allow'), findsOneWidget);
     expect(notificationPlatform.permissionRequests, 0);
 
+    final offerFade = tester.widget<FadeTransition>(
+      find.byKey(const ValueKey('notification-permission-offer-fade')),
+    );
+    expect(offerFade.opacity.value, 0);
+    expect(
+      find.ancestor(
+        of: find.byKey(
+          const ValueKey('notification-permission-offer-surface'),
+        ),
+        matching: find.byType(ScaleTransition),
+      ),
+      findsNothing,
+    );
+
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(offerFade.opacity.value, greaterThan(0));
+    expect(offerFade.opacity.value, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(offerFade.opacity.value, 1);
+
+    final surfaceFinder = find.byKey(
+      const ValueKey('notification-permission-offer-surface'),
+    );
+    final surface = tester.widget<Container>(surfaceFinder);
+    final decoration = surface.decoration! as BoxDecoration;
+    expect(decoration.border, isNull);
+    expect(decoration.boxShadow, isNull);
+    expect(decoration.gradient, isA<LinearGradient>());
+    expect(
+      tester.getCenter(surfaceFinder).dy,
+      lessThan(
+          tester.view.physicalSize.height / tester.view.devicePixelRatio / 2),
+    );
+
     await tester.tap(find.text('Not now'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 801));
+    await _pumpUntilNotificationOfferDismissed(tester);
     expect(
       find.text('Return when the silence opens again.'),
       findsNothing,
@@ -1517,7 +1555,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pump(const Duration(milliseconds: 3300));
+    await tester.pump(const Duration(milliseconds: 6800));
     expect(
       find.text('Return when the silence opens again.'),
       findsNothing,
@@ -1551,11 +1589,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 3200));
-    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 6));
+    await _pumpUntilNotificationOfferMounted(tester);
+    await tester.pump(const Duration(milliseconds: 800));
 
     await tester.tap(find.text('Allow'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 801));
     await tester.pump();
 
     final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
@@ -1594,11 +1635,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 3200));
-    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 6));
+    await _pumpUntilNotificationOfferMounted(tester);
+    await tester.pump(const Duration(milliseconds: 800));
 
     await tester.tap(find.text('Allow'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 801));
     expect(notificationPlatform.permissionRequests, 1);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1921,6 +1965,57 @@ Future<void> _pumpUntilWisdomShareEnabled(WidgetTester tester) async {
     'global gestures=${globalGestures.length}, '
     'callbacks=${globalGestures.map((gesture) => gesture.onLongPress != null)}.',
   );
+}
+
+Future<void> _pumpUntilWisdomFullyAppeared(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 200; attempt += 1) {
+    final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
+    if (reveal.evaluate().isNotEmpty &&
+        tester.widget<FadeTransition>(reveal).opacity.value >= 1.0) {
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 10));
+  }
+  fail('Wisdom reveal fade did not complete.');
+}
+
+Future<void> _pumpUntilNotificationOfferMounted(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 20; attempt += 1) {
+    if (find
+        .byKey(const ValueKey('notification-permission-offer-fade'))
+        .evaluate()
+        .isNotEmpty) {
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+  fail('Notification permission offer did not mount.');
+}
+
+Future<void> _pumpUntilNotificationOfferDismissed(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 20; attempt += 1) {
+    if (find
+        .byKey(const ValueKey('notification-permission-offer-fade'))
+        .evaluate()
+        .isEmpty) {
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+  fail('Notification permission offer did not dismiss.');
+}
+
+Future<void> _pumpInSteps(
+  WidgetTester tester,
+  Duration duration, {
+  Duration step = const Duration(milliseconds: 100),
+}) async {
+  var remaining = duration;
+  while (remaining > Duration.zero) {
+    final next = remaining < step ? remaining : step;
+    await tester.pump(next);
+    remaining -= next;
+  }
 }
 
 class _RecordingWisdomShareService implements WisdomShareHandler {
