@@ -471,12 +471,18 @@ class _HomePauseFeelText extends StatelessWidget {
 
 class _HomeTopNavigation extends StatelessWidget {
   const _HomeTopNavigation({
-    required this.onSettingsPressed,
+    required this.onObjectsPressed,
     required this.onKeptPressed,
   });
 
-  final VoidCallback onSettingsPressed;
+  final VoidCallback onObjectsPressed;
   final VoidCallback onKeptPressed;
+
+  static const ButtonStyle _noHaloStyle = ButtonStyle(
+    backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+    overlayColor: WidgetStatePropertyAll(Colors.transparent),
+    splashFactory: NoSplash.splashFactory,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -490,44 +496,48 @@ class _HomeTopNavigation extends StatelessWidget {
           SizedBox.square(
             dimension: 48,
             child: IconButton(
-              tooltip: 'Settings',
-              icon: Transform.translate(
-                offset: const Offset(0, -4),
-                child: const Text(
-                  '◎',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 29,
-                    fontWeight: FontWeight.w300,
-                    fontFamily: 'CormorantGaramond',
-                    height: 1,
-                  ),
-                ),
-              ),
-              onPressed: onSettingsPressed,
+              tooltip: 'Objects',
+              style: _noHaloStyle,
+              icon: const SingleRingIcon(),
+              onPressed: onObjectsPressed,
             ),
           ),
           SizedBox.square(
             dimension: 48,
             child: IconButton(
               tooltip: 'Kept',
-              icon: Transform.translate(
-                offset: const Offset(0, -4),
-                child: const Text(
-                  '○',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 36,
-                    fontWeight: FontWeight.w300,
-                    fontFamily: 'CormorantGaramond',
-                    height: 1,
-                  ),
-                ),
-              ),
+              style: _noHaloStyle,
+              icon: const DoubleRingIcon(),
               onPressed: onKeptPressed,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HomeSettingsMenuControl extends StatelessWidget {
+  const _HomeSettingsMenuControl({
+    required this.onPressed,
+  });
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      key: const ValueKey('settings-menu-control'),
+      top: 0,
+      left: 8,
+      child: SizedBox.square(
+        dimension: 48,
+        child: IconButton(
+          tooltip: 'Settings',
+          style: _HomeTopNavigation._noHaloStyle,
+          icon: const HomeTopNavBar(),
+          onPressed: onPressed,
+        ),
       ),
     );
   }
@@ -571,6 +581,17 @@ class _HomeSaveControl extends StatelessWidget {
                 tooltip: isCurrentFavorite
                     ? 'Remove kept reflection'
                     : 'Keep reflection',
+                // Force every interaction state (idle, hover, focus,
+                // pressed) to render with no background/overlay/splash, so
+                // only the bare symbol below is ever visible — no dark-grey
+                // circular halo behind the saved/unsaved ring. Position,
+                // symbol diameter, tap-target size, semantics, and the
+                // saved/unsaved logic in `onPressed` are untouched.
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  overlayColor: Colors.transparent,
+                  splashFactory: NoSplash.splashFactory,
+                ),
                 icon: Text(
                   isCurrentFavorite ? '●' : '○',
                   style: const TextStyle(
@@ -622,87 +643,11 @@ class _HomePostRevealMessage extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: _homeWisdomStyle(
                       15,
-                      color: const Color(0x91FFFFFF),
+                      color: eastMutedTextColor,
                     ),
                   ),
                 ],
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeNotificationPermissionOffer extends StatelessWidget {
-  const _HomeNotificationPermissionOffer({
-    required this.onNotNow,
-    required this.onAllow,
-  });
-
-  final VoidCallback onNotNow;
-  final VoidCallback onAllow;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Align(
-        alignment: const Alignment(0, -0.18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Material(
-            type: MaterialType.transparency,
-            child: Container(
-              key: const ValueKey('notification-permission-offer-surface'),
-              width: double.infinity,
-              constraints: const BoxConstraints(maxWidth: 352),
-              clipBehavior: Clip.antiAlias,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.all(Radius.circular(28)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF181817),
-                    Color(0xFF121211),
-                  ],
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(24, 28, 16, 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(
-                      'Return when the silence opens again.',
-                      textAlign: TextAlign.center,
-                      style: _homeWisdomStyle(19, height: 1.45),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: onNotNow,
-                        child: Text(
-                          'Not now',
-                          style: _homeWisdomStyle(17),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: onAllow,
-                        child: Text(
-                          'Allow',
-                          style: _homeWisdomStyle(17),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             ),
           ),
         ),

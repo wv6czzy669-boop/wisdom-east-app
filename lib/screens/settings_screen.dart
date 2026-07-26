@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
+import '../services/wisdom_notification_service.dart';
+import '../theme/muted_text_color.dart';
 import 'keeper_screen.dart';
 
 typedef SettingsUrlLauncher = Future<bool> Function(
@@ -15,23 +19,140 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     this.urlLauncher,
     this.purchaseService,
+    this.notificationService,
   });
 
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
 
+  // Injectable so widget tests can exercise the Daily Reminder row without
+  // touching real platform notification/permission APIs.
+  final WisdomNotificationService? notificationService;
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   bool _keeperNavigationInProgress = false;
   bool _privacyPolicyLaunchInProgress = false;
   bool _reachOutLaunchInProgress = false;
   bool _restoreInProgress = false;
+  bool _eastProductionsLaunchInProgress = false;
+  bool _dailyReminderOn = false;
+  bool _dailyReminderBusy = false;
+
+  // Shared by every Settings divider (see requirement: "all Settings
+  // dividers use one shared value"). Derived from the approved muted-text
+  // token rather than a duplicated raw RGB literal.
+  final Color _settingsDividerColor = eastMutedTextColor.withValues(
+    alpha: 0.30,
+  );
 
   PurchaseService get _purchaseService =>
       widget.purchaseService ?? app_services.purchaseService;
+
+  WisdomNotificationService get _notificationService =>
+      widget.notificationService ?? app_services.wisdomNotificationService;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_refreshDailyReminderStatus());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Only ever refresh the real, current status here — never request
+    // permission automatically on resume. This is what makes returning
+    // from the OS notification settings (after a denied-permission
+    // redirect) reflect the true authorization without any extra tap, and
+    // what makes an externally-revoked permission read as OFF rather than
+    // staying stale.
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshDailyReminderStatus());
+    }
+  }
+
+  Future<void> _refreshDailyReminderStatus() async {
+    final on = await _notificationService.isDailyReminderOn();
+    if (!mounted) return;
+    setState(() {
+      _dailyReminderOn = on;
+    });
+  }
+
+  String get _dailyReminderStatusText => _dailyReminderOn ? 'ON' : 'OFF';
+
+  String get dailyReminderSemanticLabel {
+    if (_dailyReminderBusy) {
+      return 'Daily Reminder. Updating.';
+    }
+    return 'Daily Reminder. Return when the silence opens again. '
+        'Currently ${_dailyReminderOn ? 'on' : 'off'}.';
+  }
+
+  VoidCallback? get dailyReminderAction {
+    if (_dailyReminderBusy) return null;
+    return _toggleDailyReminder;
+  }
+
+  Future<void> _toggleDailyReminder() async {
+    if (_dailyReminderBusy || !mounted) return;
+
+    setState(() {
+      _dailyReminderBusy = true;
+    });
+
+    try {
+      if (_dailyReminderOn) {
+        await _notificationService.disableDailyReminder();
+        if (!mounted) return;
+        setState(() {
+          _dailyReminderOn = false;
+        });
+        return;
+      }
+
+      final status = await _notificationService.authorizationStatus();
+      switch (status) {
+        case WisdomNotificationAuthorization.notDetermined:
+        case WisdomNotificationAuthorization.authorized:
+          final on = await _notificationService.enableDailyReminder();
+          if (!mounted) return;
+          setState(() {
+            _dailyReminderOn = on;
+          });
+        case WisdomNotificationAuthorization.denied:
+        case WisdomNotificationAuthorization.unavailable:
+          // Cannot take effect at the OS level from here: express the
+          // intent to enable by opening the app's own notification
+          // settings page, with no app-owned explanatory dialog. This goes
+          // through the notification service's native
+          // `openNotificationSettings()` bridge (backed by the official
+          // `UIApplication.openNotificationSettingsURLString`), not
+          // url_launcher — url_launcher remains reserved for the
+          // externally-linked rows (EAST. Productions, Objects, Privacy
+          // Policy, Reach Out). The real status is re-read on resume (see
+          // `didChangeAppLifecycleState`) once the user returns.
+          await _notificationService.openNotificationSettings();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _dailyReminderBusy = false;
+        });
+      }
+    }
+  }
 
   TextStyle eastStyle(
     double size, {
@@ -47,11 +168,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // Shared by every actionable Settings row so the pressed/hover/focus
+  // state never paints a grey overlay: the row background stays black in
+  // every interaction state (idle, pressed, focused, hovered, disabled,
+  // in-flight). Defined once rather than repeated per row.
+  static const WidgetStateProperty<Color?> _noOverlayColor =
+      WidgetStatePropertyAll(Colors.transparent);
+
   Widget settingsItem({
     required String title,
     required String subtitle,
     VoidCallback? onTap,
     String? semanticLabel,
+    Key? rowKey,
+    Widget? trailing,
   }) {
     return Semantics(
       button: true,
@@ -62,29 +192,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: SizedBox(
           width: double.infinity,
           child: InkWell(
+            key: rowKey,
             onTap: onTap,
-            splashColor: Colors.white10,
-            highlightColor: Colors.white10,
+            overlayColor: _noOverlayColor,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            splashFactory: NoSplash.splashFactory,
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 vertical: 17,
               ),
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    style: eastStyle(21),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: eastStyle(
-                      15,
-                      color: const Color(0x91FFFFFF),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: eastStyle(21),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: eastStyle(
+                            15,
+                            color: const Color(0x91FFFFFF),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 12),
+                    trailing,
+                  ],
                 ],
               ),
             ),
@@ -213,6 +357,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return sendEmail;
   }
 
+  VoidCallback? get eastProductionsAction {
+    if (_eastProductionsLaunchInProgress) return null;
+
+    return openEastProductions;
+  }
+
   String get privacyPolicySemanticLabel {
     if (_privacyPolicyLaunchInProgress) {
       return 'Privacy Policy. Opening.';
@@ -227,6 +377,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return 'Reach Out. For thoughts and questions.';
+  }
+
+  String get eastProductionsSemanticLabel {
+    if (_eastProductionsLaunchInProgress) {
+      return 'EAST. Productions. Opening.';
+    }
+
+    return 'EAST. Productions. The world beyond the ritual.';
   }
 
   void showInfoDialog(
@@ -283,7 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> sendEmail() async {
     final uri = Uri(
       scheme: 'mailto',
-      path: 'dailywisdomeast@gmail.com',
+      path: 'hello@east.productions',
       query: 'subject=EAST. Support',
     );
 
@@ -295,6 +453,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       uri: uri,
       mode: LaunchMode.platformDefault,
       failureMessage: "Reach Out could not be opened.",
+    );
+  }
+
+  Future<void> openEastProductions() async {
+    final uri = Uri.parse('https://east.productions');
+
+    await _runExternalAction(
+      inProgress: _eastProductionsLaunchInProgress,
+      setInProgress: (value) {
+        _eastProductionsLaunchInProgress = value;
+      },
+      uri: uri,
+      mode: LaunchMode.externalApplication,
+      failureMessage: "EAST. Productions could not be opened.",
     );
   }
 
@@ -360,51 +532,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         textAlign: TextAlign.center,
                         style: eastStyle(
                           17,
-                          color: const Color(0x91FFFFFF),
+                          color: eastMutedTextColor,
                         ),
                       ),
                       const SizedBox(height: 28),
-                      const Divider(
-                        color: Colors.white24,
+                      Divider(
+                        color: _settingsDividerColor,
                         thickness: 0.5,
                       ),
                       settingsItem(
+                        rowKey: const ValueKey('settings-keeper-row'),
                         title: "Keeper",
                         subtitle: "Support the circle, keep what stays.",
                         onTap: _openKeeper,
                       ),
-                      const Divider(
-                        color: Colors.white24,
+                      Divider(
+                        color: _settingsDividerColor,
                         thickness: 0.5,
                       ),
                       settingsItem(
+                        rowKey:
+                            const ValueKey('settings-restore-purchases-row'),
                         title: "Restore Purchases",
                         subtitle: "Restore what belongs with you.",
                         semanticLabel: restoreSemanticLabel,
                         onTap: restoreAction,
                       ),
-                      const Divider(
-                        color: Colors.white24,
+                      Divider(
+                        color: _settingsDividerColor,
                         thickness: 0.5,
                       ),
                       settingsItem(
+                        rowKey: const ValueKey('settings-daily-reminder-row'),
+                        title: "Daily Reminder",
+                        subtitle: "Return when the silence opens again.",
+                        semanticLabel: dailyReminderSemanticLabel,
+                        onTap: dailyReminderAction,
+                        trailing: Text(
+                          _dailyReminderStatusText,
+                          style: eastStyle(
+                            15,
+                            color: _dailyReminderOn
+                                ? const Color(0xFFF4F0E8)
+                                : eastMutedTextColor,
+                          ),
+                        ),
+                      ),
+                      Divider(
+                        color: _settingsDividerColor,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        rowKey: const ValueKey('settings-east-productions-row'),
+                        title: "EAST. Productions",
+                        subtitle: "The world beyond the ritual.",
+                        semanticLabel: eastProductionsSemanticLabel,
+                        onTap: eastProductionsAction,
+                      ),
+                      Divider(
+                        color: _settingsDividerColor,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        rowKey: const ValueKey('settings-privacy-policy-row'),
                         title: "Privacy Policy",
                         subtitle: "What stays private.",
                         semanticLabel: privacyPolicySemanticLabel,
                         onTap: privacyPolicyAction,
                       ),
-                      const Divider(
-                        color: Colors.white24,
+                      Divider(
+                        color: _settingsDividerColor,
                         thickness: 0.5,
                       ),
                       settingsItem(
+                        rowKey: const ValueKey('settings-reach-out-row'),
                         title: "Reach Out",
                         subtitle: "For thoughts and questions.",
                         semanticLabel: reachOutSemanticLabel,
                         onTap: reachOutAction,
                       ),
-                      const Divider(
-                        color: Colors.white24,
+                      Divider(
+                        color: _settingsDividerColor,
                         thickness: 0.5,
                       ),
                     ],

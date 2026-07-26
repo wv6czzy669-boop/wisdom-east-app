@@ -5,6 +5,7 @@ import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/screens/reflection_screen.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/theme/muted_text_color.dart';
 
 void main() {
   late SavedReflectionsService service;
@@ -54,6 +55,57 @@ void main() {
         expect(text.style?.fontFamily, 'CormorantGaramond');
       }
     }
+  });
+
+  testWidgets(
+      'placeholder reads Hey. with no trace of the old copy, and typing/limit/save still work',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReflectionScreen(
+          item: item,
+          isKeeper: false,
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    // Reliable while the field is genuinely empty and unfocused.
+    expect(find.text('Hey.'), findsOneWidget);
+    expect(find.text('Write quietly.'), findsNothing);
+
+    final field = find.byKey(const ValueKey('reflection-writing-area'));
+    final decoration = tester.widget<TextField>(field).decoration;
+    expect(decoration?.hintText, 'Hey.');
+    expect(decoration?.hintText, isNot('Write quietly.'));
+    expect(
+      tester.widget<TextField>(field).maxLength,
+      SavedReflectionsService.maximumReflectionLength,
+    );
+
+    await tester.enterText(field, List.filled(260, 'a').join());
+    await tester.pump();
+    expect(tester.widget<TextField>(field).controller!.text, hasLength(250));
+    // The InputDecorator may keep the hint widget instantiated (unpainted)
+    // once the field has text, so tree presence is not a reliable signal
+    // here. The configured `hintText` on the decoration is the actual
+    // source of truth for what the placeholder is, and it must still read
+    // `Hey.`.
+    expect(
+      tester.widget<TextField>(field).decoration?.hintText,
+      'Hey.',
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('keep-reflection-action')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('keep-reflection-action')));
+    await tester.pumpAndSettle();
+
+    final persisted = await SavedReflectionsService().load();
+    expect(persisted, hasLength(1));
+    expect(persisted.single.reflection, hasLength(250));
   });
 
   testWidgets('counter appears only near the enforced 250 character limit',
@@ -120,6 +172,10 @@ void main() {
       find.byKey(const ValueKey('keep-reflection-action')),
     );
     await tester.pump();
+
+    final enabledLabel = tester.widget<Text>(find.text('Keep Reflection'));
+    expect(enabledLabel.style?.color, eastMutedTextColor);
+
     await tester.tap(find.byKey(const ValueKey('keep-reflection-action')));
     await tester.pumpAndSettle();
 

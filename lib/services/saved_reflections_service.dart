@@ -38,7 +38,7 @@ class SavedReflectionsService {
   static const String storageKey = 'favorites';
   static const String resourceKey = 'saved_reflections';
   static const int maximumReflectionLength = 250;
-  static const int freeReflectionLimit = 1;
+  static const int freeReflectionLimit = 3;
 
   final StoragePreferencesAdapter _preferencesAdapter;
   final PersistenceOperationCoordinator _operationCoordinator;

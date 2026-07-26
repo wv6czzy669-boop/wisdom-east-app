@@ -16,10 +16,14 @@ import '../services/storage_service.dart';
 import '../services/wisdom_notification_service.dart';
 import '../services/wisdom_selector.dart';
 import '../services/wisdom_share_service.dart';
+import '../theme/muted_text_color.dart';
 import '../utils/countdown_formatter.dart';
 import '../utils/date_formatter.dart';
+import '../utils/directional_page_route.dart';
 import '../widgets/grain_painter.dart';
+import '../widgets/home/top_nav_ring.dart';
 import 'keeper_screen.dart';
+import 'objects_screen.dart';
 import 'saved_reflections_screen.dart';
 import 'settings_screen.dart';
 
@@ -808,37 +812,15 @@ class _HomeScreenState extends State<HomeScreen>
 
     _notificationPermissionOfferShowing = true;
     try {
-      final accepted = await showGeneralDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        barrierLabel: 'Notification permission',
-        barrierColor: Colors.black.withValues(alpha: 0.54),
-        transitionDuration: const Duration(milliseconds: 800),
-        pageBuilder: (dialogContext, _, __) {
-          return _HomeNotificationPermissionOffer(
-            onNotNow: () => Navigator.pop(dialogContext, false),
-            onAllow: () => Navigator.pop(dialogContext, true),
-          );
-        },
-        transitionBuilder: (context, animation, _, child) {
-          return FadeTransition(
-            key: const ValueKey('notification-permission-offer-fade'),
-            opacity: animation.drive(
-              CurveTween(curve: Curves.easeOutCubic),
-            ),
-            child: child,
-          );
-        },
-      );
-
-      if (accepted == true) {
-        await wisdomNotificationService.requestPermissionAndSchedule(unlockAt);
-      } else {
-        await wisdomNotificationService.dismissPermissionOffer();
-      }
+      // No application-owned pre-prompt: at this exact existing trigger
+      // point, go straight to the native iOS permission request. Only
+      // reached when `shouldOfferPermission()` is true (system status
+      // notDetermined); authorized/denied never re-request here.
+      await wisdomNotificationService.requestPermissionAndSchedule(unlockAt);
       _pendingNotificationUnlockAt = null;
     } catch (_) {
-      // Permission UI and native authorization are always optional.
+      // Native authorization is always optional and must never affect the
+      // ritual.
     } finally {
       _notificationPermissionOfferShowing = false;
     }
@@ -1251,7 +1233,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> openSettings() async {
+  Future<void> openObjects() async {
     if (navigationInProgress || transitionInProgress || _transitionLock) return;
 
     navigationInProgress = true;
@@ -1261,12 +1243,38 @@ class _HomeScreenState extends State<HomeScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
+          builder: (context) => const ObjectsScreen(),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        navigationInProgress = false;
+      }
+    }
+  }
+
+  Future<void> openSettings() async {
+    if (navigationInProgress || transitionInProgress || _transitionLock) return;
+
+    navigationInProgress = true;
+    interruptRitualForNavigation();
+
+    try {
+      await Navigator.push(
+        context,
+        DirectionalPageRoute(
           builder: (context) => const SettingsScreen(),
+          beginOffset: const Offset(-1, 0),
         ),
       );
 
       if (!mounted) return;
       await loadKeeperStatus();
+      // Settings may have changed the Daily Reminder preference; reconcile
+      // the actual scheduled notification against it immediately on return,
+      // the same way app-resume already does, instead of waiting for the
+      // next resume.
+      await synchronizeUnlockNotification();
     } finally {
       if (mounted) {
         navigationInProgress = false;
@@ -1451,11 +1459,13 @@ class _HomeScreenState extends State<HomeScreen>
                   color: Colors.black,
                 ),
               ),
-            if (screenStep != 0)
+            if (screenStep != 0) ...[
+              _HomeSettingsMenuControl(onPressed: openSettings),
               _HomeTopNavigation(
-                onSettingsPressed: openSettings,
+                onObjectsPressed: openObjects,
                 onKeptPressed: openFavorites,
               ),
+            ],
             if (wisdomRevealed)
               _HomeSaveControl(
                 opacity: saveControlOpacity,

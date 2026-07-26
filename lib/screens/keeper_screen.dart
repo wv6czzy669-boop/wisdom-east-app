@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
+import '../theme/muted_text_color.dart';
 
 class KeeperScreen extends StatefulWidget {
   const KeeperScreen({
@@ -156,7 +157,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         25,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.82),
+                        color: eastMutedTextColor,
                       ).copyWith(letterSpacing: 1.55),
                     ),
                     const SizedBox(height: 92),
@@ -247,7 +248,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         14,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
+                        color: eastMutedTextColor,
                       ).copyWith(letterSpacing: 0.8),
                     ),
                   ],

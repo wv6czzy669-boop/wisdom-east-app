@@ -8,6 +8,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
+import 'package:wisdom_app/theme/muted_text_color.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -70,6 +71,23 @@ void main() {
         .whereType<String>()
         .toSet();
     expect(renderedCopy, lockedCopy.toSet());
+
+    expect(
+      tester.widget<Text>(find.text('Keep what stays.')).style?.color,
+      eastMutedTextColor,
+    );
+    expect(
+      tester.widget<Text>(find.text('Keep EAST. alive.')).style?.color,
+      eastMutedTextColor,
+    );
+    expect(
+      tester.widget<Text>(find.text('Unlimited Kept Wisdoms')).style?.color,
+      isNot(eastMutedTextColor),
+    );
+    expect(
+      tester.widget<Text>(find.text('Unlimited Reflections')).style?.color,
+      isNot(eastMutedTextColor),
+    );
   });
 
   testWidgets('Keeper keeps StoreKit price semantic but not visible',

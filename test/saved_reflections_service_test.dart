@@ -669,20 +669,33 @@ void main() {
     expect(accepted.items.single.reflection, hasLength(250));
   });
 
-  test('free user has one active reflection and may edit it', () async {
+  test('free user has up to three active reflections and may edit any of them',
+      () async {
     await seedRaw([
       currentRecord(id: 'one', text: 'One'),
       currentRecord(id: 'two', text: 'Two'),
+      currentRecord(id: 'three', text: 'Three'),
+      currentRecord(id: 'four', text: 'Four'),
     ]);
 
-    await service.saveReflection(
+    final firstSave = await service.saveReflection(
       itemId: 'one',
       reflection: 'First version',
       isKeeper: false,
     );
-    final blocked = await service.saveReflection(
+    final secondSave = await service.saveReflection(
       itemId: 'two',
-      reflection: 'Second wisdom reflection',
+      reflection: 'Second version',
+      isKeeper: false,
+    );
+    final thirdSave = await service.saveReflection(
+      itemId: 'three',
+      reflection: 'Third version',
+      isKeeper: false,
+    );
+    final blocked = await service.saveReflection(
+      itemId: 'four',
+      reflection: 'Fourth wisdom reflection',
       isKeeper: false,
     );
     final edited = await service.saveReflection(
@@ -691,16 +704,23 @@ void main() {
       isKeeper: false,
     );
 
+    expect(firstSave.reflectionLimitReached, isFalse);
+    expect(secondSave.reflectionLimitReached, isFalse);
+    expect(thirdSave.reflectionLimitReached, isFalse);
     expect(blocked.reflectionLimitReached, isTrue);
     expect(edited.reflectionLimitReached, isFalse);
-    expect(edited.items, hasLength(2));
+    expect(edited.items, hasLength(4));
     expect(
       edited.items.singleWhere((item) => item.id == 'one').reflection,
       'Edited version',
     );
     expect(
-      edited.items.singleWhere((item) => item.id == 'two').hasReflection,
+      edited.items.singleWhere((item) => item.id == 'four').hasReflection,
       isFalse,
+    );
+    expect(
+      edited.items.where((item) => item.hasReflection),
+      hasLength(3),
     );
   });
 
@@ -760,11 +780,34 @@ void main() {
     );
   });
 
-  test('concurrent free reflection creation cannot exceed one active slot',
+  test('Keeper reflections are not limited to three', () async {
+    await seedRaw([
+      currentRecord(id: 'one', text: 'One'),
+      currentRecord(id: 'two', text: 'Two'),
+      currentRecord(id: 'three', text: 'Three'),
+      currentRecord(id: 'four', text: 'Four'),
+    ]);
+
+    for (final id in ['one', 'two', 'three', 'four']) {
+      final result = await service.saveReflection(
+        itemId: id,
+        reflection: 'Reflection for $id',
+        isKeeper: true,
+      );
+      expect(result.reflectionLimitReached, isFalse);
+    }
+
+    final persisted = await service.load();
+    expect(persisted.where((item) => item.hasReflection), hasLength(4));
+  });
+
+  test('concurrent free reflection creation cannot exceed three active slots',
       () async {
     await seedRaw([
       currentRecord(id: 'one', text: 'One'),
       currentRecord(id: 'two', text: 'Two'),
+      currentRecord(id: 'three', text: 'Three'),
+      currentRecord(id: 'four', text: 'Four'),
     ]);
 
     final results = await Future.wait([
@@ -778,12 +821,22 @@ void main() {
         reflection: 'Second',
         isKeeper: false,
       ),
+      service.saveReflection(
+        itemId: 'three',
+        reflection: 'Third',
+        isKeeper: false,
+      ),
+      service.saveReflection(
+        itemId: 'four',
+        reflection: 'Fourth',
+        isKeeper: false,
+      ),
     ]);
     final persisted = await service.load();
 
     expect(
         results.where((result) => result.reflectionLimitReached), hasLength(1));
-    expect(persisted.where((item) => item.hasReflection), hasLength(1));
+    expect(persisted.where((item) => item.hasReflection), hasLength(3));
   });
 
   test('rapid repeated reflection save updates one record without duplication',

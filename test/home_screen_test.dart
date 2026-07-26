@@ -15,7 +15,10 @@ import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
+import 'package:wisdom_app/theme/muted_text_color.dart';
+import 'package:wisdom_app/utils/directional_page_route.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
+import 'package:wisdom_app/widgets/home/top_nav_ring.dart';
 
 import 'persistence_test_helpers.dart';
 
@@ -41,6 +44,7 @@ void main() {
     final removedLaunchSubtitle = ['Where', 'silence', 'speaks.'].join(' ');
     expect(markFinder, findsOneWidget);
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
+    expect(find.byKey(const ValueKey('settings-menu-control')), findsNothing);
     expect(_grainPainters(tester), isEmpty);
     expect(find.text(removedLaunchSubtitle), findsNothing);
     expect(_ritualOpacity(tester), 1.0);
@@ -232,6 +236,12 @@ void main() {
         settingsNode.getSemanticsData().hasAction(SemanticsAction.tap),
         isTrue,
       );
+      expect(find.byTooltip('Objects'), findsOneWidget);
+      final objectsNode = tester.getSemantics(find.byTooltip('Objects'));
+      expect(
+        objectsNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
       expect(find.byTooltip('Kept'), findsOneWidget);
       final keptNode = tester.getSemantics(find.byTooltip('Kept'));
       expect(
@@ -280,6 +290,119 @@ void main() {
     }
   });
 
+  testWidgets(
+      'top navigation opens Settings, Objects, and Kept from their respective controls',
+      (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A wisdom used to verify top navigation destinations';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    // Deterministic proof of push counts, independent of route-content
+    // mount timing — see `_HomePushCountingNavigatorObserver`.
+    final pushObserver = _HomePushCountingNavigatorObserver();
+    // This test exercises Settings -> pop -> Objects -> pop -> Kept, which
+    // means `openSettings()`'s post-pop `finally` (gated on
+    // `synchronizeUnlockNotification()`) must resolve before the Objects
+    // tap's guard check can be expected to let a push through. A fresh,
+    // per-test `WisdomNotificationService` (wrapping the existing
+    // `_HomeNotificationPlatform` fake already used elsewhere in this file)
+    // keeps that resolution deterministic and test-local, rather than
+    // depending on the shared process-wide `app_services
+    // .wisdomNotificationService` singleton and however many operations
+    // preceding tests in this file have already queued onto it.
+    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+    final notificationService =
+        WisdomNotificationService(platform: notificationPlatform);
+    await tester.pumpWidget(_homeApp(
+      navigatorObservers: [pushObserver],
+      wisdomNotificationService: notificationService,
+    ));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Objects'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
+
+    // The far-left three-line control opens Settings directly (no drawer,
+    // popup menu, or bottom sheet).
+    expect(_homeNavigationInProgress(tester), isFalse);
+    final pushesBeforeSettings = pushObserver.pushCount;
+    await tester.tap(find.byTooltip('Settings'));
+    final settingsDuration = await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('settings-scroll')),
+    );
+    expect(
+      pushObserver.pushCount,
+      pushesBeforeSettings + 1,
+      reason: 'Settings tap must produce exactly one didPush.',
+    );
+    expect(find.text('Where silence speaks.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await _settleRoutePop(
+      tester,
+      settingsDuration,
+      poppedRouteFinder: find.byKey(const ValueKey('settings-scroll')),
+    );
+    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
+
+    // The repurposed left circle now opens Objects — not Settings. This is
+    // the exact tap that failed intermittently on real Mac validation
+    // ("Found 0 widgets with key objects-screen-root") whenever this test
+    // ran after other tests in the suite: if the Settings pop's guard
+    // (`navigationInProgress`) had not actually reset yet, this tap would
+    // be silently swallowed by `openObjects()`'s own guard check and no
+    // push would happen at all. Proving both the guard state and the push
+    // count directly (rather than only inferring them from mount timing)
+    // is what makes this assertion meaningful.
+    expect(
+      _homeNavigationInProgress(tester),
+      isFalse,
+      reason: 'navigationInProgress must have reset after the Settings pop '
+          'before the Objects tap can be expected to push anything.',
+    );
+    final pushesBeforeObjects = pushObserver.pushCount;
+    await tester.tap(find.byTooltip('Objects'));
+    final objectsDuration = await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('objects-screen-root')),
+    );
+    expect(
+      pushObserver.pushCount,
+      pushesBeforeObjects + 1,
+      reason: 'Objects tap must produce exactly one didPush.',
+    );
+    expect(find.text('Objects'), findsOneWidget);
+    expect(find.text('Where silence speaks.'), findsNothing);
+    await tester.tap(find.byTooltip('Back'));
+    await _settleRoutePop(
+      tester,
+      objectsDuration,
+      poppedRouteFinder: find.byKey(const ValueKey('objects-screen-root')),
+    );
+    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
+
+    // The rightmost circle still opens Kept, unchanged.
+    expect(_homeNavigationInProgress(tester), isFalse);
+    final pushesBeforeKept = pushObserver.pushCount;
+    await tester.tap(find.byTooltip('Kept'));
+    await _settleRoutePush(
+        tester, find.byKey(const ValueKey('kept-screen-root')));
+    expect(
+      pushObserver.pushCount,
+      pushesBeforeKept + 1,
+      reason: 'Kept tap must produce exactly one didPush.',
+    );
+    expect(find.text('Kept'), findsOneWidget);
+  });
+
   testWidgets('lifecycle interruption restores visible ritual content',
       (tester) async {
     await tester.pumpWidget(
@@ -291,6 +414,7 @@ void main() {
       const Color(0xFF040404),
     );
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
+    expect(find.byKey(const ValueKey('settings-menu-control')), findsNothing);
     expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
 
     await _tapCenter(tester);
@@ -738,6 +862,7 @@ void main() {
     expect(find.text('Feel.'), findsNothing);
     expect(find.text('Ask from your heart.'), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Objects'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
     expect(
@@ -817,7 +942,9 @@ void main() {
       const Offset(-500, 0),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove'));
+    await tester.tap(
+      find.byKey(const ValueKey('kept-remove-from-kept-delete-action')),
+    );
     await tester.pumpAndSettle();
     expect(find.text(wisdom), findsNothing);
 
@@ -894,6 +1021,11 @@ void main() {
         matches(RegExp(r'^\d+h \d+m$')),
         matches(RegExp(r'^\d+ min$')),
       ),
+    );
+    expect(countdown.style?.color, eastMutedTextColor);
+    expect(
+      tester.widget<Text>(find.text('Keeper one daily wisdom')).style?.color,
+      isNot(eastMutedTextColor),
     );
   });
 
@@ -1039,6 +1171,7 @@ void main() {
 
     expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
+    expect(find.byKey(const ValueKey('settings-menu-control')), findsNothing);
   });
 
   testWidgets('ritual uses the restrained haptic sequence', (tester) async {
@@ -1098,6 +1231,258 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1420));
   });
 
+  testWidgets(
+      'top navigation uses deliberate ring/bar geometry: Objects is a single '
+      'ring, Kept is a concentric double ring, no Unicode circle glyphs '
+      'remain, and tap targets/destinations/semantics are unchanged',
+      (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A wisdom used to verify top navigation ring geometry';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    // Fresh, per-test notification service. This test doesn't pop Settings
+    // before its own Objects/Kept taps, but it still mounts a HomeScreen
+    // whose `initState` unconditionally calls `synchronizeUnlockNotification()`
+    // — an injected instance keeps that call test-local instead of
+    // depending on the shared `app_services.wisdomNotificationService`
+    // singleton other tests in this file also touch.
+    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+    final notificationService =
+        WisdomNotificationService(platform: notificationPlatform);
+    await tester.pumpWidget(
+      _homeApp(wisdomNotificationService: notificationService),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    // No Unicode circle glyphs remain anywhere in the top navigation.
+    for (final glyph in ['○', '◎', '●']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('top-navigation')),
+          matching: find.text(glyph),
+        ),
+        findsNothing,
+      );
+    }
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-menu-control')),
+        matching: find.byWidgetPredicate((w) => w is Text),
+      ),
+      findsNothing,
+    );
+
+    // Objects renders exactly one ring; Kept renders exactly two.
+    final objectsPainter = tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byTooltip('Objects'),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter! as TopNavRingPainter;
+    expect(objectsPainter.ringCount, 1);
+
+    final keptPainter = tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byTooltip('Kept'),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter! as TopNavRingPainter;
+    expect(keptPainter.ringCount, 2);
+
+    // Objects and Kept share the exact same outer diameter, stroke width,
+    // and color by construction (both read the one shared geometry token),
+    // and identical outer bounding boxes / tap targets / vertical centers.
+    expect(objectsPainter.ringCount == keptPainter.ringCount, isFalse);
+    expect(TopNavRingGeometry.outerDiameter, greaterThan(0));
+    expect(
+      tester.getSize(find.byType(SingleRingIcon)),
+      const Size.square(TopNavRingGeometry.outerDiameter),
+    );
+    expect(
+      tester.getSize(find.byType(DoubleRingIcon)),
+      const Size.square(TopNavRingGeometry.outerDiameter),
+    );
+    expect(
+      tester.getSize(find.byTooltip('Objects')),
+      tester.getSize(find.byTooltip('Kept')),
+    );
+    expect(
+      tester.getSize(find.byTooltip('Settings')),
+      tester.getSize(find.byTooltip('Kept')),
+    );
+    expect(
+      tester.getCenter(find.byTooltip('Objects')).dy,
+      tester.getCenter(find.byTooltip('Kept')).dy,
+    );
+    expect(
+      tester.getCenter(find.byTooltip('Settings')).dy,
+      tester.getCenter(find.byTooltip('Kept')).dy,
+    );
+    // Objects sits immediately to the left of Kept, which stays the
+    // far-right control; the hamburger stays on the far left.
+    expect(
+      tester.getCenter(find.byTooltip('Settings')).dx,
+      lessThan(tester.getCenter(find.byTooltip('Objects')).dx),
+    );
+    expect(
+      tester.getCenter(find.byTooltip('Objects')).dx,
+      lessThan(tester.getCenter(find.byTooltip('Kept')).dx),
+    );
+
+    // Semantics/tooltips/destinations remain correct.
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Objects'), findsOneWidget);
+    expect(find.byTooltip('Kept'), findsOneWidget);
+
+    // No grey background/ripple/halo on any of the three controls.
+    for (final tooltip in ['Settings', 'Objects', 'Kept']) {
+      final button = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip(tooltip),
+          matching: find.byType(IconButton),
+        ),
+      );
+      final style = button.style!;
+      expect(style.backgroundColor?.resolve({}), Colors.transparent);
+      expect(style.overlayColor?.resolve({}), Colors.transparent);
+    }
+
+    await tester.tap(find.byTooltip('Objects'));
+    final objectsDuration = await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('objects-screen-root')),
+    );
+    expect(find.text('Objects'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await _settleRoutePop(
+      tester,
+      objectsDuration,
+      poppedRouteFinder: find.byKey(const ValueKey('objects-screen-root')),
+    );
+    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Kept'));
+    await _settleRoutePush(
+        tester, find.byKey(const ValueKey('kept-screen-root')));
+    expect(find.text('Kept'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Settings pushes as a left-origin DirectionalPageRoute while Objects '
+      'and Kept remain plain (right-origin) MaterialPageRoutes',
+      (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A wisdom used to verify route transition directions';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    final pushObserver = _HomePushCountingNavigatorObserver();
+    // Fresh, per-test notification service — see the identical rationale in
+    // "top navigation opens Settings, Objects, and Kept…" above. This test
+    // pops Settings then taps Objects, so it depends on the same post-pop
+    // guard-reset timing.
+    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+    final notificationService =
+        WisdomNotificationService(platform: notificationPlatform);
+    await tester.pumpWidget(_homeApp(
+      navigatorObservers: [pushObserver],
+      wisdomNotificationService: notificationService,
+    ));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(_homeNavigationInProgress(tester), isFalse);
+    final pushesBeforeSettings = pushObserver.pushCount;
+    await tester.tap(find.byTooltip('Settings'));
+    final settingsDuration = await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('settings-scroll')),
+    );
+    expect(pushObserver.pushCount, pushesBeforeSettings + 1);
+    final settingsRoute = ModalRoute.of(
+      tester.element(find.byKey(const ValueKey('settings-scroll'))),
+    );
+    expect(settingsRoute, isA<DirectionalPageRoute>());
+    final directionalRoute = settingsRoute! as DirectionalPageRoute;
+    expect(directionalRoute.beginOffset, const Offset(-1, 0));
+    // The route's own transitionDuration is exactly what was just used to
+    // settle its push above — this is the canonical, single-sourced
+    // production value (see `DirectionalPageRoute`'s `_duration`), not a
+    // value re-declared in the test.
+    expect(directionalRoute.transitionDuration, settingsDuration);
+    expect(settingsDuration, const Duration(milliseconds: 300));
+    await tester.tap(find.byTooltip('Back'));
+    await _settleRoutePop(
+      tester,
+      settingsDuration,
+      poppedRouteFinder: find.byKey(const ValueKey('settings-scroll')),
+    );
+    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
+
+    // This is the tap that failed intermittently on real Mac validation
+    // when this test ran as part of a larger suite: proving
+    // `navigationInProgress` is false and asserting the exact push count
+    // (rather than only inferring success from mount timing) turns "did
+    // the tap get silently swallowed by a still-active guard" into a
+    // directly observable fact.
+    expect(
+      _homeNavigationInProgress(tester),
+      isFalse,
+      reason: 'navigationInProgress must have reset after the Settings pop '
+          'before the Objects tap can be expected to push anything.',
+    );
+    final pushesBeforeObjects = pushObserver.pushCount;
+    await tester.tap(find.byTooltip('Objects'));
+    final objectsDuration = await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('objects-screen-root')),
+    );
+    expect(pushObserver.pushCount, pushesBeforeObjects + 1);
+    final objectsRoute = ModalRoute.of(
+      tester.element(find.byKey(const ValueKey('objects-screen-root'))),
+    );
+    expect(objectsRoute, isA<MaterialPageRoute>());
+    expect(objectsRoute, isNot(isA<DirectionalPageRoute>()));
+    await tester.tap(find.byTooltip('Back'));
+    await _settleRoutePop(
+      tester,
+      objectsDuration,
+      poppedRouteFinder: find.byKey(const ValueKey('objects-screen-root')),
+    );
+    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
+
+    expect(_homeNavigationInProgress(tester), isFalse);
+    final pushesBeforeKept = pushObserver.pushCount;
+    await tester.tap(find.byTooltip('Kept'));
+    final keptDuration = await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('kept-screen-root')),
+    );
+    expect(pushObserver.pushCount, pushesBeforeKept + 1);
+    final keptRoute = ModalRoute.of(
+      tester.element(find.byKey(const ValueKey('kept-screen-root'))),
+    );
+    expect(keptRoute, isA<MaterialPageRoute>());
+    expect(keptRoute, isNot(isA<DirectionalPageRoute>()));
+    expect(keptDuration, keptRoute!.transitionDuration);
+  });
+
   testWidgets('ritual remains overflow-safe on iPhone SE at 3x text scale',
       (tester) async {
     final removedRevealPrompt = ['Tap', 'to', 'Reveal'].join(' ');
@@ -1128,30 +1513,33 @@ void main() {
       0,
     );
     expect(find.byTooltip('Settings'), findsOneWidget);
-    expect(
-      tester
-          .widget<Text>(
-            find.descendant(
-              of: find.byTooltip('Settings'),
-              matching: find.text('◎'),
-            ),
-          )
-          .style
-          ?.fontSize,
-      29,
-    );
+    expect(find.byTooltip('Objects'), findsOneWidget);
+    // The ring icons are drawn geometrically (CustomPaint), not from text
+    // glyphs, so a 3x text scale cannot distort or overflow them.
+    final objectsPainterAt3x = tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byTooltip('Objects'),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter! as TopNavRingPainter;
+    expect(objectsPainterAt3x.ringCount, 1);
     expect(find.byTooltip('Kept'), findsOneWidget);
+    final keptPainterAt3x = tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byTooltip('Kept'),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter! as TopNavRingPainter;
+    expect(keptPainterAt3x.ringCount, 2);
+    // All three top-navigation controls share the same tap-target size so
+    // the restrained hamburger control balances visually with the circles.
     expect(
-      tester
-          .widget<Text>(
-            find.descendant(
-              of: find.byTooltip('Kept'),
-              matching: find.text('○'),
-            ),
-          )
-          .style
-          ?.fontSize,
-      36,
+      tester.getSize(find.byTooltip('Objects')),
+      tester.getSize(find.byTooltip('Kept')),
     );
     expect(
       tester.getSize(find.byTooltip('Settings')),
@@ -1180,6 +1568,7 @@ void main() {
     await _tapCenter(tester);
     await tester.pump();
     expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Objects'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(askTextFinder, findsOneWidget);
@@ -1220,11 +1609,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 949));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Objects'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
     expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Objects'), findsOneWidget);
     expect(find.byTooltip('Kept'), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(
@@ -1508,8 +1899,9 @@ void main() {
   });
 
   testWidgets(
-      'notification permission explanation is contextual and dismissible',
-      (tester) async {
+      'notDetermined status triggers exactly one direct native permission '
+      'request at the existing timing, with no custom permission dialog '
+      'ever shown, and no repeat request on a later resume', (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
     final notificationPlatform = _HomeNotificationPlatform(enabled: false);
     final notificationService = WisdomNotificationService(
@@ -1525,10 +1917,6 @@ void main() {
       ),
     );
     await _finishOpeningIntro(tester);
-    expect(
-      find.text('Return when the silence opens again.'),
-      findsNothing,
-    );
     expect(notificationPlatform.permissionRequests, 0);
 
     await _advanceToQuestion(tester);
@@ -1538,78 +1926,33 @@ void main() {
     await tester.pump();
     await _pumpUntilWisdomFullyAppeared(tester);
     await _pumpInSteps(tester, const Duration(milliseconds: 5999));
-    expect(
-      find.text('Return when the silence opens again.'),
-      findsNothing,
-    );
-
-    await tester.pump(const Duration(milliseconds: 1));
-    await _pumpUntilNotificationOfferMounted(tester);
-    expect(
-      find.text('Return when the silence opens again.'),
-      findsOneWidget,
-    );
-    expect(find.text('Not now'), findsOneWidget);
-    expect(find.text('Allow'), findsOneWidget);
+    // Not yet at the existing trigger delay: no request fired, no dialog.
     expect(notificationPlatform.permissionRequests, 0);
+    expect(find.text('Not now'), findsNothing);
+    expect(find.text('Allow'), findsNothing);
 
-    final offerFade = tester.widget<FadeTransition>(
-      find.byKey(const ValueKey('notification-permission-offer-fade')),
-    );
-    expect(offerFade.opacity.value, 0);
-    expect(
-      find.ancestor(
-        of: find.byKey(
-          const ValueKey('notification-permission-offer-surface'),
-        ),
-        matching: find.byType(ScaleTransition),
-      ),
-      findsNothing,
-    );
+    await _pumpInSteps(tester, const Duration(milliseconds: 2));
+    // At the existing trigger delay: the native request fires directly.
+    expect(notificationPlatform.permissionRequests, 1);
+    expect(tester.takeException(), isNull);
 
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(offerFade.opacity.value, greaterThan(0));
-    expect(offerFade.opacity.value, lessThan(1));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(offerFade.opacity.value, 1);
+    // No application-owned dialog was ever shown, at any point.
+    expect(find.text('Not now'), findsNothing);
+    expect(find.text('Allow'), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
 
-    final surfaceFinder = find.byKey(
-      const ValueKey('notification-permission-offer-surface'),
-    );
-    final surface = tester.widget<Container>(surfaceFinder);
-    final decoration = surface.decoration! as BoxDecoration;
-    expect(decoration.border, isNull);
-    expect(decoration.boxShadow, isNull);
-    expect(decoration.gradient, isA<LinearGradient>());
-    expect(
-      tester.getCenter(surfaceFinder).dy,
-      lessThan(
-          tester.view.physicalSize.height / tester.view.devicePixelRatio / 2),
-    );
-
-    await tester.tap(find.text('Not now'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 801));
-    await _pumpUntilNotificationOfferDismissed(tester);
-    expect(
-      find.text('Return when the silence opens again.'),
-      findsNothing,
-    );
-    expect(await notificationService.shouldOfferPermission(), isFalse);
-
+    // The prompt is now marked handled, so a later resume must not
+    // request again.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump(const Duration(milliseconds: 6800));
-    expect(
-      find.text('Return when the silence opens again.'),
-      findsNothing,
-    );
-    expect(notificationPlatform.permissionRequests, 0);
+    expect(notificationPlatform.permissionRequests, 1);
   });
 
-  testWidgets('accepting notification explanation requests and schedules once',
-      (tester) async {
+  testWidgets(
+      'native grant at the existing trigger schedules exactly once, with no '
+      'tap or intermediate step required', (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
     final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(
@@ -1635,13 +1978,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
     await _pumpUntilWisdomFullyAppeared(tester);
-    await _pumpInSteps(tester, const Duration(seconds: 6));
-    await _pumpUntilNotificationOfferMounted(tester);
-    await tester.pump(const Duration(milliseconds: 800));
-
-    await tester.tap(find.text('Allow'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 801));
+    await _pumpInSteps(tester, const Duration(seconds: 7));
     await tester.pump();
 
     final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
@@ -1654,7 +1991,119 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('disposal during native notification permission is safe',
+  testWidgets(
+      'native denial at the existing trigger is nonfatal, requests only '
+      'once, and shows no custom UI', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final notificationPlatform = _HomeNotificationPlatform(
+      enabled: false,
+      permissionResult: false,
+    );
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 7));
+    await tester.pump();
+
+    expect(notificationPlatform.permissionRequests, 1);
+    expect(notificationPlatform.schedules, isEmpty);
+    expect(find.text('Not now'), findsNothing);
+    expect(find.text('Allow'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'already-authorized status never requests native permission again at '
+      'the existing trigger', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 7));
+    await tester.pump();
+
+    expect(notificationPlatform.permissionRequests, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'an explicit Daily Reminder OFF blocks the reveal-time direct path '
+      'entirely: no native permission request, no scheduling, no custom '
+      'dialog, even though the system status is notDetermined', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final notificationPlatform = _HomeNotificationPlatform(
+      enabled: false,
+      permissionResult: true,
+    );
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+    await notificationService.disableDailyReminder();
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 7));
+    await tester.pump();
+
+    expect(notificationPlatform.permissionRequests, 0);
+    expect(notificationPlatform.schedules, isEmpty);
+    expect(find.text('Not now'), findsNothing);
+    expect(find.text('Allow'), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(
+      await notificationService.reminderPreference(),
+      DailyReminderPreference.disabled,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disposal during an in-flight native permission request is safe',
       (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
     final permissionGate = Completer<bool>();
@@ -1681,13 +2130,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 550));
     await tester.pump();
     await _pumpUntilWisdomFullyAppeared(tester);
-    await _pumpInSteps(tester, const Duration(seconds: 6));
-    await _pumpUntilNotificationOfferMounted(tester);
-    await tester.pump(const Duration(milliseconds: 800));
-
-    await tester.tap(find.text('Allow'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 801));
+    await _pumpInSteps(tester, const Duration(seconds: 7));
     expect(notificationPlatform.permissionRequests, 1);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1767,6 +2210,99 @@ void main() {
     expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
   });
 
+  testWidgets(
+      'the Kept save control renders no grey background, overlay, or splash '
+      'in any interaction state, while toggling and tap target are unaffected',
+      (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A wisdom used to verify the save control has no halo';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    });
+
+    await tester.pumpWidget(_homeApp());
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await tester.pump();
+
+    final unsavedButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Keep reflection'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    final unsavedStyle = unsavedButton.style;
+    expect(unsavedStyle, isNotNull);
+    for (final states in [
+      <WidgetState>{},
+      {WidgetState.hovered},
+      {WidgetState.focused},
+      {WidgetState.pressed},
+    ]) {
+      expect(
+          unsavedStyle!.backgroundColor?.resolve(states), Colors.transparent);
+      expect(unsavedStyle.overlayColor?.resolve(states), Colors.transparent);
+    }
+    expect(
+      find.descendant(
+        of: find.byTooltip('Keep reflection'),
+        matching: find.text('○'),
+      ),
+      findsOneWidget,
+    );
+    final unsavedSize = tester.getSize(find.byTooltip('Keep reflection'));
+
+    await tester.tap(find.byTooltip('Keep reflection'));
+    await tester.pump();
+
+    expect(find.byTooltip('Remove kept reflection'), findsOneWidget);
+    expect(
+      (await SavedReflectionsService().load()).single.text,
+      wisdom,
+    );
+
+    final savedButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Remove kept reflection'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    final savedStyle = savedButton.style;
+    expect(savedStyle, isNotNull);
+    for (final states in [
+      <WidgetState>{},
+      {WidgetState.hovered},
+      {WidgetState.focused},
+      {WidgetState.pressed},
+    ]) {
+      expect(
+        savedStyle!.backgroundColor?.resolve(states),
+        Colors.transparent,
+      );
+      expect(savedStyle.overlayColor?.resolve(states), Colors.transparent);
+    }
+    expect(
+      find.descendant(
+        of: find.byTooltip('Remove kept reflection'),
+        matching: find.text('●'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byTooltip('Remove kept reflection')),
+      unsavedSize,
+    );
+
+    await tester.tap(find.byTooltip('Remove kept reflection'));
+    await tester.pump();
+    expect(find.byTooltip('Keep reflection'), findsOneWidget);
+    expect(await SavedReflectionsService().load(), isEmpty);
+  });
+
   testWidgets('reduce motion freezes continuous grain movement',
       (tester) async {
     await tester.pumpWidget(
@@ -1827,9 +2363,11 @@ Widget _homeApp({
   Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
   Duration dailyWisdomStatusTimeout =
       DailyWisdomAccessService.defaultStatusTimeout,
+  List<NavigatorObserver> navigatorObservers = const <NavigatorObserver>[],
 }) {
   final resolvedDailyGraph = dailyGraph ?? DailyAccessTestGraph(clock: clock);
   return MaterialApp(
+    navigatorObservers: navigatorObservers,
     home: HomeScreen(
       storageService: storageService ?? StorageService(),
       savedReflectionsService:
@@ -2024,32 +2562,6 @@ Future<void> _pumpUntilWisdomFullyAppeared(WidgetTester tester) async {
   fail('Wisdom reveal fade did not complete.');
 }
 
-Future<void> _pumpUntilNotificationOfferMounted(WidgetTester tester) async {
-  for (var attempt = 0; attempt < 20; attempt += 1) {
-    if (find
-        .byKey(const ValueKey('notification-permission-offer-fade'))
-        .evaluate()
-        .isNotEmpty) {
-      return;
-    }
-    await tester.pump(const Duration(milliseconds: 1));
-  }
-  fail('Notification permission offer did not mount.');
-}
-
-Future<void> _pumpUntilNotificationOfferDismissed(WidgetTester tester) async {
-  for (var attempt = 0; attempt < 20; attempt += 1) {
-    if (find
-        .byKey(const ValueKey('notification-permission-offer-fade'))
-        .evaluate()
-        .isEmpty) {
-      return;
-    }
-    await tester.pump(const Duration(milliseconds: 1));
-  }
-  fail('Notification permission offer did not dismiss.');
-}
-
 Future<void> _pumpInSteps(
   WidgetTester tester,
   Duration duration, {
@@ -2060,6 +2572,143 @@ Future<void> _pumpInSteps(
     final next = remaining < step ? remaining : step;
     await tester.pump(next);
     remaining -= next;
+  }
+}
+
+// Home's ritual pulse animation never idles on its own, so `pumpAndSettle()`
+// would never return while Home is anywhere in the route stack. These
+// helpers replace it with a bounded pump driven by the actual pushed
+// route's own `transitionDuration` (rather than a disconnected magic
+// value), plus a small fixed margin for rendering/test overhead.
+const Duration _routeTransitionMargin = Duration(milliseconds: 50);
+
+/// Maximum number of small pumps to wait for the newly pushed route's
+/// content to actually mount before giving up. 30 * 16ms = 480ms, safely
+/// more than the 300ms production route-transition duration, so a route
+/// that mounts normally is found well within this bound.
+const int _routeMountBoundedAttempts = 30;
+const Duration _routeMountPollStep = Duration(milliseconds: 16);
+
+/// Pumps until the newly pushed route's content actually mounts (a single
+/// zero-duration pump is not guaranteed to be enough — the route's
+/// content is built on the frame after the push, not synchronously with
+/// it), then reads its real `transitionDuration` from `routeContentFinder`
+/// (a finder that must match exactly one widget once the new route is
+/// built — a unique widget type or stable `Key`, never ambiguous text),
+/// pumps through that transition, and returns the duration so the caller
+/// can reuse the exact same value when later popping back off this route.
+Future<Duration> _settleRoutePush(
+  WidgetTester tester,
+  Finder routeContentFinder,
+) async {
+  await tester.pump();
+
+  for (var attempt = 0;
+      attempt < _routeMountBoundedAttempts &&
+          routeContentFinder.evaluate().isEmpty;
+      attempt++) {
+    await tester.pump(_routeMountPollStep);
+  }
+
+  expect(
+    routeContentFinder,
+    findsOneWidget,
+    reason: 'Route content did not mount within '
+        '${_routeMountBoundedAttempts * _routeMountPollStep.inMilliseconds}ms '
+        'of the push.',
+  );
+
+  final element = tester.element(routeContentFinder);
+  final route = ModalRoute.of(element);
+  expect(route, isNotNull);
+
+  final transitionDuration = route!.transitionDuration;
+  await tester.pump(transitionDuration + _routeTransitionMargin);
+  await tester.pump();
+  return transitionDuration;
+}
+
+/// Reads the live `navigationInProgress` guard straight off the mounted
+/// `HomeScreen`'s `State`. The field is not underscore-prefixed, so — even
+/// though `_HomeScreenState` itself is a private type this test file cannot
+/// name — it is a perfectly ordinary public member and can be read via a
+/// `dynamic` reference to the `State` object returned by `tester.state`.
+///
+/// `openSettings()`/`openObjects()`/`openKeeperScreen()` only flip this
+/// guard back to `false` inside a `finally` block that runs *after*
+/// `await Navigator.push(...)` resolves — and for `openSettings()`
+/// specifically, that `finally` also waits on
+/// `await synchronizeUnlockNotification()` first. Reading this guard
+/// directly (bounded poll, see [_settleRoutePop]) proves whether it has
+/// actually reset, instead of inferring that from a fixed pump duration.
+bool _homeNavigationInProgress(WidgetTester tester) {
+  final dynamic homeState = tester.state(find.byType(HomeScreen));
+  return homeState.navigationInProgress as bool;
+}
+
+/// Pumps through a pop using the same `transitionDuration` obtained from
+/// [_settleRoutePush] for the route being popped, then proves — rather than
+/// assumes — that the pop has fully settled before the caller's next
+/// action (typically another tap on a top-navigation control guarded by
+/// `HomeScreen.navigationInProgress`):
+///
+/// 1. [poppedRouteFinder], when supplied, must stop matching (bounded poll)
+///    — the popped route's content is actually gone and Home is back on
+///    screen, not just mid-transition.
+/// 2. `HomeScreen.navigationInProgress` must return to `false` (bounded
+///    poll) — proving the post-pop `finally` block has actually completed
+///    and the next tap's guard check will not be silently short-circuited.
+Future<void> _settleRoutePop(
+  WidgetTester tester,
+  Duration transitionDuration, {
+  Finder? poppedRouteFinder,
+}) async {
+  await tester.pump();
+  await tester.pump(transitionDuration + _routeTransitionMargin);
+  await tester.pump();
+
+  if (poppedRouteFinder != null) {
+    for (var attempt = 0;
+        attempt < _routeMountBoundedAttempts &&
+            poppedRouteFinder.evaluate().isNotEmpty;
+        attempt++) {
+      await tester.pump(_routeMountPollStep);
+    }
+    expect(
+      poppedRouteFinder,
+      findsNothing,
+      reason: 'Popped route content is still mounted '
+          '${_routeMountBoundedAttempts * _routeMountPollStep.inMilliseconds}ms '
+          'after the pop.',
+    );
+  }
+
+  for (var attempt = 0;
+      attempt < _routeMountBoundedAttempts && _homeNavigationInProgress(tester);
+      attempt++) {
+    await tester.pump(_routeMountPollStep);
+  }
+  expect(
+    _homeNavigationInProgress(tester),
+    isFalse,
+    reason: 'HomeScreen.navigationInProgress did not reset after the route '
+        'pop.',
+  );
+}
+
+/// Test-only `NavigatorObserver` that proves exactly how many pushes have
+/// happened on the `HomeScreen`'s navigator, ignoring the initial route.
+/// Used to give a deterministic, non-timing-based answer to "did this tap
+/// actually push a route" instead of inferring it solely from whether the
+/// destination's content later becomes findable.
+class _HomePushCountingNavigatorObserver extends NavigatorObserver {
+  int pushCount = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute != null) {
+      pushCount += 1;
+    }
   }
 }
 

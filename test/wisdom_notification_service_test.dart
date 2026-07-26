@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
+import 'package:wisdom_app/services/notification_settings_launcher.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 
 void main() {
@@ -225,6 +226,296 @@ void main() {
     ]);
     expect(platform.schedules.last.unlockAt, secondUnlock);
   });
+
+  group('Daily Reminder preference', () {
+    test(
+        'an install that has never touched the preference (unset) mirrors '
+        'raw system authorization, preserving pre-existing behaviour',
+        () async {
+      expect(await service.reminderPreference(), DailyReminderPreference.unset);
+      expect(await service.isDailyReminderOn(), isTrue);
+
+      platform.enabled = false;
+      expect(await service.isDailyReminderOn(), isFalse);
+    });
+
+    test(
+        'an explicit disabled preference always reads OFF, even if the '
+        'system reports authorized', () async {
+      await service.disableDailyReminder();
+
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.disabled,
+      );
+      expect(await service.isDailyReminderOn(), isFalse);
+    });
+
+    test('disabling cancels the current pending unlock notification', () async {
+      final unlockAt = now.add(const Duration(hours: 24));
+      await service.scheduleFromAuthoritativeUnlock(unlockAt);
+      expect(platform.schedules, hasLength(1));
+
+      await service.disableDailyReminder();
+
+      expect(
+        platform.events.where((event) => event.startsWith('cancel:')).length,
+        2,
+      );
+    });
+
+    test(
+        'enabling while already authorized persists the enabled intent and '
+        'reports ON, without itself scheduling (scheduling is left to the '
+        'existing authoritative-unlock sync)', () async {
+      await service.disableDailyReminder();
+      expect(await service.isDailyReminderOn(), isFalse);
+
+      final enabled = await service.enableDailyReminder();
+
+      expect(enabled, isTrue);
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.enabled,
+      );
+      expect(await service.isDailyReminderOn(), isTrue);
+      expect(platform.schedules, isEmpty);
+    });
+
+    test(
+        'enabling while notDetermined requests native permission directly '
+        'and persists enabled only if granted', () async {
+      platform.enabled = false;
+      platform.permissionResult = true;
+
+      final enabled = await service.enableDailyReminder();
+
+      expect(enabled, isTrue);
+      expect(platform.permissionRequests, 1);
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.enabled,
+      );
+    });
+
+    test('enabling while notDetermined and denied does not persist enabled',
+        () async {
+      platform.enabled = false;
+      platform.permissionResult = false;
+
+      final enabled = await service.enableDailyReminder();
+
+      expect(enabled, isFalse);
+      expect(platform.permissionRequests, 1);
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.unset,
+      );
+      expect(await service.isDailyReminderOn(), isFalse);
+    });
+
+    test(
+        'enabling while the system already denied (prompt previously '
+        'handled) does not request permission again and does not persist '
+        'enabled', () async {
+      platform.enabled = false;
+      await service.dismissPermissionOffer();
+
+      final enabled = await service.enableDailyReminder();
+
+      expect(enabled, isFalse);
+      expect(platform.permissionRequests, 0);
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.unset,
+      );
+    });
+
+    test(
+        'an explicit disabled preference suppresses scheduling from both '
+        'the authoritative-unlock and startup-status sync paths, even '
+        'though the system remains authorized', () async {
+      await service.disableDailyReminder();
+
+      await service.scheduleFromAuthoritativeUnlock(
+        now.add(const Duration(hours: 24)),
+      );
+      expect(platform.schedules, isEmpty);
+
+      await service.synchronizeWithStatus(
+        DailyWisdomStatus(
+          isReady: false,
+          unlockAt: now.add(const Duration(hours: 7)),
+          remaining: const Duration(hours: 7),
+        ),
+      );
+      expect(platform.schedules, isEmpty);
+    });
+
+    test(
+        'an explicit enabled preference schedules exactly like the '
+        'pre-existing authorized-only gate', () async {
+      final enabled = await service.enableDailyReminder();
+      expect(enabled, isTrue);
+
+      final unlockAt = now.add(const Duration(hours: 24));
+      await service.scheduleFromAuthoritativeUnlock(unlockAt);
+
+      expect(platform.schedules.single.unlockAt, unlockAt);
+    });
+  });
+
+  group(
+      'requestPermissionAndSchedule is the canonical reveal-time direct '
+      'path and must honour an explicit Daily Reminder OFF', () {
+    test(
+        'disabled: returns immediately without requesting permission, '
+        'scheduling, cancelling, or changing the preference', () async {
+      platform.enabled = false;
+      platform.permissionResult = true;
+      await service.disableDailyReminder();
+      final cancelsBefore =
+          platform.events.where((event) => event.startsWith('cancel:')).length;
+
+      final result = await service.requestPermissionAndSchedule(
+        now.add(const Duration(hours: 24)),
+      );
+
+      expect(result, isFalse);
+      expect(platform.permissionRequests, 0);
+      expect(platform.schedules, isEmpty);
+      expect(
+        platform.events.where((event) => event.startsWith('cancel:')).length,
+        cancelsBefore,
+      );
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.disabled,
+      );
+    });
+
+    test(
+        'disabled: a second reveal cannot silently turn the preference back '
+        'on', () async {
+      platform.enabled = false;
+      platform.permissionResult = true;
+      await service.disableDailyReminder();
+
+      await service.requestPermissionAndSchedule(
+        now.add(const Duration(hours: 24)),
+      );
+      await service.requestPermissionAndSchedule(
+        now.add(const Duration(hours: 48)),
+      );
+
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.disabled,
+      );
+      expect(await service.isDailyReminderOn(), isFalse);
+      expect(platform.permissionRequests, 0);
+      expect(platform.schedules, isEmpty);
+    });
+
+    test(
+        'unset + notDetermined: the reveal-time path still requests native '
+        'permission directly, exactly once, and schedules once granted',
+        () async {
+      platform.enabled = false;
+      platform.permissionResult = true;
+      final unlockAt = now.add(const Duration(hours: 24));
+
+      final result = await service.requestPermissionAndSchedule(unlockAt);
+
+      expect(result, isTrue);
+      expect(platform.permissionRequests, 1);
+      expect(platform.schedules.single.unlockAt, unlockAt);
+    });
+
+    test('unset + authorized: scheduling remains allowed', () async {
+      platform.enabled = true;
+      final unlockAt = now.add(const Duration(hours: 24));
+
+      await service.scheduleFromAuthoritativeUnlock(unlockAt);
+
+      expect(platform.schedules.single.unlockAt, unlockAt);
+    });
+
+    test('unset + denied: the reveal-time path stays silent', () async {
+      platform.enabled = false;
+      platform.permissionResult = false;
+
+      final result = await service.requestPermissionAndSchedule(
+        now.add(const Duration(hours: 24)),
+      );
+
+      expect(result, isFalse);
+      expect(platform.permissionRequests, 1);
+      expect(platform.schedules, isEmpty);
+      expect(await service.shouldOfferPermission(), isFalse);
+    });
+
+    test(
+        'enabled + authorized: scheduling remains allowed, and permission '
+        'is not requested again since the OS already granted it', () async {
+      platform.enabled = true;
+      final enabled = await service.enableDailyReminder();
+      expect(enabled, isTrue);
+      final permissionRequestsBeforeSchedule = platform.permissionRequests;
+
+      final unlockAt = now.add(const Duration(hours: 24));
+      final result = await service.requestPermissionAndSchedule(unlockAt);
+
+      expect(result, isTrue);
+      expect(platform.schedules.single.unlockAt, unlockAt);
+      expect(platform.permissionRequests, permissionRequestsBeforeSchedule);
+      expect(
+        await service.reminderPreference(),
+        DailyReminderPreference.enabled,
+      );
+    });
+  });
+
+  group('openNotificationSettings delegates to the injected launcher', () {
+    test('returns the launcher result and calls it exactly once', () async {
+      final launcher = _FakeSettingsLauncher(result: true);
+      final serviceWithLauncher = WisdomNotificationService(
+        platform: platform,
+        clock: () => now,
+        settingsLauncher: launcher,
+      );
+
+      final opened = await serviceWithLauncher.openNotificationSettings();
+
+      expect(opened, isTrue);
+      expect(launcher.calls, 1);
+    });
+
+    test('a false result is returned as-is and never throws', () async {
+      final launcher = _FakeSettingsLauncher(result: false);
+      final serviceWithLauncher = WisdomNotificationService(
+        platform: platform,
+        clock: () => now,
+        settingsLauncher: launcher,
+      );
+
+      expect(await serviceWithLauncher.openNotificationSettings(), isFalse);
+      expect(launcher.calls, 1);
+    });
+  });
+}
+
+class _FakeSettingsLauncher implements NotificationSettingsLauncher {
+  _FakeSettingsLauncher({required this.result});
+
+  final bool result;
+  int calls = 0;
+
+  @override
+  Future<bool> openNotificationSettings() async {
+    calls += 1;
+    return result;
+  }
 }
 
 class _FakeNotificationPlatform implements WisdomNotificationPlatform {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/saved_reflections_service.dart';
+import '../theme/muted_text_color.dart';
 import 'keeper_screen.dart';
 
 class ReflectionScreen extends StatefulWidget {
@@ -244,7 +245,7 @@ class _ReflectionScreenState extends State<ReflectionScreen> {
                 style: _style(20, height: 1.45),
                 cursorColor: const Color(0xFFF4F0E8),
                 decoration: InputDecoration(
-                  hintText: 'Write quietly.',
+                  hintText: 'Hey.',
                   hintStyle: _style(
                     20,
                     color: const Color(0x66FFFFFF),
@@ -262,13 +263,13 @@ class _ReflectionScreenState extends State<ReflectionScreen> {
                       : const SizedBox.shrink(),
                   enabledBorder: const UnderlineInputBorder(
                     borderSide: BorderSide(
-                      color: Color(0x3DFFFFFF),
+                      color: eastMutedTextColor,
                       width: 0.5,
                     ),
                   ),
                   focusedBorder: const UnderlineInputBorder(
                     borderSide: BorderSide(
-                      color: Color(0x91FFFFFF),
+                      color: eastMutedTextColor,
                       width: 0.5,
                     ),
                   ),
@@ -302,7 +303,7 @@ class _ReflectionScreenState extends State<ReflectionScreen> {
                           style: _style(
                             17,
                             color: _canSave
-                                ? const Color(0xFFF4F0E8)
+                                ? eastMutedTextColor
                                 : const Color(0x61FFFFFF),
                             letterSpacing: 0.65,
                           ),

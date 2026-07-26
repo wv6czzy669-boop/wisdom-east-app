@@ -162,21 +162,42 @@ void main() {
     expect((await service.load()).single.hasReflection, isFalse);
   });
 
-  testWidgets('free second reflection opens the calm Keeper experience',
+  testWidgets(
+      'free fourth reflection opens the calm Keeper experience after three active reflections',
       (tester) async {
     final first = await _keep(
       service,
-      text: 'Already reflected',
-      date: 'July 22, 2026',
+      text: 'Already reflected one',
+      date: 'July 20, 2026',
     );
     final second = await _keep(
+      service,
+      text: 'Already reflected two',
+      date: 'July 21, 2026',
+    );
+    final third = await _keep(
+      service,
+      text: 'Already reflected three',
+      date: 'July 22, 2026',
+    );
+    final fourth = await _keep(
       service,
       text: 'Still kept',
       date: 'July 23, 2026',
     );
     await service.saveReflection(
       itemId: first.id,
-      reflection: 'The one active reflection',
+      reflection: 'First active reflection',
+      isKeeper: false,
+    );
+    await service.saveReflection(
+      itemId: second.id,
+      reflection: 'Second active reflection',
+      isKeeper: false,
+    );
+    await service.saveReflection(
+      itemId: third.id,
+      reflection: 'Third active reflection',
       isKeeper: false,
     );
     final items = await service.load();
@@ -196,10 +217,11 @@ void main() {
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text('Unlimited Reflections'), findsOneWidget);
     expect(find.text('What stayed with you?'), findsNothing);
-    expect(second.hasReflection, isFalse);
+    expect(fourth.hasReflection, isFalse);
   });
 
-  testWidgets('remove requires confirmation and Cancel preserves the item',
+  testWidgets(
+      'swiping a Kept row alone does not delete it, and reveals no REMOVE label',
       (tester) async {
     final item = await _keep(
       service,
@@ -222,33 +244,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Remove from Kept?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
+    // The row is still present: swiping only reveals the DELETE action.
     expect(find.text(item.text), findsOneWidget);
+    expect(find.text('REMOVE'), findsNothing);
+    expect(find.text('Remove from Kept?'), findsNothing);
     expect(await service.load(), hasLength(1));
   });
 
-  testWidgets('remove and Undo restore wisdom, reflection, and metadata',
+  testWidgets(
+      'the DELETE action is genuinely hit-testable at its rendered location once revealed',
       (tester) async {
     final item = await _keep(
       service,
-      text: 'Restore every part',
+      text: 'DELETE is reachable once open',
       date: 'July 23, 2026',
     );
-    await service.saveReflection(
-      itemId: item.id,
-      reflection: 'Restore this too',
-      isKeeper: false,
-      reflectedAt: DateTime.utc(2026, 7, 23, 12),
-    );
-    final original = (await service.load()).single;
+    final deleteAction = find.byKey(ValueKey('kept-${item.id}-delete-action'));
 
     await tester.pumpWidget(
       MaterialApp(
         home: SavedReflectionsScreen(
-          reflections: [original],
+          reflections: [item],
           savedReflectionsService: service,
         ),
       ),
@@ -259,22 +275,123 @@ void main() {
       const Offset(-500, 0),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove'));
+
+    // A tap at the DELETE action's own rendered location must actually
+    // reach it and invoke deletion — proving the foreground row is no
+    // longer covering that region once the row is open. This uses the
+    // real widget location (no `warnIfMissed: false`, no arbitrary
+    // coordinates, no bypassing the UI).
+    await tester.tap(deleteAction);
     await tester.pumpAndSettle();
 
     expect(find.text(item.text), findsNothing);
     expect(await service.load(), isEmpty);
-    expect(find.text('Undo'), findsOneWidget);
+  });
 
-    await tester.tap(find.text('Undo'));
-    await tester.pump();
+  testWidgets(
+      'closing an open swipe by tapping the row preserves the item without deleting',
+      (tester) async {
+    final item = await _keep(
+      service,
+      text: 'Preserved after closing swipe',
+      date: 'July 23, 2026',
+    );
 
-    final restored = await service.load();
-    expect(restored, hasLength(1));
-    expect(restored.single.encode(), original.encode());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [item],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(ValueKey('kept-${item.id}')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    // Tap the now-open row (not DELETE) to close the revealed action.
+    await tester.tap(find.text(item.text));
+    await tester.pumpAndSettle();
+
     expect(find.text(item.text), findsOneWidget);
-    expect(find.text('REFLECTED'), findsOneWidget);
-    expect(find.text('Restore this too'), findsNothing);
+    expect(await service.load(), hasLength(1));
+  });
+
+  testWidgets(
+      'tapping the DELETE action after swiping removes the item immediately with no dialog, snackbar, or Undo',
+      (tester) async {
+    final item = await _keep(
+      service,
+      text: 'Delete on explicit tap',
+      date: 'July 23, 2026',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [item],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(ValueKey('kept-${item.id}')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(item.text), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.text('Removed from Kept.'), findsNothing);
+    expect(find.text('Undo'), findsNothing);
+    expect(await service.load(), isEmpty);
+  });
+
+  testWidgets(
+      'deleting a reflected Kept item removes the complete record including its reflection',
+      (tester) async {
+    final item = await _keep(
+      service,
+      text: 'Carries a reflection',
+      date: 'July 23, 2026',
+    );
+    await service.saveReflection(
+      itemId: item.id,
+      reflection: 'This goes with it',
+      isKeeper: false,
+      reflectedAt: DateTime.utc(2026, 7, 23, 12),
+    );
+    final reflected = (await service.load()).single;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [reflected],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(ValueKey('kept-${item.id}')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(item.text), findsNothing);
+    expect(find.text('REFLECTED'), findsNothing);
+    final remaining = await service.load();
+    expect(remaining, isEmpty);
+    expect(remaining.any((candidate) => candidate.id == item.id), isFalse);
   });
 
   testWidgets('failed kept removal leaves the item visible and persisted',
@@ -302,7 +419,7 @@ void main() {
       const Offset(-500, 0),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove'));
+    await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
     await tester.pumpAndSettle();
 
     expect(find.text(item.text), findsOneWidget);
@@ -310,44 +427,8 @@ void main() {
       find.text('This wisdom could not be removed. Please try again.'),
       findsOneWidget,
     );
+    expect(find.text('Undo'), findsNothing);
     expect(await service.load(), hasLength(1));
-  });
-
-  testWidgets('failed Undo reports failure without duplicating state',
-      (tester) async {
-    final item = await _keep(
-      service,
-      text: 'Undo may fail safely',
-      date: 'July 23, 2026',
-    );
-    final adapter = _FailSecondWriteAdapter();
-    final failOnRestoreService =
-        SavedReflectionsService(preferencesAdapter: adapter);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SavedReflectionsScreen(
-          reflections: [item],
-          savedReflectionsService: failOnRestoreService,
-        ),
-      ),
-    );
-
-    await tester.drag(
-      find.byKey(ValueKey('kept-${item.id}')),
-      const Offset(-500, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Undo'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(adapter.writes, 2);
-    expect(find.text('This wisdom could not be restored.'), findsOneWidget);
-    expect(find.text(item.text), findsNothing);
-    expect(await service.load(), isEmpty);
   });
 
   testWidgets('Kept remains usable on small iPhone with large text',
@@ -386,19 +467,6 @@ class _AlwaysFailingWritesAdapter extends StoragePreferencesAdapter {
   @override
   Future<void> setStringList(String key, List<String> value) {
     throw StateError('write failed');
-  }
-}
-
-class _FailSecondWriteAdapter extends StoragePreferencesAdapter {
-  var writes = 0;
-
-  @override
-  Future<void> setStringList(String key, List<String> value) {
-    writes += 1;
-    if (writes == 2) {
-      throw StateError('restore failed');
-    }
-    return super.setStringList(key, value);
   }
 }
 

@@ -7,6 +7,7 @@ import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../services/saved_reflections_service.dart';
+import '../theme/muted_text_color.dart';
 import 'keeper_screen.dart';
 import 'reflection_screen.dart';
 
@@ -32,7 +33,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   late List<FavoriteItem> _items;
   late final SavedReflectionsService _service;
   late final PurchaseService _purchaseService;
-  final Map<String, RemovedSavedReflection> _pendingRemovals = {};
   bool _navigationInProgress = false;
 
   bool get _isKeeper => widget.isKeeper || _purchaseService.isKeeper;
@@ -55,7 +55,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   TextStyle get _statusStyle => _style(
         13,
-        color: const Color(0x91FFFFFF),
+        color: eastMutedTextColor,
         letterSpacing: 1.15,
       );
 
@@ -129,80 +129,16 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     }
   }
 
-  Future<bool> _confirmRemoval(FavoriteItem item) async {
-    final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF111111),
-              title: Text('Remove from Kept?', style: _style(22)),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: Text('Cancel', style: _style(17)),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: Text('Remove', style: _style(17)),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
-    if (!confirmed || !mounted) return false;
-
+  Future<void> _deleteItem(FavoriteItem item) async {
     try {
       final removed = await _service.remove(itemId: item.id);
-      if (!mounted || removed == null) return false;
-      _pendingRemovals[item.id] = removed;
-      return true;
-    } catch (_) {
-      _showMessage('This wisdom could not be removed. Please try again.');
-      return false;
-    }
-  }
-
-  void _completeRemoval(FavoriteItem item) {
-    final removed = _pendingRemovals.remove(item.id);
-    if (removed == null || !mounted) return;
-
-    setState(() {
-      _items = removed.items;
-    });
-
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF111111),
-          content: Text('Removed from Kept.', style: _style(17)),
-          action: SnackBarAction(
-            label: 'Undo',
-            textColor: const Color(0xFFF4F0E8),
-            onPressed: () {
-              _undoRemoval(removed);
-            },
-          ),
-        ),
-      );
-  }
-
-  Future<void> _undoRemoval(RemovedSavedReflection removed) async {
-    try {
-      final restored = await _service.restore(removed);
-      if (!mounted) return;
+      if (!mounted || removed == null) return;
       setState(() {
-        _items = restored;
+        _items = removed.items;
       });
     } catch (_) {
-      _showMessage('This wisdom could not be restored.');
+      _showMessage('This wisdom could not be removed. Please try again.');
     }
-  }
-
-  Future<void> _removeFromAccessibility(FavoriteItem item) async {
-    if (!await _confirmRemoval(item) || !mounted) return;
-    _completeRemoval(item);
   }
 
   Widget _status(FavoriteItem item) {
@@ -238,29 +174,22 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   Widget _keptItem(FavoriteItem item) {
     return Semantics(
       customSemanticsActions: {
-        const CustomSemanticsAction(label: 'Remove from Kept'): () {
-          unawaited(_removeFromAccessibility(item));
+        const CustomSemanticsAction(label: 'Delete'): () {
+          unawaited(_deleteItem(item));
         },
       },
-      child: Dismissible(
+      child: _KeptSwipeToDeleteRow(
         key: ValueKey('kept-${item.id}'),
-        direction: DismissDirection.endToStart,
-        confirmDismiss: (_) => _confirmRemoval(item),
-        onDismissed: (_) => _completeRemoval(item),
-        background: Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text('REMOVE', style: _statusStyle),
-          ),
-        ),
+        itemId: item.id,
+        deleteLabelStyle: _statusStyle,
+        onDelete: () => unawaited(_deleteItem(item)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_displayDate(item.date),
                 style: _style(
                   15,
-                  color: const Color(0x91FFFFFF),
+                  color: eastMutedTextColor,
                   letterSpacing: 0.4,
                 )),
             const SizedBox(height: 5),
@@ -299,6 +228,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     final visibleItems = _items.reversed.toList(growable: false);
 
     return Scaffold(
+      key: const ValueKey('kept-screen-root'),
       backgroundColor: const Color(0xFF040404),
       appBar: AppBar(
         backgroundColor: const Color(0xFF040404),
@@ -319,7 +249,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                 'Nothing has stayed yet.',
                 style: _style(
                   21,
-                  color: const Color(0x91FFFFFF),
+                  color: eastMutedTextColor,
                 ),
               ),
             )
@@ -339,6 +269,155 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                 return _keptItem(visibleItems[index]);
               },
             ),
+    );
+  }
+}
+
+/// A single Kept row that reveals a trailing "DELETE" action on a leftward
+/// swipe, in the style of a conventional iOS trailing swipe action.
+///
+/// Swiping alone never deletes anything: it only slides [child] aside to
+/// expose the DELETE action, which stays exposed until the user explicitly
+/// taps it, taps the row again, or swipes the row back closed. Only an
+/// explicit tap on the DELETE action invokes [onDelete].
+///
+/// Both the sliding foreground and the revealed DELETE action are built so
+/// that their *hit-test* regions move/appear exactly where they are
+/// *painted*: the foreground's `GestureDetector` sits inside its
+/// `Transform.translate`, not outside it, so an opaque foreground never
+/// keeps covering the DELETE region after it has visually slid away.
+class _KeptSwipeToDeleteRow extends StatefulWidget {
+  const _KeptSwipeToDeleteRow({
+    super.key,
+    required this.itemId,
+    required this.onDelete,
+    required this.deleteLabelStyle,
+    required this.child,
+  });
+
+  final String itemId;
+  final VoidCallback onDelete;
+  final TextStyle deleteLabelStyle;
+  final Widget child;
+
+  @override
+  State<_KeptSwipeToDeleteRow> createState() => _KeptSwipeToDeleteRowState();
+}
+
+class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
+    with SingleTickerProviderStateMixin {
+  static const double _revealWidth = 84;
+  static const double _openThreshold = 0.5;
+  static const double _flingVelocityThreshold = 300;
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+      value: 0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _isOpen => _controller.value >= 1.0;
+
+  void _handleHorizontalDragUpdate(DragUpdateDetails details) {
+    final delta = details.primaryDelta;
+    if (delta == null) return;
+    _controller.value =
+        (_controller.value - delta / _revealWidth).clamp(0.0, 1.0);
+  }
+
+  void _handleHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final double target;
+    if (velocity <= -_flingVelocityThreshold) {
+      target = 1.0;
+    } else if (velocity >= _flingVelocityThreshold) {
+      target = 0.0;
+    } else {
+      target = _controller.value >= _openThreshold ? 1.0 : 0.0;
+    }
+    _controller.animateTo(target, curve: Curves.easeOut);
+  }
+
+  void _closeIfOpen() {
+    if (_controller.value != 0) {
+      _controller.animateTo(0, curve: Curves.easeOut);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: Stack(
+        children: [
+          // The DELETE action occupies a fixed-width, full-height region
+          // pinned to the right edge. It is only hit-testable once fully
+          // revealed (`_isOpen`); while closed it sits, inert, behind the
+          // foreground row.
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: _revealWidth,
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return IgnorePointer(
+                  ignoring: !_isOpen,
+                  child: child,
+                );
+              },
+              child: GestureDetector(
+                key: ValueKey('kept-${widget.itemId}-delete-action'),
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onDelete,
+                child: Container(
+                  alignment: Alignment.center,
+                  color: const Color(0xFF040404),
+                  child: Text('DELETE', style: widget.deleteLabelStyle),
+                ),
+              ),
+            ),
+          ),
+          // The foreground row. Its GestureDetector lives *inside* the
+          // Transform.translate so the opaque hit-test area slides together
+          // with the visible content, uncovering the DELETE region above
+          // once the row is swiped open.
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(-_revealWidth * _controller.value, 0),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+                  onHorizontalDragEnd: _handleHorizontalDragEnd,
+                  onTap: _isOpen ? _closeIfOpen : null,
+                  child: child,
+                ),
+              );
+            },
+            child: SizedBox(
+              width: double.infinity,
+              child: ColoredBox(
+                color: const Color(0xFF040404),
+                child: widget.child,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

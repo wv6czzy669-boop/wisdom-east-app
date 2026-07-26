@@ -1,0 +1,127 @@
+import 'package:flutter/material.dart';
+
+/// Shared geometry for the Home top-navigation ring controls (Objects,
+/// Kept).
+///
+/// Both controls are built from these same constants so their outer visible
+/// diameter, stroke width, and color are guaranteed identical by
+/// construction, rather than approximated through font glyph metrics (the
+/// previous `○`/`◎` Unicode-glyph approach, which needed an estimated
+/// `Transform.scale` correction to even get close to matching).
+class TopNavRingGeometry {
+  const TopNavRingGeometry._();
+
+  /// The single outer diameter shared by every top-nav ring control.
+  static const double outerDiameter = 22.0;
+
+  /// The stroke width shared by every ring, and by the hamburger's bars
+  /// (see `HomeTopNavBar`), so all three controls carry the same visual
+  /// weight.
+  static const double strokeWidth = 1.0;
+
+  /// The even gap, on every side, between the outer ring and the inner
+  /// ring of a double-ring control.
+  static const double innerRingInset = 6.0;
+
+  static const Color color = Colors.white70;
+
+  static double get innerDiameter => outerDiameter - (innerRingInset * 2);
+}
+
+/// Paints one or two concentric, unfilled ring outlines, centered in the
+/// available space. Never draws a fill.
+class TopNavRingPainter extends CustomPainter {
+  const TopNavRingPainter({required this.ringCount})
+      : assert(
+          ringCount == 1 || ringCount == 2,
+          'Only single- or double-ring controls are defined.',
+        );
+
+  /// 1 for Objects (single outer ring), 2 for Kept (outer ring plus one
+  /// centered inner ring).
+  final int ringCount;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = TopNavRingGeometry.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = TopNavRingGeometry.strokeWidth;
+
+    final center = size.center(Offset.zero);
+    canvas.drawCircle(center, TopNavRingGeometry.outerDiameter / 2, paint);
+    if (ringCount == 2) {
+      canvas.drawCircle(center, TopNavRingGeometry.innerDiameter / 2, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant TopNavRingPainter oldDelegate) {
+    return oldDelegate.ringCount != ringCount;
+  }
+}
+
+/// Objects: a single circular ring, no fill.
+class SingleRingIcon extends StatelessWidget {
+  const SingleRingIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.square(
+      dimension: TopNavRingGeometry.outerDiameter,
+      child: CustomPaint(painter: TopNavRingPainter(ringCount: 1)),
+    );
+  }
+}
+
+/// Kept: a concentric double ring (outer ring identical to Objects', plus
+/// one centered inner ring), no fill.
+class DoubleRingIcon extends StatelessWidget {
+  const DoubleRingIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.square(
+      dimension: TopNavRingGeometry.outerDiameter,
+      child: CustomPaint(painter: TopNavRingPainter(ringCount: 2)),
+    );
+  }
+}
+
+/// The three-horizontal-line hamburger, geometrically centered in its tap
+/// target, with a stroke weight that matches `TopNavRingGeometry.strokeWidth`
+/// so it carries the same visual weight as the two ring controls beside it.
+class HomeTopNavBar extends StatelessWidget {
+  const HomeTopNavBar({super.key});
+
+  static const double _barLength = 18.0;
+  static const double _barGap = 5.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _Bar(),
+        SizedBox(height: _barGap),
+        _Bar(),
+        SizedBox(height: _barGap),
+        _Bar(),
+      ],
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: HomeTopNavBar._barLength,
+      height: TopNavRingGeometry.strokeWidth,
+      color: TopNavRingGeometry.color,
+    );
+  }
+}
