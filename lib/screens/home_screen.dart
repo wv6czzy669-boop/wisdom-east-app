@@ -1270,10 +1270,11 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!mounted) return;
       await loadKeeperStatus();
-      // Settings may have changed the Daily Reminder preference; reconcile
-      // the actual scheduled notification against it immediately on return,
-      // the same way app-resume already does, instead of waiting for the
-      // next resume.
+      // The user may have changed the system notification authorization
+      // while Settings was open (e.g. via the OS Settings app); reconcile
+      // the actual scheduled notification against the live status
+      // immediately on return, the same way app-resume already does,
+      // instead of waiting for the next resume.
       await synchronizeUnlockNotification();
     } finally {
       if (mounted) {

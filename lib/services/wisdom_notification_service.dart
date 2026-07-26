@@ -8,7 +8,6 @@ import 'package:timezone/timezone.dart' as timezone;
 
 import '../persistence/storage_preferences_adapter.dart';
 import 'daily_wisdom_access_service.dart';
-import 'notification_settings_launcher.dart';
 
 enum WisdomNotificationAuthorization {
   notDetermined,
@@ -16,16 +15,6 @@ enum WisdomNotificationAuthorization {
   denied,
   unavailable,
 }
-
-/// The user's explicit EAST-level Daily Reminder intent, kept distinct from
-/// the OS notification authorization status (`WisdomNotificationAuthorization`).
-/// A missing/never-decided preference (`unset`) is not the same as an
-/// explicit `disabled` choice: `unset` still defers to whatever the current
-/// system authorization allows (so existing authorized users keep their
-/// reminder working after this preference is introduced), while `disabled`
-/// always means off, regardless of system authorization, until the user
-/// re-enables it.
-enum DailyReminderPreference { unset, enabled, disabled }
 
 abstract interface class WisdomNotificationPlatform {
   Future<void> initialize();
@@ -157,12 +146,9 @@ class WisdomNotificationService {
     WisdomNotificationPlatform? platform,
     StoragePreferencesAdapter? preferencesAdapter,
     DateTime Function()? clock,
-    NotificationSettingsLauncher? settingsLauncher,
   })  : _platform = platform ?? LocalWisdomNotificationPlatform(),
         _preferencesAdapter = preferencesAdapter ?? StoragePreferencesAdapter(),
-        _clock = clock ?? DateTime.now,
-        _settingsLauncher =
-            settingsLauncher ?? MethodChannelNotificationSettingsLauncher();
+        _clock = clock ?? DateTime.now;
 
   static const int unlockNotificationId = 21001;
   static const String notificationTitle = 'EAST.';
@@ -170,19 +156,9 @@ class WisdomNotificationService {
   static const String permissionPromptHandledKey =
       'wisdom_unlock_notification_prompt_handled';
 
-  /// The single canonical, migration-safe persisted key for the user's
-  /// explicit EAST-level Daily Reminder intent. Distinct from, and never
-  /// mixed with, the OS-level notification authorization status. Existing
-  /// installs (where this key has never been written) fall back to
-  /// `DailyReminderPreference.unset`, which mirrors the prior behaviour of
-  /// gating purely on system authorization — so no existing authorized user
-  /// silently loses their reminder when this preference is introduced.
-  static const String dailyReminderPreferenceKey = 'daily_reminder_enabled';
-
   final WisdomNotificationPlatform _platform;
   final StoragePreferencesAdapter _preferencesAdapter;
   final DateTime Function() _clock;
-  final NotificationSettingsLauncher _settingsLauncher;
 
   bool _promptHandledInMemory = false;
   Future<void>? _initialization;
@@ -235,139 +211,16 @@ class WisdomNotificationService {
     await _markPromptHandled();
   }
 
-  /// The user's explicit, persisted Daily Reminder intent. `unset` for any
-  /// install that has never touched the new preference (see
-  /// [dailyReminderPreferenceKey]).
-  Future<DailyReminderPreference> reminderPreference() async {
-    try {
-      final stored =
-          await _preferencesAdapter.getBool(dailyReminderPreferenceKey);
-      if (stored == null) return DailyReminderPreference.unset;
-      return stored
-          ? DailyReminderPreference.enabled
-          : DailyReminderPreference.disabled;
-    } catch (_) {
-      return DailyReminderPreference.unset;
-    }
-  }
-
-  /// Whether the Daily Reminder should be considered ON right now, combining
-  /// the explicit app-level preference with the live system authorization
-  /// status. An explicit `disabled` choice always wins. Otherwise (an
-  /// explicit `enabled` choice, or an `unset`/never-decided install) the
-  /// reminder is ON exactly when the OS currently reports `authorized` —
-  /// this is what lets an existing authorized user read as ON with zero
-  /// migration step, and what makes revoking access in system Settings
-  /// immediately read as OFF without a separate sync.
-  Future<bool> isDailyReminderOn() async {
-    if (await reminderPreference() == DailyReminderPreference.disabled) {
-      return false;
-    }
-    return await authorizationStatus() ==
-        WisdomNotificationAuthorization.authorized;
-  }
-
-  /// Explicit OFF: persists the disabled intent and immediately cancels any
-  /// pending EAST reminder notification. Never touches OS-level
-  /// authorization. A later reveal or resume sync must not silently turn
-  /// this back on.
-  Future<void> disableDailyReminder() async {
-    try {
-      await _preferencesAdapter.setBool(dailyReminderPreferenceKey, false);
-    } catch (_) {
-      // Fall through to cancellation regardless; the in-memory state for
-      // this process still reflects the user's choice for this session.
-    }
-    await cancelUnlockNotification();
-  }
-
-  /// Explicit intent to turn the reminder ON, called from the Daily Reminder
-  /// Settings row. Returns whether the reminder is ON after this call.
-  ///
-  /// - notDetermined: requests native iOS authorization directly (no
-  ///   app-owned dialog). Persists `enabled` only if granted.
-  /// - authorized: persists `enabled`. Actual (re)scheduling of the current
-  ///   pending unlock is left to the existing
-  ///   `synchronizeWithStatus`/`scheduleFromAuthoritativeUnlock` sync (already
-  ///   invoked on every app resume, and after returning from Settings), so
-  ///   this method never needs its own copy of the current unlock time.
-  /// - denied/unavailable: cannot take effect; does not persist `enabled`
-  ///   (the caller is responsible for directing the user to system
-  ///   Settings instead).
-  Future<bool> enableDailyReminder() async {
-    final status = await authorizationStatus();
-    switch (status) {
-      case WisdomNotificationAuthorization.notDetermined:
-        await _markPromptHandled();
-        try {
-          await initialize();
-          final granted = await _platform.requestPermission();
-          if (granted) {
-            await _preferencesAdapter.setBool(
-              dailyReminderPreferenceKey,
-              true,
-            );
-          }
-          return granted;
-        } catch (_) {
-          return false;
-        }
-      case WisdomNotificationAuthorization.authorized:
-        try {
-          await _preferencesAdapter.setBool(dailyReminderPreferenceKey, true);
-        } catch (_) {
-          // Best-effort; authorization is already granted so treat as on
-          // for this session even if persistence failed transiently.
-        }
-        return true;
-      case WisdomNotificationAuthorization.denied:
-      case WisdomNotificationAuthorization.unavailable:
-        return false;
-    }
-  }
-
-  /// Opens the app's own notification-settings page in the system Settings
-  /// app, for the case where OS-level authorization is already denied and
-  /// only the user can change it outside EAST. Never shows any app-owned
-  /// dialog; the caller (the Daily Reminder row) simply re-reads the real
-  /// status the next time the app resumes.
-  ///
-  /// Defensive by construction: even though
-  /// [NotificationSettingsLauncher] implementations are documented to
-  /// never throw, this still guards the call so a misbehaving launcher
-  /// (real or injected in a test) can never surface as an uncaught error
-  /// at this boundary — matching every other public method on this
-  /// service.
-  Future<bool> openNotificationSettings() async {
-    try {
-      return await _settingsLauncher.openNotificationSettings();
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// The single entry point Home calls at the approved reveal-time trigger
-  /// when [shouldOfferPermission] was true. An explicit, persisted Daily
-  /// Reminder OFF must win over every reveal, forever, until the user
-  /// explicitly re-enables it from Settings — so this checks
-  /// [reminderPreference] first and returns immediately, before touching
-  /// native authorization, scheduling, or the preference itself, whenever
-  /// the preference is `disabled`. This is the canonical guard: it lives in
-  /// the service (not just in the Home widget), so no future call site can
-  /// silently bypass an explicit OFF.
+  /// when [shouldOfferPermission] was true.
   ///
-  /// If the OS already reports `authorized` (for example, the Daily
-  /// Reminder preference is `enabled` and the user granted access earlier
-  /// from the Settings row, or from an earlier reveal), this must not
-  /// re-request native permission — iOS never shows a second system prompt
-  /// once decided, and repeating the request here served no purpose and
-  /// broke the "authorized" fast path. Scheduling happens directly in that
-  /// case. Only when the OS status is genuinely `notDetermined` does this
-  /// request permission first.
+  /// If the OS already reports `authorized` (for example, from an earlier
+  /// reveal), this must not re-request native permission — iOS never shows
+  /// a second system prompt once decided, and repeating the request here
+  /// served no purpose and broke the "authorized" fast path. Scheduling
+  /// happens directly in that case. Only when the OS status is genuinely
+  /// `notDetermined` does this request permission first.
   Future<bool> requestPermissionAndSchedule(DateTime unlockAt) async {
-    if (await reminderPreference() == DailyReminderPreference.disabled) {
-      return false;
-    }
     try {
       final status = await authorizationStatus();
       if (status == WisdomNotificationAuthorization.authorized) {
@@ -390,6 +243,10 @@ class WisdomNotificationService {
     }
   }
 
+  /// Called after a fresh reveal to schedule (or clear) the reminder
+  /// against the newly-committed authoritative unlock time. Never requests
+  /// permission — only the OS-authorized state (already granted, from an
+  /// earlier reveal or resume) results in an actual schedule.
   Future<void> scheduleFromAuthoritativeUnlock(DateTime unlockAt) async {
     try {
       await _serialize(() async {
@@ -397,7 +254,8 @@ class WisdomNotificationService {
           await _cancelNative();
           return;
         }
-        if (!await isDailyReminderOn()) {
+        if (await authorizationStatus() !=
+            WisdomNotificationAuthorization.authorized) {
           return;
         }
         await _replaceSchedule(unlockAt);
@@ -407,6 +265,13 @@ class WisdomNotificationService {
     }
   }
 
+  /// Called on app launch and resume to reconcile the scheduled local
+  /// notification against the live system authorization status and the
+  /// authoritative current unlock record. Never requests permission — a
+  /// `notDetermined` status is left for the approved reveal-time trigger.
+  /// A `denied` status silently skips scheduling (and cancels any stale
+  /// pending reminder once the unlock is no longer valid) rather than
+  /// prompting or opening system Settings.
   Future<void> synchronizeWithStatus(DailyWisdomStatus status) async {
     try {
       await _serialize(() async {
@@ -415,7 +280,8 @@ class WisdomNotificationService {
           await _cancelNative();
           return;
         }
-        if (!await isDailyReminderOn()) {
+        if (await authorizationStatus() !=
+            WisdomNotificationAuthorization.authorized) {
           return;
         }
         await _replaceSchedule(unlockAt);

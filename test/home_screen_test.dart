@@ -2059,50 +2059,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'an explicit Daily Reminder OFF blocks the reveal-time direct path '
-      'entirely: no native permission request, no scheduling, no custom '
-      'dialog, even though the system status is notDetermined', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
-    final notificationPlatform = _HomeNotificationPlatform(
-      enabled: false,
-      permissionResult: true,
-    );
-    final notificationService = WisdomNotificationService(
-      platform: notificationPlatform,
-      clock: () => now,
-    );
-    await notificationService.disableDailyReminder();
-
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
-        clock: () => now,
-        wisdomNotificationService: notificationService,
-      ),
-    );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
-    await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
-    await _pumpInSteps(tester, const Duration(seconds: 7));
-    await tester.pump();
-
-    expect(notificationPlatform.permissionRequests, 0);
-    expect(notificationPlatform.schedules, isEmpty);
-    expect(find.text('Not now'), findsNothing);
-    expect(find.text('Allow'), findsNothing);
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(
-      await notificationService.reminderPreference(),
-      DailyReminderPreference.disabled,
-    );
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('disposal during an in-flight native permission request is safe',
       (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);

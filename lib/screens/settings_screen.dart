@@ -1,11 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
-import '../services/wisdom_notification_service.dart';
 import '../theme/muted_text_color.dart';
 import 'keeper_screen.dart';
 
@@ -19,29 +16,21 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     this.urlLauncher,
     this.purchaseService,
-    this.notificationService,
   });
 
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
 
-  // Injectable so widget tests can exercise the Daily Reminder row without
-  // touching real platform notification/permission APIs.
-  final WisdomNotificationService? notificationService;
-
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen>
-    with WidgetsBindingObserver {
+class _SettingsScreenState extends State<SettingsScreen> {
   bool _keeperNavigationInProgress = false;
   bool _privacyPolicyLaunchInProgress = false;
   bool _reachOutLaunchInProgress = false;
   bool _restoreInProgress = false;
   bool _eastProductionsLaunchInProgress = false;
-  bool _dailyReminderOn = false;
-  bool _dailyReminderBusy = false;
 
   // Shared by every Settings divider (see requirement: "all Settings
   // dividers use one shared value"). Derived from the approved muted-text
@@ -52,107 +41,6 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   PurchaseService get _purchaseService =>
       widget.purchaseService ?? app_services.purchaseService;
-
-  WisdomNotificationService get _notificationService =>
-      widget.notificationService ?? app_services.wisdomNotificationService;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    unawaited(_refreshDailyReminderStatus());
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Only ever refresh the real, current status here — never request
-    // permission automatically on resume. This is what makes returning
-    // from the OS notification settings (after a denied-permission
-    // redirect) reflect the true authorization without any extra tap, and
-    // what makes an externally-revoked permission read as OFF rather than
-    // staying stale.
-    if (state == AppLifecycleState.resumed) {
-      unawaited(_refreshDailyReminderStatus());
-    }
-  }
-
-  Future<void> _refreshDailyReminderStatus() async {
-    final on = await _notificationService.isDailyReminderOn();
-    if (!mounted) return;
-    setState(() {
-      _dailyReminderOn = on;
-    });
-  }
-
-  String get _dailyReminderStatusText => _dailyReminderOn ? 'ON' : 'OFF';
-
-  String get dailyReminderSemanticLabel {
-    if (_dailyReminderBusy) {
-      return 'Daily Reminder. Updating.';
-    }
-    return 'Daily Reminder. Return when the silence opens again. '
-        'Currently ${_dailyReminderOn ? 'on' : 'off'}.';
-  }
-
-  VoidCallback? get dailyReminderAction {
-    if (_dailyReminderBusy) return null;
-    return _toggleDailyReminder;
-  }
-
-  Future<void> _toggleDailyReminder() async {
-    if (_dailyReminderBusy || !mounted) return;
-
-    setState(() {
-      _dailyReminderBusy = true;
-    });
-
-    try {
-      if (_dailyReminderOn) {
-        await _notificationService.disableDailyReminder();
-        if (!mounted) return;
-        setState(() {
-          _dailyReminderOn = false;
-        });
-        return;
-      }
-
-      final status = await _notificationService.authorizationStatus();
-      switch (status) {
-        case WisdomNotificationAuthorization.notDetermined:
-        case WisdomNotificationAuthorization.authorized:
-          final on = await _notificationService.enableDailyReminder();
-          if (!mounted) return;
-          setState(() {
-            _dailyReminderOn = on;
-          });
-        case WisdomNotificationAuthorization.denied:
-        case WisdomNotificationAuthorization.unavailable:
-          // Cannot take effect at the OS level from here: express the
-          // intent to enable by opening the app's own notification
-          // settings page, with no app-owned explanatory dialog. This goes
-          // through the notification service's native
-          // `openNotificationSettings()` bridge (backed by the official
-          // `UIApplication.openNotificationSettingsURLString`), not
-          // url_launcher — url_launcher remains reserved for the
-          // externally-linked rows (EAST. Productions, Objects, Privacy
-          // Policy, Reach Out). The real status is re-read on resume (see
-          // `didChangeAppLifecycleState`) once the user returns.
-          await _notificationService.openNotificationSettings();
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _dailyReminderBusy = false;
-        });
-      }
-    }
-  }
 
   TextStyle eastStyle(
     double size, {
@@ -424,7 +312,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> openPrivacyPolicy() async {
     final uri = Uri.parse(
-      'https://wv6czzy669-boop.github.io/daily-wisdom-east-privacy/',
+      'https://east.productions/app/privacy',
     );
 
     await _runExternalAction(
@@ -557,26 +445,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                         subtitle: "Restore what belongs with you.",
                         semanticLabel: restoreSemanticLabel,
                         onTap: restoreAction,
-                      ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
-                      ),
-                      settingsItem(
-                        rowKey: const ValueKey('settings-daily-reminder-row'),
-                        title: "Daily Reminder",
-                        subtitle: "Return when the silence opens again.",
-                        semanticLabel: dailyReminderSemanticLabel,
-                        onTap: dailyReminderAction,
-                        trailing: Text(
-                          _dailyReminderStatusText,
-                          style: eastStyle(
-                            15,
-                            color: _dailyReminderOn
-                                ? const Color(0xFFF4F0E8)
-                                : eastMutedTextColor,
-                          ),
-                        ),
                       ),
                       Divider(
                         color: _settingsDividerColor,
