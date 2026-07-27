@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../theme/muted_text_color.dart';
+
 abstract interface class WisdomShareHandler {
   Future<void> shareWisdom({
     required String wisdom,
@@ -74,8 +76,22 @@ class WisdomShareCardRenderer {
   static const String fontFamily = 'CormorantGaramond';
 
   static const double wisdomOpticalCenterY = 900;
-  static const double ritualCircleCenterY = 1740;
-  static const double ritualCircleRadius = 16;
+
+  // Update 3: small centered line beneath the "EAST." wordmark, replacing
+  // the removed bottom ritual circle. Uses the exact same shared
+  // `eastMutedTextColor` token (see `theme/muted_text_color.dart`) already
+  // used, at full opacity with no additional `.withValues(alpha: ...)`
+  // reduction, by the in-app "Return when the silence opens again." text
+  // (`_HomePostRevealMessage` in `home_ritual_widgets.dart`).
+  static const double wordmarkLineGap = 13;
+  static const double wordmarkLineThickness = 1;
+  // Correction: the line's width is derived from the actual rendered
+  // "EAST." wordmark width (`brandPainter.width`, computed at render time)
+  // rather than a fixed constant — a fixed 30px line was shorter than the
+  // wordmark itself, the opposite of the approved direction ("extend a
+  // little past the left and right edges of the wordmark"). This is the
+  // extra width added on *each* side beyond the wordmark's own width.
+  static const double wordmarkLineOverhang = 10;
 
   static const double _minimumWisdomBoxWidth = 620;
   static const double _maximumWisdomBoxWidth = 820;
@@ -182,12 +198,36 @@ class WisdomShareCardRenderer {
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
     )..layout(maxWidth: _maximumWisdomBoxWidth);
+    const brandTop = 168.0;
     brandPainter.paint(
       canvas,
       Offset(
         (pixelWidth - brandPainter.width) / 2,
-        168,
+        brandTop,
       ),
+    );
+
+    // Update 3A: a small, flat, centered line directly beneath the "EAST."
+    // wordmark — no glow, no gradient, no rounded-capsule appearance (a
+    // sharp-cornered filled rectangle, not a stroke with round caps). The
+    // top edge is snapped to a whole device pixel so this thin (1px) line
+    // renders as one crisp, fully-opaque row rather than an antialiased
+    // blend across two rows — flatter and closer to "no glow" than a
+    // sub-pixel-positioned line would be.
+    final wordmarkLinePaint = Paint()
+      ..color = eastMutedTextColor
+      ..style = PaintingStyle.fill;
+    final wordmarkLineTop =
+        (brandTop + brandPainter.height + wordmarkLineGap).roundToDouble();
+    final wordmarkLineWidth = brandPainter.width + (wordmarkLineOverhang * 2);
+    canvas.drawRect(
+      Rect.fromLTWH(
+        (pixelWidth - wordmarkLineWidth) / 2,
+        wordmarkLineTop,
+        wordmarkLineWidth,
+        wordmarkLineThickness,
+      ),
+      wordmarkLinePaint,
     );
 
     final wisdomPainter = _wisdomPainter(
@@ -203,16 +243,8 @@ class WisdomShareCardRenderer {
       ),
     );
 
-    final ritualCirclePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..isAntiAlias = true
-      ..color = foregroundColor.withValues(alpha: 0.32);
-    canvas.drawCircle(
-      const Offset(pixelWidth / 2, ritualCircleCenterY),
-      ritualCircleRadius,
-      ritualCirclePaint,
-    );
+    // Update 3B: the bottom ritual circle is removed completely — no
+    // outline, no placeholder, no invisible reserved widget/paint call.
 
     final picture = recorder.endRecording();
     final image = await picture.toImage(pixelWidth, pixelHeight);

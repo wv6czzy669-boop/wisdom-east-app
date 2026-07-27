@@ -24,10 +24,12 @@ class ObjectsCatalog {
     'assets/objects/espresso_2.webp',
   ];
 
-  // Optimized WebP derivatives of Khaki1/2.png, in display order.
+  // Optimized WebP derivatives of Khaki1/2.png. Update 2: Khaki2.png is now
+  // first (index 0 / the initial selected image for Khaki); Khaki1.png
+  // remains available immediately after it.
   static const List<String> khakiGallery = [
-    'assets/objects/khaki_1.webp',
     'assets/objects/khaki_2.webp',
+    'assets/objects/khaki_1.webp',
   ];
 
   // Optimized WebP derivatives, in the approved display order:

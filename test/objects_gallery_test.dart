@@ -50,15 +50,18 @@ void main() {
     }
   });
 
-  testWidgets('Espresso and Khaki gallery asset order is exact, exactly two '
+  testWidgets(
+      'Espresso and Khaki gallery asset order is exact, exactly two '
       'images each', (tester) async {
     expect(ObjectsCatalog.espressoGallery, [
       'assets/objects/espresso_1.webp',
       'assets/objects/espresso_2.webp',
     ]);
+    // Update 2: Khaki2.png is now first (index 0 / the initial selected
+    // Khaki image); Khaki1.png remains available immediately after it.
     expect(ObjectsCatalog.khakiGallery, [
-      'assets/objects/khaki_1.webp',
       'assets/objects/khaki_2.webp',
+      'assets/objects/khaki_1.webp',
     ]);
     expect(ObjectsCatalog.espressoGallery, hasLength(2));
     expect(ObjectsCatalog.khakiGallery, hasLength(2));
@@ -95,8 +98,9 @@ void main() {
     );
   });
 
-  testWidgets('changing to Khaki resets to Khaki image 1, and back again',
-      (tester) async {
+  testWidgets(
+      'changing to Khaki resets to Khaki2.png (gallery position 1), and '
+      'back again', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
       await tester.pumpWidget(
@@ -105,7 +109,8 @@ void main() {
 
       // Swipe the T-Shirt gallery forward before switching colors, so a
       // naive implementation that preserved page index would land on
-      // Khaki's 2nd image instead of resetting to its 1st.
+      // Khaki's 2nd image (Khaki1.png) instead of resetting to its 1st
+      // (Khaki2.png, per Update 2's new gallery order).
       await tester.fling(
         find.byType(PageView).first,
         const Offset(-300, 0),
@@ -287,8 +292,7 @@ void main() {
 
   testWidgets(
       'exactly one thin muted divider separates the Tote gallery from the '
-      'Discover action, with no enclosing box around the CTA',
-      (tester) async {
+      'Discover action, with no enclosing box around the CTA', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: ObjectsScreen()),
     );

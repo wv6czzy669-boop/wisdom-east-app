@@ -190,8 +190,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                                 color: const Color(0xFFF4F0E8)
                                     .withValues(alpha: 0.012),
                                 border: Border.all(
-                                  color: const Color(0xFFF4F0E8)
-                                      .withValues(alpha: 0.38),
+                                  color: eastMutedTextColor,
                                   width: 0.7,
                                 ),
                                 boxShadow: [
@@ -228,19 +227,13 @@ class _KeeperScreenState extends State<KeeperScreen> {
                     Text(
                       "Unlimited Kept Wisdoms",
                       textAlign: TextAlign.center,
-                      style: keeperStyle(
-                        16,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
-                      ).copyWith(letterSpacing: 0.75),
+                      style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 11),
                     Text(
                       "Unlimited Reflections",
                       textAlign: TextAlign.center,
-                      style: keeperStyle(
-                        16,
-                        color: const Color(0xFFF4F0E8).withValues(alpha: 0.57),
-                      ).copyWith(letterSpacing: 0.75),
+                      style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 11),
                     Text(

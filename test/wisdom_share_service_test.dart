@@ -57,22 +57,142 @@ void main() {
     );
     expect(pixels, isNotNull);
     expect(_rgbAt(pixels!, x: 0, y: 0), [3, 3, 3]);
+
+    // Update 3B: the bottom ritual circle is gone entirely — nothing but
+    // the plain background color remains at and around its former
+    // location (roughly 90.6% down the 1920-tall canvas, matching the
+    // removed `ritualCircleCenterY = 1740` constant).
+    const formerCircleCenterY = 1740;
+    const formerCircleRadius = 16;
     expect(
       _rgbAt(
         pixels,
         x: WisdomShareCardRenderer.pixelWidth ~/ 2,
-        y: WisdomShareCardRenderer.ritualCircleCenterY.toInt(),
+        y: formerCircleCenterY,
       ),
       [3, 3, 3],
     );
-    final circleEdge = _rgbAt(
-      pixels,
-      x: WisdomShareCardRenderer.pixelWidth ~/ 2 +
-          WisdomShareCardRenderer.ritualCircleRadius.toInt(),
-      y: WisdomShareCardRenderer.ritualCircleCenterY.toInt(),
+    expect(
+      _rgbAt(
+        pixels,
+        x: WisdomShareCardRenderer.pixelWidth ~/ 2 + formerCircleRadius,
+        y: formerCircleCenterY,
+      ),
+      [3, 3, 3],
+      reason: 'The former circle stroke location must now be plain '
+          'background — no outline, no placeholder.',
     );
-    expect(circleEdge.first, greaterThan(3));
-    expect(circleEdge.first, lessThan(244));
+
+    frame.image.dispose();
+    codec.dispose();
+  });
+
+  test(
+      'a small centered line appears beneath "EAST." using the exact '
+      'shared eastMutedTextColor token, and nothing else near the wordmark '
+      'changed', () async {
+    const renderer = WisdomShareCardRenderer();
+    final bytes = await renderer.render('The silence remembers.');
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final pixels = await frame.image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    );
+    expect(pixels, isNotNull);
+
+    // eastMutedTextColor = 0xFFA29B8C, used at full opacity (no additional
+    // alpha reduction), matching the in-app "Return when the silence opens
+    // again." style exactly. The exact TextPainter height of "EAST." is not
+    // hardcoded here (it depends on font metrics this sandbox cannot
+    // independently recompute) — instead this scans the region just below
+    // the wordmark for the thin, pixel-snapped line the renderer draws.
+    const expectedLineRgb = [0xA2, 0x9B, 0x8C];
+    final centerX = WisdomShareCardRenderer.pixelWidth ~/ 2;
+    final matchingRows = <int>[];
+    for (var y = 168; y < 168 + 150; y++) {
+      if (_rgbAt(pixels!, x: centerX, y: y).join(',') ==
+          expectedLineRgb.join(',')) {
+        matchingRows.add(y);
+      }
+    }
+
+    expect(
+      matchingRows,
+      isNotEmpty,
+      reason: 'No row beneath the "EAST." wordmark used the exact '
+          'eastMutedTextColor token — the line appears to be missing.',
+    );
+    expect(
+      matchingRows.length,
+      lessThanOrEqualTo(2),
+      reason: 'The wordmark line must be thin (~1px), not a thick block.',
+    );
+    expect(
+      _rgbAt(pixels!, x: centerX, y: matchingRows.first - 3),
+      isNot(expectedLineRgb),
+      reason: 'The area just above the line must not also be the line '
+          'color — it must be a real thin line, not a wide band.',
+    );
+
+    // Correction: the line must now extend a little past the left and
+    // right edges of the "EAST." wordmark above it, rather than being
+    // shorter than the wordmark. Find the line's own full horizontal
+    // extent at its row, and separately find the wordmark's widest row
+    // (scanning every row between the wordmark's top and the line, since
+    // the exact glyph height/metrics are not hardcoded here), then compare.
+    final lineY = matchingRows.first;
+    int? lineLeft, lineRight;
+    for (var x = 0; x < WisdomShareCardRenderer.pixelWidth; x++) {
+      if (_rgbAt(pixels, x: x, y: lineY).join(',') ==
+          expectedLineRgb.join(',')) {
+        lineLeft ??= x;
+        lineRight = x;
+      }
+    }
+    expect(lineLeft, isNotNull);
+    expect(lineRight, isNotNull);
+    final lineWidth = lineRight! - lineLeft! + 1;
+
+    var wordmarkLeft = WisdomShareCardRenderer.pixelWidth;
+    var wordmarkRight = 0;
+    for (var y = 168; y < lineY; y++) {
+      for (var x = 0; x < WisdomShareCardRenderer.pixelWidth; x++) {
+        final rgb = _rgbAt(pixels, x: x, y: y);
+        // Matches `foregroundColor` (0xFFF4F0E8) closely enough to count
+        // as wordmark glyph, not background or anti-aliasing fringe.
+        if (rgb[0] > 200 && rgb[1] > 200 && rgb[2] > 200) {
+          if (x < wordmarkLeft) wordmarkLeft = x;
+          if (x > wordmarkRight) wordmarkRight = x;
+        }
+      }
+    }
+    expect(
+      wordmarkRight,
+      greaterThan(wordmarkLeft),
+      reason: 'Could not locate the "EAST." wordmark above the line.',
+    );
+    final wordmarkWidth = wordmarkRight - wordmarkLeft + 1;
+
+    expect(
+      lineWidth,
+      greaterThan(wordmarkWidth),
+      reason: 'The line must now be wider than the wordmark, not shorter.',
+    );
+    expect(
+      lineLeft,
+      lessThan(wordmarkLeft),
+      reason: 'The line must extend past the wordmark\'s left edge.',
+    );
+    expect(
+      lineRight,
+      greaterThan(wordmarkRight),
+      reason: 'The line must extend past the wordmark\'s right edge.',
+    );
+
+    // Still centered under the wordmark (both centered on the canvas).
+    final lineCenter = (lineLeft + lineRight) / 2;
+    final wordmarkCenter = (wordmarkLeft + wordmarkRight) / 2;
+    expect((lineCenter - wordmarkCenter).abs(), lessThan(2));
 
     frame.image.dispose();
     codec.dispose();

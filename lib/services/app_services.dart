@@ -2,6 +2,7 @@ import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/storage_preferences_adapter.dart';
 import '../repositories/daily_access_repository.dart';
 import 'daily_wisdom_access_service.dart';
+import 'kept_discovery_hint_service.dart';
 import 'purchase_service.dart';
 import 'saved_reflections_service.dart';
 import 'storage_service.dart';
@@ -15,6 +16,8 @@ final SavedReflectionsService savedReflectionsService =
 final WisdomShareHandler wisdomShareService = WisdomShareService();
 final WisdomNotificationService wisdomNotificationService =
     WisdomNotificationService();
+final KeptDiscoveryHintService keptDiscoveryHintService =
+    KeptDiscoveryHintService();
 
 final StoragePreferencesAdapter dailyAccessPreferencesAdapter =
     StoragePreferencesAdapter();

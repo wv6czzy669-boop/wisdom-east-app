@@ -90,6 +90,62 @@ void main() {
     );
   });
 
+  testWidgets(
+      'Build 25 Item 1: Enter the Circle ring and the feature lines resolve '
+      'to the exact same colors as Keep what stays. and KEEPER',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
+    );
+
+    // 1A: the ring's outline color must be exactly the same resolved color
+    // as "Keep what stays." — the same `eastMutedTextColor` token, not an
+    // approximated near-duplicate raw color.
+    final ringContainer = tester.widget<Container>(
+      find.descendant(
+        of: find.byKey(const ValueKey('keeper-purchase-action')),
+        matching: find.byType(Container),
+      ),
+    );
+    final ringDecoration = ringContainer.decoration! as BoxDecoration;
+    expect(ringDecoration.border!.top.color, eastMutedTextColor);
+    expect(
+      ringDecoration.border!.top.color,
+      tester.widget<Text>(find.text('Keep what stays.')).style!.color,
+    );
+    // Ring geometry/stroke width are untouched by the color change.
+    expect(ringDecoration.border!.top.width, 0.7);
+    final ringBox = tester.getSize(
+      find.byKey(const ValueKey('keeper-purchase-action')),
+    );
+    expect(ringBox, const Size(238, 238));
+
+    // 1B: "Unlimited Kept Wisdoms" / "Unlimited Reflections" must resolve
+    // to the exact same color as the "Keeper" heading — only color
+    // changes; font, size, and copy are untouched.
+    final keeperHeadingStyle = tester.widget<Text>(find.text('Keeper')).style!;
+    final keptWisdomsStyle =
+        tester.widget<Text>(find.text('Unlimited Kept Wisdoms')).style!;
+    final reflectionsStyle =
+        tester.widget<Text>(find.text('Unlimited Reflections')).style!;
+
+    expect(keptWisdomsStyle.color, keeperHeadingStyle.color);
+    expect(reflectionsStyle.color, keeperHeadingStyle.color);
+    expect(keptWisdomsStyle.fontSize, 16);
+    expect(reflectionsStyle.fontSize, 16);
+    expect(keptWisdomsStyle.fontFamily, keeperHeadingStyle.fontFamily);
+
+    // Secondary description colors (muted lines) are unaffected.
+    expect(
+      tester.widget<Text>(find.text('Keep what stays.')).style?.color,
+      eastMutedTextColor,
+    );
+    expect(
+      tester.widget<Text>(find.text('Keep EAST. alive.')).style?.color,
+      eastMutedTextColor,
+    );
+  });
+
   testWidgets('Keeper keeps StoreKit price semantic but not visible',
       (tester) async {
     service = _StaticPurchaseService(

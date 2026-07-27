@@ -31,8 +31,10 @@ class TopNavRingGeometry {
 /// Paints one or two concentric, unfilled ring outlines, centered in the
 /// available space. Never draws a fill.
 class TopNavRingPainter extends CustomPainter {
-  const TopNavRingPainter({required this.ringCount})
-      : assert(
+  const TopNavRingPainter({
+    required this.ringCount,
+    this.color = TopNavRingGeometry.color,
+  }) : assert(
           ringCount == 1 || ringCount == 2,
           'Only single- or double-ring controls are defined.',
         );
@@ -41,10 +43,16 @@ class TopNavRingPainter extends CustomPainter {
   /// centered inner ring).
   final int ringCount;
 
+  /// Stroke color. Defaults to [TopNavRingGeometry.color] so every existing
+  /// call site is unaffected; only the transient Kept-icon emphasis overlay
+  /// (see `_KeptIconEmphasis` in `home_ritual_widgets.dart`) supplies a
+  /// different value.
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = TopNavRingGeometry.color
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = TopNavRingGeometry.strokeWidth;
 
@@ -57,7 +65,7 @@ class TopNavRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant TopNavRingPainter oldDelegate) {
-    return oldDelegate.ringCount != ringCount;
+    return oldDelegate.ringCount != ringCount || oldDelegate.color != color;
   }
 }
 
@@ -69,7 +77,16 @@ class SingleRingIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox.square(
       dimension: TopNavRingGeometry.outerDiameter,
-      child: CustomPaint(painter: TopNavRingPainter(ringCount: 1)),
+      // A stable key directly on this control's own ring `CustomPaint`, so
+      // tests can locate and inspect its `painter` by key rather than by
+      // walking up from a tooltip/ancestor (which broke once the tooltip
+      // wrapper was removed) or calling `.single` on an unverified finder.
+      // `SingleRingIcon` is only ever used for Objects, so this key is
+      // unambiguous.
+      child: CustomPaint(
+        key: ValueKey('objects-top-nav-ring'),
+        painter: TopNavRingPainter(ringCount: 1),
+      ),
     );
   }
 }
@@ -83,7 +100,17 @@ class DoubleRingIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox.square(
       dimension: TopNavRingGeometry.outerDiameter,
-      child: CustomPaint(painter: TopNavRingPainter(ringCount: 2)),
+      // Only this base ring carries the key — the transient Kept-icon
+      // emphasis pulse (`_KeptIconEmphasis` in `home_ritual_widgets.dart`)
+      // paints a second, differently-colored `TopNavRingPainter` overlay
+      // that intentionally does not share this key, so
+      // `find.byKey('kept-top-nav-ring')` always finds exactly one widget
+      // regardless of whether the pulse is active. `DoubleRingIcon` is
+      // only ever used for Kept, so this key is unambiguous.
+      child: CustomPaint(
+        key: ValueKey('kept-top-nav-ring'),
+        painter: TopNavRingPainter(ringCount: 2),
+      ),
     );
   }
 }
