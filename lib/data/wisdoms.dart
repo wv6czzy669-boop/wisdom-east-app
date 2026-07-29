@@ -1,5 +1,5 @@
 // Daily Wisdom: East - Wisdom Database
-// 622 original, app-safe wisdoms.
+// 603 app-safe wisdoms.
 // Generated for Daily Wisdom: East.
 
 final List<Map<String, dynamic>> wisdoms = [
@@ -634,11 +634,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "mystic",
   },
   {
-    "text": "What disappears suddenly may have already been leaving quietly.",
-    "tags": ["silence", "release"],
-    "tone": "calm",
-  },
-  {
     "text": "The soul moves differently when it feels seen.",
     "tags": ["awareness", "soul"],
     "tone": "clear",
@@ -709,12 +704,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "gentle",
   },
   {
-    "text":
-        "What you fear losing may already be transforming into something gentler.",
-    "tags": ["heart", "awareness"],
-    "tone": "gentle",
-  },
-  {
     "text": "The spirit remembers what the ego tries to outrun.",
     "tags": ["awareness", "soul"],
     "tone": "clear",
@@ -768,11 +757,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "Some truths grow slowly so they can remain longer.",
     "tags": ["timing", "awareness"],
     "tone": "clear",
-  },
-  {
-    "text": "What leaves peacefully may have completed its purpose perfectly.",
-    "tags": ["release"],
-    "tone": "reflective",
   },
   {
     "text": "The spirit becomes clearer each time illusion falls away.",
@@ -895,11 +879,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "calm",
   },
   {
-    "text": "What is yours will meet the version of you that can receive it.",
-    "tags": ["oracle"],
-    "tone": "mystic",
-  },
-  {
     "text": "Release the answer and watch the question become softer.",
     "tags": ["heart", "release"],
     "tone": "gentle",
@@ -1000,11 +979,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "gentle",
   },
   {
-    "text": "Some doors are opened by becoming quiet enough to notice them.",
-    "tags": ["silence", "path"],
-    "tone": "calm",
-  },
-  {
     "text": "A clear mind does not need to own every outcome.",
     "tags": ["awareness"],
     "tone": "clear",
@@ -1063,12 +1037,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "Nothing has to bloom loudly to be alive.",
     "tags": ["oracle"],
     "tone": "mystic",
-  },
-  {
-    "text":
-        "The ego wants a sign. The soul becomes still enough to receive one.",
-    "tags": ["awareness", "soul"],
-    "tone": "clear",
   },
   {
     "text": "The path appears by being walked with attention.",
@@ -1551,11 +1519,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "mystic",
   },
   {
-    "text": "The moment you accept the lesson, the weight begins to change.",
-    "tags": ["oracle"],
-    "tone": "mystic",
-  },
-  {
     "text": "What is real does not need constant convincing.",
     "tags": ["oracle"],
     "tone": "mystic",
@@ -1649,11 +1612,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "Let the unseen have its season.",
     "tags": ["timing", "awareness"],
     "tone": "clear",
-  },
-  {
-    "text": "What is aligned will not constantly ask you to betray yourself.",
-    "tags": ["destiny"],
-    "tone": "oracle",
   },
   {
     "text": "The sacred often begins as a pause.",
@@ -2146,12 +2104,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "mystic",
   },
   {
-    "text":
-        "Some answers are carried by time because you are not ready to carry them yet.",
-    "tags": ["timing"],
-    "tone": "oracle",
-  },
-  {
     "text": "Let your soul recognize what your mind cannot organize.",
     "tags": ["awareness", "soul"],
     "tone": "clear",
@@ -2200,12 +2152,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "The mind wants the whole road; wisdom asks for one true step.",
     "tags": ["path", "awareness"],
     "tone": "clear",
-  },
-  {
-    "text":
-        "Some doors are not locked; they are waiting for you to arrive calmly.",
-    "tags": ["timing", "path", "destiny"],
-    "tone": "oracle",
   },
   {
     "text": "What softens you may also strengthen you.",
@@ -2313,11 +2259,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "calm",
   },
   {
-    "text": "What aligns with your soul does not need to humiliate your heart.",
-    "tags": ["heart", "soul"],
-    "tone": "gentle",
-  },
-  {
     "text": "The quiet life is not lesser.",
     "tags": ["silence"],
     "tone": "calm",
@@ -2331,12 +2272,6 @@ final List<Map<String, dynamic>> wisdoms = [
   {
     "text": "Let the unknown stay holy instead of hostile.",
     "tags": ["soul"],
-    "tone": "mystic",
-  },
-  {
-    "text":
-        "Your path may not be loud enough for the world, but it is loud enough for the soul.",
-    "tags": ["path", "soul"],
     "tone": "mystic",
   },
   {
@@ -2375,11 +2310,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "mystic",
   },
   {
-    "text": "Do not mistake the absence of noise for the absence of movement.",
-    "tags": ["oracle"],
-    "tone": "mystic",
-  },
-  {
     "text": "Some doors open inward.",
     "tags": ["path"],
     "tone": "mystic",
@@ -2398,16 +2328,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "Some patience is not waiting; it is becoming ready.",
     "tags": ["timing"],
     "tone": "oracle",
-  },
-  {
-    "text": "What is peaceful in you is wiser than what is panicked in you.",
-    "tags": ["oracle"],
-    "tone": "mystic",
-  },
-  {
-    "text": "Let the next chapter begin without proving the last one wrong.",
-    "tags": ["oracle"],
-    "tone": "mystic",
   },
   {
     "text": "The heart hears distance differently than fear does.",
@@ -2433,12 +2353,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "Do not fear the quiet after release.",
     "tags": ["silence", "release", "awareness"],
     "tone": "calm",
-  },
-  {
-    "text":
-        "Some answers appear when you stop making the question your prison.",
-    "tags": ["oracle"],
-    "tone": "mystic",
   },
   {
     "text": "Let the path surprise your expectations.",
@@ -2559,12 +2473,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "What feels calm after truth is guidance.",
     "tags": ["awareness"],
     "tone": "clear",
-  },
-  {
-    "text":
-        "The heart becomes lighter when it stops negotiating with illusion.",
-    "tags": ["heart", "awareness"],
-    "tone": "gentle",
   },
   {
     "text": "Some things must be blessed and released.",
@@ -3042,12 +2950,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "tone": "mystic",
   },
   {
-    "text":
-        "What belongs to your heart will not require violence against your spirit.",
-    "tags": ["heart", "soul", "destiny"],
-    "tone": "gentle",
-  },
-  {
     "text": "The quietest step may be the most faithful one.",
     "tags": ["silence", "path"],
     "tone": "calm",
@@ -3081,11 +2983,6 @@ final List<Map<String, dynamic>> wisdoms = [
     "text": "Let the answer breathe before you act.",
     "tags": ["silence"],
     "tone": "calm",
-  },
-  {
-    "text": "What is for you feels less like chasing and more like returning.",
-    "tags": ["destiny"],
-    "tone": "oracle",
   },
   {
     "text": "The heart can forgive without reopening every door.",
