@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/daily_access_snapshot.dart';
 import '../models/daily_wisdom_record.dart';
@@ -49,6 +50,7 @@ class DailyAccessRepository {
       _obsoleteKeyRemover;
   final Future<void> Function(SharedPreferences prefs, String key)?
       _pendingRevealRemover;
+  static const Uuid _uuid = Uuid();
 
   Future<DailyAccessSnapshot> snapshot({required DateTime now}) async {
     return _operationCoordinator.runRead<DailyAccessSnapshot>(
@@ -137,6 +139,22 @@ class DailyAccessRepository {
       operation: () async {
         await _preferencesAdapter.remove(dailyWisdomAccessKey);
       },
+    );
+  }
+
+  /// Build 25 upgrade path: gives the existing authoritative daily record a
+  /// stable [DailyWisdomRecord.revealId] if it does not already have one.
+  ///
+  /// Safe to call on every app launch: a no-op when there is no record, or
+  /// the record already has a revealId. Never regenerates an already
+  /// persisted revealId, never rewrites revealedAt/unlockAt/text, never
+  /// extends or resets the rolling 24-hour lock, and never invalidates the
+  /// previously valid Build 25 record on write or verification failure.
+  Future<void> backfillRevealIdIfNeeded() {
+    return _operationCoordinator.runMutation<void>(
+      resourceKey: resourceKey,
+      operationKey: 'backfill-revealId',
+      operation: _backfillRevealIdIfNeeded,
     );
   }
 
@@ -387,15 +405,67 @@ class DailyAccessRepository {
     required DateTime confirmedBoundary,
   }) async {
     final unlockAt = confirmedBoundary.add(DailyWisdomRecord.lockDuration);
+    // Sole authoritative commit point: a revealId is minted exactly once
+    // here, whether this call originates from an ordinary finalize or from
+    // recovery promoting a pending reveal. Every caller of this method
+    // already guards against re-entering it for an already-active record
+    // (see _isActive checks in _recoverIncompleteReveal/_finalizeVisualReveal),
+    // so this line can never regenerate an identity for a reveal that is
+    // already authoritative.
     final nextRecord = DailyWisdomRecord(
       text: pendingReveal.text,
       revealedAt: confirmedBoundary,
       unlockAt: unlockAt,
+      revealId: _generateRevealId(),
     );
 
     await _saveDailyWisdomRecord(nextRecord);
     _deferClearSpecificPendingBestEffort(pendingReveal.encode());
     return nextRecord;
+  }
+
+  String _generateRevealId() => _uuid.v4();
+
+  Future<void> _backfillRevealIdIfNeeded() async {
+    final record = await _loadRecordRecoveringCorruption();
+    if (record == null || record.revealId != null) {
+      // Nothing to backfill: no authoritative record yet, or a prior
+      // launch (or this same commit point above) already established one.
+      return;
+    }
+
+    final backfilled = record.copyWith(revealId: _generateRevealId());
+
+    try {
+      await _saveDailyWisdomRecord(backfilled);
+    } catch (_) {
+      // The previously valid Build 25 record was never touched by a failed
+      // write. Existing daily-access behavior remains usable; a later
+      // launch will retry this same backfill.
+      return;
+    }
+
+    final verified = await _loadRecordRecoveringCorruption();
+    final matches = verified != null &&
+        verified.revealId == backfilled.revealId &&
+        verified.text == record.text &&
+        verified.revealedAt.millisecondsSinceEpoch ==
+            record.revealedAt.millisecondsSinceEpoch &&
+        verified.unlockAt.millisecondsSinceEpoch ==
+            record.unlockAt.millisecondsSinceEpoch;
+
+    if (!matches) {
+      // Read-back verification failed: do not silently accept a possibly
+      // corrupted backfill. Best-effort restore of the original record so
+      // the previously valid Build 25 state is not left invalid; a later
+      // launch will retry the backfill from a clean read.
+      try {
+        await _saveDailyWisdomRecord(record);
+      } catch (_) {
+        // Best-effort only; a later launch retries again from whatever
+        // state is actually persisted.
+      }
+    }
   }
 
   Future<void> _saveDailyWisdomRecord(DailyWisdomRecord record) async {

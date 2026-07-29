@@ -432,6 +432,15 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadInitialState() async {
+    // Build 25 -> Build 26 upgrade: one-time reveal-identity backfill.
+    // Must complete (or fail nonfatally) before updateNextWisdomMessage or
+    // any other step below reads the authoritative daily record, so the
+    // rest of startup never observes a pre-backfill record.
+    try {
+      await dailyWisdomAccessService.backfillRevealIdIfNeeded();
+    } catch (_) {
+      // Existing Build 25 daily-access behavior remains usable.
+    }
     await loadFavorites();
     await loadKeeperStatus();
     await updateNextWisdomMessage();

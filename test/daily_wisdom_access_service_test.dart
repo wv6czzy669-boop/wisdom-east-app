@@ -415,6 +415,79 @@ void main() {
     );
   });
 
+  test('revealId absent decodes as a valid Build 25 record with null', () {
+    final decoded = DailyWisdomRecord.decode(
+      jsonEncode({
+        'text': 'No revealId wisdom',
+        'revealedAtMs': now.millisecondsSinceEpoch,
+        'unlockAtMs': now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+      }),
+    );
+
+    expect(decoded.revealId, isNull);
+    expect(decoded.text, 'No revealId wisdom');
+  });
+
+  test('valid canonical UUID v4 revealId round-trips', () {
+    const revealId = '123e4567-e89b-42d3-a456-426614174000';
+    final original = DailyWisdomRecord(
+      text: 'Round trip wisdom',
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+      revealId: revealId,
+    );
+
+    final decoded = DailyWisdomRecord.decode(original.encode());
+
+    expect(decoded.revealId, revealId);
+  });
+
+  test('malformed non-empty revealId is rejected', () {
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Malformed revealId wisdom',
+          'revealedAtMs': now.millisecondsSinceEpoch,
+          'unlockAtMs':
+              now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+          'revealId': 'not-a-uuid',
+        }),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('whitespace-padded revealId is rejected', () {
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Whitespace revealId wisdom',
+          'revealedAtMs': now.millisecondsSinceEpoch,
+          'unlockAtMs':
+              now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+          'revealId': ' 123e4567-e89b-42d3-a456-426614174000 ',
+        }),
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('a non-v4 UUID revealId is rejected', () {
+    expect(
+      () => DailyWisdomRecord.decode(
+        jsonEncode({
+          'text': 'Non-v4 revealId wisdom',
+          'revealedAtMs': now.millisecondsSinceEpoch,
+          'unlockAtMs':
+              now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+          // Version nibble '1' (a v1/time-based UUID shape) instead of '4'.
+          'revealId': '123e4567-e89b-12d3-a456-426614174000',
+        }),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('rolling daily access remains locked inside 24 hours', () async {
     var selections = 0;
     String select() => 'Shared wisdom ${++selections}';
@@ -1467,5 +1540,22 @@ void main() {
       persisted.unlockAt.millisecondsSinceEpoch,
       now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
     );
+  });
+
+  test('service delegates backfillRevealIdIfNeeded to the repository',
+      () async {
+    final legacyRecord = DailyWisdomRecord(
+      text: 'Service delegation wisdom',
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('daily_wisdom_access', legacyRecord.encode());
+
+    await service.backfillRevealIdIfNeeded();
+
+    final backfilled = await repository.loadDailyWisdomRecord();
+    expect(backfilled!.revealId, isNotNull);
+    expect(backfilled.text, 'Service delegation wisdom');
   });
 }

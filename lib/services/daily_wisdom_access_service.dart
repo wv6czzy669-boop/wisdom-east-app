@@ -116,6 +116,14 @@ class DailyWisdomAccessService {
     );
   }
 
+  /// Delegates to [DailyAccessRepository.backfillRevealIdIfNeeded]. Safe and
+  /// idempotent to call on every launch; callers should still guard the
+  /// call with their own error handling since it shares the underlying
+  /// corruption-recovery path, which is not guaranteed exception-free.
+  Future<void> backfillRevealIdIfNeeded() {
+    return _repository.backfillRevealIdIfNeeded();
+  }
+
   Future<DailyWisdomAccess?> recoverIncompleteReveal() async {
     final now = _clock();
     final record = await _repository.recoverIncompleteReveal(now: now);

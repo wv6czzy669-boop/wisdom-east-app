@@ -1751,6 +1751,46 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets(
+      'Home startup backfills a Build 25 record without changing text, '
+      'revealedAt, unlockAt, or the rolling lock', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    const wisdom = 'A Build 25 wisdom awaiting backfill on this launch.';
+    final legacyRecord = DailyWisdomRecord(
+      text: wisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    SharedPreferences.setMockInitialValues({
+      DailyAccessRepository.dailyWisdomAccessKey: legacyRecord.encode(),
+    });
+
+    await tester.pumpWidget(
+      _homeApp(dailyGraph: dailyGraph, clock: () => now),
+    );
+    await _finishOpeningIntro(tester);
+
+    final backfilled = await dailyGraph.repository.loadDailyWisdomRecord();
+
+    expect(backfilled, isNotNull);
+    expect(backfilled!.revealId, isNotNull);
+    expect(backfilled.text, legacyRecord.text);
+    expect(
+      backfilled.revealedAt.millisecondsSinceEpoch,
+      legacyRecord.revealedAt.millisecondsSinceEpoch,
+    );
+    expect(
+      backfilled.unlockAt.millisecondsSinceEpoch,
+      legacyRecord.unlockAt.millisecondsSinceEpoch,
+    );
+    expect(
+      backfilled.unlockAt.difference(backfilled.revealedAt),
+      DailyWisdomRecord.lockDuration,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('wisdom sharing is unavailable before a reveal', (tester) async {
     final shareService = _RecordingWisdomShareService();
 
@@ -1773,10 +1813,18 @@ void main() {
       (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
     const wisdom = 'The current wisdom remains unchanged.';
+    // A Build 26 record with a revealId already present, so startup's
+    // backfillRevealIdIfNeeded() is a no-op and the persisted JSON below
+    // cannot change out from under this test's exact-state assertion. A
+    // Build 25 record without revealId would be backfilled during
+    // loadInitialState(), which is correct product behavior but would race
+    // this test's own expectations rather than testing sharing.
+    const fixedRevealId = '123e4567-e89b-42d3-a456-426614174000';
     final record = DailyWisdomRecord(
       text: wisdom,
       revealedAt: now,
       unlockAt: now.add(const Duration(hours: 24)),
+      revealId: fixedRevealId,
     );
     SharedPreferences.setMockInitialValues({
       DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
