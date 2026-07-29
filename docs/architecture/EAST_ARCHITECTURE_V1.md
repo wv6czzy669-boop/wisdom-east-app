@@ -2647,3 +2647,21 @@ The backend may become sophisticated.
 The user must never feel that sophistication.
 
 That is the architecture.
+
+---
+
+# 33. Build 26 Addendum — iOS-Native Persistence Boundary
+
+**See ADR-007** (`docs/decisions/ADR-007-build-26-local-storage-and-icloud-sync.md`) for the full, authoritative decision.
+
+Build 26 introduces protected local storage and private Apple CloudKit synchronization for Kept wisdoms and Reflections, ahead of and independent from the Supabase/PostgreSQL platform described in Sections 1–32 above. This section exists only to state the boundary explicitly, so the two documents are never read as being in tension.
+
+Build 26's CloudKit decision:
+
+* does **not** introduce an EAST. account or login system, and does not alter Section 6's "accounts remain optional" posture;
+* does **not** replace or pre-empt the `reflections`, `kept_reflections`, or `user_wisdom_favorites` tables described in Section 8.2 — those remain the intended eventual model once the platform in Sections 1–12 is built; migrating CloudKit-synced content into that future platform is a deliberately separate, later decision;
+* does **not** sync the rolling 24-hour ritual lock (`daily_wisdom_access`) in any form — Section 5's local-first ritual principle is unaffected and the lock remains device-local only;
+* does **not** create cross-platform (Android or web) synchronization of any kind;
+* does **not** commit EAST. to CloudKit as the synchronization mechanism for any future platform, client, or data domain beyond this one iOS feature.
+
+Where this addendum and any earlier section could otherwise be read as implying that all reflection/favorite synchronization must run through the future backend, ADR-007 takes precedence for the specific, narrow scope of Kept wisdoms and Reflections on iOS until the platform described above exists and a deliberate migration decision is made.
