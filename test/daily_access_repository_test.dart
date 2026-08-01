@@ -1034,4 +1034,159 @@ void main() {
     expect(snapshot, isA<DailyAccessReady>());
     expect((snapshot as DailyAccessReady).pending, isNull);
   });
+
+  group('PreparedDailyAccess revealId/revealedAt propagation (Phase 3D-B)', () {
+    test('a genuinely fresh prepared reveal has null revealId/revealedAt',
+        () async {
+      final repository = createRepository();
+
+      final prepared = await repository.prepareReveal(
+        selectWisdom: () => 'Fresh wisdom',
+        preparedAt: now,
+        now: now,
+      );
+
+      expect(prepared.hasAuthoritativeRecord, isFalse);
+      expect(prepared.revealId, isNull);
+      expect(prepared.revealedAt, isNull);
+    });
+
+    test(
+        'preparing against an already-locked authoritative record carries '
+        'its revealId/revealedAt', () async {
+      final repository = createRepository();
+      final committed = await repository.finalizeVisualReveal(
+        text: (await repository.prepareReveal(
+          selectWisdom: () => 'Locked wisdom',
+          preparedAt: now,
+          now: now,
+        ))
+            .text,
+        revealBoundary: now,
+        now: now,
+      );
+      expect(committed.revealId, isNotNull);
+
+      final prepared = await repository.prepareReveal(
+        selectWisdom: () => 'Should not be selected',
+        preparedAt: now.add(const Duration(minutes: 1)),
+        now: now.add(const Duration(minutes: 1)),
+      );
+
+      expect(prepared.hasAuthoritativeRecord, isTrue);
+      expect(prepared.revealId, committed.revealId);
+      expect(
+        prepared.revealedAt!.millisecondsSinceEpoch,
+        committed.revealedAt.millisecondsSinceEpoch,
+      );
+    });
+
+    test(
+        'preparing against a locked record predating backfill carries a '
+        'null revealId but a non-null revealedAt', () async {
+      final repository = createRepository();
+      final legacyRecord = DailyWisdomRecord(
+        text: 'Pre-backfill wisdom',
+        revealedAt: now,
+        unlockAt: now.add(DailyWisdomRecord.lockDuration),
+      );
+      await repository.saveDailyWisdomRecord(legacyRecord);
+
+      final prepared = await repository.prepareReveal(
+        selectWisdom: () => 'Should not be selected',
+        preparedAt: now.add(const Duration(minutes: 1)),
+        now: now.add(const Duration(minutes: 1)),
+      );
+
+      expect(prepared.hasAuthoritativeRecord, isTrue);
+      expect(prepared.revealId, isNull);
+      expect(
+        prepared.revealedAt!.millisecondsSinceEpoch,
+        legacyRecord.revealedAt.millisecondsSinceEpoch,
+      );
+    });
+
+    test(
+        're-reading an already-locked record via prepareReveal mints no '
+        'additional UUID (the returned revealId is identical across '
+        'repeated calls)', () async {
+      final repository = createRepository();
+      final committed = await repository.finalizeVisualReveal(
+        text: (await repository.prepareReveal(
+          selectWisdom: () => 'Locked wisdom',
+          preparedAt: now,
+          now: now,
+        ))
+            .text,
+        revealBoundary: now,
+        now: now,
+      );
+
+      final first = await repository.prepareReveal(
+        selectWisdom: () => 'Should not be selected',
+        preparedAt: now.add(const Duration(minutes: 1)),
+        now: now.add(const Duration(minutes: 1)),
+      );
+      final second = await repository.prepareReveal(
+        selectWisdom: () => 'Should not be selected',
+        preparedAt: now.add(const Duration(minutes: 2)),
+        now: now.add(const Duration(minutes: 2)),
+      );
+
+      expect(first.revealId, committed.revealId);
+      expect(second.revealId, committed.revealId);
+    });
+
+    test(
+        'constructing a non-authoritative PreparedDailyAccess with a '
+        'non-null revealId throws', () {
+      expect(
+        () => PreparedDailyAccess(
+          text: 'x',
+          hasAuthoritativeRecord: false,
+          revealId: '3f2e1a4c-9b7d-4a6e-8c1f-0d2b5e7a9c11',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'constructing a non-authoritative PreparedDailyAccess with a '
+        'non-null revealedAt throws', () {
+      expect(
+        () => PreparedDailyAccess(
+          text: 'x',
+          hasAuthoritativeRecord: false,
+          revealedAt: now,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'constructing an authoritative PreparedDailyAccess with a null '
+        'revealedAt throws', () {
+      expect(
+        () => PreparedDailyAccess(
+          text: 'x',
+          hasAuthoritativeRecord: true,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+        'constructing an authoritative PreparedDailyAccess with a null '
+        'revealId but non-null revealedAt is valid (pre-backfill '
+        'compatibility)', () {
+      final prepared = PreparedDailyAccess(
+        text: 'x',
+        hasAuthoritativeRecord: true,
+        revealedAt: now,
+      );
+
+      expect(prepared.revealId, isNull);
+      expect(prepared.revealedAt, now);
+    });
+  });
 }

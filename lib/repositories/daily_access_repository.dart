@@ -227,6 +227,11 @@ class DailyAccessRepository {
           text: record.text,
           hasAuthoritativeRecord: true,
           unlockAt: record.unlockAt,
+          // Copied verbatim from the already-authoritative record — never
+          // generated here. `revealId` may still be null for an
+          // old, not-yet-backfilled Build 25 record.
+          revealId: record.revealId,
+          revealedAt: record.revealedAt,
         );
       case DailyAccessPendingCommit(:final pending):
         return PreparedDailyAccess(

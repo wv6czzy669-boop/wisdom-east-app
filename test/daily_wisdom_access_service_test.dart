@@ -1558,4 +1558,147 @@ void main() {
     expect(backfilled!.revealId, isNotNull);
     expect(backfilled.text, 'Service delegation wisdom');
   });
+
+  group('revealId/revealedAt propagation (Phase 3D-B)', () {
+    test('a new successful commit returns a non-null revealId/revealedAt',
+        () async {
+      final result = await service.reveal(
+        selectWisdom: () => 'Newly committed wisdom',
+      );
+
+      expect(result.revealId, isNotNull);
+      expect(result.revealedAt, isNotNull);
+      expect(
+        result.revealedAt!.millisecondsSinceEpoch,
+        now.millisecondsSinceEpoch,
+      );
+    });
+
+    test(
+        'rereading an already-locked reveal via reveal() returns the same '
+        'revealId/revealedAt without minting a new one', () async {
+      final first = await service.reveal(
+        selectWisdom: () => 'Locked wisdom',
+      );
+
+      now = now.add(const Duration(minutes: 1));
+      final second = await service.reveal(
+        selectWisdom: () => 'Should not be selected',
+      );
+
+      expect(second.revealId, first.revealId);
+      expect(
+        second.revealedAt!.millisecondsSinceEpoch,
+        first.revealedAt!.millisecondsSinceEpoch,
+      );
+    });
+
+    test(
+        'a recovery commit returns the promoted authoritative revealId/'
+        'revealedAt', () async {
+      // Simulate a crash after visual reveal was confirmed but before the
+      // daily record was committed: a revealedPendingCommit pending reveal
+      // exists, with no authoritative daily_wisdom_access record yet.
+      final boundary = now.add(const Duration(seconds: 5));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'pending_daily_wisdom_reveal',
+        PendingDailyWisdomReveal(
+          text: 'Recovering wisdom',
+          preparedAt: now,
+          confirmedRevealBoundary: boundary,
+          phase: PendingDailyWisdomRevealPhase.revealedPendingCommit,
+        ).encode(),
+      );
+
+      now = boundary.add(const Duration(minutes: 1));
+      final recoveredAccess = await service.recoverIncompleteReveal();
+
+      expect(recoveredAccess, isNotNull);
+      expect(recoveredAccess!.revealId, isNotNull);
+      expect(
+        recoveredAccess.revealedAt!.millisecondsSinceEpoch,
+        boundary.millisecondsSinceEpoch,
+      );
+
+      final persisted = await repository.loadDailyWisdomRecord();
+      expect(persisted!.revealId, recoveredAccess.revealId);
+    });
+
+    test('a locked status carries the authoritative revealId/revealedAt',
+        () async {
+      final committed = await service.reveal(
+        selectWisdom: () => 'Status wisdom',
+      );
+
+      now = now.add(const Duration(hours: 1));
+      final status = await service.status();
+
+      expect(status.isReady, isFalse);
+      expect(status.revealId, committed.revealId);
+      expect(
+        status.revealedAt!.millisecondsSinceEpoch,
+        committed.revealedAt!.millisecondsSinceEpoch,
+      );
+    });
+
+    test('a ready status carries neither revealId nor revealedAt', () async {
+      final status = await service.status();
+
+      expect(status.isReady, isTrue);
+      expect(status.revealId, isNull);
+      expect(status.revealedAt, isNull);
+    });
+
+    test(
+        'a fresh prepared reveal (DailyWisdomPreparedReveal) has null '
+        'revealId/revealedAt', () async {
+      final prepared = await service.prepareReveal(
+        selectWisdom: () => 'Fresh prepared wisdom',
+      );
+
+      expect(prepared.hasAuthoritativeRecord, isFalse);
+      expect(prepared.revealId, isNull);
+      expect(prepared.revealedAt, isNull);
+    });
+
+    test(
+        'preparing against an already-authoritative record carries its '
+        'revealId/revealedAt through DailyWisdomPreparedReveal', () async {
+      final committed = await service.reveal(
+        selectWisdom: () => 'Authoritative wisdom',
+      );
+
+      now = now.add(const Duration(minutes: 1));
+      final prepared = await service.prepareReveal(
+        selectWisdom: () => 'Should not be selected',
+      );
+
+      expect(prepared.hasAuthoritativeRecord, isTrue);
+      expect(prepared.revealId, committed.revealId);
+      expect(
+        prepared.revealedAt!.millisecondsSinceEpoch,
+        committed.revealedAt!.millisecondsSinceEpoch,
+      );
+    });
+
+    test(
+        'an existing pre-Build-26 authoritative record without a revealId '
+        'is preserved (not fabricated) through status()', () async {
+      final legacyRecord = DailyWisdomRecord(
+        text: 'Pre-Build-26 wisdom',
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('daily_wisdom_access', legacyRecord.encode());
+
+      now = now.add(const Duration(hours: 1));
+      final status = await service.status();
+
+      expect(status.isReady, isFalse);
+      expect(status.revealId, isNull);
+      expect(status.revealedAt, isNotNull);
+    });
+  });
 }

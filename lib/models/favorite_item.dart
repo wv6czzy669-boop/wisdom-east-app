@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../utils/canonical_uuid.dart';
+
 class FavoriteItem {
   final String id;
   final String text;
@@ -7,12 +9,27 @@ class FavoriteItem {
   final String? reflection;
   final String? reflectedAt;
 
+  /// Compatibility identity linking this Kept entry back to the Build 26
+  /// reveal occurrence it came from. Always a canonical UUID: version 4 for
+  /// a genuine Build 26 reveal, version 5 for a deterministic identity
+  /// reconstructed during Build 25 legacy migration (see
+  /// `KeptMigrationCoordinator`/`KeptRecord.revealId`).
+  ///
+  /// Always `null` for data that predates this field (every existing Build
+  /// 25 current-schema entry, and every legacy pipe-format entry) — this is
+  /// expected, safe, and never backfilled or fabricated here. `FavoriteItem`
+  /// remains the Build 25-compatible display/storage shape; it is not
+  /// itself the authoritative Kept record (see `KeptRecord`, which always
+  /// requires a non-null `revealId`).
+  final String? revealId;
+
   const FavoriteItem({
     required this.id,
     required this.text,
     required this.date,
     this.reflection,
     this.reflectedAt,
+    this.revealId,
   });
 
   static const int currentSchemaVersion = 2;
@@ -25,6 +42,7 @@ class FavoriteItem {
     String? date,
     String? reflection,
     String? reflectedAt,
+    String? revealId,
     bool clearReflection = false,
   }) {
     return FavoriteItem(
@@ -33,6 +51,11 @@ class FavoriteItem {
       date: date ?? this.date,
       reflection: clearReflection ? null : reflection ?? this.reflection,
       reflectedAt: clearReflection ? null : reflectedAt ?? this.reflectedAt,
+      // Preserved automatically whenever a caller does not explicitly pass
+      // a new value — in particular, every reflection-only edit (add/edit/
+      // delete reflection, which never passes `revealId`) leaves this
+      // identity untouched.
+      revealId: revealId ?? this.revealId,
     );
   }
 
@@ -44,6 +67,7 @@ class FavoriteItem {
       'text': text,
       if (reflection != null) 'reflection': reflection,
       if (reflectedAt != null) 'reflectedAt': reflectedAt,
+      if (revealId != null) 'revealId': revealId,
     });
   }
 
@@ -80,6 +104,18 @@ class FavoriteItem {
       throw const FormatException('Invalid reflection timestamp.');
     }
 
+    // Absent (key missing, or explicit JSON null) is always valid and
+    // decodes to `null` — this field postdates every Build 25 record, and
+    // that data must keep decoding exactly as before this field existed.
+    // When present, it must be a well-formed, canonical UUID v4/v5 — never
+    // silently trimmed or rewritten into shape.
+    final rawRevealId = decoded['revealId'];
+    if (rawRevealId != null &&
+        (rawRevealId is! String || !isCanonicalUuidV4OrV5(rawRevealId))) {
+      throw const FormatException('Invalid saved reflection revealId.');
+    }
+    final revealId = rawRevealId as String?;
+
     final id = switch (storedId) {
       final String value => value,
       null when fallbackId != null => fallbackId,
@@ -103,6 +139,7 @@ class FavoriteItem {
       text: text,
       reflection: normalizedReflection,
       reflectedAt: normalizedReflection == null ? null : normalizedReflectedAt,
+      revealId: revealId,
     );
   }
 

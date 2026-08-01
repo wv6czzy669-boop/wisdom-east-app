@@ -1,15 +1,6 @@
 import 'dart:convert';
 
-/// Canonical RFC 4122 UUID shape, restricted to the two versions Build 26
-/// actually produces: version 4 (`Uuid().v4()`, minted for every native
-/// Build 26 reveal/mutation) and version 5 (deterministic, namespace-derived
-/// identities produced only during Build 25 legacy migration). Any other
-/// version, an invalid variant nibble, braces, surrounding whitespace,
-/// missing hyphens, or any other malformed shape is rejected.
-final RegExp _canonicalUuidV4OrV5Pattern = RegExp(
-  r'^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-  caseSensitive: false,
-);
+import '../utils/canonical_uuid.dart';
 
 /// An active, user-visible Kept wisdom (and its optional Reflection).
 ///
@@ -260,7 +251,7 @@ class KeptRecord {
   }
 
   static bool _isCanonicalUuidV4OrV5(String value) {
-    return _canonicalUuidV4OrV5Pattern.hasMatch(value);
+    return isCanonicalUuidV4OrV5(value);
   }
 
   static String _readString(Map<String, dynamic> data, String key) {

@@ -13,11 +13,25 @@ class DailyWisdomAccess {
     required this.text,
     required this.isNew,
     this.unlockAt,
+    this.revealId,
+    this.revealedAt,
   });
 
   final String text;
   final bool isNew;
   final DateTime? unlockAt;
+
+  /// The authoritative reveal's identity, copied verbatim from the
+  /// [DailyWisdomRecord] this access came from — never minted here. Every
+  /// newly committed Build 26 reveal carries a non-null value; this remains
+  /// nullable only for safe compatibility with an old authoritative record
+  /// whose best-effort `revealId` backfill has not (yet) succeeded.
+  final String? revealId;
+
+  /// When the authoritative reveal actually happened, copied verbatim from
+  /// the same [DailyWisdomRecord]. Nullable for the same compatibility
+  /// reason as [revealId].
+  final DateTime? revealedAt;
 }
 
 class DailyWisdomStatus {
@@ -26,12 +40,24 @@ class DailyWisdomStatus {
     this.unlockAt,
     this.remaining,
     this.lockedText,
+    this.revealId,
+    this.revealedAt,
   });
 
   final bool isReady;
   final DateTime? unlockAt;
   final Duration? remaining;
   final String? lockedText;
+
+  /// The authoritative reveal's identity, populated only when this status
+  /// reflects a real, currently-locked [DailyWisdomRecord] — copied
+  /// verbatim, never fabricated. `null` for a ready status, and `null` for
+  /// a locked status whose record predates backfill.
+  final String? revealId;
+
+  /// When the authoritative reveal actually happened, populated under the
+  /// same rule as [revealId].
+  final DateTime? revealedAt;
 }
 
 class DailyWisdomPreparedReveal {
@@ -41,6 +67,8 @@ class DailyWisdomPreparedReveal {
     this.unlockAt,
     this.confirmedRevealBoundary,
     this.phase = PendingDailyWisdomRevealPhase.prepared,
+    this.revealId,
+    this.revealedAt,
   });
 
   final String text;
@@ -48,6 +76,14 @@ class DailyWisdomPreparedReveal {
   final DateTime? unlockAt;
   final DateTime? confirmedRevealBoundary;
   final PendingDailyWisdomRevealPhase phase;
+
+  /// Passed through verbatim from [PreparedDailyAccess.revealId] — never
+  /// generated here. `null` for a genuinely fresh pre-commit prepared
+  /// reveal.
+  final String? revealId;
+
+  /// Passed through verbatim from [PreparedDailyAccess.revealedAt].
+  final DateTime? revealedAt;
 }
 
 class DailyWisdomStatusUnavailableException implements Exception {
@@ -89,6 +125,8 @@ class DailyWisdomAccessService {
         text: prepared.text,
         isNew: false,
         unlockAt: prepared.unlockAt,
+        revealId: prepared.revealId,
+        revealedAt: prepared.revealedAt,
       );
     }
 
@@ -113,6 +151,8 @@ class DailyWisdomAccessService {
       unlockAt: prepared.unlockAt,
       confirmedRevealBoundary: prepared.confirmedRevealBoundary,
       phase: prepared.phase,
+      revealId: prepared.revealId,
+      revealedAt: prepared.revealedAt,
     );
   }
 
@@ -135,6 +175,8 @@ class DailyWisdomAccessService {
       text: record.text,
       isNew: _isSameMoment(record.revealedAt, now),
       unlockAt: record.unlockAt,
+      revealId: record.revealId,
+      revealedAt: record.revealedAt,
     );
   }
 
@@ -152,6 +194,8 @@ class DailyWisdomAccessService {
       isNew: record.text == text &&
           _isSameMoment(record.revealedAt, revealBoundary),
       unlockAt: record.unlockAt,
+      revealId: record.revealId,
+      revealedAt: record.revealedAt,
     );
   }
 
@@ -201,6 +245,8 @@ class DailyWisdomAccessService {
           isReady: true,
           unlockAt: record.unlockAt,
           remaining: Duration.zero,
+          revealId: record.revealId,
+          revealedAt: record.revealedAt,
         );
       }
 
@@ -209,6 +255,8 @@ class DailyWisdomAccessService {
         unlockAt: record.unlockAt,
         remaining: record.unlockAt.difference(now),
         lockedText: record.text,
+        revealId: record.revealId,
+        revealedAt: record.revealedAt,
       );
     } on TimeoutException catch (error) {
       throw DailyWisdomStatusUnavailableException(error);

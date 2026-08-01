@@ -24,17 +24,64 @@ final class DailyAccessPendingCommit extends DailyAccessSnapshot {
 }
 
 final class PreparedDailyAccess {
-  const PreparedDailyAccess({
+  PreparedDailyAccess({
     required this.text,
     required this.hasAuthoritativeRecord,
     this.unlockAt,
     this.confirmedRevealBoundary,
     this.phase = PendingDailyWisdomRevealPhase.prepared,
-  });
+    this.revealId,
+    this.revealedAt,
+  }) {
+    _validate(
+      hasAuthoritativeRecord: hasAuthoritativeRecord,
+      revealId: revealId,
+      revealedAt: revealedAt,
+    );
+  }
 
   final String text;
   final bool hasAuthoritativeRecord;
   final DateTime? unlockAt;
   final DateTime? confirmedRevealBoundary;
   final PendingDailyWisdomRevealPhase phase;
+
+  /// Identity of the authoritative reveal this prepared access refers to.
+  /// Truthfully copied from an existing authoritative [DailyWisdomRecord]
+  /// only — never minted here. Always `null` when [hasAuthoritativeRecord]
+  /// is false (a genuinely fresh, pre-commit prepared reveal never has one
+  /// yet). May still be `null` even when [hasAuthoritativeRecord] is true,
+  /// for an old Build 25 authoritative record whose one-time `revealId`
+  /// backfill has not (yet) completed.
+  final String? revealId;
+
+  /// When the authoritative reveal actually happened. Always populated
+  /// when [hasAuthoritativeRecord] is true (every authoritative
+  /// [DailyWisdomRecord] carries a non-null `revealedAt`); always `null`
+  /// otherwise.
+  final DateTime? revealedAt;
+
+  static void _validate({
+    required bool hasAuthoritativeRecord,
+    required String? revealId,
+    required DateTime? revealedAt,
+  }) {
+    if (!hasAuthoritativeRecord) {
+      if (revealId != null || revealedAt != null) {
+        throw ArgumentError(
+          'A non-authoritative PreparedDailyAccess cannot carry a revealId '
+          'or revealedAt: neither value may exist before an authoritative '
+          'commit.',
+        );
+      }
+      return;
+    }
+
+    if (revealedAt == null) {
+      throw ArgumentError(
+        "An authoritative PreparedDailyAccess must carry the record's "
+        'revealedAt.',
+      );
+    }
+  }
 }
