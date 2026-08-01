@@ -1086,6 +1086,314 @@ void main() {
       );
     });
   });
+
+  // Every fixture above this group predates the FavoriteItem.date hotfix and
+  // deliberately uses ISO-8601 `date` values, either to test ISO
+  // compatibility specifically or because it was written before the real
+  // production date shape was identified — those are left exactly as they
+  // are (see the correction report accompanying this change). This group
+  // adds the real Build 25 production shape: an English "MMMM d, yyyy"
+  // display string, exactly what `formattedToday()` /
+  // `HomeScreen.toggleFavorite` actually write. Before the hotfix, every one
+  // of these entries would have failed `DateTime.parse` and been classified
+  // as a convert-stage corrupt entry instead of migrating as active Kept
+  // wisdom.
+  group('real Build 25 production display-date migration', () {
+    test(
+        '14. a current-schema FavoriteItem with the real production '
+        'display-date shape migrates to one active KeptRecord', () async {
+      final item = FavoriteItem(
+        id: 'display-date-1',
+        date: 'August 1, 2026',
+        text: 'A real Kept wisdom.',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 1);
+      expect(result.corruptCount, 0);
+      final record = keptStateStore.envelope!.activeRecords.single;
+      expect(record.id, 'display-date-1');
+      expect(record.wisdomText, 'A real Kept wisdom.');
+      expect(record.revealedAt, DateTime.utc(2026, 8, 1, 12));
+      expect(record.keptAt, DateTime.utc(2026, 8, 1, 12));
+    });
+
+    test(
+        '15. a legacy pipe entry with the real production display-date '
+        'shape migrates to one active KeptRecord', () async {
+      legacy.entries = ['June 20, 2026|||A legacy pipe-format wisdom.'];
+      final coordinator = buildCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 1);
+      expect(result.corruptCount, 0);
+      final record = keptStateStore.envelope!.activeRecords.single;
+      expect(record.wisdomText, 'A legacy pipe-format wisdom.');
+      expect(record.revealedAt, DateTime.utc(2026, 6, 20, 12));
+    });
+
+    test('16. a real display-date entry is not added to the recovery artifact',
+        () async {
+      final item = FavoriteItem(
+        id: 'no-recovery-1',
+        date: 'December 31, 2025',
+        text: 'Should migrate cleanly.',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      expect(journalStore.journal!.recoveryFileName, isNull);
+      expect(artifactStore.recoveryArtifacts, isEmpty);
+    });
+
+    test(
+        '17. a display-date record with a reflection preserves '
+        'reflectionText, reflectedAt, and the existing updatedAt rule',
+        () async {
+      final item = FavoriteItem(
+        id: 'reflected-1',
+        date: 'August 1, 2026',
+        text: 'Reflected wisdom.',
+        reflection: 'What stayed with me.',
+        reflectedAt: '2026-08-02T10:00:00.000Z',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      final record = keptStateStore.envelope!.activeRecords.single;
+      expect(record.reflectionText, 'What stayed with me.');
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 2, 10));
+      // reflectedAt (Aug 2, 10:00 UTC) is after keptAt (Aug 1, 12:00 UTC
+      // noon), so updatedAt must equal reflectedAt per the existing,
+      // unchanged rule in _convertToKeptRecord.
+      expect(record.updatedAt, DateTime.utc(2026, 8, 2, 10));
+    });
+
+    test('18. multiple real display-date records preserve original order',
+        () async {
+      final items = [
+        FavoriteItem(id: 'a', date: 'January 1, 2026', text: 'A'),
+        FavoriteItem(id: 'b', date: 'February 2, 2026', text: 'B'),
+        FavoriteItem(id: 'c', date: 'March 3, 2026', text: 'C'),
+      ];
+      legacy.entries = items.map((i) => i.encode()).toList();
+      final coordinator = buildCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      expect(
+        keptStateStore.envelope!.activeRecords.map((r) => r.id).toList(),
+        ['a', 'b', 'c'],
+      );
+    });
+
+    test('19. mixed real display-date and ISO-date records both migrate',
+        () async {
+      final displayItem = FavoriteItem(
+        id: 'display-1',
+        date: 'May 5, 2026',
+        text: 'Display-dated.',
+      );
+      final isoItem = FavoriteItem(
+        id: 'iso-1',
+        date: '2026-01-01T09:00:00.000Z',
+        text: 'ISO-dated.',
+      );
+      legacy.entries = [displayItem.encode(), isoItem.encode()];
+      final coordinator = buildCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 2);
+      expect(result.corruptCount, 0);
+      final records = keptStateStore.envelope!.activeRecords;
+      expect(records[0].revealedAt, DateTime.utc(2026, 5, 5, 12));
+      expect(records[1].revealedAt, DateTime.utc(2026, 1, 1, 9));
+    });
+
+    test(
+        '20. a malformed date remains an ordinary corrupt entry, preserved '
+        'exactly in the protected recovery artifact', () async {
+      final malformed = FavoriteItem(
+        id: 'bad-date-1',
+        date: 'Blorptober 40, 2026',
+        text: 'Has an impossible date.',
+      );
+      legacy.entries = [malformed.encode()];
+      final coordinator = buildCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 0);
+      expect(result.corruptCount, 1);
+      final artifact = artifactStore.recoveryArtifacts[recoveryFileName()]!;
+      expect(artifact.corruptEntries.single.rawValue, malformed.encode());
+      expect(
+        artifact.corruptEntries.single.stage,
+        KeptMigrationFailureStage.convert,
+      );
+      expect(
+        artifact.corruptEntries.single.reasonCode,
+        'kept_record_validation_failed',
+      );
+    });
+
+    test(
+        '21. a migration containing only valid real display dates has no '
+        'corrupt entries and produces a non-empty active envelope', () async {
+      final items = [
+        FavoriteItem(id: 'x', date: 'July 4, 2026', text: 'X'),
+        FavoriteItem(id: 'y', date: 'September 9, 2026', text: 'Y'),
+      ];
+      legacy.entries = items.map((i) => i.encode()).toList();
+      final coordinator = buildCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      expect(journalStore.journal!.legacyEntryCount, 2);
+      expect(journalStore.journal!.usableEntryCount, 2);
+      expect(journalStore.journal!.corruptEntryCount, 0);
+      expect(journalStore.journal!.recoveryFileName, isNull);
+      expect(keptStateStore.envelope!.activeRecords, isNotEmpty);
+      expect(keptStateStore.envelope!.activeRecords, hasLength(2));
+    });
+
+    test('22. a successful real display-date migration reaches complete',
+        () async {
+      final item = FavoriteItem(id: 'z', date: 'October 10, 2026', text: 'Z');
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      expect(journalStore.journal!.state, KeptMigrationState.complete);
+    });
+
+    test(
+        '23. the legacy favorites key is removed only after the active '
+        'envelope containing real display-date records is verified', () async {
+      final item = FavoriteItem(id: 'w', date: 'November 11, 2026', text: 'W');
+      legacy.entries = [item.encode()];
+      keptStateStore.replaceShouldFail = true;
+      final coordinator = buildCoordinator();
+
+      await expectLater(
+        coordinator.migrateIfNeeded(),
+        throwsA(isA<KeptMigrationException>()),
+      );
+      // Envelope replace failed, so verified was never reached: the legacy
+      // key must still be present and removeAndVerify must never have been
+      // called.
+      expect(legacy.entries, isNotNull);
+      expect(legacy.removeCallCount, 0);
+
+      keptStateStore.replaceShouldFail = false;
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(legacy.entries, isNull);
+      expect(legacy.removeCallCount, 1);
+    });
+
+    test(
+        '24. retry from writing using the frozen snapshot reconstructs the '
+        'identical UTC-noon envelope for a real display-date record', () async {
+      final item = FavoriteItem(
+        id: 'retry-date-1',
+        date: 'April 4, 2026',
+        text: 'Retry me.',
+      );
+      legacy.entries = [item.encode()];
+      keptStateStore.replaceShouldFail = true;
+      final coordinator = buildCoordinator();
+
+      await expectLater(
+        coordinator.migrateIfNeeded(),
+        throwsA(isA<KeptMigrationException>()),
+      );
+      keptStateStore.replaceShouldFail = false;
+
+      // SharedPreferences changes underneath the migration after the
+      // snapshot was already frozen.
+      legacy.entries = ['December 12, 2026|||Changed after snapshot.'];
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      final record = keptStateStore.envelope!.activeRecords.single;
+      expect(record.id, 'retry-date-1');
+      expect(record.revealedAt, DateTime.utc(2026, 4, 4, 12));
+    });
+
+    test(
+        '25. complete-state re-verification succeeds for a real '
+        'display-date migration', () async {
+      final item = FavoriteItem(
+        id: 'verify-1',
+        date: 'May 15, 2026',
+        text: 'Verify me.',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+      await coordinator.migrateIfNeeded();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      expect(result.migratedCount, 1);
+    });
+
+    test(
+        '26. complete-state re-verification detects a changed parsed '
+        'timestamp', () async {
+      final item = FavoriteItem(
+        id: 'tamper-1',
+        date: 'June 6, 2026',
+        text: 'Tamper me.',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+      await coordinator.migrateIfNeeded();
+
+      final original = keptStateStore.envelope!.activeRecords.single;
+      keptStateStore.envelope = KeptStateEnvelope(
+        activeRecords: [
+          KeptRecord(
+            id: original.id,
+            revealId: original.revealId,
+            wisdomText: original.wisdomText,
+            // Tampered: a different revealedAt/keptAt than what re-parsing
+            // "June 6, 2026" via the frozen snapshot would reproduce.
+            // updatedAt is shifted by the same amount so it never falls
+            // before the tampered keptAt (KeptRecord's own invariant) —
+            // the point being verified is the mismatched revealedAt/keptAt,
+            // not an unrelated updatedAt-before-keptAt violation.
+            revealedAt: original.revealedAt.add(const Duration(days: 1)),
+            keptAt: original.revealedAt.add(const Duration(days: 1)),
+            updatedAt: original.updatedAt.add(const Duration(days: 1)),
+            mutationId: original.mutationId,
+          ),
+        ],
+      );
+
+      await expectLater(
+        coordinator.migrateIfNeeded(),
+        throwsA(isA<KeptMigrationException>()),
+      );
+    });
+  });
 }
 
 /// Thin journal-store wrapper that fails only on the Nth call to [save],

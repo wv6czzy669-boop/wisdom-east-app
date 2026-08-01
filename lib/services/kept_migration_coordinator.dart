@@ -12,6 +12,7 @@ import '../persistence/kept_state_store.dart';
 import '../persistence/legacy_favorites_store.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/stored_favorite_entry_codec.dart';
+import '../utils/favorite_date_codec.dart';
 
 /// Thrown by [KeptMigrationCoordinator.migrateIfNeeded] on any failure.
 /// Never carries wisdom text, reflection text, or raw legacy values —
@@ -759,7 +760,14 @@ final class KeptMigrationCoordinator {
   /// [KeptRecord]. May throw (date parsing, or [KeptRecord]'s own field
   /// validation) — callers treat that as a `convert`-stage corrupt entry.
   KeptRecord _convertToKeptRecord(FavoriteItem item) {
-    final revealedAt = DateTime.parse(item.date).toUtc();
+    // FavoriteItem.date is an opaque display string. The real production
+    // writer (HomeScreen.toggleFavorite -> formattedToday()) produces an
+    // English "MMMM d, yyyy" display value (e.g. "August 1, 2026"), which
+    // bare DateTime.parse cannot read; FavoriteDateCodec handles both that
+    // shape and existing ISO-8601 fixtures/data. A failure here is caught by
+    // _rebuildFromSnapshot's existing try/catch and classified as an
+    // ordinary convert-stage corrupt entry, unchanged from before this fix.
+    final revealedAt = FavoriteDateCodec.parseFavoriteDateToUtc(item.date);
     final keptAt = revealedAt;
 
     DateTime? reflectedAt;
