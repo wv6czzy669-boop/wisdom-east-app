@@ -1,6 +1,7 @@
 import '../models/favorite_item.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/storage_preferences_adapter.dart';
+import '../persistence/stored_favorite_entry_codec.dart';
 
 class SavedReflectionsResult {
   const SavedReflectionsResult({
@@ -243,7 +244,7 @@ class SavedReflectionsService {
 
     for (var index = 0; index < saved.length; index += 1) {
       final raw = saved[index];
-      final decoded = _decodeEntry(raw, index: index);
+      final decoded = StoredFavoriteEntryCodec.decode(raw, index: index);
       if (decoded == null) {
         shouldPersistMigrated = true;
         continue;
@@ -281,43 +282,6 @@ class SavedReflectionsService {
     }
   }
 
-  _DecodedSavedReflection? _decodeEntry(String raw, {required int index}) {
-    try {
-      if (FavoriteItem.looksLikeCurrentSchema(raw)) {
-        return _decodeCurrentEntry(raw, index: index);
-      }
-
-      final item = FavoriteItem.decodeLegacy(
-        raw,
-        id: _legacyIdFor(raw: raw, index: index),
-      );
-      return _DecodedSavedReflection(
-        item: item,
-        requiresMigration: true,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  _DecodedSavedReflection? _decodeCurrentEntry(
-    String raw, {
-    required int index,
-  }) {
-    try {
-      final item = FavoriteItem.decodeCurrent(
-        raw,
-        fallbackId: _legacyIdFor(raw: raw, index: index),
-      );
-      return _DecodedSavedReflection(
-        item: item,
-        requiresMigration: item.encode() != raw,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _persist(List<FavoriteItem> items) async {
     try {
       await _preferencesAdapter.setStringList(
@@ -335,36 +299,10 @@ class SavedReflectionsService {
     return 'sr-v1-$now-$serial';
   }
 
-  String _legacyIdFor({
-    required String raw,
-    required int index,
-  }) {
-    return 'legacy-v1-$index-${_stableHash(raw)}';
-  }
-
   String _duplicateIdFor({
     required FavoriteItem item,
     required int index,
   }) {
-    return 'duplicate-v1-$index-${_stableHash(item.encode())}';
+    return 'duplicate-v1-$index-${StoredFavoriteEntryCodec.stableHashFor(item.encode())}';
   }
-
-  String _stableHash(String value) {
-    var hash = 0x811c9dc5;
-    for (final unit in value.codeUnits) {
-      hash ^= unit;
-      hash = (hash * 0x01000193) & 0xffffffff;
-    }
-    return hash.toRadixString(16).padLeft(8, '0');
-  }
-}
-
-class _DecodedSavedReflection {
-  const _DecodedSavedReflection({
-    required this.item,
-    required this.requiresMigration,
-  });
-
-  final FavoriteItem item;
-  final bool requiresMigration;
 }
