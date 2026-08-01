@@ -7,11 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wisdom_app/app.dart';
 import 'package:wisdom_app/data/objects_catalog.dart';
-import 'package:wisdom_app/models/favorite_item.dart';
+import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
+
+import 'persistence_test_helpers.dart';
 
 void main() {
   setUp(() {
@@ -20,7 +22,19 @@ void main() {
   });
 
   testWidgets('application and settings use EAST. branding', (tester) async {
-    await tester.pumpWidget(const WisdomApp());
+    // Correction: `WisdomApp` mounts a real `HomeScreen`, whose `initState`
+    // falls through to `app_services.savedReflectionsService` (a `late
+    // final` production global only ever populated by production's own
+    // `initializeKeptStorage()`, which this isolated widget test never
+    // runs) whenever no `savedReflectionsService` is supplied. A fresh,
+    // isolated `KeptRepositoryTestGraph` (in-memory store only — no
+    // Application Support directory, no native file-protection channel, no
+    // production global touched, no bootstrap call) is threaded through
+    // `WisdomApp`'s own test-only injection seam instead.
+    final keptGraph = KeptRepositoryTestGraph();
+    await tester.pumpWidget(
+      WisdomApp(savedReflectionsService: keptGraph.service),
+    );
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.title, 'Daily Wisdom: EAST.');
@@ -276,16 +290,34 @@ void main() {
   });
 
   testWidgets('Kept displays the full stored date with year', (tester) async {
-    const storedDate = 'June 21, 2026';
-    final reflection = FavoriteItem(
-      id: 'kept-year-test',
-      text: 'A quiet reflection.',
-      date: storedDate,
-    );
+    // Correction: seeds a real protected Kept occurrence (canonical UUID v4
+    // identity, never a text/date-derived identity) through an isolated
+    // `KeptRepositoryTestGraph` — in-memory only, no SharedPreferences, no
+    // Application Support directory, no native file protection — then
+    // loads it exactly the way `HomeScreen` itself does before pushing
+    // this screen (`reflections: List<FavoriteItem>.from(favorites)` +
+    // `savedReflectionsService: savedReflectionsService`), so the screen
+    // never falls through to the uninitialized production
+    // `app_services.savedReflectionsService`.
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        KeptRecord(
+          id: 'kept-year-test',
+          revealId: 'a5f3c111-1111-4111-8111-111111111111',
+          wisdomText: 'A quiet reflection.',
+          revealedAt: DateTime(2026, 6, 21, 12),
+          keptAt: DateTime(2026, 6, 21, 12),
+          updatedAt: DateTime(2026, 6, 21, 12),
+          mutationId: 'a5f3c111-2222-4222-8222-222222222222',
+        ),
+      ]);
+    final reflections = await keptGraph.service.load();
+
     await tester.pumpWidget(
       MaterialApp(
         home: SavedReflectionsScreen(
-          reflections: [reflection],
+          reflections: reflections,
+          savedReflectionsService: keptGraph.service,
         ),
       ),
     );
@@ -293,13 +325,23 @@ void main() {
     expect(find.text('JUNE 21, 2026'), findsOneWidget);
     final displayedDate = tester.widget<Text>(find.text('JUNE 21, 2026'));
     expect(displayedDate.style?.color, eastMutedTextColor);
-    expect(reflection.date, storedDate);
+    // The repository's own `keptAt`-derived display date — never a
+    // text/date value fabricated by the test.
+    expect(reflections.single.date, 'June 21, 2026');
   });
 
   testWidgets('Kept screen uses the quiet empty state', (tester) async {
+    // Correction: an isolated, empty `KeptRepositoryTestGraph` supplies the
+    // service so this screen never falls through to the uninitialized
+    // production `app_services.savedReflectionsService`. No production
+    // state is fabricated and no bootstrap is called.
+    final keptGraph = KeptRepositoryTestGraph();
     await tester.pumpWidget(
-      const MaterialApp(
-        home: SavedReflectionsScreen(reflections: []),
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: const [],
+          savedReflectionsService: keptGraph.service,
+        ),
       ),
     );
 

@@ -1,972 +1,594 @@
-import 'dart:convert';
-
+// Build 26 Phase 3D-C production cutover: `SavedReflectionsService` is now a
+// thin, additive-free delegation layer over `KeptRepository` — it no longer
+// touches SharedPreferences, the legacy `favorites` key, or migration
+// directly, and holds no storage state of its own. This suite therefore no
+// longer re-verifies `KeptRepository`'s own migration/limit/duplicate/
+// concurrency rules (those remain covered exhaustively by
+// `test/kept_repository_test.dart`); it verifies only that this thin layer
+// delegates correctly and maps `KeptRepository`'s result/exception shapes
+// into `SavedReflectionsResult`/`RemovedSavedReflection` faithfully.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wisdom_app/models/favorite_item.dart';
+import 'package:wisdom_app/models/kept_bootstrap_result.dart';
 import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
-import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
+import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 
+import 'persistence_test_helpers.dart';
+
 void main() {
+  late KeptRepositoryTestGraph graph;
   late SavedReflectionsService service;
 
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
-    service = SavedReflectionsService();
-  });
-
-  test('empty storage loads empty', () async {
-    expect(await service.load(), isEmpty);
-  });
-
-  test('one valid current record round-trips', () async {
-    await seedRaw([currentRecord(id: 'one', text: 'One')]);
-
-    final loaded = await service.load();
-    final afterLoad = await rawFavorites();
-
-    expect(loaded, hasLength(1));
-    expect(loaded.single.id, 'one');
-    expect(loaded.single.text, 'One');
-    expect(afterLoad, [currentRecord(id: 'one', text: 'One')]);
-  });
-
-  test('multiple records preserve ordering', () async {
-    await seedRaw([
-      currentRecord(id: 'first', text: 'First'),
-      currentRecord(id: 'second', text: 'Second'),
-      currentRecord(id: 'third', text: 'Third'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['First', 'Second', 'Third']);
-  });
-
-  test('stable ID survives restart', () async {
-    await seedRaw(['June 20, 2026|||Legacy reflection']);
-
-    final firstLoad = await service.load();
-    final restarted = SavedReflectionsService();
-    final secondLoad = await restarted.load();
-
-    expect(firstLoad.single.id, secondLoad.single.id);
-    expect(secondLoad.single.text, 'Legacy reflection');
-  });
-
-  test('identical text entries retain distinct IDs', () async {
-    await seedRaw([
-      'June 20, 2026|||Repeated reflection',
-      'June 20, 2026|||Repeated reflection',
-      'June 21, 2026|||Repeated reflection',
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded, hasLength(3));
-    expect(loaded.map((item) => item.text).toSet(), {'Repeated reflection'});
-    expect(loaded.map((item) => item.id).toSet(), hasLength(3));
-  });
-
-  test('deletion removes only targeted ID', () async {
-    await seedRaw([
-      currentRecord(id: 'first', text: 'Repeated reflection'),
-      currentRecord(id: 'second', text: 'Repeated reflection'),
-    ]);
-
-    final result = await service.toggle(
-      text: 'Repeated reflection',
-      date: 'June 20, 2026',
-      isKeeper: true,
-      existingId: 'second',
+    graph = KeptRepositoryTestGraph(
+      clock: () => DateTime.utc(2026, 8, 1, 12),
     );
-
-    expect(result.items.map((item) => item.id), ['first']);
-    expect(result.items.single.text, 'Repeated reflection');
+    service = graph.service;
   });
 
-  test('deletion after restart works by stable ID', () async {
-    await seedRaw(['June 20, 2026|||Legacy reflection']);
-    final migrated = await service.load();
-    final restarted = SavedReflectionsService();
+  group('load', () {
+    test('empty protected storage loads empty', () async {
+      expect(await service.load(), isEmpty);
+    });
 
-    final result = await restarted.toggle(
-      text: 'Legacy reflection',
-      date: 'June 20, 2026',
-      isKeeper: false,
-      existingId: migrated.single.id,
-    );
+    test('load reflects whatever KeptRepository currently holds', () async {
+      await graph.repository.keepOccurrence(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
 
-    expect(result.items, isEmpty);
-    expect(await restarted.load(), isEmpty);
+      final loaded = await service.load();
+
+      expect(loaded, hasLength(1));
+      expect(loaded.single.text, 'Be still.');
+      expect(loaded.single.revealId, 'a5f3c111-1111-4111-8111-111111111111');
+    });
   });
 
-  test('malformed entry does not drop valid siblings', () async {
-    await seedRaw([
-      currentRecord(id: 'valid-one', text: 'Valid one'),
-      '',
-      currentRecord(id: 'valid-two', text: 'Valid two'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Valid one', 'Valid two']);
-  });
-
-  test('invalid JSON is skipped safely', () async {
-    await seedRaw([
-      '{"schemaVersion":1,"id":"broken"',
-      currentRecord(id: 'valid', text: 'Valid reflection'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Valid reflection']);
-  });
-
-  test('wrong field types are skipped safely', () async {
-    await seedRaw([
-      jsonEncode({
-        'schemaVersion': 1,
-        'id': 7,
-        'date': 'June 20, 2026',
-        'text': 'Wrong ID type',
-      }),
-      currentRecord(id: 'valid', text: 'Valid reflection'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Valid reflection']);
-  });
-
-  test('missing text is skipped', () async {
-    await seedRaw([
-      jsonEncode({
-        'schemaVersion': 1,
-        'id': 'missing-text',
-        'date': 'June 20, 2026',
-      }),
-      currentRecord(id: 'valid', text: 'Valid reflection'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Valid reflection']);
-  });
-
-  test('empty text is skipped', () async {
-    await seedRaw([
-      currentRecord(id: 'empty-text', text: ''),
-      currentRecord(id: 'valid', text: 'Valid reflection'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Valid reflection']);
-  });
-
-  test('invalid date is skipped', () async {
-    await seedRaw([
-      currentRecord(id: 'empty-date', date: '', text: 'No date'),
-      currentRecord(id: 'valid', text: 'Valid reflection'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Valid reflection']);
-  });
-
-  test('legacy record migrates once', () async {
-    await seedRaw(['June 20, 2026|||Legacy reflection']);
-
-    final loaded = await service.load();
-    final migrated = await rawFavorites();
-
-    expect(loaded.single.text, 'Legacy reflection');
-    expect(FavoriteItem.looksLikeCurrentSchema(migrated!.single), isTrue);
-    expect(FavoriteItem.decodeCurrent(migrated.single).id, loaded.single.id);
-  });
-
-  test('repeated migration is idempotent', () async {
-    await seedRaw(['June 20, 2026|||Legacy reflection']);
-
-    await service.load();
-    final afterFirstLoad = await rawFavorites();
-    await service.load();
-    final afterSecondLoad = await rawFavorites();
-
-    expect(afterSecondLoad, afterFirstLoad);
-  });
-
-  test('migration preserves date', () async {
-    await seedRaw(['June 21, 2026|||Legacy reflection']);
-
-    final loaded = await service.load();
-
-    expect(loaded.single.date, 'June 21, 2026');
-  });
-
-  test('migration preserves ordering', () async {
-    await seedRaw([
-      'June 20, 2026|||First',
-      'June 21, 2026|||Second',
-      'June 22, 2026|||Third',
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['First', 'Second', 'Third']);
-  });
-
-  test('migration preserves duplicates', () async {
-    await seedRaw([
-      'June 20, 2026|||Repeated',
-      'June 20, 2026|||Repeated',
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.map((item) => item.text), ['Repeated', 'Repeated']);
-    expect(loaded.map((item) => item.id).toSet(), hasLength(2));
-  });
-
-  test('duplicate persisted IDs are repaired deterministically', () async {
-    await seedRaw([
-      currentRecord(id: 'duplicate', text: 'First'),
-      currentRecord(id: 'duplicate', text: 'Second'),
-      currentRecord(id: 'duplicate', text: 'Third'),
-    ]);
-
-    final loaded = await service.load();
-    final restarted = SavedReflectionsService();
-    final reloaded = await restarted.load();
-
-    expect(loaded.map((item) => item.id).toSet(), hasLength(3));
-    expect(reloaded.map((item) => item.id), loaded.map((item) => item.id));
-    expect(reloaded.map((item) => item.text), ['First', 'Second', 'Third']);
-  });
-
-  test('mixed legacy/current records load safely', () async {
-    await seedRaw([
-      currentRecord(id: 'current', text: 'Current'),
-      'June 21, 2026|||Legacy',
-      '{',
-      currentRecord(id: 'another-current', text: 'Another current'),
-    ]);
-
-    final loaded = await service.load();
-
-    expect(
-      loaded.map((item) => item.text),
-      ['Current', 'Legacy', 'Another current'],
-    );
-  });
-
-  test('current record missing ID is migrated without losing data', () async {
-    await seedRaw([
-      jsonEncode({
-        'schemaVersion': 1,
-        'date': 'June 20, 2026',
-        'text': 'Missing ID',
-      }),
-    ]);
-
-    final loaded = await service.load();
-    final persisted =
-        FavoriteItem.decodeCurrent((await rawFavorites())!.single);
-
-    expect(loaded.single.text, 'Missing ID');
-    expect(loaded.single.id, isNotEmpty);
-    expect(persisted.id, loaded.single.id);
-  });
-
-  test('delimiter inside reflection text remains decodable', () async {
-    await seedRaw([
-      'June 20, 2026|||A reflection ||| with delimiter',
-    ]);
-
-    final loaded = await service.load();
-
-    expect(loaded.single.text, 'A reflection ||| with delimiter');
-  });
-
-  test('free users can save at most three reflections', () async {
-    for (var index = 1; index <= 3; index += 1) {
+  group('toggle: new occurrence (no existingId)', () {
+    test('keeps a new occurrence identified by revealId', () async {
       final result = await service.toggle(
-        text: 'Reflection $index',
-        date: 'June 20, 2026',
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
         isKeeper: false,
       );
+
       expect(result.limitReached, isFalse);
-    }
+      expect(result.items, hasLength(1));
+      expect(result.items.single.text, 'Be still.');
+      expect(
+        result.items.single.revealId,
+        'a5f3c111-1111-4111-8111-111111111111',
+      );
+      // Section 5 (b): `revealedAt` itself is not exposed on the
+      // display-only `FavoriteItem`, so its exact passthrough is proven via
+      // the underlying `KeptRecord` the same `KeptRepositoryTestGraph`'s
+      // store now holds.
+      expect(
+        graph.store.envelope!.activeRecords.single.revealedAt,
+        DateTime.utc(2026, 8, 1),
+      );
+    });
 
-    final fourth = await service.toggle(
-      text: 'Reflection 4',
-      date: 'June 20, 2026',
-      isKeeper: false,
-    );
-    final persisted = await service.load();
+    test(
+        'duplicate wisdom text with different revealIds remains two '
+        'separate kept records', () async {
+      const sharedText = 'A wisdom the pool repeats across two distinct days';
+      final first = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111101',
+        text: sharedText,
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final second = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111102',
+        text: sharedText,
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 2),
+        isKeeper: false,
+      );
 
-    expect(fourth.limitReached, isTrue);
-    expect(fourth.items, hasLength(3));
-    expect(persisted, hasLength(3));
-    expect(persisted.any((item) => item.text == 'Reflection 4'), isFalse);
-  });
+      expect(first.items, hasLength(1));
+      expect(second.items, hasLength(2));
+      final loaded = await service.load();
+      expect(loaded.map((item) => item.revealId).toSet(), {
+        'a5f3c111-1111-4111-8111-111111111101',
+        'a5f3c111-1111-4111-8111-111111111102',
+      });
+      expect(loaded.every((item) => item.text == sharedText), isTrue);
+    });
 
-  test('free users may remove a reflection and save a replacement', () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One', date: 'Today'),
-      currentRecord(id: 'two', text: 'Two', date: 'Today'),
-      currentRecord(id: 'three', text: 'Three', date: 'Today'),
-    ]);
-
-    final removed = await service.toggle(
-      text: 'Two',
-      date: 'Today',
-      isKeeper: false,
-      existingId: 'two',
-    );
-    final replacement = await service.toggle(
-      text: 'Four',
-      date: 'Today',
-      isKeeper: false,
-    );
-
-    expect(removed.items.map((item) => item.text), ['One', 'Three']);
-    expect(replacement.limitReached, isFalse);
-    expect(
-      replacement.items.map((item) => item.text),
-      ['One', 'Three', 'Four'],
-    );
-  });
-
-  test('Keeper users have unlimited kept reflections', () async {
-    for (var index = 0; index < 12; index += 1) {
+    test(
+        'Toggle correction (1): date never determines or influences '
+        'KeptRecord.revealedAt — it is compatibility-only and is never '
+        'parsed', () async {
+      // If `date` were parsed and used, this Y2K-era string would produce
+      // a wildly different stored `revealedAt` than the authoritative
+      // `revealedAt` argument below.
       final result = await service.toggle(
-        text: 'Reflection $index',
-        date: 'June 20, 2026',
-        isKeeper: true,
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'January 1, 2000',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
       );
+
+      expect(result.items, hasLength(1));
+      final stored = graph.store.envelope!.activeRecords.single;
+      expect(stored.revealedAt, DateTime.utc(2026, 8, 1));
+      expect(stored.revealedAt, isNot(DateTime.utc(2000, 1, 1)));
+    });
+
+    test(
+        'Toggle correction (2 & 4): an already-kept revealId remains '
+        'idempotent even when a later call supplies different text/date — '
+        'neither text nor date participates in identity, and the original '
+        'kept content is never overwritten by the second call\'s text',
+        () async {
+      const revealId = 'a5f3c111-1111-4111-8111-111111111111';
+
+      final first = await service.toggle(
+        revealId: revealId,
+        text: 'The original wisdom text',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final second = await service.toggle(
+        revealId: revealId,
+        text: 'A completely different piece of text',
+        date: 'January 1, 2000',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      // Identity (revealId) alone determined this was already kept: no
+      // second record was created despite the differing text/date.
+      expect(first.items, hasLength(1));
+      expect(second.items, hasLength(1));
+      expect(await service.load(), hasLength(1));
+      // The original call's content is untouched — the second call's
+      // (different) text/date never overwrote it.
+      final loaded = await service.load();
+      expect(loaded.single.text, 'The original wisdom text');
+    });
+
+    test('toggling the exact same revealId twice is idempotent', () async {
+      const revealId = 'a5f3c111-1111-4111-8111-111111111111';
+      final revealedAt = DateTime.utc(2026, 8, 1);
+
+      await service.toggle(
+        revealId: revealId,
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: revealedAt,
+        isKeeper: false,
+      );
+      final second = await service.toggle(
+        revealId: revealId,
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: revealedAt,
+        isKeeper: false,
+      );
+
+      expect(second.items, hasLength(1));
+      expect(await service.load(), hasLength(1));
+    });
+
+    test('free users are blocked at the free Kept limit', () async {
+      for (var i = 0; i < 3; i += 1) {
+        final result = await service.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-11111111111$i',
+          text: 'Wisdom $i',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: false,
+        );
+        expect(result.limitReached, isFalse);
+      }
+
+      final fourth = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111999',
+        text: 'Wisdom 4',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(fourth.limitReached, isTrue);
+      expect(fourth.items, hasLength(3));
+    });
+
+    test('Keeper users are not limited', () async {
+      for (var i = 0; i < 5; i += 1) {
+        final result = await service.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-11111111111$i',
+          text: 'Wisdom $i',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: true,
+        );
+        expect(result.limitReached, isFalse);
+      }
+
+      expect(await service.load(), hasLength(5));
+    });
+  });
+
+  group('toggle: removal (existingId)', () {
+    test('an existingId matching an active record removes it', () async {
+      final kept = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final itemId = kept.items.single.id;
+
+      final removed = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+        existingId: itemId,
+      );
+
+      expect(removed.items, isEmpty);
+      expect(await service.load(), isEmpty);
+    });
+
+    test(
+        'an existingId with no matching active record is a no-op success '
+        '(mirrors the pre-cutover toggle contract)', () async {
+      final result = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+        existingId: 'does-not-exist',
+      );
+
+      expect(result.items, isEmpty);
       expect(result.limitReached, isFalse);
-    }
+    });
 
-    expect(await service.load(), hasLength(12));
-  });
-
-  test('free users preserve legacy over-limit items but cannot add more',
-      () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One', date: 'Today'),
-      currentRecord(id: 'two', text: 'Two', date: 'Today'),
-      currentRecord(id: 'three', text: 'Three', date: 'Today'),
-      currentRecord(id: 'legacy-four', text: 'Legacy four', date: 'Today'),
-    ]);
-
-    final blocked = await service.toggle(
-      text: 'Five',
-      date: 'Today',
-      isKeeper: false,
-    );
-    expect(blocked.limitReached, isTrue);
-    expect(blocked.items, hasLength(4));
-
-    await service.toggle(
-      text: 'Legacy four',
-      date: 'Today',
-      isKeeper: false,
-      existingId: 'legacy-four',
-    );
-    final stillBlocked = await service.toggle(
-      text: 'Replacement',
-      date: 'Today',
-      isKeeper: false,
-    );
-    expect(stillBlocked.limitReached, isTrue);
-
-    await service.toggle(
-      text: 'Three',
-      date: 'Today',
-      isKeeper: false,
-      existingId: 'three',
-    );
-    final replacement = await service.toggle(
-      text: 'Replacement',
-      date: 'Today',
-      isKeeper: false,
-    );
-
-    expect(replacement.limitReached, isFalse);
-    expect(replacement.items, hasLength(3));
-    expect(
-      replacement.items.any((item) => item.text == 'Replacement'),
-      isTrue,
-    );
-  });
-
-  test('failed persistence does not report a changed reflection list',
-      () async {
-    service = SavedReflectionsService(
-      preferencesAdapter: _FailingStringListAdapter(),
-    );
-
-    await expectLater(
-      service.toggle(
-        text: 'Unpersisted reflection',
-        date: 'Today',
+    test(
+        'an existingId removes only that record, leaving every other active '
+        'record untouched', () async {
+      final first = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111101',
+        text: 'First wisdom',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
         isKeeper: false,
-      ),
-      throwsA(isA<StateError>()),
-    );
-
-    expect(await rawFavorites(), isNull);
-  });
-
-  test('failed write does not corrupt subsequent operations', () async {
-    final adapter = _FailingOnceStringListAdapter();
-    service = SavedReflectionsService(preferencesAdapter: adapter);
-
-    await expectLater(
-      service.toggle(
-        text: 'First attempt',
-        date: 'Today',
-        isKeeper: false,
-      ),
-      throwsA(isA<StateError>()),
-    );
-
-    final retry = await service.toggle(
-      text: 'Second attempt',
-      date: 'Today',
-      isKeeper: false,
-    );
-
-    expect(retry.items.map((item) => item.text), ['Second attempt']);
-    expect(await service.load(), hasLength(1));
-  });
-
-  test('concurrent save/save loses no valid write', () async {
-    final first = service.toggle(
-      text: 'First',
-      date: 'Today',
-      isKeeper: true,
-    );
-    final second = service.toggle(
-      text: 'Second',
-      date: 'Today',
-      isKeeper: true,
-    );
-
-    await Future.wait([first, second]);
-    final persisted = await service.load();
-
-    expect(persisted.map((item) => item.text), ['First', 'Second']);
-  });
-
-  test('concurrent save/delete does not resurrect deleted record', () async {
-    await seedRaw([currentRecord(id: 'delete-me', text: 'Delete me')]);
-
-    final delete = service.toggle(
-      text: 'Delete me',
-      date: 'June 20, 2026',
-      isKeeper: true,
-      existingId: 'delete-me',
-    );
-    final save = service.toggle(
-      text: 'Keep me',
-      date: 'June 20, 2026',
-      isKeeper: true,
-    );
-
-    await Future.wait([delete, save]);
-    final persisted = await service.load();
-
-    expect(persisted.map((item) => item.text), ['Keep me']);
-  });
-
-  test('concurrent delete/delete is deterministic', () async {
-    await seedRaw([currentRecord(id: 'delete-once', text: 'Delete once')]);
-
-    final first = service.toggle(
-      text: 'Delete once',
-      date: 'June 20, 2026',
-      isKeeper: true,
-      existingId: 'delete-once',
-    );
-    final second = service.toggle(
-      text: 'Delete once',
-      date: 'June 20, 2026',
-      isKeeper: true,
-      existingId: 'delete-once',
-    );
-
-    await Future.wait([first, second]);
-
-    expect(await service.load(), isEmpty);
-  });
-
-  test('free user concurrent saves cannot exceed three', () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One'),
-      currentRecord(id: 'two', text: 'Two'),
-    ]);
-
-    final first = service.toggle(
-      text: 'Three',
-      date: 'Today',
-      isKeeper: false,
-    );
-    final second = service.toggle(
-      text: 'Four',
-      date: 'Today',
-      isKeeper: false,
-    );
-
-    final results = await Future.wait([first, second]);
-    final persisted = await service.load();
-
-    expect(persisted, hasLength(3));
-    expect(results.where((result) => result.limitReached), hasLength(1));
-  });
-
-  test('Keeper concurrent saves are not limited to three', () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One'),
-      currentRecord(id: 'two', text: 'Two'),
-      currentRecord(id: 'three', text: 'Three'),
-    ]);
-
-    await Future.wait([
-      service.toggle(text: 'Four', date: 'Today', isKeeper: true),
-      service.toggle(text: 'Five', date: 'Today', isKeeper: true),
-    ]);
-
-    expect(await service.load(), hasLength(5));
-  });
-
-  test('separate test instances do not share hidden static state', () async {
-    final firstService = SavedReflectionsService(
-      preferencesAdapter: StoragePreferencesAdapter(),
-      operationCoordinator: PersistenceOperationCoordinator(),
-    );
-    final secondService = SavedReflectionsService(
-      preferencesAdapter: StoragePreferencesAdapter(),
-      operationCoordinator: PersistenceOperationCoordinator(),
-    );
-
-    await firstService.toggle(
-      text: 'First',
-      date: 'Today',
-      isKeeper: true,
-    );
-    await secondService.toggle(
-      text: 'Second',
-      date: 'Today',
-      isKeeper: true,
-    );
-
-    expect(await service.load(), hasLength(2));
-  });
-
-  test('text toggle still prevents duplicate current wisdom saves', () async {
-    final saved = await service.toggle(
-      text: 'Current wisdom',
-      date: 'Today',
-      isKeeper: true,
-    );
-    final removed = await service.toggle(
-      text: 'Current wisdom',
-      date: 'Today',
-      isKeeper: true,
-      existingId: saved.items.single.id,
-    );
-
-    expect(removed.items, isEmpty);
-  });
-
-  test('version one records migrate without losing kept wisdom', () async {
-    await seedRaw([
-      jsonEncode({
-        'schemaVersion': 1,
-        'id': 'build-22',
-        'date': 'July 23, 2026',
-        'text': 'What was kept remains.',
-      }),
-    ]);
-
-    final loaded = await service.load();
-    final persisted =
-        FavoriteItem.decodeCurrent((await rawFavorites())!.single);
-
-    expect(loaded.single.text, 'What was kept remains.');
-    expect(loaded.single.hasReflection, isFalse);
-    expect(persisted.id, 'build-22');
-    expect(persisted.hasReflection, isFalse);
-    expect(
-      jsonDecode((await rawFavorites())!.single)['schemaVersion'],
-      FavoriteItem.currentSchemaVersion,
-    );
-  });
-
-  test('reflection save trims and survives service recreation', () async {
-    await seedRaw([currentRecord(id: 'one', text: 'One')]);
-
-    final saved = await service.saveReflection(
-      itemId: 'one',
-      reflection: '  What stayed.  ',
-      isKeeper: false,
-      reflectedAt: DateTime.utc(2026, 7, 23),
-    );
-    final restarted = SavedReflectionsService();
-    final reloaded = await restarted.load();
-
-    expect(saved.reflectionLimitReached, isFalse);
-    expect(reloaded, hasLength(1));
-    expect(reloaded.single.reflection, 'What stayed.');
-    expect(reloaded.single.reflectedAt, '2026-07-23T00:00:00.000Z');
-  });
-
-  test('empty and whitespace-only reflections are rejected', () async {
-    await seedRaw([currentRecord(id: 'one', text: 'One')]);
-
-    await expectLater(
-      service.saveReflection(
-        itemId: 'one',
-        reflection: '',
-        isKeeper: false,
-      ),
-      throwsArgumentError,
-    );
-    await expectLater(
-      service.saveReflection(
-        itemId: 'one',
-        reflection: '   \n ',
-        isKeeper: false,
-      ),
-      throwsArgumentError,
-    );
-
-    expect((await service.load()).single.hasReflection, isFalse);
-  });
-
-  test('reflection persistence rejects more than 250 characters', () async {
-    await seedRaw([currentRecord(id: 'one', text: 'One')]);
-
-    await expectLater(
-      service.saveReflection(
-        itemId: 'one',
-        reflection: List.filled(251, 'a').join(),
-        isKeeper: false,
-      ),
-      throwsArgumentError,
-    );
-    final accepted = await service.saveReflection(
-      itemId: 'one',
-      reflection: List.filled(250, 'a').join(),
-      isKeeper: false,
-    );
-
-    expect(accepted.items.single.reflection, hasLength(250));
-  });
-
-  test('free user has up to three active reflections and may edit any of them',
-      () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One'),
-      currentRecord(id: 'two', text: 'Two'),
-      currentRecord(id: 'three', text: 'Three'),
-      currentRecord(id: 'four', text: 'Four'),
-    ]);
-
-    final firstSave = await service.saveReflection(
-      itemId: 'one',
-      reflection: 'First version',
-      isKeeper: false,
-    );
-    final secondSave = await service.saveReflection(
-      itemId: 'two',
-      reflection: 'Second version',
-      isKeeper: false,
-    );
-    final thirdSave = await service.saveReflection(
-      itemId: 'three',
-      reflection: 'Third version',
-      isKeeper: false,
-    );
-    final blocked = await service.saveReflection(
-      itemId: 'four',
-      reflection: 'Fourth wisdom reflection',
-      isKeeper: false,
-    );
-    final edited = await service.saveReflection(
-      itemId: 'one',
-      reflection: 'Edited version',
-      isKeeper: false,
-    );
-
-    expect(firstSave.reflectionLimitReached, isFalse);
-    expect(secondSave.reflectionLimitReached, isFalse);
-    expect(thirdSave.reflectionLimitReached, isFalse);
-    expect(blocked.reflectionLimitReached, isTrue);
-    expect(edited.reflectionLimitReached, isFalse);
-    expect(edited.items, hasLength(4));
-    expect(
-      edited.items.singleWhere((item) => item.id == 'one').reflection,
-      'Edited version',
-    );
-    expect(
-      edited.items.singleWhere((item) => item.id == 'four').hasReflection,
-      isFalse,
-    );
-    expect(
-      edited.items.where((item) => item.hasReflection),
-      hasLength(3),
-    );
-  });
-
-  test('deleting a reflection restores the free reflection slot', () async {
-    await seedRaw([
-      currentRecord(
-        id: 'one',
-        text: 'One',
-        reflection: 'Existing reflection',
-      ),
-      currentRecord(id: 'two', text: 'Two'),
-    ]);
-
-    final afterDelete = await service.deleteReflection(itemId: 'one');
-    final replacement = await service.saveReflection(
-      itemId: 'two',
-      reflection: 'Now available',
-      isKeeper: false,
-    );
-
-    expect(afterDelete.singleWhere((item) => item.id == 'one').hasReflection,
-        isFalse);
-    expect(replacement.reflectionLimitReached, isFalse);
-    expect(
-      replacement.items.singleWhere((item) => item.id == 'two').reflection,
-      'Now available',
-    );
-  });
-
-  test('Keeper can create multiple reflections but one per wisdom', () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One'),
-      currentRecord(id: 'two', text: 'Two'),
-    ]);
-
-    await service.saveReflection(
-      itemId: 'one',
-      reflection: 'First',
-      isKeeper: true,
-    );
-    await service.saveReflection(
-      itemId: 'two',
-      reflection: 'Second',
-      isKeeper: true,
-    );
-    final edited = await service.saveReflection(
-      itemId: 'one',
-      reflection: 'First, edited',
-      isKeeper: true,
-    );
-
-    expect(edited.items.where((item) => item.hasReflection), hasLength(2));
-    expect(edited.items, hasLength(2));
-    expect(
-      edited.items.singleWhere((item) => item.id == 'one').reflection,
-      'First, edited',
-    );
-  });
-
-  test('Keeper reflections are not limited to three', () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One'),
-      currentRecord(id: 'two', text: 'Two'),
-      currentRecord(id: 'three', text: 'Three'),
-      currentRecord(id: 'four', text: 'Four'),
-    ]);
-
-    for (final id in ['one', 'two', 'three', 'four']) {
-      final result = await service.saveReflection(
-        itemId: id,
-        reflection: 'Reflection for $id',
-        isKeeper: true,
       );
-      expect(result.reflectionLimitReached, isFalse);
-    }
-
-    final persisted = await service.load();
-    expect(persisted.where((item) => item.hasReflection), hasLength(4));
-  });
-
-  test('concurrent free reflection creation cannot exceed three active slots',
-      () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One'),
-      currentRecord(id: 'two', text: 'Two'),
-      currentRecord(id: 'three', text: 'Three'),
-      currentRecord(id: 'four', text: 'Four'),
-    ]);
-
-    final results = await Future.wait([
-      service.saveReflection(
-        itemId: 'one',
-        reflection: 'First',
+      final second = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111102',
+        text: 'Second wisdom',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 2),
         isKeeper: false,
-      ),
-      service.saveReflection(
-        itemId: 'two',
-        reflection: 'Second',
+      );
+      final firstId = first.items.single.id;
+      final secondId =
+          second.items.firstWhere((item) => item.text == 'Second wisdom').id;
+
+      final afterRemoval = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111101',
+        text: 'First wisdom',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
         isKeeper: false,
-      ),
-      service.saveReflection(
-        itemId: 'three',
-        reflection: 'Third',
+        existingId: firstId,
+      );
+
+      expect(afterRemoval.items, hasLength(1));
+      expect(afterRemoval.items.single.id, secondId);
+      expect(afterRemoval.items.single.text, 'Second wisdom');
+      final loaded = await service.load();
+      expect(loaded, hasLength(1));
+      expect(loaded.single.id, secondId);
+    });
+  });
+
+  group('saveReflection / deleteReflection', () {
+    test('saveReflection delegates and maps the mutation result', () async {
+      final kept = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
         isKeeper: false,
-      ),
-      service.saveReflection(
-        itemId: 'four',
-        reflection: 'Fourth',
+      );
+      final itemId = kept.items.single.id;
+
+      // Fixture correction: the graph's clock (and therefore this record's
+      // `keptAt`) is fixed at `2026-08-01 12:00 UTC` (see `setUp` above).
+      // `KeptRecord` requires `updatedAt` (which `saveReflection` sets from
+      // this `reflectedAt`) to never be before `keptAt` — an explicit
+      // `reflectedAt` must be after that fixed noon, not before it.
+      final saved = await service.saveReflection(
+        itemId: itemId,
+        reflection: 'A quiet morning.',
         isKeeper: false,
-      ),
-    ]);
-    final persisted = await service.load();
+        reflectedAt: DateTime.utc(2026, 8, 1, 15),
+      );
 
-    expect(
-        results.where((result) => result.reflectionLimitReached), hasLength(1));
-    expect(persisted.where((item) => item.hasReflection), hasLength(3));
+      expect(saved.reflectionLimitReached, isFalse);
+      expect(saved.items.single.reflection, 'A quiet morning.');
+    });
+
+    test('saveReflection propagates the free reflection limit', () async {
+      // Fixture correction: the free *Kept* limit (`freeKeptLimit`, default
+      // 3) is a separate, earlier gate from the free *reflection* limit
+      // this test targets. Creating all four distinct occurrences with
+      // `isKeeper: false` tripped the Kept limit on the fourth `toggle`
+      // call instead — no fourth record was ever created, so
+      // `kept.items.singleWhere((item) => item.text == 'Wisdom 3')` found
+      // nothing. Creating as a Keeper here only bypasses the *Kept* limit
+      // during setup; every `saveReflection` call below still passes
+      // `isKeeper: false`, so the free *reflection* limit this test is
+      // actually about still applies exactly as before.
+      final ids = <String>[];
+      for (var i = 0; i < 4; i += 1) {
+        final kept = await service.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-11111111111$i',
+          text: 'Wisdom $i',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: true,
+        );
+        ids.add(
+          kept.items.singleWhere((item) => item.text == 'Wisdom $i').id,
+        );
+      }
+      expect(ids.toSet(), hasLength(4));
+
+      for (var i = 0; i < 3; i += 1) {
+        final result = await service.saveReflection(
+          itemId: ids[i],
+          reflection: 'Reflection $i',
+          isKeeper: false,
+        );
+        expect(result.reflectionLimitReached, isFalse);
+      }
+
+      final blocked = await service.saveReflection(
+        itemId: ids[3],
+        reflection: 'Fourth reflection',
+        isKeeper: false,
+      );
+      expect(blocked.reflectionLimitReached, isTrue);
+      // The target record remains present and unchanged — blocked, not
+      // dropped.
+      final afterBlock = await service.load();
+      expect(afterBlock, hasLength(4));
+      final target = afterBlock.singleWhere((item) => item.id == ids[3]);
+      expect(target.hasReflection, isFalse);
+    });
+
+    test('an invalid reflection throws (KeptRepository validates it)',
+        () async {
+      final kept = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      await expectLater(
+        service.saveReflection(
+          itemId: kept.items.single.id,
+          reflection: '   ',
+          isKeeper: false,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+    });
+
+    test(
+        'saveReflection for a missing item preserves KeptRepository\'s '
+        '"missing-item" error, not a swallowed or generic one', () async {
+      await expectLater(
+        service.saveReflection(
+          itemId: 'does-not-exist',
+          reflection: 'A reflection for a record that is gone',
+          isKeeper: false,
+        ),
+        throwsA(
+          isA<KeptRepositoryException>().having(
+            (error) => error.stage,
+            'stage',
+            'missing-item',
+          ),
+        ),
+      );
+    });
+
+    test(
+        'deleteReflection for a missing item preserves KeptRepository\'s '
+        '"missing-item" error, not a swallowed or generic one', () async {
+      await expectLater(
+        service.deleteReflection(itemId: 'does-not-exist'),
+        throwsA(
+          isA<KeptRepositoryException>().having(
+            (error) => error.stage,
+            'stage',
+            'missing-item',
+          ),
+        ),
+      );
+    });
+
+    test('deleteReflection delegates and clears the reflection', () async {
+      final kept = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final itemId = kept.items.single.id;
+      await service.saveReflection(
+        itemId: itemId,
+        reflection: 'A quiet morning.',
+        isKeeper: false,
+      );
+
+      final afterDelete = await service.deleteReflection(itemId: itemId);
+
+      expect(afterDelete.single.hasReflection, isFalse);
+    });
   });
 
-  test('rapid repeated reflection save updates one record without duplication',
-      () async {
-    await seedRaw([currentRecord(id: 'one', text: 'One')]);
+  group('remove / restore', () {
+    test('remove returns null for an item that does not exist', () async {
+      expect(await service.remove(itemId: 'missing'), isNull);
+    });
 
-    await Future.wait([
-      service.saveReflection(
-        itemId: 'one',
-        reflection: 'First version',
-        isKeeper: true,
-      ),
-      service.saveReflection(
-        itemId: 'one',
-        reflection: 'Second version',
-        isKeeper: true,
-      ),
-    ]);
-    final persisted = await service.load();
+    test('remove then restore round-trips the exact removed occurrence',
+        () async {
+      final kept = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      await service.saveReflection(
+        itemId: kept.items.single.id,
+        reflection: 'A quiet morning.',
+        isKeeper: false,
+      );
+      final beforeRemoval = await service.load();
 
-    expect(persisted, hasLength(1));
-    expect(persisted.single.reflection, 'Second version');
+      final removed = await service.remove(itemId: kept.items.single.id);
+      expect(removed, isNotNull);
+      expect(await service.load(), isEmpty);
+
+      final restored = await service.restore(removed!);
+
+      expect(restored, hasLength(1));
+      expect(
+        restored.single.encode(),
+        beforeRemoval.single.encode(),
+      );
+    });
+
+    test(
+        'remove then restore carries the exact RemovedKeptOccurrence, '
+        'including its originalIndex among several active records', () async {
+      for (var i = 0; i < 3; i += 1) {
+        await service.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-11111111120$i',
+          text: 'Wisdom $i',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: false,
+        );
+      }
+      final beforeRemoval = await service.load();
+      final middle = beforeRemoval.firstWhere(
+        (item) => item.text == 'Wisdom 1',
+      );
+      final middleIndex = beforeRemoval.indexOf(middle);
+
+      final removed = await service.remove(itemId: middle.id);
+      expect(removed, isNotNull);
+      // `RemovedSavedReflection.items` (a pass-through to
+      // `RemovedKeptOccurrence.items`) is the *remaining* active list after
+      // removal, not the removed record itself — with 3 active records to
+      // start, removing 1 always leaves 2, so `.single` here is always
+      // wrong regardless of which record was targeted. The removed
+      // record's own identity is proven instead by confirming it is no
+      // longer present among what remains, and that the other two records
+      // (in their original relative order) are untouched.
+      expect(removed!.items, hasLength(2));
+      expect(removed.items.any((item) => item.id == middle.id), isFalse);
+      expect(
+        removed.items.map((item) => item.text).toList(),
+        beforeRemoval
+            .where((item) => item.id != middle.id)
+            .map((item) => item.text)
+            .toList(),
+      );
+      expect(removed.originalIndex, middleIndex);
+
+      final restored = await service.restore(removed);
+      expect(restored, hasLength(3));
+      final restoredMiddle = restored.firstWhere((i) => i.id == middle.id);
+      // Restored to the exact original position, and with its exact prior
+      // content/timestamps — not merely present somewhere in the list.
+      expect(restored.indexOf(restoredMiddle), middleIndex);
+      expect(restoredMiddle.encode(), middle.encode());
+    });
+
+    test('restoring an already-active occurrence twice is duplicate-safe',
+        () async {
+      final kept = await service.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final removed = await service.remove(itemId: kept.items.single.id);
+
+      final firstRestore = await service.restore(removed!);
+      final secondRestore = await service.restore(removed);
+
+      expect(firstRestore, hasLength(1));
+      expect(secondRestore, hasLength(1));
+    });
   });
 
-  test('existing over-limit reflections remain editable and readable',
-      () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One', reflection: 'First'),
-      currentRecord(id: 'two', text: 'Two', reflection: 'Second'),
-    ]);
+  group('bootstrap-unavailable propagation', () {
+    test('every operation throws when Kept storage is unavailable', () async {
+      final unavailableGraph = KeptRepositoryTestGraph(
+        bootstrap:
+            KeptBootstrapResult.unavailable('protected-store-load-failed'),
+      );
+      final unavailableService = unavailableGraph.service;
 
-    final edited = await service.saveReflection(
-      itemId: 'two',
-      reflection: 'Second, edited',
-      isKeeper: false,
-    );
-
-    expect(edited.reflectionLimitReached, isFalse);
-    expect(edited.items.where((item) => item.hasReflection), hasLength(2));
-    expect(
-      edited.items.singleWhere((item) => item.id == 'two').reflection,
-      'Second, edited',
-    );
+      await expectLater(
+        unavailableService.load(),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+      await expectLater(
+        unavailableService.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-111111111111',
+          text: 'Be still.',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: false,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+    });
   });
 
-  test('removing reflected wisdom and Undo restore exact stored data',
-      () async {
-    final original = FavoriteItem(
-      id: 'one',
-      text: 'One',
-      date: 'July 23, 2026',
-      reflection: 'Private memory',
-      reflectedAt: '2026-07-23T12:00:00.000Z',
-    );
-    await seedRaw([original.encode(), currentRecord(id: 'two', text: 'Two')]);
+  group('constructor', () {
+    test('requires an explicit KeptRepository (no hidden default)', () {
+      final repository = KeptRepository(
+        store: InMemoryKeptStateStore(),
+        bootstrap: const KeptBootstrapResult.ready(),
+        operationCoordinator: PersistenceOperationCoordinator(),
+      );
 
-    final removed = await service.remove(itemId: 'one');
-    expect(removed, isNotNull);
-    expect(removed!.items.map((item) => item.id), ['two']);
-
-    final restored = await service.restore(removed);
-    final restoredItem = restored.singleWhere((item) => item.id == 'one');
-    expect(restoredItem.encode(), original.encode());
-
-    final duplicateSafe = await service.restore(removed);
-    expect(
-      duplicateSafe.where((item) => item.id == 'one'),
-      hasLength(1),
-    );
+      expect(
+        () => SavedReflectionsService(keptRepository: repository),
+        returnsNormally,
+      );
+    });
   });
-
-  test('removing reflected wisdom restores free reflection capacity', () async {
-    await seedRaw([
-      currentRecord(id: 'one', text: 'One', reflection: 'First'),
-      currentRecord(id: 'two', text: 'Two'),
-    ]);
-
-    await service.remove(itemId: 'one');
-    final replacement = await service.saveReflection(
-      itemId: 'two',
-      reflection: 'Replacement',
-      isKeeper: false,
-    );
-
-    expect(replacement.reflectionLimitReached, isFalse);
-    expect(replacement.items.single.reflection, 'Replacement');
-  });
-}
-
-String currentRecord({
-  required String id,
-  String date = 'June 20, 2026',
-  required String text,
-  String? reflection,
-}) {
-  return FavoriteItem(
-    id: id,
-    date: date,
-    text: text,
-    reflection: reflection,
-  ).encode();
-}
-
-Future<void> seedRaw(List<String> entries) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setStringList(SavedReflectionsService.storageKey, entries);
-}
-
-Future<List<String>?> rawFavorites() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getStringList(SavedReflectionsService.storageKey);
-}
-
-class _FailingStringListAdapter extends StoragePreferencesAdapter {
-  @override
-  Future<void> setStringList(String key, List<String> value) {
-    throw StateError('Simulated saved reflection persistence failure.');
-  }
-}
-
-class _FailingOnceStringListAdapter extends StoragePreferencesAdapter {
-  var _shouldFail = true;
-
-  @override
-  Future<void> setStringList(String key, List<String> value) {
-    if (_shouldFail) {
-      _shouldFail = false;
-      throw StateError('Simulated one-time persistence failure.');
-    }
-
-    return super.setStringList(key, value);
-  }
 }

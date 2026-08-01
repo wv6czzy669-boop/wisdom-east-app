@@ -1,30 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
-import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
+import 'package:wisdom_app/models/kept_bootstrap_result.dart';
+import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
+import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/utils/date_formatter.dart';
+
+import 'persistence_test_helpers.dart';
 
 void main() {
+  late KeptRepositoryTestGraph graph;
   late SavedReflectionsService service;
+  late DateTime keptAtClock;
+  var revealCounter = 0;
 
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
-    service = SavedReflectionsService();
+    keptAtClock = DateTime.utc(2026, 7, 1);
+    revealCounter = 0;
+    graph = KeptRepositoryTestGraph(clock: () => keptAtClock);
+    service = graph.service;
   });
+
+  Future<FavoriteItem> keep(
+    SavedReflectionsService service, {
+    required String text,
+    required DateTime date,
+  }) async {
+    keptAtClock = date;
+    revealCounter += 1;
+    final revealId =
+        'a5f3c111-1111-4111-8111-${revealCounter.toString().padLeft(12, '0')}';
+    final result = await service.toggle(
+      revealId: revealId,
+      text: text,
+      // Compatibility-only per the locked Phase 3D-C contract: never parsed,
+      // never used to derive `revealedAt`, never part of identity.
+      date: formatFavoriteDisplayDate(date),
+      revealedAt: date,
+      isKeeper: true,
+    );
+    return result.items.last;
+  }
+
+  SavedReflectionsService failingWritesService() {
+    final store = InMemoryKeptStateStore()
+      ..envelope = graph.store.envelope
+      ..failReplace = StateError('write failed');
+    final repository = KeptRepository(
+      store: store,
+      bootstrap: const KeptBootstrapResult.ready(),
+      operationCoordinator: PersistenceOperationCoordinator(),
+    );
+    return SavedReflectionsService(keptRepository: repository);
+  }
 
   testWidgets('Kept shows newest first, full year, and exact states',
       (tester) async {
-    final first = await _keep(
+    final first = await keep(
       service,
       text: 'Older wisdom',
-      date: 'July 22, 2026',
+      date: DateTime.utc(2026, 7, 22),
     );
-    final second = await _keep(
+    final second = await keep(
       service,
       text: 'Newer wisdom',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
     await service.saveReflection(
       itemId: second.id,
@@ -65,10 +107,10 @@ void main() {
 
   testWidgets('ADD REFLECTION opens dedicated screen with associated wisdom',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Wisdom to reread while writing',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
 
     await tester.pumpWidget(
@@ -90,10 +132,10 @@ void main() {
 
   testWidgets('REFLECTED state opens the existing reflection for editing',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Reflected wisdom',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
     await service.saveReflection(
       itemId: item.id,
@@ -123,10 +165,10 @@ void main() {
 
   testWidgets('deleting a reflection returns REFLECTED wisdom to KEPT',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Return to kept state',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
     await service.saveReflection(
       itemId: item.id,
@@ -165,25 +207,25 @@ void main() {
   testWidgets(
       'free fourth reflection opens the calm Keeper experience after three active reflections',
       (tester) async {
-    final first = await _keep(
+    final first = await keep(
       service,
       text: 'Already reflected one',
-      date: 'July 20, 2026',
+      date: DateTime.utc(2026, 7, 20),
     );
-    final second = await _keep(
+    final second = await keep(
       service,
       text: 'Already reflected two',
-      date: 'July 21, 2026',
+      date: DateTime.utc(2026, 7, 21),
     );
-    final third = await _keep(
+    final third = await keep(
       service,
       text: 'Already reflected three',
-      date: 'July 22, 2026',
+      date: DateTime.utc(2026, 7, 22),
     );
-    final fourth = await _keep(
+    final fourth = await keep(
       service,
       text: 'Still kept',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
     await service.saveReflection(
       itemId: first.id,
@@ -223,10 +265,10 @@ void main() {
   testWidgets(
       'swiping a Kept row alone does not delete it, and reveals no REMOVE label',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Do not remove yet',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
 
     await tester.pumpWidget(
@@ -254,10 +296,10 @@ void main() {
   testWidgets(
       'the DELETE action is genuinely hit-testable at its rendered location once revealed',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'DELETE is reachable once open',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
     final deleteAction = find.byKey(ValueKey('kept-${item.id}-delete-action'));
 
@@ -291,10 +333,10 @@ void main() {
   testWidgets(
       'closing an open swipe by tapping the row preserves the item without deleting',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Preserved after closing swipe',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
 
     await tester.pumpWidget(
@@ -323,10 +365,10 @@ void main() {
   testWidgets(
       'tapping the DELETE action after swiping removes the item immediately with no dialog, snackbar, or Undo',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Delete on explicit tap',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
 
     await tester.pumpWidget(
@@ -357,10 +399,10 @@ void main() {
   testWidgets(
       'deleting a reflected Kept item removes the complete record including its reflection',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Carries a reflection',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
     await service.saveReflection(
       itemId: item.id,
@@ -396,14 +438,12 @@ void main() {
 
   testWidgets('failed kept removal leaves the item visible and persisted',
       (tester) async {
-    final item = await _keep(
+    final item = await keep(
       service,
       text: 'Remain when storage fails',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
-    final failingService = SavedReflectionsService(
-      preferencesAdapter: _AlwaysFailingWritesAdapter(),
-    );
+    final failingService = failingWritesService();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -441,11 +481,11 @@ void main() {
     addTearDown(
       tester.platformDispatcher.clearTextScaleFactorTestValue,
     );
-    final item = await _keep(
+    final item = await keep(
       service,
       text:
           'A longer wisdom remains readable without turning the page into a card.',
-      date: 'July 23, 2026',
+      date: DateTime.utc(2026, 7, 23),
     );
 
     await tester.pumpWidget(
@@ -461,24 +501,4 @@ void main() {
     expect(find.text('ADD REFLECTION'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-}
-
-class _AlwaysFailingWritesAdapter extends StoragePreferencesAdapter {
-  @override
-  Future<void> setStringList(String key, List<String> value) {
-    throw StateError('write failed');
-  }
-}
-
-Future<FavoriteItem> _keep(
-  SavedReflectionsService service, {
-  required String text,
-  required String date,
-}) async {
-  final result = await service.toggle(
-    text: text,
-    date: date,
-    isKeeper: true,
-  );
-  return result.items.last;
 }

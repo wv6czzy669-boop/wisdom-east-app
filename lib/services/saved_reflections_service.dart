@@ -1,7 +1,6 @@
 import '../models/favorite_item.dart';
-import '../persistence/persistence_operation_coordinator.dart';
-import '../persistence/storage_preferences_adapter.dart';
-import '../persistence/stored_favorite_entry_codec.dart';
+import '../models/kept_record.dart';
+import '../repositories/kept_repository.dart';
 
 class SavedReflectionsResult {
   const SavedReflectionsResult({
@@ -15,93 +14,87 @@ class SavedReflectionsResult {
   final bool reflectionLimitReached;
 }
 
+/// Wraps a [RemovedKeptOccurrence] so a caller can later [restore] the exact
+/// removed occurrence without losing any protected-domain field a
+/// display-only [FavoriteItem] does not carry (in particular
+/// [KeptRecord.revealId] and [KeptRecord.keptAt]).
+///
+/// [items] and [originalIndex] are exposed as pass-through getters so
+/// existing callers (`SavedReflectionsScreen._deleteItem`) that only ever
+/// read those two fields need no changes.
 class RemovedSavedReflection {
-  const RemovedSavedReflection({
-    required this.item,
-    required this.originalIndex,
-    required this.items,
-  });
+  const RemovedSavedReflection({required this.occurrence});
 
-  final FavoriteItem item;
-  final int originalIndex;
-  final List<FavoriteItem> items;
+  final RemovedKeptOccurrence occurrence;
+
+  List<FavoriteItem> get items => occurrence.items;
+  int get originalIndex => occurrence.originalIndex;
 }
 
+/// Build 26 Phase 3D-C production cutover: `SavedReflectionsService` is now
+/// a thin, additive-free delegation layer over [KeptRepository] — the
+/// actual authoritative protected Kept storage.
+///
+/// This class no longer touches `SharedPreferences`, the legacy `favorites`
+/// key, or migration directly, and holds no storage state of its own; every
+/// method here is a direct pass-through to the equivalent [KeptRepository]
+/// operation. It exists only so existing callers (`HomeScreen`,
+/// `SavedReflectionsScreen`, `ReflectionScreen`) keep their existing
+/// method/result shapes (`SavedReflectionsResult`, `RemovedSavedReflection`)
+/// without depending on `KeptRepository` types directly.
 class SavedReflectionsService {
-  SavedReflectionsService({
-    StoragePreferencesAdapter? preferencesAdapter,
-    PersistenceOperationCoordinator? operationCoordinator,
-    this.freeLimit = 3,
-  })  : _preferencesAdapter = preferencesAdapter ?? StoragePreferencesAdapter(),
-        _operationCoordinator =
-            operationCoordinator ?? PersistenceOperationCoordinator();
+  SavedReflectionsService({required KeptRepository keptRepository})
+      : _keptRepository = keptRepository;
 
-  static const String storageKey = 'favorites';
-  static const String resourceKey = 'saved_reflections';
-  static const int maximumReflectionLength = 250;
+  static const int maximumReflectionLength = KeptRecord.maximumReflectionLength;
   static const int freeReflectionLimit = 3;
 
-  final StoragePreferencesAdapter _preferencesAdapter;
-  final PersistenceOperationCoordinator _operationCoordinator;
-  final int freeLimit;
+  final KeptRepository _keptRepository;
 
-  int _generatedIdSerial = 0;
+  Future<List<FavoriteItem>> load() => _keptRepository.load();
 
-  Future<List<FavoriteItem>> load() {
-    return _operationCoordinator.runExclusive<List<FavoriteItem>>(
-      resourceKey: resourceKey,
-      operation: _loadAndMigrate,
-    );
-  }
-
+  /// Keeps a new occurrence identified by [revealId], or removes an already
+  /// -kept occurrence identified by [existingId] (the one-way toggle:
+  /// removal via this path is retained only for test/back-compat
+  /// completeness — `HomeScreen`'s save ring itself never calls this with a
+  /// non-null `existingId`, since its own save ring is one-way).
+  ///
+  /// Build 26 Phase 3D-C compatibility contract (locked): the public
+  /// parameter names are [text]/[date]/[isKeeper]/[revealId]/[revealedAt]/
+  /// [existingId] — matching the pre-cutover call shape byte-for-byte so
+  /// every existing caller/test needs no structural changes beyond the
+  /// rename.
+  ///
+  /// [text] is forwarded as [KeptRepository.keepOccurrence]'s `wisdomText`.
+  /// [date] exists for source/API compatibility only: it is never parsed,
+  /// never used to derive [revealedAt], and never participates in Kept
+  /// identity in any way — it is accepted and otherwise completely ignored.
+  /// Identity is [revealId] alone; the authoritative timestamp is
+  /// [revealedAt] alone. [existingId] compatibility-removal behavior is
+  /// unchanged from before this rename.
   Future<SavedReflectionsResult> toggle({
     required String text,
     required String date,
     required bool isKeeper,
+    required String revealId,
+    required DateTime revealedAt,
     String? existingId,
-  }) {
-    return _operationCoordinator.runExclusive<SavedReflectionsResult>(
-      resourceKey: resourceKey,
-      operation: () async {
-        final items = await _loadAndMigrate();
-        final existingIndex = _findExistingIndex(
-          items: items,
-          text: text,
-          existingId: existingId,
-        );
+  }) async {
+    if (existingId != null) {
+      final removed = await _keptRepository.remove(itemId: existingId);
+      final items = removed?.items ?? await _keptRepository.load();
+      return SavedReflectionsResult(items: items, limitReached: false);
+    }
 
-        if (existingIndex >= 0) {
-          items.removeAt(existingIndex);
-        } else if (existingId != null) {
-          return SavedReflectionsResult(
-            items: List.unmodifiable(items),
-            limitReached: false,
-          );
-        } else {
-          // Preserve legacy items without silently deleting user data. Free
-          // users may remove entries, but cannot add until below the limit.
-          if (!isKeeper && items.length >= freeLimit) {
-            return SavedReflectionsResult(
-              items: List.unmodifiable(items),
-              limitReached: true,
-            );
-          }
-
-          items.add(
-            FavoriteItem(
-              id: _createId(),
-              text: text,
-              date: date,
-            ),
-          );
-        }
-
-        await _persist(items);
-        return SavedReflectionsResult(
-          items: List.unmodifiable(items),
-          limitReached: false,
-        );
-      },
+    final result = await _keptRepository.keepOccurrence(
+      revealId: revealId,
+      wisdomText: text,
+      revealedAt: revealedAt,
+      isKeeper: isKeeper,
+    );
+    return SavedReflectionsResult(
+      items: result.items,
+      limitReached: result.limitReached,
     );
   }
 
@@ -110,199 +103,31 @@ class SavedReflectionsService {
     required String reflection,
     required bool isKeeper,
     DateTime? reflectedAt,
-  }) {
-    return _operationCoordinator.runExclusive<SavedReflectionsResult>(
-      resourceKey: resourceKey,
-      operation: () async {
-        final normalized = reflection.trim();
-        if (normalized.isEmpty) {
-          throw ArgumentError.value(
-            reflection,
-            'reflection',
-            'Reflection cannot be empty.',
-          );
-        }
-        if (normalized.length > maximumReflectionLength) {
-          throw ArgumentError.value(
-            reflection,
-            'reflection',
-            'Reflection cannot exceed $maximumReflectionLength characters.',
-          );
-        }
-
-        final items = await _loadAndMigrate();
-        final itemIndex = items.indexWhere((item) => item.id == itemId);
-        if (itemIndex < 0) {
-          throw StateError('The kept wisdom no longer exists.');
-        }
-
-        final existing = items[itemIndex];
-        if (!existing.hasReflection &&
-            !isKeeper &&
-            items.where((item) => item.hasReflection).length >=
-                freeReflectionLimit) {
-          return SavedReflectionsResult(
-            items: List.unmodifiable(items),
-            limitReached: false,
-            reflectionLimitReached: true,
-          );
-        }
-
-        items[itemIndex] = existing.copyWith(
-          reflection: normalized,
-          reflectedAt: (reflectedAt ?? DateTime.now()).toIso8601String(),
-        );
-        await _persist(items);
-        return SavedReflectionsResult(
-          items: List.unmodifiable(items),
-          limitReached: false,
-        );
-      },
+  }) async {
+    final result = await _keptRepository.saveReflection(
+      itemId: itemId,
+      reflection: reflection,
+      isKeeper: isKeeper,
+      reflectedAt: reflectedAt,
+    );
+    return SavedReflectionsResult(
+      items: result.items,
+      limitReached: result.limitReached,
+      reflectionLimitReached: result.reflectionLimitReached,
     );
   }
 
-  Future<List<FavoriteItem>> deleteReflection({
-    required String itemId,
-  }) {
-    return _operationCoordinator.runExclusive<List<FavoriteItem>>(
-      resourceKey: resourceKey,
-      operation: () async {
-        final items = await _loadAndMigrate();
-        final itemIndex = items.indexWhere((item) => item.id == itemId);
-        if (itemIndex < 0) {
-          throw StateError('The kept wisdom no longer exists.');
-        }
-
-        if (!items[itemIndex].hasReflection) {
-          return List.unmodifiable(items);
-        }
-
-        items[itemIndex] = items[itemIndex].copyWith(clearReflection: true);
-        await _persist(items);
-        return List.unmodifiable(items);
-      },
-    );
+  Future<List<FavoriteItem>> deleteReflection({required String itemId}) {
+    return _keptRepository.deleteReflection(itemId: itemId);
   }
 
-  Future<RemovedSavedReflection?> remove({
-    required String itemId,
-  }) {
-    return _operationCoordinator.runExclusive<RemovedSavedReflection?>(
-      resourceKey: resourceKey,
-      operation: () async {
-        final items = await _loadAndMigrate();
-        final itemIndex = items.indexWhere((item) => item.id == itemId);
-        if (itemIndex < 0) return null;
-
-        final removed = items.removeAt(itemIndex);
-        await _persist(items);
-        return RemovedSavedReflection(
-          item: removed,
-          originalIndex: itemIndex,
-          items: List.unmodifiable(items),
-        );
-      },
-    );
+  Future<RemovedSavedReflection?> remove({required String itemId}) async {
+    final removed = await _keptRepository.remove(itemId: itemId);
+    if (removed == null) return null;
+    return RemovedSavedReflection(occurrence: removed);
   }
 
   Future<List<FavoriteItem>> restore(RemovedSavedReflection removed) {
-    return _operationCoordinator.runExclusive<List<FavoriteItem>>(
-      resourceKey: resourceKey,
-      operation: () async {
-        final items = await _loadAndMigrate();
-        if (items.any((item) => item.id == removed.item.id)) {
-          return List.unmodifiable(items);
-        }
-
-        final insertionIndex = removed.originalIndex.clamp(0, items.length);
-        items.insert(insertionIndex, removed.item);
-        await _persist(items);
-        return List.unmodifiable(items);
-      },
-    );
-  }
-
-  int _findExistingIndex({
-    required List<FavoriteItem> items,
-    required String text,
-    required String? existingId,
-  }) {
-    if (existingId != null) {
-      return items.indexWhere((item) => item.id == existingId);
-    }
-
-    return items.indexWhere((item) => item.text == text);
-  }
-
-  Future<List<FavoriteItem>> _loadAndMigrate() async {
-    final saved = await _readRaw();
-    if (saved.isEmpty) return <FavoriteItem>[];
-
-    final items = <FavoriteItem>[];
-    final usedIds = <String>{};
-    var shouldPersistMigrated = false;
-
-    for (var index = 0; index < saved.length; index += 1) {
-      final raw = saved[index];
-      final decoded = StoredFavoriteEntryCodec.decode(raw, index: index);
-      if (decoded == null) {
-        shouldPersistMigrated = true;
-        continue;
-      }
-
-      var item = decoded.item;
-      if (usedIds.contains(item.id)) {
-        item = item.copyWith(
-          id: _duplicateIdFor(
-            item: item,
-            index: index,
-          ),
-        );
-        shouldPersistMigrated = true;
-      }
-
-      usedIds.add(item.id);
-      items.add(item);
-      shouldPersistMigrated =
-          shouldPersistMigrated || decoded.requiresMigration;
-    }
-
-    if (shouldPersistMigrated) {
-      await _persist(items);
-    }
-
-    return items;
-  }
-
-  Future<List<String>> _readRaw() async {
-    try {
-      return await _preferencesAdapter.getStringList(storageKey) ?? [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<void> _persist(List<FavoriteItem> items) async {
-    try {
-      await _preferencesAdapter.setStringList(
-        storageKey,
-        items.map((item) => item.encode()).toList(growable: false),
-      );
-    } catch (_) {
-      throw StateError('Saved reflections could not be persisted.');
-    }
-  }
-
-  String _createId() {
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final serial = _generatedIdSerial++;
-    return 'sr-v1-$now-$serial';
-  }
-
-  String _duplicateIdFor({
-    required FavoriteItem item,
-    required int index,
-  }) {
-    return 'duplicate-v1-$index-${StoredFavoriteEntryCodec.stableHashFor(item.encode())}';
+    return _keptRepository.restore(removed.occurrence);
   }
 }

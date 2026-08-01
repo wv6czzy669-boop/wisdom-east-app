@@ -1,26 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
-import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
+import 'package:wisdom_app/models/kept_bootstrap_result.dart';
+import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
+import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/screens/reflection_screen.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 
+import 'persistence_test_helpers.dart';
+
 void main() {
+  late KeptRepositoryTestGraph graph;
   late SavedReflectionsService service;
   late FavoriteItem item;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    service = SavedReflectionsService();
+    graph = KeptRepositoryTestGraph(
+      clock: () => DateTime.utc(2026, 7, 23),
+    );
+    service = graph.service;
     final result = await service.toggle(
+      revealId: 'a5f3c111-1111-4111-8111-111111111111',
       text: 'The associated wisdom remains visible.',
       date: 'July 23, 2026',
+      revealedAt: DateTime.utc(2026, 7, 23),
       isKeeper: false,
     );
     item = result.items.single;
   });
+
+  SavedReflectionsService failingWritesService() {
+    final store = InMemoryKeptStateStore()
+      ..envelope = graph.store.envelope
+      ..failReplace = StateError('write failed');
+    final repository = KeptRepository(
+      store: store,
+      bootstrap: const KeptBootstrapResult.ready(),
+      operationCoordinator: PersistenceOperationCoordinator(),
+    );
+    return SavedReflectionsService(keptRepository: repository);
+  }
 
   testWidgets('Reflection screen is dedicated, quiet, and starts disabled',
       (tester) async {
@@ -103,7 +123,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('keep-reflection-action')));
     await tester.pumpAndSettle();
 
-    final persisted = await SavedReflectionsService().load();
+    final persisted = await service.load();
     expect(persisted, hasLength(1));
     expect(persisted.single.reflection, hasLength(250));
   });
@@ -179,7 +199,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('keep-reflection-action')));
     await tester.pumpAndSettle();
 
-    final persisted = await SavedReflectionsService().load();
+    final persisted = await service.load();
     expect(persisted, hasLength(1));
     expect(persisted.single.reflection, 'A private memory.');
   });
@@ -192,8 +212,10 @@ void main() {
       isKeeper: true,
     );
     final second = await service.toggle(
+      revealId: 'a5f3c111-1111-4111-8111-222222222222',
       text: 'Second kept wisdom',
       date: 'July 24, 2026',
+      revealedAt: DateTime.utc(2026, 7, 24),
       isKeeper: true,
     );
     await service.saveReflection(
@@ -201,7 +223,8 @@ void main() {
       reflection: 'Historical second reflection',
       isKeeper: true,
     );
-    final reflected = (await service.load()).first;
+    final reflected =
+        (await service.load()).singleWhere((entry) => entry.id == item.id);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -296,9 +319,7 @@ void main() {
 
   testWidgets('failed save preserves typed reflection for retry',
       (tester) async {
-    final failingService = SavedReflectionsService(
-      preferencesAdapter: _FailingWritesAdapter(),
-    );
+    final failingService = failingWritesService();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -333,9 +354,7 @@ void main() {
       isKeeper: false,
     );
     final reflected = (await service.load()).single;
-    final failingService = SavedReflectionsService(
-      preferencesAdapter: _FailingWritesAdapter(),
-    );
+    final failingService = failingWritesService();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -367,11 +386,4 @@ void main() {
     );
     expect((await service.load()).single.reflection, 'Keep this on failure');
   });
-}
-
-class _FailingWritesAdapter extends StoragePreferencesAdapter {
-  @override
-  Future<void> setStringList(String key, List<String> value) {
-    throw StateError('write failed');
-  }
 }

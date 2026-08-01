@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
+import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
 import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
@@ -17,6 +18,7 @@ import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
+import 'package:wisdom_app/utils/date_formatter.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
 import 'package:wisdom_app/widgets/home/top_nav_ring.dart';
 
@@ -771,6 +773,16 @@ void main() {
       expectedBoundary.millisecondsSinceEpoch,
     );
     expect(_keptGuard(tester).ignoring, isFalse);
+    // Item 3 (3D-C correction, Section 4): the late-arriving authoritative
+    // commit's revealId/revealedAt are what the live `HomeScreen` state
+    // ends up holding — not left null or stale from before the slow write
+    // resolved.
+    expect(persisted.revealId, isNotNull);
+    expect(_homeCurrentRevealId(tester), persisted.revealId);
+    expect(
+      _homeCurrentRevealedAt(tester)?.millisecondsSinceEpoch,
+      persisted.revealedAt.millisecondsSinceEpoch,
+    );
   });
 
   testWidgets('retry after failed finalization uses original reveal boundary',
@@ -837,20 +849,23 @@ void main() {
       text: existingWisdom,
       revealedAt: now,
       unlockAt: now.add(const Duration(hours: 24)),
+      revealId: _fixedRevealId,
     );
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_access': originalRecord.encode(),
-      'favorites': [
-        FavoriteItem(
-          id: 'existing-locked-reflection',
-          text: existingWisdom,
-          date: 'June 21, 2026',
-        ).encode(),
-      ],
     });
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: 'existing-locked-reflection',
+          revealId: _fixedRevealId,
+          wisdomText: existingWisdom,
+          revealedAt: now,
+        ),
+      ]);
 
     await tester.pumpWidget(
-      _homeApp(),
+      _homeApp(keptGraph: keptGraph),
     );
     await _finishOpeningIntro(tester);
     expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
@@ -869,6 +884,15 @@ void main() {
     expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
+    // Item 2 (3D-C correction, Section 4): a locked `DailyWisdomStatus`
+    // reopened from disk retains its authoritative revealId/revealedAt on
+    // the live `HomeScreen` state — not just in the persisted record — so
+    // `currentFavorite()`/`toggleFavorite()` keep working from a re-view.
+    expect(_homeCurrentRevealId(tester), _fixedRevealId);
+    expect(
+      _homeCurrentRevealedAt(tester)?.millisecondsSinceEpoch,
+      now.millisecondsSinceEpoch,
+    );
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
@@ -921,22 +945,26 @@ void main() {
       (tester) async {
     final now = DateTime.now();
     const wisdom = 'A kept wisdom removed from its quiet list';
-    final kept = FavoriteItem(
-      id: 'remove-from-kept',
-      text: wisdom,
-      date: 'July 23, 2026',
-      reflection: 'A private reflection',
-    );
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_access': DailyWisdomRecord(
         text: wisdom,
         revealedAt: now,
         unlockAt: now.add(const Duration(hours: 24)),
+        revealId: _fixedRevealId,
       ).encode(),
-      'favorites': [kept.encode()],
     });
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: 'remove-from-kept',
+          revealId: _fixedRevealId,
+          wisdomText: wisdom,
+          revealedAt: now,
+          reflectionText: 'A private reflection',
+        ),
+      ]);
 
-    await tester.pumpWidget(_homeApp());
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     expect(
@@ -963,7 +991,7 @@ void main() {
     expect(find.text(wisdom), findsOneWidget);
     expect(find.byKey(const ValueKey('home-save-control-unsaved')),
         findsOneWidget);
-    expect(await SavedReflectionsService().load(), isEmpty);
+    expect(await keptGraph.service.load(), isEmpty);
   });
 
   testWidgets('Keeper reopens to the shared locked wisdom without extra reveal',
@@ -1163,6 +1191,10 @@ void main() {
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     expect(find.text('Nearly unlocked wisdom'), findsOneWidget);
+    // The startup backfill gives this re-viewed legacy record a real
+    // identity before the refresh below wipes it — proving the wipe (not
+    // an identity that was simply never set) is what Item 4 depends on.
+    expect(_homeCurrentRevealId(tester), isNotNull);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -1181,6 +1213,11 @@ void main() {
     expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
     expect(find.byKey(const ValueKey('settings-menu-control')), findsNothing);
+    // Item 4 (3D-C correction, Section 4): returning to the ready/unlocked
+    // state clears the stale reveal identity — a later reveal must never
+    // inherit an old occurrence's revealId/revealedAt.
+    expect(_homeCurrentRevealId(tester), isNull);
+    expect(_homeCurrentRevealedAt(tester), isNull);
   });
 
   testWidgets('ritual uses the restrained haptic sequence', (tester) async {
@@ -2211,9 +2248,10 @@ void main() {
         unlockAt: now.add(const Duration(hours: 24)),
       ).encode(),
     });
+    final keptGraph = KeptRepositoryTestGraph();
 
     await tester.pumpWidget(
-      _homeApp(),
+      _homeApp(keptGraph: keptGraph),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -2227,7 +2265,7 @@ void main() {
     saveButton.onPressed!();
     await tester.pump(const Duration(milliseconds: 20));
 
-    final persisted = await SavedReflectionsService().load();
+    final persisted = await keptGraph.service.load();
     expect(persisted, hasLength(1));
     expect(persisted.single.text, wisdom);
     expect(
@@ -2247,8 +2285,9 @@ void main() {
         unlockAt: now.add(const Duration(hours: 24)),
       ).encode(),
     });
+    final keptGraph = KeptRepositoryTestGraph();
 
-    await tester.pumpWidget(_homeApp());
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     await tester.pump();
@@ -2295,7 +2334,7 @@ void main() {
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
-      (await SavedReflectionsService().load()).single.text,
+      (await keptGraph.service.load()).single.text,
       wisdom,
     );
 
@@ -2406,7 +2445,7 @@ void main() {
     expect(
         find.byKey(const ValueKey('home-save-control-unsaved')), findsNothing);
     expect(
-      (await SavedReflectionsService().load()).single.text,
+      (await keptGraph.service.load()).single.text,
       wisdom,
     );
   });
@@ -2419,21 +2458,25 @@ void main() {
     try {
       final now = DateTime.now();
       const wisdom = 'A wisdom used to verify no duplicate kept semantics';
-      final kept = FavoriteItem(
-        id: 'already-kept-for-semantics-isolation-test',
-        text: wisdom,
-        date: 'July 23, 2026',
-      );
       SharedPreferences.setMockInitialValues({
         'daily_wisdom_access': DailyWisdomRecord(
           text: wisdom,
           revealedAt: now,
           unlockAt: now.add(const Duration(hours: 24)),
+          revealId: _fixedRevealId,
         ).encode(),
-        'favorites': [kept.encode()],
       });
+      final keptGraph = KeptRepositoryTestGraph()
+        ..seed([
+          _testKeptRecord(
+            id: 'already-kept-for-semantics-isolation-test',
+            revealId: _fixedRevealId,
+            wisdomText: wisdom,
+            revealedAt: now,
+          ),
+        ]);
 
-      await tester.pumpWidget(_homeApp());
+      await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
       await _finishOpeningIntro(tester);
       await _openExistingWisdom(tester);
       await tester.pump();
@@ -2500,7 +2543,21 @@ void main() {
                 context,
               ).copyWith(disableAnimations: true),
               child: HomeScreen(
-                  dailyWisdomAccessService: DailyAccessTestGraph().service),
+                dailyWisdomAccessService: DailyAccessTestGraph().service,
+                // Correction: this test constructs `HomeScreen` directly
+                // rather than through `_homeApp()` (which always supplies
+                // this). Without an explicit `savedReflectionsService`,
+                // `initState` falls back to
+                // `app_services.savedReflectionsService` — a `late final`
+                // global only ever populated by production's
+                // `initializeKeptStorage()` before `runApp()`, which this
+                // isolated widget test never runs. A fresh, test-local
+                // `KeptRepositoryTestGraph` (in-memory store only — no
+                // Application Support directory, no native file
+                // protection, no production global touched) avoids that
+                // uninitialized access entirely.
+                savedReflectionsService: KeptRepositoryTestGraph().service,
+              ),
             );
           },
         ),
@@ -2883,8 +2940,9 @@ void main() {
         unlockAt: now.add(const Duration(hours: 24)),
       ).encode(),
     });
+    final keptGraph = KeptRepositoryTestGraph();
 
-    await tester.pumpWidget(_homeApp());
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     await tester.pump();
@@ -2910,7 +2968,7 @@ void main() {
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
     expect(
-      (await SavedReflectionsService().load()).single.text,
+      (await keptGraph.service.load()).single.text,
       wisdom,
     );
 
@@ -2967,8 +3025,9 @@ void main() {
         unlockAt: now.add(const Duration(hours: 24)),
       ).encode(),
     });
+    final keptGraph = KeptRepositoryTestGraph();
 
-    await tester.pumpWidget(_homeApp());
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     await tester.pump();
@@ -2981,7 +3040,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(
-      (await SavedReflectionsService().load()).single.text,
+      (await keptGraph.service.load()).single.text,
       wisdom,
     );
     expect(find.text('Kept.'), findsNothing);
@@ -3048,8 +3107,9 @@ void main() {
       ).encode(),
       KeptDiscoveryHintService.completedKey: true,
     });
+    final keptGraph = KeptRepositoryTestGraph();
 
-    await tester.pumpWidget(_homeApp());
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     await tester.pump();
@@ -3067,7 +3127,7 @@ void main() {
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
-      (await SavedReflectionsService().load()).single.text,
+      (await keptGraph.service.load()).single.text,
       wisdom,
     );
 
@@ -3622,21 +3682,25 @@ void main() {
       'size', (tester) async {
     final now = DateTime.now();
     const wisdom = 'A wisdom used to verify the filled ring absorbs taps';
-    final kept = FavoriteItem(
-      id: 'already-kept-for-absorb-test',
-      text: wisdom,
-      date: 'July 23, 2026',
-    );
     SharedPreferences.setMockInitialValues({
       'daily_wisdom_access': DailyWisdomRecord(
         text: wisdom,
         revealedAt: now,
         unlockAt: now.add(const Duration(hours: 24)),
+        revealId: _fixedRevealId,
       ).encode(),
-      'favorites': [kept.encode()],
     });
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: 'already-kept-for-absorb-test',
+          revealId: _fixedRevealId,
+          wisdomText: wisdom,
+          revealedAt: now,
+        ),
+      ]);
 
-    await tester.pumpWidget(_homeApp());
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
     await tester.pump();
@@ -3710,9 +3774,9 @@ void main() {
 
     // Persistence is byte-for-byte unchanged: still exactly the one
     // pre-existing Kept entry, not removed and not duplicated.
-    final persisted = await SavedReflectionsService().load();
+    final persisted = await keptGraph.service.load();
     expect(persisted, hasLength(1));
-    expect(persisted.single.id, kept.id);
+    expect(persisted.single.id, 'already-kept-for-absorb-test');
     expect(persisted.single.text, wisdom);
     expect(tester.takeException(), isNull);
   });
@@ -3730,6 +3794,7 @@ void main() {
         unlockAt: now.add(const Duration(hours: 24)),
       ).encode(),
     });
+    final keptGraph = KeptRepositoryTestGraph();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -3749,20 +3814,13 @@ void main() {
                 // this file) constructs `HomeScreen` directly instead of
                 // going through `_homeApp()` — which is exactly what
                 // `_homeApp()`'s own default (`savedReflectionsService ??
-                // SavedReflectionsService()`) exists to protect against.
-                // Without this, `HomeScreen` fell back to
-                // `app_services.savedReflectionsService`, the process-wide
-                // singleton every other direct-construction test in this
-                // file also shares — its own `PersistenceOperationCoordinator`
-                // can still have a prior test's operation queued/in-flight
-                // on the `saved_reflections` resource key, so this test's
-                // own `toggle()` call was not guaranteed to have actually
-                // persisted by the time the assertion below reads it back,
-                // which is what produced the reported `List.single`
-                // "No element" failure (the toggle simply had not landed
-                // yet). A fresh, test-local instance removes any
-                // dependency on other tests' in-flight operations.
-                savedReflectionsService: SavedReflectionsService(),
+                // keptGraph.service`) exists to protect against. A fresh,
+                // test-local `KeptRepositoryTestGraph` (its own in-memory
+                // store and its own `PersistenceOperationCoordinator`)
+                // removes any dependency on other tests' in-flight
+                // operations, and this test reads the save back through
+                // that exact same graph below.
+                savedReflectionsService: keptGraph.service,
               ),
             );
           },
@@ -3798,8 +3856,8 @@ void main() {
     // fact, still empty because this test previously read from the
     // process-wide `SavedReflectionsService` singleton's persistence
     // queue rather than a test-local instance; see the `savedReflectionsService:
-    // SavedReflectionsService()` correction above).
-    final savedAfterReduceMotionSave = await SavedReflectionsService().load();
+    // keptGraph.service` correction above).
+    final savedAfterReduceMotionSave = await keptGraph.service.load();
     expect(savedAfterReduceMotionSave, hasLength(1));
     expect(savedAfterReduceMotionSave.single.text, wisdom);
     final prefs = await SharedPreferences.getInstance();
@@ -3906,9 +3964,10 @@ void main() {
       ).encode(),
     });
     final pushObserver = _HomePushCountingNavigatorObserver();
+    final keptGraph = KeptRepositoryTestGraph();
 
     await tester.pumpWidget(
-      _homeApp(navigatorObservers: [pushObserver]),
+      _homeApp(navigatorObservers: [pushObserver], keptGraph: keptGraph),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
@@ -3974,7 +4033,7 @@ void main() {
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
-      (await SavedReflectionsService().load()).single.text,
+      (await keptGraph.service.load()).single.text,
       wisdom,
     );
     expect(find.byKey(const ValueKey('kept-screen-root')), findsNothing);
@@ -4040,6 +4099,475 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  // ---------------------------------------------------------------------
+  // 3D-C correction (Section 4): HomeScreen reveal-identity tests. These
+  // prove the 16 listed scenarios directly rather than assuming them from
+  // source inspection. Items 2, 3, 4, 12, 13, 14 are covered above/already
+  // existed (see the edits to "active lock reopens to the existing wisdom
+  // without revealing", "slow authoritative write does not delay reveal
+  // animation but gates save", "locked wisdom returns to launch after
+  // expiry refresh", and the pre-existing one-way/rapid-tap save tests);
+  // the remaining items are covered by the dedicated tests below.
+  // ---------------------------------------------------------------------
+
+  testWidgets(
+      'Item 1: a successful new reveal commit retains its revealId and '
+      'revealedAt on the live HomeScreen state', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+
+    await tester.pumpWidget(
+      _homeApp(dailyGraph: dailyGraph, clock: () => now),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump();
+
+    final persisted = await dailyGraph.repository.loadDailyWisdomRecord();
+    expect(persisted, isNotNull);
+    expect(persisted!.revealId, isNotNull);
+    expect(_homeCurrentRevealId(tester), persisted.revealId);
+    expect(
+      _homeCurrentRevealedAt(tester)?.millisecondsSinceEpoch,
+      persisted.revealedAt.millisecondsSinceEpoch,
+    );
+
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets(
+      'Items 5/7/8: currentFavorite matches strictly by revealId, never by '
+      'wisdom text', (tester) async {
+    await tester.pumpWidget(_homeApp());
+    await _finishOpeningIntro(tester);
+
+    final dynamic homeState = tester.state(find.byType(HomeScreen));
+
+    const sharedText = 'A wisdom the pool repeats across two distinct days';
+    const matchingItem = FavoriteItem(
+      id: 'match-by-id',
+      revealId: 'reveal-aaaa',
+      text: sharedText,
+      date: 'Jan 1, 2026',
+    );
+    const sameTextDifferentRevealItem = FavoriteItem(
+      id: 'same-text-different-reveal',
+      revealId: 'reveal-bbbb',
+      text: sharedText,
+      date: 'Jan 2, 2026',
+    );
+
+    homeState.favorites = <FavoriteItem>[
+      matchingItem,
+      sameTextDifferentRevealItem,
+    ];
+
+    // Item 8: identical text on screen, but the current revealId matches
+    // neither seeded record — never treated as already kept.
+    homeState.currentRevealId = 'reveal-cccc';
+    homeState.currentText = sharedText;
+    expect(homeState.isCurrentFavorite(), isFalse);
+    expect(homeState.currentFavorite(), isNull);
+
+    // Items 5/7: currentRevealId matches `matchingItem`'s revealId exactly,
+    // even though the text currently on screen is completely different —
+    // the match is by identity, never by text.
+    homeState.currentRevealId = 'reveal-aaaa';
+    homeState.currentText = 'A completely different piece of text on screen';
+    expect(homeState.isCurrentFavorite(), isTrue);
+    expect(homeState.currentFavorite(), same(matchingItem));
+
+    // The other record shares identical text with `matchingItem` but a
+    // distinct revealId — it remains its own distinct, separately matched
+    // identity, proving identical text never collapses two occurrences.
+    homeState.currentRevealId = 'reveal-bbbb';
+    expect(homeState.currentFavorite(), same(sameTextDifferentRevealItem));
+  });
+
+  testWidgets(
+      'Item 9: a null revealId blocks save before SavedReflectionsService '
+      'is ever called', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final keptGraph = KeptRepositoryTestGraph();
+
+    await tester.pumpWidget(
+      _homeApp(dailyGraph: dailyGraph, clock: () => now, keptGraph: keptGraph),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+
+    expect(_homeCurrentRevealId(tester), isNotNull);
+    final dynamic homeState = tester.state(find.byType(HomeScreen));
+    homeState.currentRevealId = null;
+
+    // The wisdom text's own fade (1200ms) completes before the save ring's
+    // separate opacity animation (which does not even start until 900ms
+    // after commit, and itself takes 1000ms) does — an explicit real-time
+    // pump is needed here so `saveInteractionEnabled` has actually flipped
+    // true by the time the tap below is attempted, rather than the tap
+    // being swallowed by the unrelated "still fading in" guard.
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpUntilCondition(
+        tester, () => _keptGuard(tester).ignoring == false);
+    expect(_keptGuard(tester).ignoring, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(await keptGraph.service.load(), isEmpty);
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('home-save-control-kept')), findsNothing);
+    expect(find.textContaining('could not be kept'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Item 10: a null revealedAt blocks save before SavedReflectionsService '
+      'is ever called', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final keptGraph = KeptRepositoryTestGraph();
+
+    await tester.pumpWidget(
+      _homeApp(dailyGraph: dailyGraph, clock: () => now, keptGraph: keptGraph),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+
+    expect(_homeCurrentRevealedAt(tester), isNotNull);
+    final dynamic homeState = tester.state(find.byType(HomeScreen));
+    // revealId is deliberately left non-null: this isolates the
+    // `revealedAt == null` half of `toggleFavorite`'s
+    // `revealId == null || revealedAt == null` guard from the `revealId`
+    // half already proven by Item 9 above — a combination `toggleFavorite`
+    // never produces on its own, since both fields are always assigned
+    // together on every production code path, but the guard itself checks
+    // them independently and must be proven to do so.
+    homeState.currentRevealedAt = null;
+
+    // See Item 9's identical comment above: the save ring's own opacity
+    // animation finishes well after the wisdom text's fade does, so a real
+    // elapsed-time pump is required before the interaction guard reliably
+    // reads false.
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpUntilCondition(
+        tester, () => _keptGuard(tester).ignoring == false);
+    expect(_keptGuard(tester).ignoring, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(await keptGraph.service.load(), isEmpty);
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('home-save-control-kept')), findsNothing);
+    expect(find.textContaining('could not be kept'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Item 11: a locked record whose revealId backfill has persistently '
+      'failed remains viewable but blocks save without falling back to '
+      'text-based identity', (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A pre-identity legacy wisdom whose backfill never lands';
+    final legacyRecord = DailyWisdomRecord(
+      text: wisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': legacyRecord.encode(),
+    });
+    final failingAdapter = InterceptingStoragePreferencesAdapter(
+      setStringInterceptor: (key, value, persist) async {
+        if (key == DailyAccessRepository.dailyWisdomAccessKey) {
+          // The backfill write always fails; the original legacy record on
+          // disk is therefore never touched by it, and revealId remains
+          // null indefinitely across every launch this test performs.
+          throw StateError('backfill persistently fails');
+        }
+        await persist();
+      },
+    );
+    final dailyGraph =
+        DailyAccessTestGraph(adapter: failingAdapter, clock: () => now);
+    final keptGraph = KeptRepositoryTestGraph();
+
+    await tester.pumpWidget(
+      _homeApp(dailyGraph: dailyGraph, clock: () => now, keptGraph: keptGraph),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await tester.pump();
+
+    // Viewable: the locked wisdom's text is on screen despite the failed
+    // backfill.
+    expect(find.text(wisdom), findsOneWidget);
+    expect(_homeCurrentRevealId(tester), isNull);
+
+    final prefs = await SharedPreferences.getInstance();
+    final persistedOnDisk =
+        DailyWisdomRecord.decode(prefs.getString('daily_wisdom_access')!);
+    expect(persistedOnDisk.revealId, isNull);
+    expect(persistedOnDisk.text, wisdom);
+
+    final save = find.byKey(const ValueKey('home-save-control-unsaved'));
+    expect(save, findsOneWidget);
+    await _pumpUntilCondition(
+        tester, () => _keptGuard(tester).ignoring == false);
+    expect(_keptGuard(tester).ignoring, isFalse);
+
+    await tester.tap(save);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    // Blocked before any SavedReflectionsService call: no record is kept,
+    // and the block never fell back to matching/saving by wisdom text.
+    expect(await keptGraph.service.load(), isEmpty);
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('home-save-control-kept')), findsNothing);
+    expect(find.textContaining('could not be kept'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Item 15: a free-limit result still shows the existing Kept Limit '
+      'dialog and does not persist a new record', (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A new wisdom attempted while already at the free limit';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+        revealId: _fixedRevealId,
+      ).encode(),
+    });
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: 'limit-1',
+          revealId: _testUuid(1),
+          wisdomText: 'One',
+          revealedAt: now,
+        ),
+        _testKeptRecord(
+          id: 'limit-2',
+          revealId: _testUuid(2),
+          wisdomText: 'Two',
+          revealedAt: now,
+        ),
+        _testKeptRecord(
+          id: 'limit-3',
+          revealId: _testUuid(3),
+          wisdomText: 'Three',
+          revealedAt: now,
+        ),
+      ]);
+
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+    await _pumpUntilCondition(
+        tester, () => _keptGuard(tester).ignoring == false);
+
+    // Correction: `pumpAndSettle()` never returns here — HomeScreen's
+    // ritual screen keeps perpetual ambient animation (grain, breathing,
+    // glow) continuously scheduling new frames for as long as this screen
+    // is mounted, so "settled" (no pending frames) never actually occurs.
+    // A bounded, real-duration pump sequence is used instead: one pump to
+    // let the tap's callback and the in-memory repository Future resolve,
+    // then a further 300ms to let the dialog's own (short, one-shot)
+    // entrance transition finish rendering — without ever waiting for the
+    // screen's own unrelated continuous animation to stop.
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Kept Limit'), findsOneWidget);
+    expect(find.text('Become a Keeper'), findsOneWidget);
+    final storedAfterLimit = await keptGraph.service.load();
+    expect(storedAfterLimit, hasLength(3));
+    // The attempted (blocked) wisdom's revealId — `_fixedRevealId`, set on
+    // the seeded `DailyWisdomRecord` above and therefore this screen's
+    // `currentRevealId` — never made it into protected storage.
+    expect(
+      storedAfterLimit.any((item) => item.revealId == _fixedRevealId),
+      isFalse,
+    );
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Item 16: Keeper unlimited behavior still follows the existing UI '
+      'flow beyond the free limit', (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A new wisdom kept by a Keeper beyond the free limit';
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: wisdom,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+        revealId: _fixedRevealId,
+      ).encode(),
+    });
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: 'keeper-limit-1',
+          revealId: _testUuid(4),
+          wisdomText: 'One',
+          revealedAt: now,
+        ),
+        _testKeptRecord(
+          id: 'keeper-limit-2',
+          revealId: _testUuid(5),
+          wisdomText: 'Two',
+          revealedAt: now,
+        ),
+        _testKeptRecord(
+          id: 'keeper-limit-3',
+          revealId: _testUuid(6),
+          wisdomText: 'Three',
+          revealedAt: now,
+        ),
+      ]);
+
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await tester.pump();
+
+    final dynamic homeState = tester.state(find.byType(HomeScreen));
+    // `isKeeper` is an ordinary (non-underscore) instance field on
+    // `_HomeScreenState`, populated in production from
+    // `app_services.purchaseService.isKeeper` — a process-wide singleton
+    // this test file has no existing seam to flip. Writing it directly here
+    // is the same narrow, already-established dynamic-dispatch technique
+    // used for `currentRevealId`/`currentRevealedAt` above, not a new
+    // production seam.
+    homeState.isKeeper = true;
+
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+    await _pumpUntilCondition(
+        tester, () => _keptGuard(tester).ignoring == false);
+
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.text('Kept Limit'), findsNothing);
+    final persisted = await keptGraph.service.load();
+    expect(persisted, hasLength(4));
+    expect(persisted.any((item) => item.text == wisdom), isTrue);
+    expect(
+        find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
+  });
+
+  // ---------------------------------------------------------------------
+  // Correction (toggle rename): `SavedReflectionsService.toggle` now takes
+  // text/date/isKeeper/revealId/revealedAt/existingId. `date` is a
+  // compatibility-only field HomeScreen fills with `formattedToday()` (the
+  // real wall-clock date) — it must never be confused with or substitute
+  // for `revealedAt` (the authoritative, possibly-injected-clock reveal
+  // moment). This test proves the two are never conflated.
+  // ---------------------------------------------------------------------
+  testWidgets(
+      'toggleFavorite passes the authoritative revealedAt independent of '
+      'the date compatibility field', (tester) async {
+    // Deliberately far from the real date this test actually runs on, so
+    // `date` (always today's real wall-clock date) and `revealedAt` (this
+    // injected clock) can never coincidentally match.
+    final revealBoundary = DateTime.utc(2019, 3, 14, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => revealBoundary);
+    final keptGraph = KeptRepositoryTestGraph();
+    final spy = _RecordingSavedReflectionsService(keptGraph.service);
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => revealBoundary,
+        savedReflectionsService: spy,
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump();
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await tester.pump(const Duration(seconds: 2));
+    await _pumpUntilCondition(
+        tester, () => _keptGuard(tester).ignoring == false);
+
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(spy.toggleCallCount, 1);
+    expect(spy.capturedIsKeeper, isFalse);
+    expect(spy.capturedExistingId, isNull);
+
+    final persistedDailyRecord =
+        await dailyGraph.repository.loadDailyWisdomRecord();
+    expect(persistedDailyRecord, isNotNull);
+    expect(spy.capturedRevealId, persistedDailyRecord!.revealId);
+    expect(spy.capturedText, persistedDailyRecord.text);
+
+    // The authoritative timestamp is exactly the injected reveal boundary
+    // — never today's real date.
+    expect(
+      spy.capturedRevealedAt?.millisecondsSinceEpoch,
+      revealBoundary.millisecondsSinceEpoch,
+    );
+    // `date` is today's real display date, not a formatting of
+    // `revealedAt`/`revealBoundary` — proving `date` carries no identity or
+    // timestamp authority of its own.
+    expect(spy.capturedDate, formattedToday());
+    expect(spy.capturedDate, isNot(formatFavoriteDisplayDate(revealBoundary)));
+
+    // The persisted `KeptRecord` itself reflects the authoritative
+    // `revealedAt`, never `date`.
+    final storedRecord = keptGraph.store.envelope!.activeRecords.single;
+    expect(
+      storedRecord.revealedAt.millisecondsSinceEpoch,
+      revealBoundary.millisecondsSinceEpoch,
+    );
+    expect(storedRecord.revealId, persistedDailyRecord.revealId);
+
+    await tester.pump(const Duration(seconds: 6));
+  });
 }
 
 void _expectSemanticNode({
@@ -4061,9 +4589,61 @@ void _expectSemanticNode({
   expect(actualHasTap, hasTap, reason: reason);
 }
 
+/// Build 26 Phase 3D-C: a single fixed, canonical UUID v4 used across this
+/// file's "already kept" test setups. Kept identity is now `revealId`-only
+/// (never text/date), so an "already kept" fixture must give the seeded
+/// `DailyWisdomRecord` this exact `revealId` and pre-populate a matching
+/// `KeptRecord` under the same `revealId` — never rely on `backfillRevealIdIfNeeded()`'s
+/// own freshly minted (and therefore unpredictable) UUID. Reused verbatim
+/// across different tests is safe: each test constructs its own isolated
+/// `KeptRepositoryTestGraph`/store, so there is no cross-test collision.
+const _fixedRevealId = 'a5f3c111-1111-4111-8111-111111111111';
+
+/// Deterministic, repeatable canonical UUID v4 for test-only fixtures that
+/// need several *distinct* valid Kept identities (`KeptRecord.revealId`/
+/// `mutationId` — see `KeptRecord._validate`/`isCanonicalUuidV4OrV5` —
+/// require a canonical UUID v4 or v5; arbitrary strings like `'reveal-1'`
+/// are rejected). Every call with a distinct [suffix] produces a distinct,
+/// valid UUID; the same [suffix] always produces the same UUID, so
+/// fixtures remain reproducible across runs with no random collision risk.
+/// Never used outside this test file.
+String _testUuid(int suffix) {
+  assert(suffix >= 0 && suffix <= 0xFFFFFFFFFFFF);
+  return '00000000-0000-4000-8000-'
+      '${suffix.toRadixString(16).padLeft(12, '0')}';
+}
+
+/// Builds one active [KeptRecord] for seeding a [KeptRepositoryTestGraph]
+/// directly (bypassing `keepOccurrence`'s own id/mutationId generation) so
+/// an "already kept" fixture's identity is entirely deterministic.
+KeptRecord _testKeptRecord({
+  required String id,
+  required String revealId,
+  required String wisdomText,
+  required DateTime revealedAt,
+  DateTime? keptAt,
+  String? reflectionText,
+  DateTime? reflectedAt,
+}) {
+  final effectiveKeptAt = keptAt ?? revealedAt;
+  final effectiveUpdatedAt = reflectedAt ?? effectiveKeptAt;
+  return KeptRecord(
+    id: id,
+    revealId: revealId,
+    wisdomText: wisdomText,
+    revealedAt: revealedAt,
+    keptAt: effectiveKeptAt,
+    reflectionText: reflectionText,
+    reflectedAt: reflectedAt,
+    updatedAt: effectiveUpdatedAt,
+    mutationId: revealId,
+  );
+}
+
 Widget _homeApp({
   DailyAccessTestGraph? dailyGraph,
   StorageService? storageService,
+  KeptRepositoryTestGraph? keptGraph,
   SavedReflectionsService? savedReflectionsService,
   WisdomShareHandler? wisdomShareService,
   WisdomNotificationService? wisdomNotificationService,
@@ -4075,12 +4655,20 @@ Widget _homeApp({
   List<NavigatorObserver> navigatorObservers = const <NavigatorObserver>[],
 }) {
   final resolvedDailyGraph = dailyGraph ?? DailyAccessTestGraph(clock: clock);
+  // Build 26 Phase 3D-C: `SavedReflectionsService` no longer has a bare
+  // no-arg constructor — it now requires a `KeptRepository`. A fresh
+  // `KeptRepositoryTestGraph` per call (never shared, never a process-wide
+  // singleton) keeps every test's Kept persistence fully isolated, exactly
+  // as `resolvedDailyGraph` already does for daily access above. Tests that
+  // need to read back what a widget interaction persisted pass their own
+  // `keptGraph:` in and read `keptGraph.service.load()` afterward.
+  final resolvedKeptGraph = keptGraph ?? KeptRepositoryTestGraph();
   return MaterialApp(
     navigatorObservers: navigatorObservers,
     home: HomeScreen(
       storageService: storageService ?? StorageService(),
       savedReflectionsService:
-          savedReflectionsService ?? SavedReflectionsService(),
+          savedReflectionsService ?? resolvedKeptGraph.service,
       dailyWisdomAccessService: resolvedDailyGraph.service,
       wisdomShareService: wisdomShareService,
       wisdomNotificationService: wisdomNotificationService,
@@ -4395,6 +4983,25 @@ int _homeScreenStep(WidgetTester tester) {
   return homeState.screenStep as int;
 }
 
+/// 3D-C correction (Section 4): reads the live `currentRevealId`/
+/// `currentRevealedAt` straight off the mounted `HomeScreen`'s `State`, the
+/// same non-underscore-field dynamic-dispatch technique
+/// `_homeScreenStep`/`_homeNavigationInProgress` already use above. Both
+/// fields are ordinary (non-underscore) instance members of the private
+/// `_HomeScreenState`, so no new test-only production seam is introduced by
+/// reading — or, where a test needs to force an otherwise-unreachable
+/// combination (see the null-revealId/null-revealedAt tests below), writing
+/// — them via a `dynamic` reference.
+String? _homeCurrentRevealId(WidgetTester tester) {
+  final dynamic homeState = tester.state(find.byType(HomeScreen));
+  return homeState.currentRevealId as String?;
+}
+
+DateTime? _homeCurrentRevealedAt(WidgetTester tester) {
+  final dynamic homeState = tester.state(find.byType(HomeScreen));
+  return homeState.currentRevealedAt as DateTime?;
+}
+
 /// Pumps through a pop using the same `transitionDuration` obtained from
 /// [_settleRoutePush] for the route being popped, then proves — rather than
 /// assumes — that the pop has fully settled before the caller's next
@@ -4458,6 +5065,86 @@ class _HomePushCountingNavigatorObserver extends NavigatorObserver {
     if (previousRoute != null) {
       pushCount += 1;
     }
+  }
+}
+
+/// Correction pass (toggle rename to text/date/isKeeper/revealId/
+/// revealedAt/existingId): wraps a real [SavedReflectionsService] and
+/// records exactly what `HomeScreen.toggleFavorite` passed to [toggle],
+/// while still delegating to the real instance so persisted Kept state
+/// behaves identically to production. Used to prove `date` is passed
+/// through untouched (today's real display date) while `revealedAt` is the
+/// authoritative reveal moment — the two are never conflated.
+class _RecordingSavedReflectionsService implements SavedReflectionsService {
+  _RecordingSavedReflectionsService(this._inner);
+
+  final SavedReflectionsService _inner;
+
+  int toggleCallCount = 0;
+  String? capturedText;
+  String? capturedDate;
+  bool? capturedIsKeeper;
+  String? capturedRevealId;
+  DateTime? capturedRevealedAt;
+  String? capturedExistingId;
+
+  @override
+  Future<List<FavoriteItem>> load() => _inner.load();
+
+  @override
+  Future<SavedReflectionsResult> toggle({
+    required String text,
+    required String date,
+    required bool isKeeper,
+    required String revealId,
+    required DateTime revealedAt,
+    String? existingId,
+  }) {
+    toggleCallCount += 1;
+    capturedText = text;
+    capturedDate = date;
+    capturedIsKeeper = isKeeper;
+    capturedRevealId = revealId;
+    capturedRevealedAt = revealedAt;
+    capturedExistingId = existingId;
+    return _inner.toggle(
+      text: text,
+      date: date,
+      isKeeper: isKeeper,
+      revealId: revealId,
+      revealedAt: revealedAt,
+      existingId: existingId,
+    );
+  }
+
+  @override
+  Future<SavedReflectionsResult> saveReflection({
+    required String itemId,
+    required String reflection,
+    required bool isKeeper,
+    DateTime? reflectedAt,
+  }) {
+    return _inner.saveReflection(
+      itemId: itemId,
+      reflection: reflection,
+      isKeeper: isKeeper,
+      reflectedAt: reflectedAt,
+    );
+  }
+
+  @override
+  Future<List<FavoriteItem>> deleteReflection({required String itemId}) {
+    return _inner.deleteReflection(itemId: itemId);
+  }
+
+  @override
+  Future<RemovedSavedReflection?> remove({required String itemId}) {
+    return _inner.remove(itemId: itemId);
+  }
+
+  @override
+  Future<List<FavoriteItem>> restore(RemovedSavedReflection removed) {
+    return _inner.restore(removed);
   }
 }
 

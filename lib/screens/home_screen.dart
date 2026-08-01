@@ -90,6 +90,21 @@ class _HomeScreenState extends State<HomeScreen>
   DateTime? _pendingRevealBoundaryForRetry;
   DateTime? _pendingNotificationUnlockAt;
   String? _lockedWisdomText;
+  // Build 26 Phase 3D-C: the authoritative reveal identity for whatever
+  // wisdom `currentText` currently displays, copied verbatim from the
+  // `DailyWisdomRecord` an authoritative `DailyWisdomStatus`/
+  // `DailyWisdomAccess`/`DailyWisdomPreparedReveal` carries it from — never
+  // minted here. Both are null whenever `currentText` is not a genuinely
+  // authoritative, identity-bearing reveal (e.g. "EAST.", ritual copy, or a
+  // fresh reveal whose commit has not yet resolved), which is exactly the
+  // condition `toggleFavorite()` and `currentFavorite()` gate on.
+  String? currentRevealId;
+  DateTime? currentRevealedAt;
+  // Mirrors `_lockedWisdomText`: the reveal identity of the locked wisdom a
+  // tap on the locked countdown would re-display via
+  // `transitionToExistingWisdom`.
+  String? _lockedWisdomRevealId;
+  DateTime? _lockedWisdomRevealedAt;
 
   // Item 5 — Home left-swipe opens Kept. Cumulative drag offset for the
   // current gesture, reset on every swipe start; `_homeSwipeHandled` makes
@@ -522,7 +537,11 @@ class _HomeScreenState extends State<HomeScreen>
             nextStep: 5,
           );
         } else {
-          await transitionToExistingWisdom(lockedWisdomText);
+          await transitionToExistingWisdom(
+            lockedWisdomText,
+            revealId: _lockedWisdomRevealId,
+            revealedAt: _lockedWisdomRevealedAt,
+          );
         }
         return;
       }
@@ -693,7 +712,11 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> transitionToExistingWisdom(String text) async {
+  Future<void> transitionToExistingWisdom(
+    String text, {
+    String? revealId,
+    DateTime? revealedAt,
+  }) async {
     if (transitionInProgress) return;
 
     final currentFlow = ++flowSessionId;
@@ -722,6 +745,8 @@ class _HomeScreenState extends State<HomeScreen>
 
       setState(() {
         currentText = text;
+        currentRevealId = revealId;
+        currentRevealedAt = revealedAt;
         screenStep = 4;
         _showingLockedWisdom = true;
         textOpacity = 1.0;
@@ -782,6 +807,8 @@ class _HomeScreenState extends State<HomeScreen>
           _dailyStatusResolved = true;
           _dailyLockActive = false;
           _lockedWisdomText = null;
+          _lockedWisdomRevealId = null;
+          _lockedWisdomRevealedAt = null;
           nextWisdomMessage =
               status.unlockAt == null ? "" : "A new wisdom is ready.";
 
@@ -789,6 +816,8 @@ class _HomeScreenState extends State<HomeScreen>
             screenStep = 0;
             _showingLockedWisdom = false;
             currentText = "EAST.";
+            currentRevealId = null;
+            currentRevealedAt = null;
             textOpacity = 1.0;
             textScale = 1.0;
             backgroundDepth = 0.0;
@@ -799,11 +828,15 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     String? lockedWisdomText;
+    String? lockedRevealId;
+    DateTime? lockedRevealedAt;
     final text = status.lockedText?.trim();
     if (text != null &&
         text.isNotEmpty &&
         text != DailyWisdomAccessService.corruptRecordRecoveryText) {
       lockedWisdomText = status.lockedText;
+      lockedRevealId = status.revealId;
+      lockedRevealedAt = status.revealedAt;
     }
 
     final message = CountdownFormatter.silenceMessage(status.remaining!);
@@ -813,6 +846,8 @@ class _HomeScreenState extends State<HomeScreen>
         _dailyStatusResolved = true;
         _dailyLockActive = true;
         _lockedWisdomText = lockedWisdomText;
+        _lockedWisdomRevealId = lockedRevealId;
+        _lockedWisdomRevealedAt = lockedRevealedAt;
         nextWisdomMessage = message;
         if (onLockedCountdown) {
           currentText = message;
@@ -1486,6 +1521,8 @@ class _HomeScreenState extends State<HomeScreen>
               text: revealReady.text,
               isNew: false,
               unlockAt: revealReady.unlockAt,
+              revealId: revealReady.revealId,
+              revealedAt: revealReady.revealedAt,
             )
           : DailyWisdomAccess(
               text: revealReady.text,
@@ -1502,6 +1539,8 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _isInBlackSilence = false;
         currentText = revealedAccess.text;
+        currentRevealId = revealedAccess.revealId;
+        currentRevealedAt = revealedAccess.revealedAt;
         screenStep = 4;
         _showingLockedWisdom = !revealedAccess.isNew;
         textOpacity = 1.0;
@@ -1569,6 +1608,8 @@ class _HomeScreenState extends State<HomeScreen>
               setState(() {
                 _revealPersistenceNeedsRetry = false;
                 _showingLockedWisdom = !lateAccess.isNew;
+                currentRevealId = lateAccess.revealId;
+                currentRevealedAt = lateAccess.revealedAt;
                 saveControlOpacity = 1.0;
                 saveInteractionEnabled = true;
                 postRevealMessageOpacity = 1.0;
@@ -1603,6 +1644,11 @@ class _HomeScreenState extends State<HomeScreen>
 
       finishCommittedDailyWisdom(committedAccess);
       _pendingRevealBoundaryForRetry = null;
+
+      setState(() {
+        currentRevealId = committedAccess.revealId;
+        currentRevealedAt = committedAccess.revealedAt;
+      });
 
       await Future.delayed(const Duration(milliseconds: 900));
 
@@ -1665,6 +1711,8 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _revealPersistenceNeedsRetry = false;
         _showingLockedWisdom = !committedAccess.isNew;
+        currentRevealId = committedAccess.revealId;
+        currentRevealedAt = committedAccess.revealedAt;
         saveControlOpacity = 1.0;
         revealGlowOpacity = 0.10;
       });
@@ -1685,6 +1733,8 @@ class _HomeScreenState extends State<HomeScreen>
             setState(() {
               _revealPersistenceNeedsRetry = false;
               _showingLockedWisdom = !lateAccess.isNew;
+              currentRevealId = lateAccess.revealId;
+              currentRevealedAt = lateAccess.revealedAt;
               saveControlOpacity = 1.0;
               saveInteractionEnabled = true;
               postRevealMessageOpacity = 1.0;
@@ -1794,9 +1844,22 @@ class _HomeScreenState extends State<HomeScreen>
     return currentFavorite() != null;
   }
 
+  /// Build 26 Phase 3D-C: identity, not text, is what determines whether
+  /// the wisdom currently on screen is already Kept. Two different daily
+  /// reveals can carry identical wisdom text (the wisdom pool repeats), so
+  /// matching on `item.text == currentText` could wrongly report an
+  /// unrelated occurrence as already kept. `currentRevealId` is only ever
+  /// non-null once a reveal is genuinely authoritative (see
+  /// `updateNextWisdomMessage`, `revealWisdom`, `retryRevealedWisdomCommit`,
+  /// `transitionToExistingWisdom`), so a `null` here always means "not yet
+  /// identified" rather than "not kept" — `toggleFavorite` gates on that
+  /// distinction separately.
   FavoriteItem? currentFavorite() {
+    final revealId = currentRevealId;
+    if (revealId == null) return null;
+
     for (final item in favorites) {
-      if (item.text == currentText) {
+      if (item.revealId == revealId) {
         return item;
       }
     }
@@ -1848,15 +1911,31 @@ class _HomeScreenState extends State<HomeScreen>
     // toggle API itself is unchanged.
     if (isCurrentFavorite()) return;
 
+    // Build 26 Phase 3D-C: keeping a wisdom now requires its authoritative
+    // reveal identity. A reveal that has not yet committed (or whose commit
+    // is still pending after a timeout) has neither, and must never be
+    // keepable — there is no genuine occurrence identity to keep yet.
+    final revealId = currentRevealId;
+    final revealedAt = currentRevealedAt;
+    if (revealId == null || revealedAt == null) {
+      showEastSnack("Wisdom could not be kept. Please try again.");
+      return;
+    }
+
     _saveOperationInProgress = true;
 
     try {
-      final existing = currentFavorite();
+      // Build 26 Phase 3D-C compatibility contract (locked): `text`/`date`
+      // are accepted for source/API compatibility only. `date` is never
+      // parsed and never used to derive `revealedAt` — the authoritative
+      // timestamp passed below is `revealedAt` (from `currentRevealedAt`)
+      // alone, and identity remains `revealId` alone.
       final result = await savedReflectionsService.toggle(
         text: currentText,
         date: formattedToday(),
         isKeeper: isKeeper,
-        existingId: existing?.id,
+        revealId: revealId,
+        revealedAt: revealedAt,
       );
 
       if (!mounted) return;
@@ -1878,12 +1957,17 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadFavorites() async {
-    List<FavoriteItem> loadedFavorites;
+    final List<FavoriteItem> loadedFavorites;
 
     try {
       loadedFavorites = await savedReflectionsService.load();
     } catch (_) {
-      loadedFavorites = [];
+      // Build 26 Phase 3D-C: a load failure (e.g. protected storage
+      // temporarily unavailable) must never be interpreted as "there are no
+      // Kept wisdoms" — silently collapsing to `[]` here would visibly wipe
+      // the Kept list for a transient failure. Leave `favorites` exactly as
+      // it already was.
+      return;
     }
 
     if (!mounted) return;
