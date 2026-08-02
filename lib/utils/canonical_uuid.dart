@@ -35,10 +35,33 @@ bool isCanonicalUuidV4OrV5(String value) {
 }
 
 /// Returns whether [value] is an exact, canonical UUID version 4 string
-/// only (stricter than [isCanonicalUuidV4OrV5]) — used where a genuine
-/// Build 26-native identity is required and a migration-only version 5
-/// identity must be rejected (for example `KeptRepository.keepOccurrence`'s
-/// `revealId` parameter).
+/// only (stricter than [isCanonicalUuidV4OrV5]) — used specifically where a
+/// freshly self-generated identity (an `id`/`mutationId` minted by this
+/// codebase's own id factory, never a value accepted from elsewhere) must
+/// be proven to be a genuine, newly-minted v4 and never any other shape.
 bool isCanonicalUuidV4(String value) {
   return _canonicalUuidV4Pattern.hasMatch(value);
+}
+
+/// Build 26 Phase 3D-E (safety-gap correction, round 4): the migration-aware
+/// acceptance policy for `revealId` fields specifically —
+/// `DailyWisdomRecord.revealId`, `KeptRecord.revealId`, and
+/// `FavoriteItem.revealId`.
+///
+/// A `revealId` may legitimately be either shape this codebase ever
+/// produces for it: a genuine Build 26-native identity (canonical UUID v4,
+/// minted by `Uuid().v4()`) or a deterministic migrated Build 25 identity
+/// (canonical UUID v5, minted once by `KeptMigrationCoordinator` and later
+/// adopted onto the Daily Access side by
+/// `DailyAccessRepository.reconcileRevealIdForOccurrence`). Today this is
+/// the same shape check as [isCanonicalUuidV4OrV5] — but named and used
+/// separately, specifically for `revealId` fields, so that record `id` and
+/// `mutationId` (each validated via [isCanonicalUuidV4] against freshly
+/// self-generated values only) can never be accidentally loosened or
+/// tightened by a future, unrelated change to this policy, and vice versa.
+///
+/// A malformed UUID, or a UUID of any version this codebase does not
+/// actually produce for a `revealId` (v1/v2/v3/v6/...), remains rejected.
+bool isSupportedRevealId(String value) {
+  return isCanonicalUuidV4OrV5(value);
 }

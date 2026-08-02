@@ -9,6 +9,7 @@ import '../persistence/persistence_operation_coordinator.dart';
 import '../utils/canonical_uuid.dart';
 import '../utils/date_formatter.dart';
 import '../utils/kept_timestamp_canonicalizer.dart';
+import '../utils/legacy_kept_identity.dart';
 
 typedef KeptClock = DateTime Function();
 typedef KeptIdFactory = String Function();
@@ -150,10 +151,21 @@ final class KeptRepository {
       operation: () async {
         _requireReady();
 
-        if (!isCanonicalUuidV4(revealId)) {
+        // Build 26 Phase 3D-E (safety-gap correction, round 4): accepts
+        // both a genuine Build 26-native v4 (the ordinary case) and a
+        // deterministic migrated v5 (so a legacy occurrence, once its Daily
+        // Access revealId has been reconciled to the migrated identity by
+        // `DailyAccessRepository.reconcileRevealIdForOccurrence`, can be
+        // deleted and re-kept without failing solely because its revealId
+        // is v5, not v4). This is narrower than a blanket loosening: only
+        // this externally-supplied `revealId` parameter is affected --
+        // `_generateId`'s self-check below, and every other id/mutationId
+        // contract in this file, remain v4-only.
+        if (!isSupportedRevealId(revealId)) {
           throw const KeptRepositoryException(
             'invalid-reveal-id',
-            'keepOccurrence requires a canonical UUID v4 revealId.',
+            'keepOccurrence requires a supported (v4 or migrated v5) '
+                'revealId.',
           );
         }
 
@@ -351,6 +363,114 @@ final class KeptRepository {
           originalIndex: index,
           items: _mapAll(nextEnvelope),
         );
+      },
+    );
+  }
+
+  /// Build 26 Phase 3D-E (safety-gap correction, round 3 — direction
+  /// inversion): a **read-only** lookup that never mutates protected Kept
+  /// storage in any way.
+  ///
+  /// Background — why the migrated [KeptRecord] itself must never be
+  /// touched: `KeptMigrationCoordinator._handleComplete()` runs on *every*
+  /// app launch after the first (inside `KeptStorageBootstrapper`, before
+  /// `HomeScreen` ever mounts) and re-derives the exact expected envelope
+  /// from the immutable migration snapshot, then verifies the current
+  /// protected envelope against it field-by-field
+  /// (`_verifyFieldByField`, using [KeptRecord.operator==], which compares
+  /// every field including `revealId`, `updatedAt`, and `mutationId`). A
+  /// prior version of this fix rewrote a migrated record's `revealId` in
+  /// place — which is exactly what made that verification fail on the very
+  /// next launch (`KeptMigrationException['field-verify-mismatch']`),
+  /// confirmed by real `flutter test` evidence. A migrated [KeptRecord] is
+  /// permanently, byte-for-byte fixed the moment migration completes; nothing
+  /// may ever change it again, including this lookup.
+  ///
+  /// So the correction runs in the *other* direction: the Build 25 daily
+  /// wisdom occurrence's own `DailyWisdomRecord.revealId` (which never
+  /// existed pre-Build-26, and is only ever a fresh, unrelated random UUID
+  /// v4 minted by `DailyAccessRepository.backfillRevealIdIfNeeded()`) is
+  /// what gets corrected — see
+  /// `DailyAccessRepository.reconcileRevealIdForOccurrence`, which calls
+  /// this method to discover what to correct *to*. Nothing in the protected
+  /// Kept store ever changes as a result.
+  ///
+  /// Returns the already-existing, already-verified `revealId` of the one
+  /// migrated [KeptRecord] that can be *proven* to be the exact same
+  /// occurrence as [wisdomText] /
+  /// `[committedRevealedAt, committedUnlockAt)` — never merely on the
+  /// strength of matching text alone, which could just as easily describe
+  /// an ordinary Build 26 record kept for a recurring wisdom on some other,
+  /// unrelated occasion. Returns `null` for every other case (see below).
+  ///
+  /// A candidate is eligible only when ALL of the following hold:
+  ///
+  /// 1. [KeptRecord.wisdomText] matches [wisdomText] exactly.
+  /// 2. Legacy save-instant window rule: the record's [KeptRecord.id] is a
+  ///    parseable Build 25 `sr-v1-<micros>-<serial>` id
+  ///    ([parseLegacySavedReflectionId]) whose embedded save instant falls
+  ///    inside `[committedRevealedAt, committedUnlockAt)` — the committed
+  ///    daily occurrence's own active window. See
+  ///    `legacy_kept_identity.dart` for why this is genuinely
+  ///    timezone-independent: the embedded value is
+  ///    `DateTime.now().microsecondsSinceEpoch` at the moment the item was
+  ///    originally Kept — an absolute Unix epoch instant, never
+  ///    reinterpreted through any device's timezone at any point. The
+  ///    window is right-exclusive (`< committedUnlockAt`) because a save at
+  ///    or after `unlockAt` belongs, by the product's own rolling-24-hour
+  ///    rule, to a *different* (later) occurrence, not this one.
+  /// 3. Provenance gate: the record's existing `revealId` exactly equals
+  ///    [deriveLegacyMigrationRevealId] of the record's own [KeptRecord.id]
+  ///    — the same deterministic UUID v5 `KeptMigrationCoordinator` itself
+  ///    minted for it at migration time. A normal Build 26 record's
+  ///    `revealId` is a genuine random UUID v4 sourced from its own daily
+  ///    record, never this deterministic v5 value, so it can never satisfy
+  ///    this gate — an ordinary record is never returned here merely
+  ///    because its text and window happen to coincide.
+  /// 4. Exactly one such record exists. Zero or more than one is `null`:
+  ///    ambiguity is never guessed at.
+  ///
+  /// Not every legacy id carries a derivable timestamp.
+  /// `legacy-v1-<index>-...` (`StoredFavoriteEntryCodec.fallbackIdFor`,
+  /// assigned when no id was ever stored at all) and
+  /// `duplicate-v1-<index>-...`
+  /// (`SavedReflectionsService._duplicateIdFor`, assigned to whichever of
+  /// two colliding same-id legacy entries was decoded second) are both
+  /// purely content-derived, carry no timestamp, and
+  /// [parseLegacySavedReflectionId] correctly returns `null` for them — such
+  /// a record can never be returned here, with no generic text/date
+  /// fallback introduced to paper over it.
+  Future<String?> resolveLegacyMigratedRevealIdForOccurrence({
+    required String wisdomText,
+    required DateTime committedRevealedAt,
+    required DateTime committedUnlockAt,
+  }) {
+    return _coordinator.runExclusive<String?>(
+      resourceKey: resourceKey,
+      operation: () async {
+        _requireReady();
+
+        if (wisdomText.trim().isEmpty) return null;
+        if (!committedUnlockAt.isAfter(committedRevealedAt)) return null;
+
+        // Read-only: `load()`/`_loadEnvelope()` only, never `replace()`.
+        final envelope = await _loadEnvelope();
+
+        final candidates = envelope.activeRecords.where((record) {
+          if (record.wisdomText != wisdomText) return false;
+
+          final legacyInfo = parseLegacySavedReflectionId(record.id);
+          if (legacyInfo == null) return false;
+
+          final savedAt = legacyInfo.savedAt;
+          if (savedAt.isBefore(committedRevealedAt)) return false;
+          if (!savedAt.isBefore(committedUnlockAt)) return false;
+
+          return record.revealId == deriveLegacyMigrationRevealId(record.id);
+        }).toList();
+
+        if (candidates.length != 1) return null;
+        return candidates.single.revealId;
       },
     );
   }

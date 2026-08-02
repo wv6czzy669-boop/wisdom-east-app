@@ -6,6 +6,7 @@ import 'package:wisdom_app/models/kept_migration_recovery_artifact.dart';
 import 'package:wisdom_app/models/kept_migration_snapshot.dart';
 import 'package:wisdom_app/persistence/file_protection_bridge.dart';
 import 'package:wisdom_app/persistence/protected_kept_migration_artifact_store.dart';
+import 'package:wisdom_app/utils/kept_timestamp_canonicalizer.dart';
 
 class _FakeFileProtectionBridge implements FileProtectionBridge {
   final List<String> protectedPaths = [];
@@ -256,5 +257,173 @@ void main() {
       () => store.loadSnapshot('snap.json'),
       throwsA(isA<KeptMigrationArtifactStoreException>()),
     );
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 3D-D real-device migration hotfix (round 2): a genuinely
+  // sub-millisecond-precision capturedAt/createdAt — the common case for a
+  // DateTime.now()-sourced clock on a real device — makes the store's own
+  // mandatory write-then-read-back verification fail, because
+  // KeptMigrationSnapshot.encode()/KeptMigrationRecoveryArtifact.encode()
+  // only serialize millisecond precision (capturedAtMs/createdAtMs) while
+  // their operator== compares via isAtSameMomentAs, exact to the
+  // microsecond. This reproduces, against the real store (not a fake),
+  // the exact confirmed real-device failure:
+  //   EAST_KEPT_DIAGNOSTIC stage-failed: snapshot-write
+  //   errorType=KeptMigrationArtifactStoreException
+  //   message=Temporary artifact file did not match the intended content.
+  //
+  // These tests are independent of KeptMigrationCoordinator's own fix
+  // (canonicalizing before construction) — they prove the model/store
+  // wire-round-trip defect directly, and prove canonicalizing first is
+  // the correct fix, without depending on the coordinator at all.
+  // -------------------------------------------------------------------
+  group('Phase 3D-D: microsecond-bearing artifact timestamps', () {
+    // The exact shape of clock value recovered from the physical device's
+    // failing run (see the coordinator's real snapshot-write failure).
+    final microsecondBearingClock =
+        DateTime.utc(2026, 8, 2, 9, 44, 43, 484, 133);
+
+    test(
+        '33. an uncanonicalized microsecond-bearing snapshot capturedAt '
+        'fails the store\'s own write-verify-temp read-back check '
+        '(proves the exact defect, independent of any coordinator fix)',
+        () async {
+      final store = buildStore();
+      final snapshot = KeptMigrationSnapshot(
+        migrationId: migrationId,
+        capturedAt: microsecondBearingClock,
+        legacyKey: 'favorites',
+        entries: const [
+          KeptMigrationSnapshotEntry(index: 0, rawValue: 'first|||text'),
+        ],
+      );
+
+      await expectLater(
+        store.writeSnapshot('snap.json', snapshot),
+        throwsA(
+          isA<KeptMigrationArtifactStoreException>().having(
+            (e) => e.stage,
+            'stage',
+            'write-verify-temp',
+          ),
+        ),
+      );
+      // The exact-field proof: encode() truncated capturedAt to millisecond
+      // precision, decode() reconstructed at millisecond precision, and
+      // operator== (isAtSameMomentAs) compared that against the original
+      // microsecond-bearing value and found them not the same moment.
+      final encoded = snapshot.encodeString();
+      final decoded = KeptMigrationSnapshot.decodeString(encoded);
+      expect(decoded.capturedAt.isAtSameMomentAs(snapshot.capturedAt), isFalse);
+      expect(decoded.capturedAt.microsecond, 0);
+      expect(snapshot.capturedAt.microsecond, isNot(0));
+      // Every other field survives the round trip unchanged — this is not
+      // a general corruption, only the timestamp precision.
+      expect(decoded.migrationId, snapshot.migrationId);
+      expect(decoded.legacyKey, snapshot.legacyKey);
+      expect(decoded.entries, snapshot.entries);
+    });
+
+    test(
+        '34. canonicalizing capturedAt before construction makes the exact '
+        'same snapshot write and round-trip successfully', () async {
+      final store = buildStore();
+      final snapshot = KeptMigrationSnapshot(
+        migrationId: migrationId,
+        capturedAt: canonicalizeKeptTimestamp(microsecondBearingClock),
+        legacyKey: 'favorites',
+        entries: const [
+          KeptMigrationSnapshotEntry(index: 0, rawValue: 'first|||text'),
+        ],
+      );
+
+      await store.writeSnapshot('snap.json', snapshot);
+      final loaded = await store.loadSnapshot('snap.json');
+
+      expect(loaded, snapshot);
+    });
+
+    test(
+        '35. an uncanonicalized microsecond-bearing recovery artifact '
+        'createdAt fails the same write-verify-temp check', () async {
+      final store = buildStore();
+      final artifact = KeptMigrationRecoveryArtifact(
+        migrationId: migrationId,
+        createdAt: microsecondBearingClock,
+        legacyEntryCount: 1,
+        usableEntryCount: 0,
+        corruptEntries: const [
+          KeptMigrationRecoveryEntry(
+            index: 0,
+            rawValue: 'garbage',
+            stage: KeptMigrationFailureStage.decode,
+            reasonCode: 'favorite_decode_failed',
+          ),
+        ],
+      );
+
+      await expectLater(
+        store.writeRecoveryArtifact('recovery.json', artifact),
+        throwsA(
+          isA<KeptMigrationArtifactStoreException>().having(
+            (e) => e.stage,
+            'stage',
+            'write-verify-temp',
+          ),
+        ),
+      );
+    });
+
+    test(
+        '36. canonicalizing createdAt before construction makes the exact '
+        'same recovery artifact write and round-trip successfully', () async {
+      final store = buildStore();
+      final artifact = KeptMigrationRecoveryArtifact(
+        migrationId: migrationId,
+        createdAt: canonicalizeKeptTimestamp(microsecondBearingClock),
+        legacyEntryCount: 1,
+        usableEntryCount: 0,
+        corruptEntries: const [
+          KeptMigrationRecoveryEntry(
+            index: 0,
+            rawValue: 'garbage',
+            stage: KeptMigrationFailureStage.decode,
+            reasonCode: 'favorite_decode_failed',
+          ),
+        ],
+      );
+
+      await store.writeRecoveryArtifact('recovery.json', artifact);
+      final loaded = await store.loadRecoveryArtifact('recovery.json');
+
+      expect(loaded, artifact);
+    });
+
+    test(
+        '37. no temp/final artifact file is left behind after a '
+        'write-verify-temp failure (fail-closed, nothing partially '
+        'written)', () async {
+      final store = buildStore(tokenFactory: () => 'fixed');
+      final snapshot = KeptMigrationSnapshot(
+        migrationId: migrationId,
+        capturedAt: microsecondBearingClock,
+        legacyKey: 'favorites',
+        entries: const [
+          KeptMigrationSnapshotEntry(index: 0, rawValue: 'first|||text'),
+        ],
+      );
+
+      await expectLater(
+        store.writeSnapshot('snap.json', snapshot),
+        throwsA(isA<KeptMigrationArtifactStoreException>()),
+      );
+
+      expect(
+        File('${dirPath()}/.snap.json.tmp-fixed').existsSync(),
+        isFalse,
+      );
+      expect(File('${dirPath()}/snap.json').existsSync(), isFalse);
+    });
   });
 }

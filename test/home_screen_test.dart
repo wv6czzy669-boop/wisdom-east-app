@@ -19,6 +19,7 @@ import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
+import 'package:wisdom_app/utils/legacy_kept_identity.dart';
 import 'package:wisdom_app/widgets/grain_painter.dart';
 import 'package:wisdom_app/widgets/home/top_nav_ring.dart';
 
@@ -917,6 +918,165 @@ void main() {
       originalRecord.unlockAt.millisecondsSinceEpoch,
     );
     expect(prefs.getStringList('daily_wisdom_archive'), isNull);
+  });
+
+  testWidgets(
+      'Phase 3D-E safety-gap correction: a Build 25 wisdom already Kept '
+      'before the upgrade shows a filled Keep ring on the very first '
+      'stable render -- no interactive empty-ring frame, no duplicate '
+      'record, idempotent across relaunch, and preserved after returning '
+      'from Kept', (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'A Build 25 wisdom already Kept before the Build 26 upgrade';
+
+    // No revealId: exactly how a pre-Build-26 authoritative daily record
+    // looks before `backfillRevealIdIfNeeded()` ever runs.
+    final legacyDailyRecord = DailyWisdomRecord(
+      text: wisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': legacyDailyRecord.encode(),
+    });
+
+    // A migrated KeptRecord for the exact same occurrence: a real,
+    // parseable `sr-v1-<micros>-<serial>` legacy id whose embedded save
+    // instant falls inside [revealedAt, unlockAt), carrying the
+    // deterministic v5 revealId `KeptMigrationCoordinator` would have
+    // minted for it -- the exact real-world state a successful Phase 3D-D
+    // migration leaves behind, *before* this reconciliation fix existed.
+    final legacyId = 'sr-v1-${now.microsecondsSinceEpoch}-0';
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: legacyId,
+          revealId: deriveLegacyMigrationRevealId(legacyId),
+          wisdomText: wisdom,
+          revealedAt: now,
+          reflectionText: 'A private reflection kept before the upgrade',
+        ),
+      ]);
+
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    // First stable render: the ring is already filled -- never an
+    // interactive empty-ring frame first, even transiently.
+    expect(find.text(wisdom), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('home-save-control-unsaved')), findsNothing);
+
+    final afterFirstRender = await keptGraph.service.load();
+    expect(afterFirstRender, hasLength(1));
+    final backfilledRevealId = _homeCurrentRevealId(tester);
+    expect(backfilledRevealId, isNotNull);
+    expect(afterFirstRender.single.revealId, backfilledRevealId);
+    expect(afterFirstRender.single.id, legacyId);
+    expect(
+      afterFirstRender.single.reflection,
+      'A private reflection kept before the upgrade',
+    );
+
+    final mutationIdAfterFirstRender =
+        keptGraph.store.envelope!.activeRecords.single.mutationId;
+
+    // Relaunch: a fresh HomeScreen (and a fresh DailyAccessRepository,
+    // exactly like a real app restart) built against the same underlying
+    // persisted daily-access state and the same protected Kept store --
+    // reconciliation must be a pure no-op this time.
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(
+        find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
+    final afterRelaunch = await keptGraph.service.load();
+    expect(afterRelaunch, hasLength(1));
+    expect(afterRelaunch.single.revealId, backfilledRevealId);
+    expect(
+      keptGraph.store.envelope!.activeRecords.single.mutationId,
+      mutationIdAfterFirstRender,
+      reason: 'no second mutation occurred on relaunch',
+    );
+
+    // Returning from Kept preserves the filled state.
+    await tester.tap(find.byKey(const ValueKey('home-kept-control')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+
+    expect(find.text(wisdom), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('home-save-control-unsaved')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Phase 3D-E safety-gap correction: insufficient migration evidence '
+      '(no parseable legacy save-instant) leaves the Keep ring unfilled, '
+      'and the daily record still safely falls back to an ordinary v4 '
+      'backfill', (tester) async {
+    final now = DateTime.now();
+    const wisdom = 'Text matches, but the evidence does not';
+
+    // No revealId: same pre-Build-26 shape as the successful-reconciliation
+    // test above.
+    final legacyDailyRecord = DailyWisdomRecord(
+      text: wisdom,
+      revealedAt: now,
+      unlockAt: now.add(const Duration(hours: 24)),
+    );
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': legacyDailyRecord.encode(),
+    });
+
+    // Matching text and a revealId that satisfies the provenance gate, but
+    // an id shape (`legacy-v1-...`) that carries no timestamp at all --
+    // `parseLegacySavedReflectionId` correctly returns null for it, so the
+    // resolver can never prove this is the same occurrence. Mirrors
+    // `kept_repository_test.dart` test 66.
+    const noTimestampId = 'legacy-v1-3-abcd1234';
+    final keptGraph = KeptRepositoryTestGraph()
+      ..seed([
+        _testKeptRecord(
+          id: noTimestampId,
+          revealId: deriveLegacyMigrationRevealId(noTimestampId),
+          wisdomText: wisdom,
+          revealedAt: now,
+        ),
+      ]);
+
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    // The ring must remain unfilled -- text/provenance alone is never
+    // enough evidence to reconcile.
+    expect(find.text(wisdom), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-save-control-kept')), findsNothing);
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
+
+    // The daily record itself remains safe and usable: it received an
+    // ordinary fresh v4 backfill (Case D), never the unrelated Kept
+    // record's revealId, and the pre-existing, unrelated Kept record was
+    // never touched.
+    final dailyRevealId = _homeCurrentRevealId(tester);
+    expect(dailyRevealId, isNotNull);
+    expect(dailyRevealId, isNot(deriveLegacyMigrationRevealId(noTimestampId)));
+
+    final favorites = await keptGraph.service.load();
+    expect(favorites, hasLength(1));
+    expect(favorites.single.id, noTimestampId);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('free locked wisdom offers no extra reveal action',
@@ -5145,6 +5305,19 @@ class _RecordingSavedReflectionsService implements SavedReflectionsService {
   @override
   Future<List<FavoriteItem>> restore(RemovedSavedReflection removed) {
     return _inner.restore(removed);
+  }
+
+  @override
+  Future<String?> resolveLegacyMigratedRevealIdForOccurrence({
+    required String wisdomText,
+    required DateTime committedRevealedAt,
+    required DateTime committedUnlockAt,
+  }) {
+    return _inner.resolveLegacyMigratedRevealIdForOccurrence(
+      wisdomText: wisdomText,
+      committedRevealedAt: committedRevealedAt,
+      committedUnlockAt: committedUnlockAt,
+    );
   }
 }
 

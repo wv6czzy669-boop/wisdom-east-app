@@ -1,17 +1,6 @@
 import 'dart:convert';
 
-/// Canonical UUID v4 shape: 8-4-4-4-12 hex digits, version nibble `4`,
-/// variant nibble one of `8`/`9`/`a`/`b`.
-///
-/// The installed `uuid` 4.5.3 package's public validation surface could not
-/// be confirmed in this environment to check the version-4-specific nibble
-/// (as opposed to general RFC4122 structure across any UUID version), so a
-/// small local canonical-v4 check is used instead of assuming that
-/// capability. This mirrors the exact shape `Uuid().v4()` already produces.
-final RegExp _canonicalUuidV4Pattern = RegExp(
-  r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-  caseSensitive: false,
-);
+import '../utils/canonical_uuid.dart';
 
 class DailyWisdomRecord {
   const DailyWisdomRecord({
@@ -27,9 +16,19 @@ class DailyWisdomRecord {
 
   /// Stable identity of this specific reveal occurrence.
   ///
-  /// Always a client-generated random UUID, never derived from [text] or
-  /// from [revealedAt]/[unlockAt]. Introduced in Build 26; a Build 25
-  /// record decoded before backfill will have `revealId == null`.
+  /// Ordinarily a client-generated random UUID v4, never derived from
+  /// [text] or from [revealedAt]/[unlockAt]. Introduced in Build 26; a
+  /// Build 25 record decoded before backfill will have `revealId == null`.
+  ///
+  /// Build 26 Phase 3D-E (safety-gap correction, round 4): may also be a
+  /// deterministic migrated UUID v5, but only when
+  /// `DailyAccessRepository.reconcileRevealIdForOccurrence` has adopted the
+  /// already-existing migrated Kept identity for a Build 25 occurrence that
+  /// was already Kept before the Build 26 upgrade — see that method's doc
+  /// comment. A genuinely new Build 26 reveal is always minted as v4; this
+  /// field never becomes v5 through any other path. See
+  /// `isSupportedRevealId` (`lib/utils/canonical_uuid.dart`) for the exact
+  /// accepted shapes.
   ///
   /// This [DailyWisdomRecord] and the `daily_wisdom_access` state it
   /// belongs to remain device-local and are never synced. A later phase
@@ -92,16 +91,29 @@ class DailyWisdomRecord {
   /// Returns `null` when [key] is absent, preserving backward
   /// compatibility with Build 25 records that predate `revealId`.
   ///
-  /// When present, the value must be an exact, canonical UUID v4 string:
-  /// no surrounding whitespace, no wrong-version or wrong-variant nibble,
-  /// no non-string value. Anything else is treated as corruption,
-  /// consistent with the strict validation of every other field in this
-  /// decoder — a revealId is an occurrence identity, not free text, so it
-  /// is never trimmed or coerced into shape.
+  /// When present, the value must satisfy [isSupportedRevealId]: an exact,
+  /// canonical UUID v4 (a genuine Build 26-native reveal) or UUID v5 (a
+  /// migrated Build 25 identity adopted via
+  /// `DailyAccessRepository.reconcileRevealIdForOccurrence`) string — no
+  /// surrounding whitespace, no unsupported version/variant nibble, no
+  /// non-string value. Anything else is treated as corruption, consistent
+  /// with the strict validation of every other field in this decoder — a
+  /// revealId is an occurrence identity, not free text, so it is never
+  /// trimmed or coerced into shape.
+  ///
+  /// Build 26 Phase 3D-E (safety-gap correction, round 4): this previously
+  /// accepted only UUID v4, via a locally-duplicated pattern. That silently
+  /// rejected a genuine, correctly-written migrated v5 revealId on the very
+  /// next read-back, which `DailyAccessRepository._applyRevealIdCorrection`
+  /// then (correctly, given its own contract) treated as a failed
+  /// verification and reverted — the write always happened, but was always
+  /// silently undone one line later. Widening this check to the same
+  /// migration-aware policy already used for `KeptRecord.revealId` and
+  /// `FavoriteItem.revealId` (see `isSupportedRevealId`) is the fix.
   static String? _readOptionalRevealId(Map<String, dynamic> data, String key) {
     if (!data.containsKey(key)) return null;
     final value = data[key];
-    if (value is String && _canonicalUuidV4Pattern.hasMatch(value)) {
+    if (value is String && isSupportedRevealId(value)) {
       return value;
     }
     throw const FormatException('Invalid daily wisdom record.');

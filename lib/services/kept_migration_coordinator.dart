@@ -11,8 +11,15 @@ import '../persistence/kept_migration_journal_store.dart';
 import '../persistence/kept_state_store.dart';
 import '../persistence/legacy_favorites_store.dart';
 import '../persistence/persistence_operation_coordinator.dart';
+import '../persistence/protected_file_kept_state_store.dart'
+    show KeptStateStoreException;
+import '../persistence/protected_kept_migration_artifact_store.dart'
+    show KeptMigrationArtifactStoreException;
 import '../persistence/stored_favorite_entry_codec.dart';
 import '../utils/favorite_date_codec.dart';
+import '../utils/kept_diagnostics.dart';
+import '../utils/kept_timestamp_canonicalizer.dart';
+import '../utils/legacy_kept_identity.dart';
 
 /// Thrown by [KeptMigrationCoordinator.migrateIfNeeded] on any failure.
 /// Never carries wisdom text, reflection text, or raw legacy values —
@@ -151,6 +158,10 @@ final class KeptMigrationCoordinator {
     );
     final existingEnvelope =
         await _wrap('read-protected-envelope', () => _keptStateStore.load());
+    keptDiagnostic(
+      'not-started: legacyExists=$legacyExists '
+      'existingEnvelopePresent=${existingEnvelope != null}',
+    );
 
     if (!legacyExists && existingEnvelope == null) {
       return const KeptMigrationResult(
@@ -180,7 +191,13 @@ final class KeptMigrationCoordinator {
 
     // legacyExists && existingEnvelope == null.
     final migrationId = _migrationIdFactory();
-    final now = _clock();
+    // Canonicalized for the same reason every KeptRecord timestamp is (see
+    // kept_timestamp_canonicalizer.dart): KeptMigrationJournal's wire format
+    // only stores millisecond precision, but its operator== compares
+    // startedAt/updatedAt with isAtSameMomentAs (exact to the microsecond).
+    // An uncanonicalized DateTime.now() value would make the freshly
+    // written-then-read-back journal compare unequal to itself.
+    final now = canonicalizeKeptTimestamp(_clock());
     final journal = KeptMigrationJournal(
       state: KeptMigrationState.writing,
       migrationId: migrationId,
@@ -230,6 +247,7 @@ final class KeptMigrationCoordinator {
           'The legacy favorites key disappeared during migration.',
         );
       }
+      keptDiagnostic('legacy-read: entryCount=${rawEntries.length}');
 
       final entries = <KeptMigrationSnapshotEntry>[
         for (var i = 0; i < rawEntries.length; i += 1)
@@ -237,7 +255,18 @@ final class KeptMigrationCoordinator {
       ];
       final builtSnapshot = KeptMigrationSnapshot(
         migrationId: currentJournal.migrationId,
-        capturedAt: _clock(),
+        // Phase 3D-D real-device hotfix: canonicalized for the identical
+        // reason KeptRecord timestamps are (kept_timestamp_canonicalizer.dart)
+        // — KeptMigrationSnapshot.encode() only stores millisecond precision
+        // (capturedAtMs), but its operator== compares capturedAt with
+        // isAtSameMomentAs (exact to the microsecond). A genuine
+        // sub-millisecond-precision DateTime.now() value (the common case on
+        // a real device) made the freshly-written-then-read-back temp file
+        // compare unequal to the in-memory snapshot, failing
+        // ProtectedKeptMigrationArtifactStore's mandatory verify-temp
+        // read-back — exactly the confirmed real-device
+        // `snapshot-write`/`write-verify-temp` failure.
+        capturedAt: canonicalizeKeptTimestamp(_clock()),
         legacyKey: 'favorites',
         entries: entries,
       );
@@ -251,7 +280,7 @@ final class KeptMigrationCoordinator {
       currentJournal = currentJournal.copyWith(
         legacyEntryCount: entries.length,
         snapshotFileName: fileName,
-        updatedAt: _clock(),
+        updatedAt: canonicalizeKeptTimestamp(_clock()),
       );
       await _wrap('journal-write', () => _journalStore.save(currentJournal));
     }
@@ -262,7 +291,11 @@ final class KeptMigrationCoordinator {
     if (rebuilt.recoveryEntries.isNotEmpty) {
       final artifact = KeptMigrationRecoveryArtifact(
         migrationId: currentJournal.migrationId,
-        createdAt: _clock(),
+        // Same wire-round-trip reasoning as the snapshot's capturedAt above:
+        // KeptMigrationRecoveryArtifact.encode() also only stores
+        // millisecond precision (createdAtMs), compared via
+        // isAtSameMomentAs.
+        createdAt: canonicalizeKeptTimestamp(_clock()),
         legacyEntryCount: snapshot.entries.length,
         usableEntryCount: rebuilt.usableRecords.length,
         corruptEntries: rebuilt.recoveryEntries,
@@ -294,7 +327,7 @@ final class KeptMigrationCoordinator {
         usableEntryCount: rebuilt.usableRecords.length,
         corruptEntryCount: rebuilt.recoveryEntries.length,
         recoveryFileName: recoveryFileName,
-        updatedAt: _clock(),
+        updatedAt: canonicalizeKeptTimestamp(_clock()),
       );
       await _wrap('journal-write', () => _journalStore.save(currentJournal));
     }
@@ -356,7 +389,7 @@ final class KeptMigrationCoordinator {
       usableEntryCount: rebuilt.usableRecords.length,
       corruptEntryCount: rebuilt.recoveryEntries.length,
       recoveryFileName: recoveryFileName,
-      updatedAt: _clock(),
+      updatedAt: canonicalizeKeptTimestamp(_clock()),
     );
     await _wrap('journal-write', () => _journalStore.save(verifiedJournal));
 
@@ -463,7 +496,7 @@ final class KeptMigrationCoordinator {
 
     final completeJournal = journal.copyWith(
       state: KeptMigrationState.complete,
-      updatedAt: _clock(),
+      updatedAt: canonicalizeKeptTimestamp(_clock()),
     );
     await _wrap('journal-write', () => _journalStore.save(completeJournal));
 
@@ -737,6 +770,13 @@ final class KeptMigrationCoordinator {
       ...duplicateEntries,
     ]..sort((a, b) => a.index.compareTo(b.index));
 
+    keptDiagnostic(
+      'rebuild-from-snapshot: legacyEntryCount=${snapshot.entries.length} '
+      'usableCount=${usableRecords.length} '
+      'decodeOrConvertFailures=${corruptEntries.length} '
+      'duplicateIdentityFailures=${duplicateEntries.length}',
+    );
+
     return _RebuiltMigration(
       usableRecords: usableRecords,
       recoveryEntries: allRecoveryEntries,
@@ -856,8 +896,16 @@ final class KeptMigrationCoordinator {
     // keptAt), or keptAt has already been guaranteed <= reflectedAt above.
     final updatedAt = reflectedAt ?? keptAt;
 
-    final revealId = _uuidV5Factory(
-      'com.dogukan.dailywisdom/build25/reveal/${item.id}',
+    // The reveal-identity name is shared with `KeptRepository`'s
+    // reconciliation provenance gate (`legacy_kept_identity.dart`) so the
+    // two can never independently drift on what "this migrated record's
+    // legacy-derived identity" means. `_uuidV5Factory` is passed through
+    // unchanged — in production this is always the real UUID v5 default;
+    // only one existing coordinator test overrides it, to test this
+    // coordinator's own duplicate-identity handling in isolation.
+    final revealId = deriveLegacyMigrationRevealId(
+      item.id,
+      uuidV5Factory: _uuidV5Factory,
     );
     final mutationId = _uuidV5Factory(
       'com.dogukan.dailywisdom/build25/mutation/${item.id}',
@@ -907,16 +955,54 @@ final class KeptMigrationCoordinator {
       'east_kept_migration_recovery_v1-$migrationId.json';
 
   Future<T> _wrap<T>(String stage, Future<T> Function() action) async {
+    keptDiagnostic('stage-begin: $stage');
     try {
-      return await action();
-    } on KeptMigrationException {
+      final result = await action();
+      keptDiagnostic('stage-ok: $stage');
+      return result;
+    } on KeptMigrationException catch (error) {
+      keptDiagnostic(
+        'stage-failed: $stage (already-wrapped at stage=${error.stage}) '
+        'errorType=${error.runtimeType} message=${error.message}',
+      );
+      await persistKeptDiagnosticLast(
+        stage: stage,
+        errorType: error.runtimeType.toString(),
+        errorCode: error.stage,
+        message: error.message,
+      );
       rethrow;
     } catch (error) {
+      final safeMessage = _safeDiagnosticMessageFor(error);
+      keptDiagnostic(
+        'stage-failed: $stage errorType=${error.runtimeType} '
+        'message=$safeMessage',
+      );
+      await persistKeptDiagnosticLast(
+        stage: stage,
+        errorType: error.runtimeType.toString(),
+        message: safeMessage,
+      );
       throw KeptMigrationException(
         stage,
         'Migration failed at stage: $stage.',
         error,
       );
     }
+  }
+
+  /// Extracts only the already-sanitized `.message` field from recognized
+  /// project store exception types — never their `.cause`, and never any
+  /// error's bare `.toString()` (for example, a `FormatException` thrown by
+  /// `jsonDecode` on corrupt input can echo a fragment of the actual source
+  /// text being parsed, which could include real Kept/reflection content).
+  /// Anything unrecognized logs as `null`; only its `runtimeType` is ever
+  /// logged for those, by the caller.
+  String? _safeDiagnosticMessageFor(Object error) {
+    if (error is KeptStateStoreException) return error.message;
+    if (error is KeptMigrationArtifactStoreException) return error.message;
+    if (error is KeptMigrationJournalStoreException) return error.message;
+    if (error is LegacyFavoritesStoreException) return error.message;
+    return null;
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
+import 'package:wisdom_app/models/kept_bootstrap_result.dart';
 import 'package:wisdom_app/models/kept_migration_journal.dart';
 import 'package:wisdom_app/models/kept_migration_recovery_artifact.dart';
 import 'package:wisdom_app/models/kept_migration_snapshot.dart';
@@ -10,7 +11,9 @@ import 'package:wisdom_app/persistence/kept_migration_artifact_store.dart';
 import 'package:wisdom_app/persistence/kept_migration_journal_store.dart';
 import 'package:wisdom_app/persistence/kept_state_store.dart';
 import 'package:wisdom_app/persistence/legacy_favorites_store.dart';
+import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/persistence/stored_favorite_entry_codec.dart';
+import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/services/kept_migration_coordinator.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 
@@ -1719,6 +1722,225 @@ void main() {
       expect(record.keptAt.isAfter(record.reflectedAt!), isFalse);
       expect(record.updatedAt.isBefore(record.keptAt), isFalse);
       expect(record.revealedAt.isAfter(record.keptAt), isFalse);
+    });
+  });
+
+  group(
+      'Phase 3D-D real-device migration hotfix (round 2): snapshot/recovery/'
+      'journal timestamp round-trip', () {
+    // The Phase 3D-D (round 1) group above already proved KeptRecord's own
+    // wire round-trip is safe against a real device clock — but it still
+    // uses the shared, object-retaining `_FakeArtifactStore`/
+    // `_FakeJournalStore` (declared at the top of this file), which store a
+    // KeptMigrationSnapshot/KeptMigrationRecoveryArtifact/
+    // KeptMigrationJournal *instance* directly and can never reproduce a
+    // defect that only manifests through genuine JSON serialization. This
+    // group uses JsonRoundTrippingKeptMigrationArtifactStore/
+    // JsonRoundTrippingKeptMigrationJournalStore (persistence_test_helpers.dart),
+    // which mirror ProtectedKeptMigrationArtifactStore's and
+    // SharedPreferencesKeptMigrationJournalStore's own mandatory
+    // write-then-read-back verification exactly — this is what actually
+    // proves the confirmed real-device `snapshot-write`/`write-verify-temp`
+    // failure, and proves the fix (canonicalizing every `_clock()` call
+    // site in KeptMigrationCoordinator before constructing a snapshot,
+    // recovery artifact, or journal) resolves it end-to-end.
+    late _FakeLegacyFavoritesStore roundTripLegacy;
+    late JsonRoundTrippingKeptMigrationJournalStore roundTripJournalStore;
+    late JsonRoundTrippingKeptMigrationArtifactStore roundTripArtifactStore;
+    late JsonRoundTrippingKeptStateStore roundTripKeptStateStore;
+
+    // The exact shape of clock value recovered from the physical device's
+    // failing run: a genuine, non-zero microsecond remainder, the routine
+    // case for a real DateTime.now()-sourced clock.
+    final microsecondClock = DateTime.utc(2026, 8, 2, 9, 44, 43, 484, 133);
+
+    // Byte-exact recovered `flutter.favorites` entry from the reported
+    // Build 25 -> 26 upgrade incident (same fixture the round-1 group
+    // above uses).
+    const recoveredPayload = '{"schemaVersion":2,'
+        '"id":"sr-v1-1785622374122602-0",'
+        '"date":"August 2, 2026",'
+        '"text":"Some doors open after surrender.",'
+        '"reflection":"Ibne galatasaray",'
+        '"reflectedAt":"2026-08-02T01:13:07.484133"}';
+
+    setUp(() {
+      roundTripLegacy = _FakeLegacyFavoritesStore();
+      roundTripJournalStore = JsonRoundTrippingKeptMigrationJournalStore();
+      roundTripArtifactStore = JsonRoundTrippingKeptMigrationArtifactStore();
+      roundTripKeptStateStore = JsonRoundTrippingKeptStateStore();
+    });
+
+    KeptMigrationCoordinator buildFullRoundTripCoordinator() {
+      return KeptMigrationCoordinator(
+        legacyFavoritesStore: roundTripLegacy,
+        journalStore: roundTripJournalStore,
+        artifactStore: roundTripArtifactStore,
+        keptStateStore: roundTripKeptStateStore,
+        migrationIdFactory: () => migrationId,
+        clock: () => microsecondClock,
+      );
+    }
+
+    test(
+        '11. the exact recovered physical-device payload migrates cleanly '
+        'end-to-end through real snapshot/recovery/journal JSON '
+        'serialization with a microsecond-bearing clock', () async {
+      // PRE-FIX ANALYSIS (what this exact test proves against the code as
+      // it existed before this change — see the final report's root-cause
+      // section for the full trace): KeptMigrationCoordinator._handleWriting
+      // built `KeptMigrationSnapshot(capturedAt: _clock(), ...)` directly
+      // from the injected clock with no canonicalization.
+      // KeptMigrationSnapshot.encode() serializes capturedAt via
+      // `millisecondsSinceEpoch` only (`capturedAtMs`); decode() reconstructs
+      // at millisecond precision; operator== compares via
+      // `isAtSameMomentAs`, exact to the microsecond. With this clock
+      // (...484133), the freshly-decoded temp-file snapshot (...484000)
+      // compared unequal to the in-memory original, so
+      // JsonRoundTrippingKeptMigrationArtifactStore.writeSnapshot (which
+      // mirrors ProtectedKeptMigrationArtifactStore._writeArtifact's real
+      // write-verify-temp check) threw
+      // KeptMigrationArtifactStoreException('write-verify-temp', ...),
+      // which `_wrap` rewrapped as KeptMigrationException(stage:
+      // 'snapshot-write', ...) — exactly the confirmed real-device
+      // evidence:
+      //   EAST_KEPT_DIAGNOSTIC stage-failed: snapshot-write
+      //   errorType=KeptMigrationArtifactStoreException
+      //   message=Temporary artifact file did not match the intended
+      //   content.
+      //
+      // POST-FIX (this test, against the current code): every `_clock()`
+      // call site in KeptMigrationCoordinator now canonicalizes before
+      // constructing a snapshot/recovery artifact/journal, so migration
+      // completes cleanly.
+      roundTripLegacy.entries = [recoveredPayload];
+      final coordinator = buildFullRoundTripCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 1);
+      expect(result.corruptCount, 0);
+      expect(result.legacyCleanupCompleted, isTrue);
+      expect(roundTripLegacy.entries, isNull);
+      expect(
+        (await roundTripJournalStore.load())!.state,
+        KeptMigrationState.complete,
+      );
+      final record =
+          (await roundTripKeptStateStore.load())!.activeRecords.single;
+      expect(record.id, 'sr-v1-1785622374122602-0');
+    });
+
+    test(
+        '12. the snapshot itself round-trips through the artifact store '
+        'exactly, including a microsecond-bearing capturedAt', () async {
+      roundTripLegacy.entries = [recoveredPayload];
+      final coordinator = buildFullRoundTripCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      final journal = (await roundTripJournalStore.load())!;
+      final snapshot =
+          await roundTripArtifactStore.loadSnapshot(journal.snapshotFileName!);
+      expect(snapshot, isNotNull);
+      // The raw legacy entry survives byte-for-byte, in original order.
+      expect(snapshot!.entries.single.rawValue, recoveredPayload);
+      expect(snapshot.entries.single.index, 0);
+      expect(snapshot.migrationId, migrationId);
+      // The coordinator canonicalized the injected microsecond-bearing
+      // clock before construction, so the snapshot's own capturedAt is
+      // already millisecond-exact — this is why it survived the store's
+      // write-verify-temp round trip at all.
+      expect(snapshot.capturedAt.microsecond, 0);
+    });
+
+    test(
+        '13. retrying after the fixed migration is idempotent and creates '
+        'no duplicate record', () async {
+      roundTripLegacy.entries = [recoveredPayload];
+      final coordinator = buildFullRoundTripCoordinator();
+
+      final first = await coordinator.migrateIfNeeded();
+      expect(first.status, KeptMigrationStatus.migrated);
+
+      final second = await coordinator.migrateIfNeeded();
+
+      expect(second.status, KeptMigrationStatus.alreadyComplete);
+      expect(second.migratedCount, 1);
+      expect(
+        (await roundTripKeptStateStore.load())!.activeRecords,
+        hasLength(1),
+      );
+      // No second snapshot/recovery/journal write is attempted for an
+      // already-complete migration — `_handleComplete` is read-only.
+      expect(roundTripArtifactStore.writeSnapshotCallCount, 1);
+    });
+
+    test(
+        '14. a forced snapshot write-verify-temp failure leaves the legacy '
+        'key untouched, writes no protected envelope, and the journal '
+        'remains in writing state', () async {
+      roundTripLegacy.entries = [recoveredPayload];
+      roundTripArtifactStore.forceVerifyFailure = true;
+      final coordinator = buildFullRoundTripCoordinator();
+
+      await expectLater(
+        coordinator.migrateIfNeeded(),
+        throwsA(
+          isA<KeptMigrationException>()
+              .having((e) => e.stage, 'stage', 'snapshot-write'),
+        ),
+      );
+
+      expect(roundTripLegacy.entries, [recoveredPayload]);
+      expect(await roundTripKeptStateStore.load(), isNull);
+      final journal = await roundTripJournalStore.load();
+      expect(journal, isNotNull);
+      expect(journal!.state, KeptMigrationState.writing);
+      expect(journal.snapshotFileName, isNull);
+    });
+
+    test(
+        '15. after a successful migration, a new runtime Keep and '
+        'Reflection still succeed', () async {
+      roundTripLegacy.entries = [recoveredPayload];
+      final coordinator = buildFullRoundTripCoordinator();
+      await coordinator.migrateIfNeeded();
+
+      final repository = KeptRepository(
+        store: roundTripKeptStateStore,
+        bootstrap: const KeptBootstrapResult.ready(),
+        operationCoordinator: PersistenceOperationCoordinator(),
+        clock: () => DateTime.utc(2026, 8, 3, 10, 0),
+      );
+
+      final keepResult = await repository.keepOccurrence(
+        revealId: const Uuid().v4(),
+        wisdomText: 'A brand-new wisdom, kept after migration.',
+        revealedAt: DateTime.utc(2026, 8, 3, 9, 0),
+        isKeeper: false,
+      );
+      expect(keepResult.limitReached, isFalse);
+      expect(keepResult.items, hasLength(2));
+      final newItemId = keepResult.items.last.id;
+
+      final reflectionResult = await repository.saveReflection(
+        itemId: newItemId,
+        reflection: 'A brand-new reflection, after migration.',
+        isKeeper: false,
+      );
+      expect(reflectionResult.limitReached, isFalse);
+      expect(reflectionResult.reflectionLimitReached, isFalse);
+
+      final envelope = await roundTripKeptStateStore.load();
+      expect(envelope!.activeRecords, hasLength(2));
+      expect(
+        envelope.activeRecords
+            .firstWhere((record) => record.id == newItemId)
+            .reflectionText,
+        'A brand-new reflection, after migration.',
+      );
     });
   });
 }

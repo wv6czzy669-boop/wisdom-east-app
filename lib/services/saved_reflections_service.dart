@@ -130,4 +130,24 @@ class SavedReflectionsService {
   Future<List<FavoriteItem>> restore(RemovedSavedReflection removed) {
     return _keptRepository.restore(removed.occurrence);
   }
+
+  /// Thin pass-through to
+  /// [KeptRepository.resolveLegacyMigratedRevealIdForOccurrence] — see its
+  /// doc comment for the full Build 26 Phase 3D-E (round 3) migration-
+  /// identity rationale. Read-only: never mutates Kept storage. `HomeScreen`
+  /// calls this at startup to discover the migrated Kept revealId (if any)
+  /// for the currently committed daily occurrence, then applies the
+  /// correction on the Daily Access side via
+  /// `DailyWisdomAccessService.reconcileRevealIdForOccurrence` — never here.
+  Future<String?> resolveLegacyMigratedRevealIdForOccurrence({
+    required String wisdomText,
+    required DateTime committedRevealedAt,
+    required DateTime committedUnlockAt,
+  }) {
+    return _keptRepository.resolveLegacyMigratedRevealIdForOccurrence(
+      wisdomText: wisdomText,
+      committedRevealedAt: committedRevealedAt,
+      committedUnlockAt: committedUnlockAt,
+    );
+  }
 }

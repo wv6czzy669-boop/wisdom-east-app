@@ -447,19 +447,72 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadInitialState() async {
-    // Build 25 -> Build 26 upgrade: one-time reveal-identity backfill.
-    // Must complete (or fail nonfatally) before updateNextWisdomMessage or
-    // any other step below reads the authoritative daily record, so the
-    // rest of startup never observes a pre-backfill record.
-    try {
-      await dailyWisdomAccessService.backfillRevealIdIfNeeded();
-    } catch (_) {
-      // Existing Build 25 daily-access behavior remains usable.
-    }
+    // Build 26 Phase 3D-E (safety-gap correction, round 3 — direction
+    // inversion): a single atomic startup sequence, run before
+    // loadFavorites() below so the very first `favorites` read and the
+    // first stable rendered Keep ring already reflect the corrected
+    // identity — never an interactive empty-ring frame first.
+    //
+    // 1. Read the currently committed Daily Wisdom occurrence.
+    // 2. Ask the read-only Kept resolver
+    //    (SavedReflectionsService.resolveLegacyMigratedRevealIdForOccurrence)
+    //    for a migrated Kept revealId candidate for that exact occurrence —
+    //    never mutates Kept storage.
+    // 3. Atomically reconcile/backfill the Daily Wisdom revealId for that
+    //    same occurrence
+    //    (DailyWisdomAccessService.reconcileRevealIdForOccurrence) — the
+    //    only place either revealId is ever written.
+    //
+    // See KeptRepository.resolveLegacyMigratedRevealIdForOccurrence's and
+    // DailyAccessRepository.reconcileRevealIdForOccurrence's doc comments
+    // for the full rationale and safety rules. A migrated KeptRecord itself
+    // is never touched here or anywhere else post-migration.
+    await _reconcileDailyWisdomIdentity();
     await loadFavorites();
     await loadKeeperStatus();
     await updateNextWisdomMessage();
     await synchronizeUnlockNotification();
+  }
+
+  Future<void> _reconcileDailyWisdomIdentity() async {
+    try {
+      final status = await dailyWisdomAccessService.status();
+      final text = status.lockedText;
+      final revealedAt = status.revealedAt;
+      final unlockAt = status.unlockAt;
+      if (text == null || revealedAt == null || unlockAt == null) return;
+      if (text == DailyWisdomAccessService.corruptRecordRecoveryText) return;
+
+      // Step 2: read-only Kept-side lookup. Never mutates Kept storage —
+      // a failure here must never block the Daily Access side backfill in
+      // step 3, so it is caught independently.
+      String? resolvedLegacyRevealId;
+      try {
+        resolvedLegacyRevealId = await savedReflectionsService
+            .resolveLegacyMigratedRevealIdForOccurrence(
+          wisdomText: text,
+          committedRevealedAt: revealedAt,
+          committedUnlockAt: unlockAt,
+        );
+      } catch (_) {
+        resolvedLegacyRevealId = null;
+      }
+
+      // Step 3: atomic Daily Access side reconcile-or-backfill for the same
+      // occurrence. Re-checks the persisted record against the expected
+      // occurrence before applying anything — never applied to a different
+      // occurrence than the one just read above.
+      await dailyWisdomAccessService.reconcileRevealIdForOccurrence(
+        expectedText: text,
+        expectedRevealedAt: revealedAt,
+        expectedUnlockAt: unlockAt,
+        resolvedLegacyRevealId: resolvedLegacyRevealId,
+      );
+    } catch (_) {
+      // Best-effort, one-time migration aid only — existing daily-access
+      // and membership behavior remain usable if this fails for any
+      // reason.
+    }
   }
 
   Future<void> loadKeeperStatus() async {

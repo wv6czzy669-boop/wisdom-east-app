@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../utils/kept_diagnostics.dart';
+
 /// Applies, and verifies, `NSFileProtectionComplete` on a file or directory.
 ///
 /// This is not a general native filesystem abstraction — it exposes
@@ -66,20 +68,55 @@ final class MethodChannelFileProtectionBridge implements FileProtectionBridge {
       );
     }
 
+    keptDiagnostic(
+      'file-protection-begin: channel=$channelName method=$methodName '
+      'path=$path',
+    );
+
     dynamic rawResult;
     try {
       rawResult = await _channel.invokeMethod(methodName, {'path': path});
     } on MissingPluginException catch (error) {
+      // No native handler is registered for this channel at all — distinct
+      // from a PlatformException, where a handler ran but returned an
+      // error. See ios/Runner/AppDelegate.swift's registerFileProtectionChannel:
+      // this is what would surface if the native registrar could not be
+      // created, or if this call raced ahead of that registration.
+      keptDiagnostic(
+        'file-protection-failed: path=$path errorType=MissingPluginException '
+        '(no native handler registered for $channelName/$methodName)',
+      );
+      await persistKeptDiagnosticLast(
+        stage: 'file-protection:$methodName',
+        errorType: 'MissingPluginException',
+        errorCode: 'channel_unavailable',
+      );
       throw FileProtectionException(
         'File protection channel is unavailable.',
         error,
       );
     } on PlatformException catch (error) {
+      keptDiagnostic(
+        'file-protection-failed: path=$path errorType=PlatformException '
+        'code=${error.code}',
+      );
+      await persistKeptDiagnosticLast(
+        stage: 'file-protection:$methodName',
+        errorType: 'PlatformException',
+        errorCode: error.code,
+      );
       throw FileProtectionException(
         'File protection failed: ${error.code}',
         error,
       );
     } catch (error) {
+      keptDiagnostic(
+        'file-protection-failed: path=$path errorType=${error.runtimeType}',
+      );
+      await persistKeptDiagnosticLast(
+        stage: 'file-protection:$methodName',
+        errorType: error.runtimeType.toString(),
+      );
       throw FileProtectionException(
         'File protection failed unexpectedly.',
         error,
@@ -87,9 +124,21 @@ final class MethodChannelFileProtectionBridge implements FileProtectionBridge {
     }
 
     if (rawResult is! bool || rawResult != true) {
+      keptDiagnostic(
+        'file-protection-failed: path=$path '
+        'unexpectedResultType=${rawResult.runtimeType} '
+        'unexpectedResultValue=$rawResult',
+      );
+      await persistKeptDiagnosticLast(
+        stage: 'file-protection:$methodName',
+        errorType: 'UnexpectedResult',
+        errorCode: rawResult.runtimeType.toString(),
+      );
       throw const FileProtectionException(
         'File protection did not return a successful result.',
       );
     }
+
+    keptDiagnostic('file-protection-ok: path=$path');
   }
 }

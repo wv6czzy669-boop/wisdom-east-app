@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/kept_migration_recovery_artifact.dart';
 import '../models/kept_migration_snapshot.dart';
+import '../utils/kept_diagnostics.dart';
 import 'file_protection_bridge.dart';
 import 'kept_migration_artifact_store.dart';
 import 'persistence_operation_coordinator.dart';
@@ -234,6 +235,10 @@ final class ProtectedKeptMigrationArtifactStore
         await raf.close();
       }
     } catch (error) {
+      keptDiagnostic(
+        'kept-migration-artifact-store: write-temp-failed '
+        'tempExists=${tempFile.existsSync()} errorType=${error.runtimeType}',
+      );
       await _deleteBestEffort(tempFile);
       throw KeptMigrationArtifactStoreException(
         'write-temp',
@@ -245,6 +250,10 @@ final class ProtectedKeptMigrationArtifactStore
     try {
       await _fileProtectionBridge.protectAndVerifyComplete(tempPath);
     } catch (error) {
+      keptDiagnostic(
+        'kept-migration-artifact-store: write-protect-temp-failed '
+        'tempExists=${tempFile.existsSync()} errorType=${error.runtimeType}',
+      );
       await _deleteBestEffort(tempFile);
       throw KeptMigrationArtifactStoreException(
         'write-protect-temp',
@@ -309,10 +318,15 @@ final class ProtectedKeptMigrationArtifactStore
   }
 
   Future<String> _resolveAndProtectDirectory() async {
+    keptDiagnostic('kept-migration-artifact-store: directory-resolve-begin');
     final Directory root;
     try {
       root = await _rootDirectoryProvider();
     } catch (error) {
+      keptDiagnostic(
+        'kept-migration-artifact-store: directory-resolve-failed '
+        'errorType=${error.runtimeType}',
+      );
       throw KeptMigrationArtifactStoreException(
         'directory-resolve',
         'Could not resolve the application support directory.',
@@ -325,22 +339,37 @@ final class ProtectedKeptMigrationArtifactStore
     try {
       await dir.create(recursive: true);
     } catch (error) {
+      keptDiagnostic(
+        'kept-migration-artifact-store: directory-create-failed '
+        'path=$dirPath errorType=${error.runtimeType}',
+      );
       throw KeptMigrationArtifactStoreException(
         'directory-create',
         'Could not create the protected migration artifact directory.',
         error,
       );
     }
+    keptDiagnostic(
+      'kept-migration-artifact-store: directory-create-ok path=$dirPath '
+      'existsAfterCreate=${dir.existsSync()}',
+    );
 
     try {
       await _fileProtectionBridge.protectAndVerifyComplete(dirPath);
     } catch (error) {
+      keptDiagnostic(
+        'kept-migration-artifact-store: directory-protect-failed '
+        'path=$dirPath errorType=${error.runtimeType}',
+      );
       throw KeptMigrationArtifactStoreException(
         'directory-protect',
         'Could not protect the migration artifact directory.',
         error,
       );
     }
+    keptDiagnostic(
+      'kept-migration-artifact-store: directory-protect-ok path=$dirPath',
+    );
 
     return dirPath;
   }

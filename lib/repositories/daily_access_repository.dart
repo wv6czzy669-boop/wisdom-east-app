@@ -17,6 +17,48 @@ class CorruptDailyWisdomRecordException implements Exception {
   final String? encodedRecord;
 }
 
+/// Build 26 Phase 3D-E (safety-gap correction, round 4): the internally
+/// distinguishable result of a revealId reconciliation/backfill attempt
+/// (`backfillRevealIdIfNeeded`/`reconcileRevealIdForOccurrence`).
+///
+/// A silent no-op and a silent failure used to be indistinguishable from
+/// the outside -- both simply left the persisted revealId unchanged. That
+/// made a real defect (a genuinely valid write being immediately reverted
+/// because a downstream decode-side check rejected an otherwise-correct
+/// value) look identical to an intentional, harmless no-op. This type
+/// exists so tests and diagnostics can tell the two apart; the public
+/// fail-closed behavior at call sites (retry silently on the next launch)
+/// is unchanged by this alone.
+enum RevealIdReconciliationOutcome {
+  /// The intended revealId was written and read back successfully.
+  applied,
+
+  /// The persisted revealId already equaled the intended value; nothing
+  /// was written.
+  alreadyConsistent,
+
+  /// The persisted record no longer matches the expected occurrence
+  /// (text/revealedAt/unlockAt) -- the correction was not applied to a
+  /// different occurrence than the one the caller resolved a candidate
+  /// against.
+  occurrenceChanged,
+
+  /// No authoritative daily record was persisted at all.
+  noRecord,
+
+  /// The write to persistent storage itself failed (for example a
+  /// [PersistenceException] from [StoragePreferencesAdapter]) -- the
+  /// previously valid record was never touched.
+  storageWriteFailed,
+
+  /// The write succeeded, but reading it back and re-decoding it did not
+  /// reproduce the intended value, so the previously valid record was
+  /// restored. A [DailyWisdomRecord.decode] rejection of an otherwise
+  /// validly-written value (for example an unsupported revealId shape)
+  /// produces this outcome, not [storageWriteFailed].
+  readBackVerificationFailed,
+}
+
 class DailyAccessRepository {
   DailyAccessRepository({
     required StoragePreferencesAdapter preferencesAdapter,
@@ -154,7 +196,69 @@ class DailyAccessRepository {
     return _operationCoordinator.runMutation<void>(
       resourceKey: resourceKey,
       operationKey: 'backfill-revealId',
-      operation: _backfillRevealIdIfNeeded,
+      operation: () async {
+        await _backfillRevealIdIfNeeded();
+      },
+    );
+  }
+
+  /// Build 26 Phase 3D-E (safety-gap correction, round 3 — direction
+  /// inversion): the atomic Daily Access side of the migrated-identity
+  /// correction. Never touches Kept storage; the caller supplies
+  /// [resolvedLegacyRevealId] from a prior, separate, read-only call to
+  /// `KeptRepository.resolveLegacyMigratedRevealIdForOccurrence` (or `null`
+  /// when no safe candidate was found).
+  ///
+  /// [expectedText], [expectedRevealedAt], and [expectedUnlockAt] describe
+  /// the exact committed occurrence the caller resolved a candidate
+  /// against. Before applying anything, the currently persisted
+  /// [DailyWisdomRecord] is re-checked against these values; if daily access
+  /// has moved on since the caller read its status (a new reveal committed,
+  /// or the record was cleared), this is a silent no-op — a correction
+  /// meant for one occurrence is never applied to a different one.
+  ///
+  /// Behavior once the occurrence is confirmed still current:
+  ///
+  /// * [resolvedLegacyRevealId] is non-null and differs from the record's
+  ///   current `revealId` (whether that is `null` or an already-minted,
+  ///   unrelated Build 26 backfill v4): adopts [resolvedLegacyRevealId]
+  ///   directly. A still-missing revealId never passes through an
+  ///   intermediate, unrelated v4 first.
+  /// * [resolvedLegacyRevealId] is non-null and already equals the record's
+  ///   current `revealId`: no-op (already consistent).
+  /// * [resolvedLegacyRevealId] is `null` (no safe migrated candidate) and
+  ///   the record's `revealId` is missing: falls back to the ordinary,
+  ///   already-verified [backfillRevealIdIfNeeded] v4 path.
+  /// * [resolvedLegacyRevealId] is `null` and the record already has a
+  ///   `revealId`: left unchanged. Text/date are never used as a runtime
+  ///   membership check on their own.
+  ///
+  /// Never rewrites `text`/`revealedAt`/`unlockAt`, and never extends or
+  /// resets the rolling 24-hour lock — only `revealId` (and the record's own
+  /// encoded representation) can change here.
+  ///
+  /// Build 26 Phase 3D-E (safety-gap correction, round 4): returns a
+  /// [RevealIdReconciliationOutcome] so tests and diagnostics can prove
+  /// exactly which case occurred — including distinguishing a genuine
+  /// no-op from a silent failure, which used to be indistinguishable from
+  /// the outside. Callers that only need the existing fail-closed,
+  /// retry-next-launch behavior may continue to simply `await` this without
+  /// inspecting the result — no call site is required to change.
+  Future<RevealIdReconciliationOutcome> reconcileRevealIdForOccurrence({
+    required String expectedText,
+    required DateTime expectedRevealedAt,
+    required DateTime expectedUnlockAt,
+    required String? resolvedLegacyRevealId,
+  }) {
+    return _operationCoordinator.runMutation<RevealIdReconciliationOutcome>(
+      resourceKey: resourceKey,
+      operationKey: 'reconcile-revealId',
+      operation: () => _reconcileRevealIdForOccurrence(
+        expectedText: expectedText,
+        expectedRevealedAt: expectedRevealedAt,
+        expectedUnlockAt: expectedUnlockAt,
+        resolvedLegacyRevealId: resolvedLegacyRevealId,
+      ),
     );
   }
 
@@ -431,28 +535,118 @@ class DailyAccessRepository {
 
   String _generateRevealId() => _uuid.v4();
 
-  Future<void> _backfillRevealIdIfNeeded() async {
+  Future<RevealIdReconciliationOutcome> _backfillRevealIdIfNeeded() async {
     final record = await _loadRecordRecoveringCorruption();
-    if (record == null || record.revealId != null) {
-      // Nothing to backfill: no authoritative record yet, or a prior
-      // launch (or this same commit point above) already established one.
-      return;
+    if (record == null) {
+      // Nothing to backfill: no authoritative record yet.
+      return RevealIdReconciliationOutcome.noRecord;
+    }
+    if (record.revealId != null) {
+      // A prior launch (or this same commit point above) already
+      // established one.
+      return RevealIdReconciliationOutcome.alreadyConsistent;
     }
 
-    final backfilled = record.copyWith(revealId: _generateRevealId());
+    return _applyRevealIdCorrection(
+      record: record,
+      nextRevealId: _generateRevealId(),
+    );
+  }
+
+  /// Build 26 Phase 3D-E (safety-gap correction, round 3): the private
+  /// implementation behind [reconcileRevealIdForOccurrence]. See that
+  /// method's doc comment for the full behavior contract.
+  Future<RevealIdReconciliationOutcome> _reconcileRevealIdForOccurrence({
+    required String expectedText,
+    required DateTime expectedRevealedAt,
+    required DateTime expectedUnlockAt,
+    required String? resolvedLegacyRevealId,
+  }) async {
+    final record = await _loadRecordRecoveringCorruption();
+    if (record == null) return RevealIdReconciliationOutcome.noRecord;
+
+    if (!_matchesExpectedOccurrence(
+      record,
+      expectedText: expectedText,
+      expectedRevealedAt: expectedRevealedAt,
+      expectedUnlockAt: expectedUnlockAt,
+    )) {
+      // Daily access has moved on since the caller resolved a candidate for
+      // this occurrence (a new reveal committed, or the record was
+      // cleared) -- a correction for one occurrence is never applied to a
+      // different one.
+      return RevealIdReconciliationOutcome.occurrenceChanged;
+    }
+
+    if (resolvedLegacyRevealId == null) {
+      // Case D: no safe migrated candidate. Delegates to the same,
+      // already-verified backfill path used on every ordinary launch --
+      // never a separate, duplicated write for the missing case. A record
+      // that already has a revealId is left untouched (text/date are never
+      // used as a runtime membership check on their own).
+      return _backfillRevealIdIfNeeded();
+    }
+
+    if (record.revealId == resolvedLegacyRevealId) {
+      // Case C: already consistent -- no-op.
+      return RevealIdReconciliationOutcome.alreadyConsistent;
+    }
+
+    // Case A (missing) / Case B (already carries an unrelated Build 26
+    // backfill v4 from a prior launch): adopt the resolved migrated
+    // revealId directly. A still-missing revealId never passes through an
+    // intermediate, unrelated v4 first.
+    return _applyRevealIdCorrection(
+      record: record,
+      nextRevealId: resolvedLegacyRevealId,
+    );
+  }
+
+  bool _matchesExpectedOccurrence(
+    DailyWisdomRecord record, {
+    required String expectedText,
+    required DateTime expectedRevealedAt,
+    required DateTime expectedUnlockAt,
+  }) {
+    return record.text == expectedText &&
+        record.revealedAt.millisecondsSinceEpoch ==
+            expectedRevealedAt.millisecondsSinceEpoch &&
+        record.unlockAt.millisecondsSinceEpoch ==
+            expectedUnlockAt.millisecondsSinceEpoch;
+  }
+
+  /// Shared write/read-back-verify/revert-on-mismatch primitive behind both
+  /// [_backfillRevealIdIfNeeded] and [_reconcileRevealIdForOccurrence].
+  /// Only ever changes `revealId`; `text`/`revealedAt`/`unlockAt` are always
+  /// copied forward unchanged from [record].
+  ///
+  /// Build 26 Phase 3D-E (safety-gap correction, round 4): returns exactly
+  /// which of [RevealIdReconciliationOutcome.storageWriteFailed],
+  /// [RevealIdReconciliationOutcome.readBackVerificationFailed], or
+  /// [RevealIdReconciliationOutcome.applied] occurred, rather than
+  /// collapsing all three into an identical silent `void` return. This is
+  /// exactly the distinction that let a real defect (a genuinely valid
+  /// write being decode-rejected on read-back, purely because of an
+  /// overly narrow revealId shape check) look indistinguishable from a
+  /// deliberate, harmless no-op.
+  Future<RevealIdReconciliationOutcome> _applyRevealIdCorrection({
+    required DailyWisdomRecord record,
+    required String nextRevealId,
+  }) async {
+    final corrected = record.copyWith(revealId: nextRevealId);
 
     try {
-      await _saveDailyWisdomRecord(backfilled);
+      await _saveDailyWisdomRecord(corrected);
     } catch (_) {
-      // The previously valid Build 25 record was never touched by a failed
-      // write. Existing daily-access behavior remains usable; a later
-      // launch will retry this same backfill.
-      return;
+      // The previously valid record was never touched by a failed write.
+      // Existing daily-access behavior remains usable; a later launch will
+      // retry.
+      return RevealIdReconciliationOutcome.storageWriteFailed;
     }
 
     final verified = await _loadRecordRecoveringCorruption();
     final matches = verified != null &&
-        verified.revealId == backfilled.revealId &&
+        verified.revealId == nextRevealId &&
         verified.text == record.text &&
         verified.revealedAt.millisecondsSinceEpoch ==
             record.revealedAt.millisecondsSinceEpoch &&
@@ -461,16 +655,19 @@ class DailyAccessRepository {
 
     if (!matches) {
       // Read-back verification failed: do not silently accept a possibly
-      // corrupted backfill. Best-effort restore of the original record so
-      // the previously valid Build 25 state is not left invalid; a later
-      // launch will retry the backfill from a clean read.
+      // corrupted write. Best-effort restore of the original record so the
+      // previously valid state is not left invalid; a later launch will
+      // retry from a clean read.
       try {
         await _saveDailyWisdomRecord(record);
       } catch (_) {
         // Best-effort only; a later launch retries again from whatever
         // state is actually persisted.
       }
+      return RevealIdReconciliationOutcome.readBackVerificationFailed;
     }
+
+    return RevealIdReconciliationOutcome.applied;
   }
 
   Future<void> _saveDailyWisdomRecord(DailyWisdomRecord record) async {

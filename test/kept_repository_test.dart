@@ -9,6 +9,7 @@ import 'package:wisdom_app/persistence/protected_file_kept_state_store.dart'
     show KeptStateStoreException;
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
+import 'package:wisdom_app/utils/legacy_kept_identity.dart';
 
 import 'persistence_test_helpers.dart';
 
@@ -334,20 +335,37 @@ void main() {
       expect(store.replaceCallCount, 0);
     });
 
-    test('14b. a v5 revealId is rejected for a new keep (v4 required)',
-        () async {
+    // Build 26 Phase 3D-E (safety-gap correction, round 4): this test
+    // previously asserted the *opposite* -- that a v5 revealId was rejected
+    // here. That was correct in isolation, but combined with
+    // `DailyAccessRepository.reconcileRevealIdForOccurrence` adopting a
+    // genuine migrated v5 onto the Daily Access side, it meant a user who
+    // deleted a reconciled legacy occurrence from Kept could never re-keep
+    // it: `HomeScreen`'s Keep action always calls `keepOccurrence` with the
+    // *current* `DailyWisdomRecord.revealId`, which for that occurrence is
+    // now permanently v5. The policy is intentionally widened: a v5 is
+    // accepted here specifically so that case works, while a malformed or
+    // otherwise-unsupported-version string remains rejected (see test 14
+    // above and test 15 below), and freshly-generated `id`/`mutationId`
+    // values remain their own, separate, v4-only contract (`_generateId`,
+    // unaffected by this change).
+    test(
+        '14b. a genuine migrated v5 revealId is accepted for keepOccurrence '
+        '(re-keeping a reconciled legacy occurrence after deletion must not '
+        'fail solely because its revealId is v5)', () async {
       final repository = buildRepository();
       const v5 = '6fa459ea-ee8a-5ca4-894e-db77e160355e';
 
-      await expectLater(
-        repository.keepOccurrence(
-          revealId: v5,
-          wisdomText: 'Be still.',
-          revealedAt: now,
-          isKeeper: false,
-        ),
-        throwsA(isA<KeptRepositoryException>()),
+      final result = await repository.keepOccurrence(
+        revealId: v5,
+        wisdomText: 'Be still.',
+        revealedAt: now,
+        isKeeper: false,
       );
+
+      expect(result.limitReached, isFalse);
+      final favorites = await repository.load();
+      expect(favorites.single.revealId, v5);
     });
 
     test('15. generated invalid UUID is rejected', () async {
@@ -1401,6 +1419,666 @@ void main() {
         (await roundTrippingStore.load())!.activeRecords,
         hasLength(4),
       );
+    });
+  });
+
+  group(
+      'Phase 3D-E (safety-gap correction, round 3 -- direction inversion): '
+      'resolveLegacyMigratedRevealIdForOccurrence', () {
+    // Deliberately before the outer `now` (2026-08-01T09:00Z, this file's
+    // fixed repository clock) -- this group never mutates the store, so,
+    // unlike the old mutation-based design, nothing here actually depends on
+    // `now`/`updatedAt` any more. Kept anyway for continuity with the
+    // fixture ids/windows the previous round already established.
+    final committedRevealedAt = DateTime.utc(2026, 7, 30, 9, 0);
+    final committedUnlockAt =
+        committedRevealedAt.add(const Duration(hours: 24));
+
+    /// Builds a Build 25 `sr-v1-<microseconds>-<serial>` legacy id whose
+    /// embedded save instant is exactly [savedAt] — the only id shape
+    /// [parseLegacySavedReflectionId] recognizes as carrying a genuine,
+    /// timezone-independent instant. See `legacy_kept_identity.dart` for the
+    /// exact real Build 25 `SavedReflectionsService._createId()` source
+    /// this mirrors.
+    String srV1Id(DateTime savedAt, {int serial = 0}) =>
+        'sr-v1-${savedAt.microsecondsSinceEpoch}-$serial';
+
+    test(
+        '55. exactly one text+window, migration-provenanced candidate '
+        'resolves to its own already-existing revealId', () async {
+      final legacyId =
+          srV1Id(committedRevealedAt.add(const Duration(hours: 2)));
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: DateTime.utc(2026, 7, 30, 1, 13, 7, 484),
+        reflectionText: 'A reflection worth keeping.',
+        reflectedAt: DateTime.utc(2026, 7, 30, 1, 13, 7, 484),
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, migrated.revealId);
+      // Read-only: never touches the store.
+      expect(store.replaceCallCount, 0);
+      expect(store.envelope!.activeRecords.single, migrated);
+    });
+
+    test('56. zero matching candidates (different text) resolves to null',
+        () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      final unrelated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'A completely different wisdom.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [unrelated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '57. two ambiguous migration-provenanced candidates, both with a '
+        'save instant inside the window, resolve to null -- ambiguity is '
+        'never guessed at', () async {
+      final idOne = srV1Id(committedRevealedAt.add(const Duration(hours: 1)));
+      final idTwo = srV1Id(committedRevealedAt.add(const Duration(hours: 2)));
+      final candidateOne = buildRecord(
+        id: idOne,
+        revealId: deriveLegacyMigrationRevealId(idOne),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      final candidateTwo = buildRecord(
+        id: idTwo,
+        revealId: deriveLegacyMigrationRevealId(idTwo),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt.add(const Duration(hours: 2)),
+      );
+      store.envelope =
+          KeptStateEnvelope(activeRecords: [candidateOne, candidateTwo]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+      expect(store.envelope!.activeRecords[0], candidateOne);
+      expect(store.envelope!.activeRecords[1], candidateTwo);
+    });
+
+    test(
+        '58. a duplicate wisdom text whose legacy save instant is *before* '
+        'the committed window resolves to null', () async {
+      final legacyId =
+          srV1Id(committedRevealedAt.subtract(const Duration(minutes: 1)));
+      final olderOccurrence = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt.subtract(const Duration(days: 3)),
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [olderOccurrence]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '59. a duplicate wisdom text whose legacy save instant is at or '
+        'after the committed unlockAt (right-exclusive boundary) resolves '
+        'to null', () async {
+      final legacyId = srV1Id(committedUnlockAt);
+      final laterOccurrence = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [laterOccurrence]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '60. an invalid window (committedUnlockAt not after '
+        'committedRevealedAt) is safely rejected, resolving to null', () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedRevealedAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test('61. throws when the bootstrap result is unavailable', () async {
+      final repository = buildRepository(
+        bootstrap: KeptBootstrapResult.unavailable('snapshot-write'),
+      );
+
+      await expectLater(
+        repository.resolveLegacyMigratedRevealIdForOccurrence(
+          wisdomText: 'Some doors open after surrender.',
+          committedRevealedAt: committedRevealedAt,
+          committedUnlockAt: committedUnlockAt,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+    });
+
+    test(
+        '62. only the matching record is ever considered; unrelated active '
+        "records' identity, content, and position are never touched", () async {
+      final before = buildRecord(
+        id: 'before-1',
+        revealId: '33333333-3333-4333-8333-333333333333',
+        wisdomText: 'An unrelated earlier wisdom.',
+        keptAt: committedRevealedAt.subtract(const Duration(days: 10)),
+      );
+      final legacyId = srV1Id(committedRevealedAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      final after = buildRecord(
+        id: 'after-1',
+        revealId: '44444444-4444-4444-8444-444444444444',
+        wisdomText: 'An unrelated later wisdom.',
+        keptAt: committedRevealedAt.add(const Duration(days: 10)),
+      );
+      final seededEnvelope =
+          KeptStateEnvelope(activeRecords: [before, migrated, after]);
+      store.envelope = seededEnvelope;
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, migrated.revealId);
+      expect(store.replaceCallCount, 0);
+      // Byte-for-byte/value-equal to the seeded envelope -- resolution
+      // never wrote anything, to any record.
+      expect(store.envelope, seededEnvelope);
+      expect(store.envelope!.activeRecords, [before, migrated, after]);
+    });
+
+    test(
+        '63. calling twice returns the identical result both times, and '
+        'never calls store.replace() either time (pure, idempotent, '
+        'read-only)', () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final first = await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+      final second =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(first, migrated.revealId);
+      expect(second, first);
+      expect(store.replaceCallCount, 0);
+      expect(store.envelope!.activeRecords.single, migrated);
+    });
+
+    test(
+        '64. (Gap 2) a normal, non-migrated Build 26 record with matching '
+        "text and a save instant inside the window is never returned as a "
+        "candidate -- the provenance gate rejects a match by text/window "
+        'alone', () async {
+      // A genuine random UUID v4, exactly what `keepOccurrence` always
+      // assigns for an ordinary (non-migrated) Kept record -- never the
+      // deterministic v5 the migration coordinator mints, and its own `id`
+      // is a fresh UUID v4 too, never a parseable `sr-v1-...` id.
+      const ordinaryRevealId = '55555555-5555-4555-8555-555555555555';
+      final ordinary = buildRecord(
+        id: '00000000-0000-4000-8000-0000000000aa',
+        revealId: ordinaryRevealId,
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [ordinary]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '65. (Gap 2) a tampered/unrelated v5 revealId -- matching text and '
+        'window, and even a valid sr-v1 id, but not the deterministic '
+        "derivation for *this* record's own id -- is never returned as a "
+        'candidate', () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      // A genuine UUID v5 value (correct version/variant bits), but
+      // derived from a *different* legacy id than this record's own --
+      // simulating a tampered, corrupted, or otherwise-unrelated v5 value
+      // that happens to still look structurally like a migration revealId.
+      final unrelatedV5 = deriveLegacyMigrationRevealId('some-other-legacy-id');
+      final tampered = buildRecord(
+        id: legacyId,
+        revealId: unrelatedV5,
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [tampered]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '66. a `legacy-v1-<index>-<hash>` id -- carrying no timestamp at '
+        'all -- is never returned as a candidate, even when its revealId '
+        'already satisfies the provenance gate', () async {
+      const legacyV1Id = 'legacy-v1-3-abcd1234';
+      final noTimestamp = buildRecord(
+        id: legacyV1Id,
+        revealId: deriveLegacyMigrationRevealId(legacyV1Id),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [noTimestamp]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '67. a `duplicate-v1-<index>-<hash>` id -- also carrying no '
+        'timestamp -- is never returned as a candidate, even when its '
+        'revealId already satisfies the provenance gate', () async {
+      const duplicateV1Id = 'duplicate-v1-2-deadbeef';
+      final noTimestamp = buildRecord(
+        id: duplicateV1Id,
+        revealId: deriveLegacyMigrationRevealId(duplicateV1Id),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [noTimestamp]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '68. a malformed sr-v1-shaped id with a non-numeric microsecond '
+        'component is never returned as a candidate', () async {
+      const malformedId = 'sr-v1-not-a-number-0';
+      final malformed = buildRecord(
+        id: malformedId,
+        revealId: deriveLegacyMigrationRevealId(malformedId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [malformed]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '69. a malformed sr-v1-shaped id missing its serial segment is '
+        'never returned as a candidate', () async {
+      final malformedId = 'sr-v1-${committedRevealedAt.microsecondsSinceEpoch}';
+      final malformed = buildRecord(
+        id: malformedId,
+        revealId: deriveLegacyMigrationRevealId(malformedId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [malformed]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '70. a save instant exactly at committedRevealedAt (inclusive left '
+        'boundary) resolves to the candidate', () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, migrated.revealId);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '71. a save instant exactly at committedUnlockAt (exclusive right '
+        'boundary) resolves to null', () async {
+      final legacyId = srV1Id(committedUnlockAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '72. a save instant one microsecond before committedUnlockAt '
+        'resolves to the candidate (boundary-adjacent proof)', () async {
+      final legacyId = srV1Id(
+        committedUnlockAt.subtract(const Duration(microseconds: 1)),
+      );
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, migrated.revealId);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '73. a save instant strictly before committedRevealedAt resolves '
+        'to null', () async {
+      final legacyId = srV1Id(
+        committedRevealedAt.subtract(const Duration(microseconds: 1)),
+      );
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, isNull);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '74. the real physical-device fixture id resolves through its '
+        'actual embedded save instant, expressed with the literal micros '
+        'value from the reported evidence', () async {
+      const physicalLegacyId = 'sr-v1-1785622374122602-0';
+      final savedAt = DateTime.fromMicrosecondsSinceEpoch(
+        1785622374122602,
+        isUtc: true,
+      );
+      final windowRevealedAt = savedAt.subtract(const Duration(hours: 2));
+      final windowUnlockAt = windowRevealedAt.add(const Duration(hours: 24));
+      final migrated = buildRecord(
+        id: physicalLegacyId,
+        revealId: deriveLegacyMigrationRevealId(physicalLegacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: DateTime.utc(2026, 8, 2, 1, 13, 7, 484),
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: windowRevealedAt,
+        committedUnlockAt: windowUnlockAt,
+      );
+
+      expect(resolved, migrated.revealId);
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '75. the resolver never calls store.replace() across every '
+        'scenario above -- an aggregate proof that this method is '
+        'genuinely read-only, never a mutation with a lucky no-op path',
+        () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+      );
+      store.envelope = KeptStateEnvelope(activeRecords: [migrated]);
+      final repository = buildRepository();
+
+      // A match, a non-match (different text), an ambiguous scenario, and
+      // an invalid window -- every branch this method can take.
+      await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+      await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'A completely different wisdom.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      final secondLegacyId =
+          srV1Id(committedRevealedAt.add(const Duration(hours: 3)));
+      final secondCandidate = buildRecord(
+        id: secondLegacyId,
+        revealId: deriveLegacyMigrationRevealId(secondLegacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt.add(const Duration(hours: 3)),
+      );
+      store.envelope = KeptStateEnvelope(
+        activeRecords: [migrated, secondCandidate],
+      );
+      final ambiguous =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+      expect(ambiguous, isNull);
+
+      await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedRevealedAt,
+      );
+
+      expect(store.replaceCallCount, 0);
+    });
+
+    test(
+        '76. the protected envelope (KeptRecord field-for-field, including '
+        'mutationId/updatedAt) remains byte-for-byte identical before and '
+        'after resolution -- a migrated KeptRecord is never touched by '
+        'this lookup', () async {
+      final legacyId = srV1Id(committedRevealedAt);
+      final migrated = buildRecord(
+        id: legacyId,
+        revealId: deriveLegacyMigrationRevealId(legacyId),
+        wisdomText: 'Some doors open after surrender.',
+        keptAt: committedRevealedAt,
+        reflectionText: 'Ibne galatasaray',
+        reflectedAt: committedRevealedAt.add(const Duration(hours: 3)),
+      );
+      final before = KeptStateEnvelope(activeRecords: [migrated]);
+      store.envelope = before;
+      final repository = buildRepository();
+
+      final resolved =
+          await repository.resolveLegacyMigratedRevealIdForOccurrence(
+        wisdomText: 'Some doors open after surrender.',
+        committedRevealedAt: committedRevealedAt,
+        committedUnlockAt: committedUnlockAt,
+      );
+
+      expect(resolved, migrated.revealId);
+      final after = store.envelope!;
+      expect(after, before);
+      expect(after.activeRecords.single.id, migrated.id);
+      expect(after.activeRecords.single.revealId, migrated.revealId);
+      expect(after.activeRecords.single.wisdomText, migrated.wisdomText);
+      expect(after.activeRecords.single.revealedAt, migrated.revealedAt);
+      expect(after.activeRecords.single.keptAt, migrated.keptAt);
+      expect(
+        after.activeRecords.single.reflectionText,
+        migrated.reflectionText,
+      );
+      expect(after.activeRecords.single.reflectedAt, migrated.reflectedAt);
+      expect(after.activeRecords.single.updatedAt, migrated.updatedAt);
+      expect(after.activeRecords.single.mutationId, migrated.mutationId);
     });
   });
 }

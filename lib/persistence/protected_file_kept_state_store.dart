@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/kept_state_envelope.dart';
+import '../utils/kept_diagnostics.dart';
 import 'file_protection_bridge.dart';
 import 'kept_state_store.dart';
 import 'persistence_operation_coordinator.dart';
@@ -260,6 +261,10 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
         await raf.close();
       }
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: replace-write-temp-failed '
+        'tempExists=${tempFile.existsSync()} errorType=${error.runtimeType}',
+      );
       await _deleteBestEffort(tempFile);
       throw KeptStateStoreException(
         'replace-write-temp',
@@ -272,6 +277,10 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
     try {
       await _fileProtectionBridge.protectAndVerifyComplete(tempPath);
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: replace-protect-temp-failed '
+        'tempExists=${tempFile.existsSync()} errorType=${error.runtimeType}',
+      );
       await _deleteBestEffort(tempFile);
       throw KeptStateStoreException(
         'replace-protect-temp',
@@ -291,6 +300,10 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
         );
       }
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: replace-verify-temp-failed '
+        'tempExists=${tempFile.existsSync()} errorType=${error.runtimeType}',
+      );
       await _deleteBestEffort(tempFile);
       if (error is KeptStateStoreException) rethrow;
       throw KeptStateStoreException(
@@ -321,6 +334,12 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
         final rawBackup = await backupFile.readAsString();
         previousEnvelope = KeptStateEnvelope.decodeString(rawBackup);
       } catch (error) {
+        keptDiagnostic(
+          'kept-state-store: replace-backup-failed '
+          'tempExists=${tempFile.existsSync()} '
+          'backupExists=${File(backupPath).existsSync()} '
+          'errorType=${error.runtimeType}',
+        );
         await _deleteBestEffort(tempFile);
         await _deleteBestEffort(File(backupPath));
         throw KeptStateStoreException(
@@ -336,6 +355,12 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
     try {
       await tempFile.rename(finalPath);
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: replace-rename-failed '
+        'tempExists=${tempFile.existsSync()} '
+        'finalExists=${finalFile.existsSync()} '
+        'errorType=${error.runtimeType}',
+      );
       await _deleteBestEffort(tempFile);
       if (backupPath != null) await _deleteBestEffort(File(backupPath));
       throw KeptStateStoreException(
@@ -358,6 +383,12 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
         );
       }
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: replace-verify-final-failed '
+        'finalExists=${finalFile.existsSync()} '
+        'backupExists=${backupPath != null && File(backupPath).existsSync()} '
+        'errorType=${error.runtimeType}',
+      );
       await _rollbackAfterRename(
         finalFile: finalFile,
         backupPath: backupPath,
@@ -431,10 +462,15 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
   // ---------------------------------------------------------------------
 
   Future<String> _resolveAndProtectDirectory() async {
+    keptDiagnostic('kept-state-store: directory-resolve-begin');
     final Directory root;
     try {
       root = await _rootDirectoryProvider();
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: directory-resolve-failed '
+        'errorType=${error.runtimeType}',
+      );
       throw KeptStateStoreException(
         'directory-resolve',
         'Could not resolve the application support directory.',
@@ -447,22 +483,41 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
     try {
       await dir.create(recursive: true);
     } catch (error) {
+      keptDiagnostic(
+        'kept-state-store: directory-create-failed path=$dirPath '
+        'errorType=${error.runtimeType}',
+      );
       throw KeptStateStoreException(
         'directory-create',
         'Could not create the protected kept-state directory.',
         error,
       );
     }
+    keptDiagnostic(
+      'kept-state-store: directory-create-ok path=$dirPath '
+      'existsAfterCreate=${dir.existsSync()}',
+    );
 
     try {
       await _fileProtectionBridge.protectAndVerifyComplete(dirPath);
     } catch (error) {
+      // This is the very first native file-protection channel call in the
+      // entire Kept-storage startup sequence. If the channel is unavailable
+      // (see file_protection_bridge.dart's MissingPluginException branch),
+      // this is exactly where it first surfaces — before any temp/final
+      // Kept-state file is ever written, matching a directory that exists
+      // but has zero descendant files.
+      keptDiagnostic(
+        'kept-state-store: directory-protect-failed path=$dirPath '
+        'errorType=${error.runtimeType}',
+      );
       throw KeptStateStoreException(
         'directory-protect',
         'Could not protect the kept-state directory.',
         error,
       );
     }
+    keptDiagnostic('kept-state-store: directory-protect-ok path=$dirPath');
 
     return dirPath;
   }

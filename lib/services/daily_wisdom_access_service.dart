@@ -164,6 +164,31 @@ class DailyWisdomAccessService {
     return _repository.backfillRevealIdIfNeeded();
   }
 
+  /// Delegates to [DailyAccessRepository.reconcileRevealIdForOccurrence] —
+  /// see that method's doc comment for the full behavior contract. Thin
+  /// pass-through only; never mutates Kept storage, and the caller is
+  /// responsible for supplying [resolvedLegacyRevealId] from a prior,
+  /// separate, read-only Kept-side resolution.
+  ///
+  /// Build 26 Phase 3D-E (safety-gap correction, round 4): returns the
+  /// [RevealIdReconciliationOutcome] so tests and diagnostics can prove
+  /// exactly which case occurred. `HomeScreen`'s call site does not need to
+  /// change: it may continue to simply `await` this without inspecting the
+  /// result, preserving today's fail-closed, retry-next-launch behavior.
+  Future<RevealIdReconciliationOutcome> reconcileRevealIdForOccurrence({
+    required String expectedText,
+    required DateTime expectedRevealedAt,
+    required DateTime expectedUnlockAt,
+    required String? resolvedLegacyRevealId,
+  }) {
+    return _repository.reconcileRevealIdForOccurrence(
+      expectedText: expectedText,
+      expectedRevealedAt: expectedRevealedAt,
+      expectedUnlockAt: expectedUnlockAt,
+      resolvedLegacyRevealId: resolvedLegacyRevealId,
+    );
+  }
+
   Future<DailyWisdomAccess?> recoverIncompleteReveal() async {
     final now = _clock();
     final record = await _repository.recoverIncompleteReveal(now: now);

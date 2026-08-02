@@ -1,4 +1,5 @@
 import '../models/kept_bootstrap_result.dart';
+import '../utils/kept_diagnostics.dart';
 import 'kept_migration_coordinator.dart';
 
 /// Narrow, platform-store-free typedefs isolating [KeptStorageBootstrapper]
@@ -97,12 +98,33 @@ class KeptStorageBootstrapper<R, S> {
   /// analysis could not prove was singly assigned, which is what the real
   /// compiler's "might already be assigned" error was about).
   Future<KeptBootstrapResult> _resolveBootstrapResult() async {
+    keptDiagnostic('bootstrap-begin');
     try {
       await _migrate();
+      keptDiagnostic('bootstrap-result: isReady=true');
       return const KeptBootstrapResult.ready();
     } on KeptMigrationException catch (error) {
+      keptDiagnostic(
+        'bootstrap-result: isReady=false errorCode=${error.stage} '
+        'errorType=${error.runtimeType} message=${error.message}',
+      );
+      await persistKeptDiagnosticLast(
+        stage: 'bootstrap',
+        errorType: error.runtimeType.toString(),
+        errorCode: error.stage,
+        message: error.message,
+      );
       return KeptBootstrapResult.unavailable(error.stage);
-    } catch (_) {
+    } catch (error) {
+      keptDiagnostic(
+        'bootstrap-result: isReady=false errorCode=unknown '
+        'errorType=${error.runtimeType}',
+      );
+      await persistKeptDiagnosticLast(
+        stage: 'bootstrap',
+        errorType: error.runtimeType.toString(),
+        errorCode: 'unknown',
+      );
       return KeptBootstrapResult.unavailable('unknown');
     }
   }

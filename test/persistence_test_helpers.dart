@@ -1,9 +1,16 @@
 import 'package:wisdom_app/models/kept_bootstrap_result.dart';
+import 'package:wisdom_app/models/kept_migration_journal.dart';
+import 'package:wisdom_app/models/kept_migration_recovery_artifact.dart';
+import 'package:wisdom_app/models/kept_migration_snapshot.dart';
 import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/models/kept_state_envelope.dart';
+import 'package:wisdom_app/persistence/kept_migration_artifact_store.dart';
+import 'package:wisdom_app/persistence/kept_migration_journal_store.dart';
 import 'package:wisdom_app/persistence/kept_state_store.dart';
 import 'package:wisdom_app/persistence/protected_file_kept_state_store.dart'
     show KeptStateStoreException;
+import 'package:wisdom_app/persistence/protected_kept_migration_artifact_store.dart'
+    show KeptMigrationArtifactStoreException;
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/repositories/daily_access_repository.dart';
@@ -194,6 +201,124 @@ class JsonRoundTrippingKeptStateStore implements KeptStateStore {
       throw const KeptStateStoreException(
         'replace-verify-temp',
         'Temporary kept-state file did not match the intended envelope.',
+      );
+    }
+    _encoded = encoded;
+  }
+}
+
+/// Round-trips every `writeSnapshot`/`writeRecoveryArtifact` through real
+/// JSON encode/decode before ever considering it durable — the same
+/// reasoning as [JsonRoundTrippingKeptStateStore] above, applied to the
+/// Phase 3C migration artifact store. An object-retaining fake (like
+/// `_FakeArtifactStore` in `kept_migration_coordinator_test.dart`) stores
+/// the `KeptMigrationSnapshot`/`KeptMigrationRecoveryArtifact` instance
+/// directly and can never reproduce a defect that only manifests through
+/// genuine JSON serialization — such as the Phase 3D-D real-device
+/// `snapshot-write` failure, where a snapshot's genuinely
+/// sub-millisecond-precision `capturedAt` survived into the in-memory
+/// snapshot but was silently dropped by `KeptMigrationSnapshot.encode()`'s
+/// millisecond-only wire format, making the freshly-decoded read-back
+/// compare unequal to the in-memory original.
+///
+/// Mirrors `ProtectedKeptMigrationArtifactStore._writeArtifact`'s own
+/// mandatory write-then-read-back verification exactly: a round-trip
+/// mismatch throws [KeptMigrationArtifactStoreException] with stage
+/// `'write-verify-temp'`, the same stage a real protected-file mismatch
+/// would report.
+class JsonRoundTrippingKeptMigrationArtifactStore
+    implements KeptMigrationArtifactStore {
+  final Map<String, String> _encodedSnapshots = {};
+  final Map<String, String> _encodedRecoveryArtifacts = {};
+
+  /// Forces every subsequent `writeSnapshot`/`writeRecoveryArtifact` call to
+  /// fail verification regardless of content — for tests proving "a
+  /// failure before verification leaves prior state untouched" without
+  /// depending on a particular content defect to trigger it.
+  bool forceVerifyFailure = false;
+
+  int writeSnapshotCallCount = 0;
+  int writeRecoveryArtifactCallCount = 0;
+
+  @override
+  Future<KeptMigrationSnapshot?> loadSnapshot(String fileName) async {
+    final encoded = _encodedSnapshots[fileName];
+    if (encoded == null) return null;
+    return KeptMigrationSnapshot.decodeString(encoded);
+  }
+
+  @override
+  Future<void> writeSnapshot(
+    String fileName,
+    KeptMigrationSnapshot snapshot,
+  ) async {
+    writeSnapshotCallCount += 1;
+    final encoded = snapshot.encodeString();
+    final decoded = KeptMigrationSnapshot.decodeString(encoded);
+    if (forceVerifyFailure || decoded != snapshot) {
+      throw const KeptMigrationArtifactStoreException(
+        'write-verify-temp',
+        'Temporary artifact file did not match the intended content.',
+      );
+    }
+    _encodedSnapshots[fileName] = encoded;
+  }
+
+  @override
+  Future<KeptMigrationRecoveryArtifact?> loadRecoveryArtifact(
+    String fileName,
+  ) async {
+    final encoded = _encodedRecoveryArtifacts[fileName];
+    if (encoded == null) return null;
+    return KeptMigrationRecoveryArtifact.decodeString(encoded);
+  }
+
+  @override
+  Future<void> writeRecoveryArtifact(
+    String fileName,
+    KeptMigrationRecoveryArtifact artifact,
+  ) async {
+    writeRecoveryArtifactCallCount += 1;
+    final encoded = artifact.encodeString();
+    final decoded = KeptMigrationRecoveryArtifact.decodeString(encoded);
+    if (forceVerifyFailure || decoded != artifact) {
+      throw const KeptMigrationArtifactStoreException(
+        'write-verify-temp',
+        'Temporary artifact file did not match the intended content.',
+      );
+    }
+    _encodedRecoveryArtifacts[fileName] = encoded;
+  }
+}
+
+/// Round-trips every `save` through real JSON encode/decode before ever
+/// considering the migration journal durable — the journal counterpart to
+/// [JsonRoundTrippingKeptMigrationArtifactStore] and
+/// [JsonRoundTrippingKeptStateStore] above, exercising
+/// `KeptMigrationJournal.encode()`/`decode()`'s real millisecond-only wire
+/// format against `operator==`'s exact `isAtSameMomentAs` comparison on
+/// `startedAt`/`updatedAt`.
+class JsonRoundTrippingKeptMigrationJournalStore
+    implements KeptMigrationJournalStore {
+  String? _encoded;
+  int saveCallCount = 0;
+
+  @override
+  Future<KeptMigrationJournal?> load() async {
+    final encoded = _encoded;
+    if (encoded == null) return null;
+    return KeptMigrationJournal.decodeString(encoded);
+  }
+
+  @override
+  Future<void> save(KeptMigrationJournal journal) async {
+    saveCallCount += 1;
+    final encoded = journal.encodeString();
+    final decoded = KeptMigrationJournal.decodeString(encoded);
+    if (decoded != journal) {
+      throw const KeptMigrationJournalStoreException(
+        'save-verify',
+        'The migration journal read-back did not match the intended value.',
       );
     }
     _encoded = encoded;
