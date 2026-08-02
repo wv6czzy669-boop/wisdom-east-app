@@ -26,6 +26,20 @@ enum CloudKitErrorClassifier {
   static let incompatibleVersion = "incompatibleVersion"
   static let quotaExceeded = "quotaExceeded"
 
+  /// Build 26 Phase 4B-2: `CKError.Code.serverRejectedRequest` (raw code
+  /// 15), confirmed on a physical device as the error `EASTKeptZone`'s
+  /// initial fetch returns before the zone exists (CloudKit Console:
+  /// ZoneFetch / SERVER_ERROR / INTERNAL_ERROR), even though directly
+  /// saving the same zone succeeds. Handled by
+  /// `CloudKitPrivateZoneCoordinator`'s guarded create-fallback -- this
+  /// symbolic code is reported only when that fallback (or the create
+  /// operation itself) still fails. Not retried by this classifier or by
+  /// `lib/sync/sync_error_classification.dart`'s `classifySyncErrorCode`
+  /// (an unrecognized-by-name code there defaults to
+  /// `SyncErrorCategory.permanent`, i.e. non-retryable) -- there is no
+  /// existing authoritative rule making a rejected request retryable.
+  static let serverRejectedRequest = "serverRejectedRequest"
+
   /// Reported for any error this classifier does not recognize, including
   /// a non-`CKError` failure. Dart's `classifySyncErrorCode` already
   /// defaults any code it does not recognize to `permanent` (fail closed),
@@ -60,6 +74,8 @@ enum CloudKitErrorClassifier {
       return incompatibleVersion
     case .quotaExceeded:
       return quotaExceeded
+    case .serverRejectedRequest:
+      return serverRejectedRequest
     default:
       if #available(iOS 15.0, *), ckError.code == .accountTemporarilyUnavailable {
         return accountTemporarilyUnavailable
