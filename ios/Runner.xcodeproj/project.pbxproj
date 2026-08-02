@@ -22,6 +22,10 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		EF3EFA03BF40F2A6384D13E7 /* CloudKitSyncBridgeConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06EBDCBC9B147636B57BA3AC /* CloudKitSyncBridgeConstants.swift */; };
 		F88720FF7409A5547D72F49E /* CloudKitAccountStatusMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */; };
+		E749858BF163D25704FC6203 /* CloudKitRecordSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */; };
+		090478D0F6C231A32358E085 /* CloudKitRecordIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */; };
+		D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */; };
+		A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +76,10 @@
 		C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountStatusMapper.swift; sourceTree = "<group>"; };
 		D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncBridge.swift; sourceTree = "<group>"; };
 		FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitErrorClassifier.swift; sourceTree = "<group>"; };
+		B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordSchema.swift; sourceTree = "<group>"; };
+		6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordIdentity.swift; sourceTree = "<group>"; };
+		B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitKeptWisdomCodec.swift; sourceTree = "<group>"; };
+		40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncStateCodec.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,6 +160,10 @@
 				3F46F09478559DBF3E9AF9CD /* CloudKitAccountFingerprintUtility.swift */,
 				7EA6EF4FDC3F1BAA720EF7C2 /* CloudKitPrivateZoneCoordinator.swift */,
 				D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */,
+				B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */,
+				6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */,
+				B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */,
+				40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -326,6 +338,10 @@
 				665F3ADD240938B15D08348A /* CloudKitAccountFingerprintUtility.swift in Sources */,
 				12EC13957B35BA0E817D19DA /* CloudKitPrivateZoneCoordinator.swift in Sources */,
 				000D64F1780418629EF46358 /* CloudKitSyncBridge.swift in Sources */,
+				E749858BF163D25704FC6203 /* CloudKitRecordSchema.swift in Sources */,
+				090478D0F6C231A32358E085 /* CloudKitRecordIdentity.swift in Sources */,
+				D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */,
+				A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

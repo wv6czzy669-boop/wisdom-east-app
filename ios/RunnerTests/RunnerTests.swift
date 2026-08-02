@@ -300,4 +300,261 @@ class RunnerTests: XCTestCase {
     waitForExpectations(timeout: 1)
   }
 
+  // MARK: - Build 26 Phase 4C-1: CKKeptWisdom / CKEastSyncState schema and
+  // codec tests
+  //
+  // Every `CKRecord` here is a plain, locally-constructed value -- no
+  // `CKDatabase`, no network call, no real iCloud account. Synthetic test
+  // values only, exactly as this phase requires.
+
+  private let phase4CRevealIdA = "c947bbb4-f86a-4db3-87c9-ed5e718bbd98"
+  private let phase4CRevealIdB = "affbc527-29c4-5d19-b678-1bc7f9dfb7d4"
+  private let phase4CMutationId = "22222222-2222-4222-8222-222222222222"
+  private let phase4CDataEpoch = "11111111-1111-4111-8111-111111111111"
+
+  // 1. Valid Kept encode/decode round trip (active form).
+  func testKeptWisdomCodecRoundTripsActiveForm() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: "A quiet thought.",
+      reflectedAtMs: 1_754_078_700_000,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+
+    switch CloudKitKeptWisdomCodec.decode(record) {
+    case .success(let envelope):
+      XCTAssertFalse(envelope.isTombstone)
+      XCTAssertEqual(envelope.revealId, phase4CRevealIdA)
+      XCTAssertEqual(envelope.wisdomText, "Be still and know.")
+      XCTAssertEqual(envelope.reflectionText, "A quiet thought.")
+      XCTAssertEqual(envelope.mutationId, phase4CMutationId)
+      XCTAssertEqual(envelope.dataEpoch, phase4CDataEpoch)
+      XCTAssertEqual(envelope.schemaVersion, CloudKitRecordSchema.keptWisdomActiveSchemaVersion)
+    case .failure(let error):
+      XCTFail("Expected successful decode, got \(error)")
+    }
+  }
+
+  // 2. Valid sync-state encode/decode round trip.
+  func testSyncStateCodecRoundTrips() {
+    let record = CloudKitSyncStateCodec.encode(
+      dataEpoch: phase4CDataEpoch,
+      resetAtMs: 1_754_078_400_000,
+      mutationId: phase4CMutationId
+    )
+
+    switch CloudKitSyncStateCodec.decode(record) {
+    case .success(let envelope):
+      XCTAssertEqual(envelope.dataEpoch, phase4CDataEpoch)
+      XCTAssertEqual(envelope.resetAtMs, 1_754_078_400_000)
+      XCTAssertEqual(envelope.mutationId, phase4CMutationId)
+      XCTAssertEqual(envelope.schemaVersion, CloudKitRecordSchema.syncStateSchemaVersion)
+    case .failure(let error):
+      XCTFail("Expected successful decode, got \(error)")
+    }
+  }
+
+  // 3. Deterministic record ID -- the same revealId always produces the
+  // same CKRecord.ID, on every call.
+  func testKeptWisdomRecordIdentityIsDeterministic() throws {
+    let first = try CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    let second = try CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    XCTAssertEqual(first.recordName, second.recordName)
+    XCTAssertEqual(first.zoneID, second.zoneID)
+    XCTAssertEqual(first.recordName, "east-kept-\(phase4CRevealIdA)")
+  }
+
+  // 4. Different revealIds never collide, even with identical wisdom text.
+  func testDifferentRevealIdsProduceDifferentRecordIdentities() throws {
+    let recordA = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+    let recordB = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdB,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+
+    XCTAssertNotEqual(recordA.recordID.recordName, recordB.recordID.recordName)
+  }
+
+  // 5. A record in the wrong (including default) zone is rejected.
+  func testKeptWisdomCodecRejectsWrongZone() throws {
+    let wrongZoneID = CKRecordZone.default().zoneID
+    let recordID = CKRecord.ID(recordName: "east-kept-\(phase4CRevealIdA)", zoneID: wrongZoneID)
+    let record = CKRecord(recordType: CloudKitRecordSchema.keptWisdomRecordType, recordID: recordID)
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdA as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "Be still and know." as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = Int64(1_754_078_400_000) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = Int64(1_754_078_700_000) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.updatedAtMs] = Int64(1_754_078_700_000) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.mutationId] = phase4CMutationId as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.dataEpoch] = phase4CDataEpoch as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.schemaVersion] =
+      CloudKitRecordSchema.keptWisdomActiveSchemaVersion as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.isTombstone] = false as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record) {
+    case .success:
+      XCTFail("Expected a wrong-zone rejection")
+    case .failure(let error):
+      XCTAssertEqual(error, .wrongZone)
+    }
+  }
+
+  // 6. An unrecognized/wrong record type is rejected.
+  func testSyncStateCodecRejectsWrongRecordType() {
+    let recordID = CloudKitRecordIdentity.syncStateRecordID()
+    let record = CKRecord(recordType: CloudKitRecordSchema.keptWisdomRecordType, recordID: recordID)
+    record[CloudKitRecordSchema.SyncStateField.dataEpoch] = phase4CDataEpoch as CKRecordValue
+    record[CloudKitRecordSchema.SyncStateField.mutationId] = phase4CMutationId as CKRecordValue
+    record[CloudKitRecordSchema.SyncStateField.schemaVersion] =
+      CloudKitRecordSchema.syncStateSchemaVersion as CKRecordValue
+
+    switch CloudKitSyncStateCodec.decode(record) {
+    case .success:
+      XCTFail("Expected a wrong-record-type rejection")
+    case .failure(let error):
+      XCTAssertEqual(error, .wrongRecordType)
+    }
+  }
+
+  // 7. A malformed field type is rejected.
+  func testKeptWisdomCodecRejectsMalformedFieldType() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+    // wisdomText is required to be a String; store a number instead.
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = 12345 as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record) {
+    case .success:
+      XCTFail("Expected a malformed-field rejection")
+    case .failure(let error):
+      XCTAssertEqual(error, .malformedField(CloudKitRecordSchema.KeptWisdomField.wisdomText))
+    }
+  }
+
+  // 8. A record-name/revealId mismatch is rejected.
+  func testKeptWisdomCodecRejectsRecordNameMismatch() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+    // The record's own identity (recordName) still says revealIdA, but the
+    // revealId field now claims to be a different, equally-valid occurrence.
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdB as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record) {
+    case .success:
+      XCTFail("Expected a record-name-mismatch rejection")
+    case .failure(let error):
+      XCTAssertEqual(error, .recordNameMismatch)
+    }
+  }
+
+  // 9. Tombstone behavior: encodes with no content field at all, decodes
+  // back with every content field nil, and a real tombstone carrying a
+  // forbidden content field is itself rejected.
+  func testKeptWisdomCodecTombstoneBehavior() throws {
+    let tombstoneRecord = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA,
+      deletedAtMs: 1_754_078_800_000,
+      updatedAtMs: 1_754_078_800_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+
+    XCTAssertNil(tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.wisdomText])
+    XCTAssertNil(tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.revealId])
+
+    switch CloudKitKeptWisdomCodec.decode(tombstoneRecord) {
+    case .success(let envelope):
+      XCTAssertTrue(envelope.isTombstone)
+      XCTAssertNil(envelope.wisdomText)
+      XCTAssertNil(envelope.revealId)
+      XCTAssertNotNil(envelope.deletedAtMs)
+      XCTAssertEqual(envelope.recordName, "east-kept-\(phase4CRevealIdA)")
+    case .failure(let error):
+      XCTFail("Expected successful tombstone decode, got \(error)")
+    }
+
+    // A tombstone-shaped record that also carries a forbidden content
+    // field indicates corruption or tampering -- never tolerated.
+    tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "smuggled content" as CKRecordValue
+    switch CloudKitKeptWisdomCodec.decode(tombstoneRecord) {
+    case .success:
+      XCTFail("Expected rejection of a tombstone carrying forbidden content")
+    case .failure(let error):
+      XCTAssertEqual(error, .forbiddenFieldOnTombstone(CloudKitRecordSchema.KeptWisdomField.wisdomText))
+    }
+  }
+
+  // 10. No content ever appears in safe error output -- a decode failure's
+  // associated value is always one of this schema's own field-name
+  // constants, never the malformed value itself.
+  func testKeptWisdomCodecErrorsNeverExposeFieldContent() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "This exact wisdom text must never appear in a decode error.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: "This exact reflection text must never appear either.",
+      reflectedAtMs: 1_754_078_700_000,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = 999 as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record) {
+    case .success:
+      XCTFail("Expected a malformed-field rejection")
+    case .failure(let error):
+      guard case .malformedField(let fieldName) = error else {
+        XCTFail("Expected .malformedField, got \(error)")
+        return
+      }
+      // The error carries only the field's *name* -- one of this file's
+      // own known constants -- never any field's actual (or malformed)
+      // value.
+      XCTAssertEqual(fieldName, CloudKitRecordSchema.KeptWisdomField.wisdomText)
+      XCTAssertFalse(fieldName.contains("wisdom text must never appear"))
+    }
+  }
+
 }

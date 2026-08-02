@@ -1,6 +1,6 @@
-# EAST. CloudKit Sync Design v1.0 (Phase 4A, updated for Phase 4B-1)
+# EAST. CloudKit Sync Design v1.0 (Phase 4A, updated for Phase 4B-1, Phase 4B-2, and Phase 4C-1)
 
-**Status:** Phase 4A's architecture and pure Dart sync-domain foundation are implemented (Sections 1-9). Phase 4B-1 (Section 10) additionally implements a native Swift CloudKit bridge **foundation** — account snapshot, private-zone configuration, static bridge info, and account-change events — behind a narrow Dart platform-bridge layer. **No iCloud capability, entitlement, or CloudKit container is registered yet, and no Kept/Reflection record has ever been uploaded, downloaded, merged, or deleted.** Every CloudKit call Phase 4B-1 adds is inert in production today: nothing in this app's startup path or repository code invokes it. This document is the precise design ADR-007 (`docs/decisions/ADR-007-build-26-local-storage-and-icloud-sync.md`) requires its implementation phases to follow.
+**Status:** Phase 4A's architecture and pure Dart sync-domain foundation are implemented (Sections 1-9). Phase 4B-1 (Section 10) additionally implements a native Swift CloudKit bridge **foundation** — account snapshot, private-zone configuration, static bridge info, and account-change events — behind a narrow Dart platform-bridge layer. Phase 4B-2 activated the iCloud/CloudKit capability and hardened private-zone configuration (including a guarded `CKError.serverRejectedRequest` create-fallback, confirmed necessary and safe on a physical device). Phase 4C-1 (Section 11) additionally implements the **record-schema and encode/decode codec foundation** for both private record types, on both the Dart and native Swift sides — still transport-free. **No Kept/Reflection record has ever been uploaded, downloaded, merged, or deleted.** Every CloudKit read/write operation remains absent from this codebase: nothing in this app's startup path or repository code invokes any of it. This document is the precise design ADR-007 (`docs/decisions/ADR-007-build-26-local-storage-and-icloud-sync.md`) requires its implementation phases to follow.
 
 **Scope of this document:** the CloudKit boundary, record schema, local-first behavior, conflict/deletion rules, account-boundary behavior, sync-engine choice, and the future native bridge contract. It does not implement any of these — see `docs/architecture/EAST_ARCHITECTURE_V1.md` Section 33 for the one-paragraph product-level summary, and ADR-007 for the original decision record.
 
@@ -329,3 +329,58 @@ Performed by a human in Xcode, on the developer's own machine, after this subpha
 ### 10.8 Explicit non-goals (Phase 4B-1)
 
 No iCloud capability, no container registration, no production CloudKit entitlements, no CloudKit schema deployment, no automatic CloudKit invocation during app startup, no record upload/download/merge/delete, no private-zone creation during normal application execution, no durable outbox, no background modes, no notification handling, no `aps-environment`, no third-party dependency, no minimum-iOS-version increase, no public/shared database use, and no start of Phase 4C.
+
+### 10.9 Phase 4B-2 addendum — capability activation and zone-configuration hardening
+
+Performed after this section was first written, on the developer's own machine and physical device, per the §10.7 checklist:
+
+- The iCloud/CloudKit capability is now active (`ios/Runner/Runner.entitlements`: `com.apple.developer.icloud-container-identifiers = [iCloud.com.dogukan.dailywisdom]`, `com.apple.developer.icloud-services = [CloudKit]`).
+- `CloudKitPrivateZoneCoordinator.configureZone`'s fetch-then-create flow gained one guarded fallback, scoped only to this one operation: a fetch that fails with `CKError.serverRejectedRequest` now also attempts `createZone` (the same call already used for `.zoneNotFound`), because a physical device was observed to have `EASTKeptZone`'s initial fetch fail with `.serverRejectedRequest` (CloudKit Console: `ZoneFetch` / `SERVER_ERROR` / `INTERNAL_ERROR`) even though directly saving the same zone succeeds, repeatably. This fallback never claims success on its own — the create/save attempt must still succeed, and its own normalized error (never the original fetch error) is what a caller sees if it does not.
+- `CloudKitErrorClassifier` gained one additional stable symbolic code, `serverRejectedRequest`, for `CKError.Code.serverRejectedRequest` — non-retryable (Dart's `classifySyncErrorCode` defaults any code it does not recognize by name to `SyncErrorCategory.permanent`, which already covers this code without requiring a separate Dart-side entry).
+- No other behavior in Section 10 changed.
+
+## 11. Phase 4C-1 — private record schema and codec foundation (implemented this phase)
+
+**Scope:** the production-grade record-schema and encode/decode foundation for both private record types (`CKKeptWisdom`, `CKEastSyncState`), on both the Dart and native Swift sides. **This phase remains entirely transport-free** — it prepares deterministic, validated records and parses/validates hypothetical wire payloads, but performs no real `CKDatabase` read or write, and adds no `CKModifyRecordsOperation`, `CKFetchRecordZoneChangesOperation`, subscription, or any other network-performing CloudKit API.
+
+### 11.1 The record schema itself was already frozen by Phase 4A — this phase implements it, it does not redesign it
+
+Sections 2.1–2.8 above (written during Phase 4A) already specify the complete, exact field set for both record types, their deterministic identity rule, their schema-versioning behavior, and their malformed-record handling. Phase 4C-1 introduces no new field, no renamed field, and no changed identity rule — it is the first phase to actually implement encode/decode against that existing specification, on both sides of the Dart/Swift boundary. Where this section restates a field name or rule from Section 2, it is restating it, not redefining it.
+
+One genuine gap existed and is filled by this phase: no pure Dart type previously represented `CKEastSyncState` (§2.5) at all — only its `dataEpoch` value (`DataEpoch`) existed as a shared value type. This phase adds `CloudEastSyncStateProjection` (`lib/sync/cloud_east_sync_state_projection.dart`), a pure sync-domain type built the same way `CloudKeptWisdomProjection` already was in Phase 4A — no new fields beyond exactly what §2.5 already specifies (`dataEpoch`, `resetAtMs`, `mutationId`, `schemaVersion`), and no dependency on any local Kept/Reflection/daily-access model (there is nothing local to project *from* for this singleton record).
+
+**Existing-implementation reuse, not a competing model:** `CloudKeptWisdomProjection.tryParseRemote` (Phase 4A) already implements every §2.6 fail-closed validation rule for `CKKeptWisdom` — this phase's Dart wire-boundary layer (§11.3 below) delegates to it rather than re-implementing field-level validation a second time, exactly as `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s own engineering discipline (and the Lead Engineer's standing "never duplicate business logic, never create multiple sources of truth" rule) requires.
+
+### 11.2 Exact record types and field names (restated from §2, for a single authoritative Phase 4C-1 cross-reference)
+
+| Record type | Constant | Fields (required unless marked optional) |
+|---|---|---|
+| `CKKeptWisdom` — active form | `keptWisdomRecordType` | `recordName`, `revealId`, `wisdomText`, `revealedAtMs` (Int64), `keptAtMs` (Int64), `reflectionText` (optional String), `reflectedAtMs` (optional Int64, present iff `reflectionText` present), `updatedAtMs` (Int64), `mutationId`, `dataEpoch`, `schemaVersion` (currently `3`), `isTombstone` (`false`) |
+| `CKKeptWisdom` — tombstone form | `keptWisdomRecordType` | `recordName` (unchanged from the active form), `isTombstone` (`true`), `deletedAtMs` (Int64), `updatedAtMs` (Int64), `mutationId`, `dataEpoch`, `schemaVersion` (currently `1`) — **never** `revealId`, `wisdomText`, `reflectionText`, `revealedAtMs`, `keptAtMs`, or `reflectedAtMs` |
+| `CKEastSyncState` | `syncStateRecordType` | `recordName` (fixed literal `"sync-state"`), `dataEpoch`, `resetAtMs` (optional Int64), `mutationId`, `schemaVersion` (currently `1`) |
+
+Custom zone: `EASTKeptZone` (`zoneName` on every record above). Container: `iCloud.com.dogukan.dailywisdom`. Database: private only. No field name, required/optional designation, or schema-version number above differs from Section 2 — this table exists only so Phase 4C-1's own Dart and Swift implementations can be checked against one place without cross-referencing every subsection of Section 2 individually.
+
+### 11.3 Dart wire-boundary layer (`lib/sync_platform/`)
+
+Two new thin codec types, deliberately not new business-rule models:
+
+- `CloudKeptWisdomWireEnvelope` (`lib/sync_platform/cloud_kept_wisdom_wire_envelope.dart`): `encode(CloudKeptWisdomProjection) -> Map<Object?, Object?>` / `tryDecode(Map<Object?, Object?>) -> CloudKeptWisdomProjection?`. Rejects, before ever delegating to `CloudKeptWisdomProjection.tryParseRemote`: a `recordType` other than `CKKeptWisdom`; a `zoneName` other than `EASTKeptZone`; any key in `forbiddenDailyAccessKeys`; any non-`String` map key.
+- `CloudEastSyncStateWireEnvelope` (`lib/sync_platform/cloud_east_sync_state_wire_envelope.dart`): the same shape for `CKEastSyncState`, additionally rejecting any `recordName` other than the fixed singleton literal `"sync-state"`.
+
+Both types are pure `Map`-shape codecs only — no `MethodChannel` call, no `CKRecord`, no network access. A future phase that actually implements record push/pull would use these to prepare/parse whatever a native bridge method eventually carries.
+
+### 11.4 Native Swift schema and codec (`ios/Runner/`)
+
+Four new, narrowly-scoped files, none of which depends on `CKDatabase`:
+
+- `CloudKitRecordSchema.swift` — record-type, zone-name, and field-name constants for both record types, plus each schema-version literal. This project's one authoritative native-side copy of these values (mirroring `lib/sync/sync_record_identity.dart`).
+- `CloudKitRecordIdentity.swift` — deterministic `CKRecord.ID` construction, mirroring `deriveKeptWisdomRecordName` exactly (`east-kept-<revealId>` inside `EASTKeptZone`), plus the fixed `CKEastSyncState` singleton identity and a canonical-revealId check mirroring `lib/utils/canonical_uuid.dart`.
+- `CloudKitKeptWisdomCodec.swift` — `encodeActive`/`encodeTombstone` (validated values → `CKRecord`) and `decode` (`CKRecord` → `Result<CloudKitKeptWisdomWireEnvelope, DecodeError>`). Rejects a wrong record type, a wrong (including default) zone, a record-name/`revealId` mismatch, a missing or wrong-typed required field, an unrecognized schema version, a tombstone carrying a forbidden content field, and an internally-inconsistent Reflection field pair — no force cast, no force unwrap, no localized `CKError` description, no logging of content or identity values anywhere in the file.
+- `CloudKitSyncStateCodec.swift` — the same shape for `CKEastSyncState`, additionally rejecting any `recordName` other than the fixed singleton literal.
+
+Both codec files are registered in `ios/Runner.xcodeproj/project.pbxproj`'s Runner target only (not `RunnerTests`, which accesses them via `@testable import Runner`).
+
+### 11.5 Explicit non-goals (Phase 4C-1)
+
+No `CKDatabase.save`, no `CKModifyRecordsOperation`, no `CKFetchRecordZoneChangesOperation`, no record query, no subscription, no change-token persistence, no outbox/inbox processing, no background or startup sync, no retry scheduling, no automatic zone configuration, no repository wiring, no Settings or user-visible sync UI, no account-change migration behavior, no change to application startup, and no start of whatever a later Phase 4C-2 (real record push/pull) will be.
