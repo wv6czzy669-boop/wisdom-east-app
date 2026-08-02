@@ -140,6 +140,66 @@ class InMemoryKeptStateStore implements KeptStateStore {
   }
 }
 
+/// Round-trips every [replace] through real JSON encode/decode
+/// (`KeptStateEnvelope.encodeString()`/`decodeString()`) before ever
+/// considering it durable — comparing the decoded-back envelope against the
+/// intended one by value first, exactly mirroring the mandatory post-write
+/// verification `ProtectedFileKeptStateStore._replace` performs on its
+/// temporary file before ever renaming it into place (see that class's
+/// steps 10-11). [load] likewise always decodes from the last successfully
+/// stored JSON string rather than returning a retained object reference.
+///
+/// This is deliberately different from [InMemoryKeptStateStore], which
+/// stores the `KeptStateEnvelope` object directly and therefore can never
+/// reproduce a defect that only manifests through genuine JSON
+/// serialization — such as the Phase 3D-D real-device migration failure,
+/// where a legacy `reflectedAt` value's genuine sub-millisecond precision
+/// survived into an in-memory migrated `KeptRecord` but was silently
+/// dropped by `KeptRecord.encode()`'s millisecond-only wire format,
+/// making the freshly-decoded read-back compare unequal to the in-memory
+/// original. Use this store specifically when a test needs to prove
+/// something about that real persistence round-trip, not just about the
+/// migration/repository logic sitting on top of it.
+class JsonRoundTrippingKeptStateStore implements KeptStateStore {
+  String? _encoded;
+
+  /// Forces every subsequent [replace] to fail verification regardless of
+  /// content — for tests proving "a failure before verification leaves the
+  /// prior state untouched" without depending on any particular content
+  /// defect to trigger it.
+  bool forceVerifyFailure = false;
+
+  /// Call counters, mirroring the pattern already used by
+  /// `_CountingKeptStateStore` (`kept_storage_bootstrap_test.dart`) and the
+  /// coordinator suite's own fakes — so a test can assert exactly how many
+  /// times the store was actually touched (e.g. proving an idempotent
+  /// no-op mutation never calls [replace]).
+  int loadCallCount = 0;
+  int replaceCallCount = 0;
+
+  @override
+  Future<KeptStateEnvelope?> load() async {
+    loadCallCount += 1;
+    final encoded = _encoded;
+    if (encoded == null) return null;
+    return KeptStateEnvelope.decodeString(encoded);
+  }
+
+  @override
+  Future<void> replace(KeptStateEnvelope envelope) async {
+    replaceCallCount += 1;
+    final encoded = envelope.encodeString();
+    final decoded = KeptStateEnvelope.decodeString(encoded);
+    if (forceVerifyFailure || decoded != envelope) {
+      throw const KeptStateStoreException(
+        'replace-verify-temp',
+        'Temporary kept-state file did not match the intended envelope.',
+      );
+    }
+    _encoded = encoded;
+  }
+}
+
 /// Test-only wiring for the Build 26 Phase 3D-C protected Kept repository
 /// graph, mirroring [DailyAccessTestGraph]'s role for daily access.
 ///

@@ -217,4 +217,109 @@ void main() {
       expect(caught.toString().contains('SECRET_MARKER'), isFalse);
     });
   });
+
+  group('Phase 3D-D: parseLegacyReflectedAtToUtc', () {
+    test(
+        'the exact recovered physical-device value preserves its wall-clock '
+        'reading exactly, truncated to millisecond precision', () {
+      final parsed = FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+        '2026-08-02T01:13:07.484133',
+      );
+
+      // Build 25 always wrote this with a bare, offset-free
+      // DateTime.now().toIso8601String() -- the wall-clock numbers as
+      // written are preserved exactly (tagged UTC directly, never
+      // reinterpreted through whatever timezone happens to be current on
+      // the migrating device), with only the sub-millisecond remainder
+      // (the ".133" beyond ".484") truncated to match KeptRecord's own
+      // millisecond-only wire format.
+      expect(parsed, DateTime.utc(2026, 8, 2, 1, 13, 7, 484));
+      expect(parsed.millisecondsSinceEpoch,
+          DateTime.utc(2026, 8, 2, 1, 13, 7, 484).millisecondsSinceEpoch);
+    });
+
+    test('a naive value with no fractional seconds parses cleanly', () {
+      final parsed = FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+        '2026-08-02T14:30:00',
+      );
+
+      expect(parsed, DateTime.utc(2026, 8, 2, 14, 30));
+    });
+
+    test('a naive value with a short (1-digit) fractional-second parses', () {
+      final parsed = FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+        '2026-08-02T14:30:00.5',
+      );
+
+      expect(parsed, DateTime.utc(2026, 8, 2, 14, 30, 0, 500));
+    });
+
+    test(
+        'an explicit "Z" value preserves its true UTC instant unambiguously '
+        '(no wall-clock reinterpretation)', () {
+      final parsed = FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+        '2026-08-02T10:00:00.000Z',
+      );
+
+      expect(parsed, DateTime.utc(2026, 8, 2, 10));
+    });
+
+    test('an explicit positive-offset value converts to its true UTC instant',
+        () {
+      final parsed = FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+        '2026-08-02T14:13:07+03:00',
+      );
+
+      expect(parsed, DateTime.utc(2026, 8, 2, 11, 13, 7));
+    });
+
+    test(
+        'an explicit-offset value with sub-millisecond precision is still '
+        'truncated to millisecond precision', () {
+      final parsed = FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+        '2026-08-02T14:13:07.123456+03:00',
+      );
+
+      expect(parsed, DateTime.utc(2026, 8, 2, 11, 13, 7, 123));
+    });
+
+    test('an empty value fails', () {
+      expect(
+        () => FavoriteDateCodec.parseLegacyReflectedAtToUtc('   '),
+        throwsA(isA<FavoriteDateParseException>()),
+      );
+    });
+
+    test('an unparseable value fails without leaking its content', () {
+      const secretLookingValue = 'Not a timestamp, contains SECRET_MARKER';
+
+      Object? caught;
+      try {
+        FavoriteDateCodec.parseLegacyReflectedAtToUtc(secretLookingValue);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isA<FavoriteDateParseException>());
+      expect(caught.toString().contains('SECRET_MARKER'), isFalse);
+    });
+
+    test('an impossible naive time (hour 25) fails', () {
+      expect(
+        () => FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+          '2026-08-02T25:00:00',
+        ),
+        throwsA(isA<FavoriteDateParseException>()),
+      );
+    });
+
+    test('an impossible naive day (February 30) fails', () {
+      expect(
+        () => FavoriteDateCodec.parseLegacyReflectedAtToUtc(
+          '2026-02-30T10:00:00',
+        ),
+        throwsA(isA<FavoriteDateParseException>()),
+      );
+    });
+  });
 }

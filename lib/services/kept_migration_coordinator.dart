@@ -757,28 +757,104 @@ final class KeptMigrationCoordinator {
   }
 
   /// Deterministically converts a decoded [FavoriteItem] into a
-  /// [KeptRecord]. May throw (date parsing, or [KeptRecord]'s own field
-  /// validation) — callers treat that as a `convert`-stage corrupt entry.
+  /// [KeptRecord]. May throw (date parsing, calendar-day contradiction, or
+  /// [KeptRecord]'s own field validation) — callers treat that as a
+  /// `convert`-stage corrupt entry.
+  ///
+  /// Phase 3D-D real-device hotfix: the previous version of this method
+  /// unconditionally anchored `revealedAt`/`keptAt` at the display date's
+  /// noon anchor and set `updatedAt` to `reflectedAt` only when it was
+  /// *after* that anchor — silently leaving `keptAt` after a genuinely
+  /// earlier same-day `reflectedAt` in every other case. Separately, a bare
+  /// `DateTime.parse(item.reflectedAt!).toUtc()` reinterpreted Build 25's
+  /// always-offset-free `reflectedAt` string through whichever timezone
+  /// happened to be current on the migrating device, and never truncated
+  /// the result to millisecond precision. That last part is what the
+  /// confirmed real-device failure traces back to: a genuine
+  /// sub-millisecond-precision `reflectedAt` (routine for any
+  /// `DateTime.now()`-sourced value) survived into the in-memory migrated
+  /// `KeptRecord`, but `KeptRecord.encode()` only serializes
+  /// `millisecondsSinceEpoch` — so the protected store's own mandatory
+  /// post-write read-back verification
+  /// (`ProtectedFileKeptStateStore._replace`'s temp-file/final-file
+  /// comparison) found the freshly-decoded record did not equal the
+  /// in-memory one, threw `KeptStateStoreException('replace-verify-temp',
+  /// ...)`, and the migration failed before ever placing the envelope file
+  /// — exactly matching the reported evidence (the protected directory
+  /// existed, its temp file had already been deleted by the store's own
+  /// best-effort cleanup, no `east_kept_state_v3.json` existed, and the
+  /// legacy `favorites` key was therefore never removed). See
+  /// `test/kept_migration_coordinator_test.dart`'s
+  /// "Phase 3D-D real-device migration hotfix" group for the exact
+  /// reproduction.
   KeptRecord _convertToKeptRecord(FavoriteItem item) {
     // FavoriteItem.date is an opaque display string. The real production
     // writer (HomeScreen.toggleFavorite -> formattedToday()) produces an
     // English "MMMM d, yyyy" display value (e.g. "August 1, 2026"), which
     // bare DateTime.parse cannot read; FavoriteDateCodec handles both that
-    // shape and existing ISO-8601 fixtures/data. A failure here is caught by
-    // _rebuildFromSnapshot's existing try/catch and classified as an
-    // ordinary convert-stage corrupt entry, unchanged from before this fix.
-    final revealedAt = FavoriteDateCodec.parseFavoriteDateToUtc(item.date);
-    final keptAt = revealedAt;
+    // shape and existing ISO-8601 fixtures/data.
+    final displayAnchor = FavoriteDateCodec.parseFavoriteDateToUtc(item.date);
 
     DateTime? reflectedAt;
+    var reflectedOnDisplayDay = false;
     if (item.reflection != null && item.reflectedAt != null) {
-      reflectedAt = DateTime.parse(item.reflectedAt!).toUtc();
+      // Preserves the legacy value's own wall-clock/no-offset meaning
+      // (never reinterpreted through the migrating device's current
+      // timezone) and truncates to millisecond precision — see
+      // FavoriteDateCodec.parseLegacyReflectedAtToUtc's doc comment.
+      reflectedAt =
+          FavoriteDateCodec.parseLegacyReflectedAtToUtc(item.reflectedAt!);
+
+      reflectedOnDisplayDay = reflectedAt.year == displayAnchor.year &&
+          reflectedAt.month == displayAnchor.month &&
+          reflectedAt.day == displayAnchor.day;
+
+      final reflectedCalendarDay =
+          DateTime.utc(reflectedAt.year, reflectedAt.month, reflectedAt.day);
+      final displayCalendarDay = DateTime.utc(
+          displayAnchor.year, displayAnchor.month, displayAnchor.day);
+      if (reflectedCalendarDay.isBefore(displayCalendarDay)) {
+        // A genuine contradiction: the legacy reflectedAt's own calendar
+        // day is *before* the legacy display date, i.e. the record claims
+        // to have been reflected on before it was ever kept. Never
+        // silently reinterpreted — a reflectedAt on the *same* day (common,
+        // handled below) or on any *later* day (equally common — nothing
+        // requires a Reflection to be added the same day it was kept) is
+        // perfectly valid and never reaches this branch.
+        // _rebuildFromSnapshot's existing per-entry try/catch classifies
+        // this exactly like any other unresolvable legacy inconsistency —
+        // an ordinary `convert`-stage corrupt entry, preserved byte-exact
+        // in the recovery artifact.
+        throw const FormatException(
+          "Legacy reflectedAt's calendar day precedes the display date.",
+        );
+      }
     }
 
-    var updatedAt = keptAt;
-    if (reflectedAt != null && reflectedAt.isAfter(keptAt)) {
-      updatedAt = reflectedAt;
+    // revealedAt/keptAt: the display date's noon anchor by default (the
+    // deliberately day-boundary-safe placeholder — see
+    // FavoriteDateCodec.parseFavoriteDateToUtc). A Reflection added on a
+    // *later* calendar day is always safely after that anchor already, so
+    // no adjustment is needed there. But a Kept wisdom can never be
+    // reflected on before it was kept: when a genuine reflectedAt on the
+    // *same* calendar day is earlier than the noon placeholder, keeping
+    // keptAt at noon would put it after reflectedAt. Anchoring both
+    // historical fields to the real, more precise reflectedAt instead is
+    // strictly more truthful than the noon placeholder and keeps
+    // revealedAt == keptAt <= reflectedAt in every case.
+    var revealedAt = displayAnchor;
+    var keptAt = displayAnchor;
+    if (reflectedOnDisplayDay && reflectedAt!.isBefore(displayAnchor)) {
+      revealedAt = reflectedAt;
+      keptAt = reflectedAt;
     }
+
+    // updatedAt tracks the real last known mutation — reflectedAt itself
+    // when a Reflection exists, otherwise keptAt — and is never the
+    // migration's own execution time (ADR-007, Legacy date mapping). This
+    // can never be before keptAt: either no reflectedAt exists (equal to
+    // keptAt), or keptAt has already been guaranteed <= reflectedAt above.
+    final updatedAt = reflectedAt ?? keptAt;
 
     final revealId = _uuidV5Factory(
       'com.dogukan.dailywisdom/build25/reveal/${item.id}',

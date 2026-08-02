@@ -17,6 +17,8 @@
 /// parsing, rather than duplicating ad-hoc parsing logic per call site.
 library;
 
+import 'kept_timestamp_canonicalizer.dart';
+
 /// Thrown by [FavoriteDateCodec.parseFavoriteDateToUtc] on any unparseable
 /// input. Deliberately narrow and content-free: [stage] is a stable,
 /// diagnostic-only code — [toString] never includes the original date
@@ -155,5 +157,119 @@ abstract final class FavoriteDateCodec {
     } catch (_) {
       throw const FavoriteDateParseException('unparseable');
     }
+  }
+
+  /// Matches the naive (no offset/`Z` marker) ISO-8601-shaped legacy
+  /// `FavoriteItem.reflectedAt` value Build 25 always wrote, via a bare
+  /// `DateTime.now().toIso8601String()` call on a non-UTC `DateTime`
+  /// (`toIso8601String()` never appends a zone suffix for a local/non-UTC
+  /// instance) — e.g. `"2026-08-02T01:13:07.484133"`. Fractional seconds are
+  /// optional and, when present, 1-6 digits.
+  static final RegExp _naiveReflectedAtPattern = RegExp(
+    r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,6})?$',
+  );
+
+  /// Parses a legacy `FavoriteItem.reflectedAt` value for Build 25 -> 26
+  /// migration into a UTC [DateTime], truncated to millisecond precision.
+  ///
+  /// Build 25 always wrote this value with a bare, offset-free
+  /// `DateTime.now().toIso8601String()` call — so the value is a wall-clock
+  /// reading with no reliable record of which device timezone it was
+  /// written in. Reinterpreting those naive numbers through whichever
+  /// timezone happens to be current on the *migrating* device (as a bare
+  /// `DateTime.parse(value).toUtc()` call would) is non-deterministic
+  /// across devices/retries and can silently shift the value onto a
+  /// different calendar day than the one the user actually experienced.
+  /// Instead, for a naive value, the wall-clock numbers exactly as written
+  /// are preserved by tagging them UTC directly — deterministic,
+  /// device-independent, and the only genuinely honest reading of a
+  /// timestamp with no reliable offset, mirroring the same reasoning
+  /// [parseFavoriteDateToUtc]'s noon anchor already uses.
+  ///
+  /// A value that *does* carry an explicit UTC/offset marker (`Z` or
+  /// `+HH:MM`/`-HH:MM`) is unambiguous — its real instant is preserved
+  /// exactly via `DateTime.parse(value).toUtc()`, exactly as before this
+  /// method existed.
+  ///
+  /// Either way, the result is canonicalized to millisecond precision (via
+  /// the shared `canonicalizeKeptTimestamp`,
+  /// `kept_timestamp_canonicalizer.dart`) before it is returned.
+  /// [KeptRecord]'s own wire format (`encode()`/`decode()`) stores only
+  /// `millisecondsSinceEpoch` for every timestamp field; a genuinely
+  /// sub-millisecond-precision source value (real device timestamps from
+  /// `DateTime.now()` routinely carry one) would otherwise survive into the
+  /// in-memory migrated `KeptRecord` but not into its encoded-then-decoded
+  /// read-back, making `KeptRecord.operator==`'s exact (`isAtSameMomentAs`)
+  /// comparison spuriously fail the protected store's own mandatory
+  /// post-write read-back verification for perfectly valid data — the
+  /// confirmed real-device migration failure this fix addresses.
+  /// Canonicalizing once, here, via the same helper [KeptRepository] uses
+  /// for its own normal-runtime writes, is the smallest fix that respects
+  /// that existing storage contract without touching it, and avoids two
+  /// slightly different private truncation implementations.
+  ///
+  /// Throws [FavoriteDateParseException] for anything unparseable.
+  static DateTime parseLegacyReflectedAtToUtc(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      throw const FavoriteDateParseException('reflected-at-empty');
+    }
+
+    final DateTime parsed;
+    final naiveMatch = _naiveReflectedAtPattern.firstMatch(trimmed);
+    if (naiveMatch != null) {
+      parsed = _parseNaiveReflectedAt(naiveMatch);
+    } else {
+      try {
+        parsed = DateTime.parse(trimmed).toUtc();
+      } catch (_) {
+        throw const FavoriteDateParseException('reflected-at-unparseable');
+      }
+    }
+
+    // Canonicalize to millisecond precision via the one shared helper both
+    // this codec and KeptRepository use — see the doc comment above and
+    // kept_timestamp_canonicalizer.dart for why this must happen regardless
+    // of which branch produced [parsed].
+    return canonicalizeKeptTimestamp(parsed);
+  }
+
+  static DateTime _parseNaiveReflectedAt(RegExpMatch match) {
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    final hour = int.parse(match.group(4)!);
+    final minute = int.parse(match.group(5)!);
+    final second = int.parse(match.group(6)!);
+
+    var millisecond = 0;
+    var microsecond = 0;
+    final fraction = match.group(7);
+    if (fraction != null) {
+      final digits = fraction.substring(1).padRight(6, '0');
+      millisecond = int.parse(digits.substring(0, 3));
+      microsecond = int.parse(digits.substring(3, 6));
+    }
+
+    if (month < 1 || month > 12) {
+      throw const FavoriteDateParseException('reflected-at-invalid-month');
+    }
+    if (day < 1 || day > _daysInMonth(month: month, year: year)) {
+      throw const FavoriteDateParseException('reflected-at-invalid-day');
+    }
+    if (hour > 23 || minute > 59 || second > 59) {
+      throw const FavoriteDateParseException('reflected-at-invalid-time');
+    }
+
+    return DateTime.utc(
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      second,
+      millisecond,
+      microsecond,
+    );
   }
 }

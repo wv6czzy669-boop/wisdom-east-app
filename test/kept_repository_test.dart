@@ -10,6 +10,8 @@ import 'package:wisdom_app/persistence/protected_file_kept_state_store.dart'
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 
+import 'persistence_test_helpers.dart';
+
 final RegExp _uuidV4Pattern = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
   caseSensitive: false,
@@ -1137,6 +1139,268 @@ void main() {
       final item = result.items.single;
       expect(item.id, isNotEmpty);
       expect(item.revealId, revealA);
+    });
+  });
+
+  group(
+      'Phase 3D-D addendum: normal-runtime timestamps are canonicalized '
+      'before reaching a protected write', () {
+    // Every group above this one uses _FakeKeptStateStore, which stores the
+    // KeptStateEnvelope *object* directly on replace() -- it never actually
+    // serializes to JSON, so it can never reproduce a defect that only
+    // manifests through genuine encode/decode (KeptRecord.encode() only
+    // serializes millisecondsSinceEpoch, while KeptRecord.operator== compares
+    // exactly, down to the microsecond). JsonRoundTrippingKeptStateStore
+    // (persistence_test_helpers.dart) round-trips every replace() through
+    // real JSON, exactly mirroring ProtectedFileKeptStateStore's own
+    // mandatory post-write verification -- this is what actually proves the
+    // fix.
+    late JsonRoundTrippingKeptStateStore roundTrippingStore;
+
+    // A clock shaped like a real device's DateTime.now(): non-zero
+    // milliseconds *and* microseconds, exactly like the recovered Build 25
+    // payload's ".484133" reflectedAt that originally exposed this defect.
+    final microsecondClock = DateTime.utc(2026, 8, 1, 9, 0, 0, 484, 133);
+    final canonicalClockInstant = DateTime.utc(2026, 8, 1, 9, 0, 0, 484);
+
+    setUp(() {
+      roundTrippingStore = JsonRoundTrippingKeptStateStore();
+    });
+
+    KeptRepository buildRoundTrippingRepository({
+      KeptClock? clock,
+      KeptIdFactory? idFactory,
+      int freeKeptLimit = 3,
+      int freeReflectionLimit = 3,
+    }) {
+      return KeptRepository(
+        store: roundTrippingStore,
+        bootstrap: const KeptBootstrapResult.ready(),
+        operationCoordinator: PersistenceOperationCoordinator(),
+        idFactory: idFactory ?? (_SequentialIdFactory()).call,
+        clock: clock ?? (() => microsecondClock),
+        freeKeptLimit: freeKeptLimit,
+        freeReflectionLimit: freeReflectionLimit,
+      );
+    }
+
+    test(
+        '1/2/3. keepOccurrence succeeds with a microsecond-bearing clock and '
+        'a microsecond-bearing supplied revealedAt, storing both truncated '
+        'to the same canonical millisecond instant, and the envelope '
+        'survives encode/decode equality verification', () async {
+      final repository = buildRoundTrippingRepository();
+      final suppliedRevealedAt = DateTime.utc(2026, 7, 31, 20, 0, 0, 250, 750);
+
+      final result = await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'A wisdom kept on a real device.',
+        revealedAt: suppliedRevealedAt,
+        isKeeper: false,
+      );
+
+      expect(result.limitReached, isFalse);
+      expect(result.items, hasLength(1));
+
+      // A fresh, independent load() (simulating a later read) proves the
+      // write actually persisted through real JSON encode/decode, not
+      // merely that an in-memory reference survived.
+      final reloaded = await roundTrippingStore.load();
+      expect(reloaded, isNotNull);
+      final record = reloaded!.activeRecords.single;
+      expect(record.keptAt, canonicalClockInstant);
+      expect(
+        record.revealedAt,
+        DateTime.utc(2026, 7, 31, 20, 0, 0, 250),
+      );
+      expect(record.updatedAt, canonicalClockInstant);
+    });
+
+    test(
+        '4. saveReflection succeeds when reflectedAt has non-zero '
+        'microseconds', () async {
+      final repository = buildRoundTrippingRepository();
+      await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'Be still.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+      final keptId = (await roundTrippingStore.load())!.activeRecords.single.id;
+
+      final result = await repository.saveReflection(
+        itemId: keptId,
+        reflection: 'A reflection with a real clock.',
+        isKeeper: false,
+        reflectedAt: DateTime.utc(2026, 8, 1, 10, 0, 0, 999, 999),
+      );
+
+      expect(result.limitReached, isFalse);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.reflectionText, 'A reflection with a real clock.');
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 1, 10, 0, 0, 999));
+      expect(record.updatedAt, record.reflectedAt);
+    });
+
+    test(
+        '5. deleteReflection succeeds with a microsecond-bearing mutation '
+        'clock', () async {
+      final repository = buildRoundTrippingRepository(
+        clock: () => microsecondClock,
+      );
+      await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'Be still.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+      final keptId = (await roundTrippingStore.load())!.activeRecords.single.id;
+      await repository.saveReflection(
+        itemId: keptId,
+        reflection: 'Temporary.',
+        isKeeper: false,
+      );
+
+      final items = await repository.deleteReflection(itemId: keptId);
+
+      expect(items.single.reflection, isNull);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.reflectionText, isNull);
+      expect(record.updatedAt, canonicalClockInstant);
+    });
+
+    test(
+        '6. remove and restore succeed with a microsecond-bearing clock and '
+        'preserve the exact removed record payload/order', () async {
+      final repository = buildRoundTrippingRepository(
+        clock: () => microsecondClock,
+      );
+      await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'First.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+      await repository.keepOccurrence(
+        revealId: revealB,
+        wisdomText: 'Second.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+      final idB = (await roundTrippingStore.load())!.activeRecords[1].id;
+
+      final removed = await repository.remove(itemId: idB);
+      expect(removed, isNotNull);
+      expect(removed!.items, hasLength(1));
+      expect(
+        (await roundTrippingStore.load())!.activeRecords,
+        hasLength(1),
+      );
+
+      final restored = await repository.restore(removed);
+
+      expect(restored, hasLength(2));
+      expect(restored[1].id, idB);
+      final reloaded = (await roundTrippingStore.load())!.activeRecords;
+      expect(reloaded, hasLength(2));
+      expect(reloaded[1].wisdomText, 'Second.');
+      expect(reloaded[1].revealId, revealB);
+      expect(reloaded[1].updatedAt, canonicalClockInstant);
+    });
+
+    test(
+        '7. repeated same revealId remains idempotent after '
+        'canonicalization', () async {
+      final repository = buildRoundTrippingRepository();
+
+      await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'Be still.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+      final result = await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'Be still.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+
+      expect(result.items, hasLength(1));
+      expect(roundTrippingStore.replaceCallCount, 1);
+    });
+
+    test(
+        '8. same wisdom text with different revealIds remains two distinct '
+        'records', () async {
+      final repository = buildRoundTrippingRepository();
+
+      await repository.keepOccurrence(
+        revealId: revealA,
+        wisdomText: 'Identical text.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+      await repository.keepOccurrence(
+        revealId: revealB,
+        wisdomText: 'Identical text.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+
+      final records = (await roundTrippingStore.load())!.activeRecords;
+      expect(records, hasLength(2));
+      expect(records.map((r) => r.revealId).toSet(), {revealA, revealB});
+    });
+
+    test('9. free 3/3 limits remain unchanged', () async {
+      final repository = buildRoundTrippingRepository(freeKeptLimit: 3);
+      for (final reveal in [revealA, revealB, revealC]) {
+        await repository.keepOccurrence(
+          revealId: reveal,
+          wisdomText: 'Text for $reveal.',
+          revealedAt: microsecondClock,
+          isKeeper: false,
+        );
+      }
+
+      final blocked = await repository.keepOccurrence(
+        revealId: revealD,
+        wisdomText: 'A fourth wisdom.',
+        revealedAt: microsecondClock,
+        isKeeper: false,
+      );
+
+      expect(blocked.limitReached, isTrue);
+      expect(
+        (await roundTrippingStore.load())!.activeRecords,
+        hasLength(3),
+      );
+    });
+
+    test('10. Keeper unlimited behavior remains unchanged', () async {
+      final repository = buildRoundTrippingRepository(freeKeptLimit: 3);
+      for (final reveal in [revealA, revealB, revealC]) {
+        await repository.keepOccurrence(
+          revealId: reveal,
+          wisdomText: 'Text for $reveal.',
+          revealedAt: microsecondClock,
+          isKeeper: true,
+        );
+      }
+
+      final fourth = await repository.keepOccurrence(
+        revealId: revealD,
+        wisdomText: 'A fourth wisdom, unlimited for Keeper.',
+        revealedAt: microsecondClock,
+        isKeeper: true,
+      );
+
+      expect(fourth.limitReached, isFalse);
+      expect(
+        (await roundTrippingStore.load())!.activeRecords,
+        hasLength(4),
+      );
     });
   });
 }

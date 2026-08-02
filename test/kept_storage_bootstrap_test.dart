@@ -495,6 +495,212 @@ void main() {
       expect(result.bootstrap.isReady, isTrue);
     });
   });
+
+  group(
+      'Phase 3D-D addendum: the reported Keep-control failure is a '
+      'downstream symptom of migration/bootstrap unavailability, not a '
+      'separate defect', () {
+    // Byte-exact recovered `flutter.favorites` entry from the reported
+    // real-device incident (see kept_migration_coordinator_test.dart's
+    // "Phase 3D-D real-device migration hotfix" group for the full
+    // reproduction and root-cause analysis of why this exact payload used
+    // to fail migration).
+    const recoveredPayload = '{"schemaVersion":2,'
+        '"id":"sr-v1-1785622374122602-0",'
+        '"date":"August 2, 2026",'
+        '"text":"Some doors open after surrender.",'
+        '"reflection":"Ibne galatasaray",'
+        '"reflectedAt":"2026-08-02T01:13:07.484133"}';
+
+    late _FakeLegacyFavoritesStore legacyStore;
+    late _FakeJournalStore journalStore;
+    late _FakeArtifactStore artifactStore;
+    late JsonRoundTrippingKeptStateStore roundTrippingStore;
+
+    KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
+        buildBootstrapper() {
+      final coordinator = KeptMigrationCoordinator(
+        legacyFavoritesStore: legacyStore,
+        journalStore: journalStore,
+        artifactStore: artifactStore,
+        keptStateStore: roundTrippingStore,
+        operationCoordinator: PersistenceOperationCoordinator(),
+      );
+      return KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>(
+        migrate: coordinator.migrateIfNeeded,
+        buildRepository: (bootstrap) => KeptRepository(
+          store: roundTrippingStore,
+          bootstrap: bootstrap,
+          operationCoordinator: PersistenceOperationCoordinator(),
+          // A fixed, already millisecond-exact clock: a new Keep's
+          // KeptRecord.keptAt/updatedAt otherwise default to a raw
+          // DateTime.now(), which (like the unfixed legacy reflectedAt
+          // this whole hotfix is about) commonly carries genuine
+          // sub-millisecond precision on a real device. Whether
+          // KeptRepository's own default clock should itself be
+          // millisecond-truncated is a separate, pre-existing question
+          // about ordinary (non-migration) runtime mutation behavior,
+          // explicitly out of scope for this hotfix — this fixed clock
+          // only keeps this test focused on the migration/availability
+          // interaction it's actually about.
+          clock: () => DateTime.utc(2026, 8, 2, 15, 0, 0),
+        ),
+        buildService: (repository) =>
+            SavedReflectionsService(keptRepository: repository),
+      );
+    }
+
+    setUp(() {
+      legacyStore = _FakeLegacyFavoritesStore();
+      journalStore = _FakeJournalStore();
+      artifactStore = _FakeArtifactStore();
+      roundTrippingStore = JsonRoundTrippingKeptStateStore();
+      legacyStore.entries = [recoveredPayload];
+    });
+
+    test(
+        '1. a pre-fix-equivalent envelope-verification failure (the exact '
+        'mechanism the unfixed reflectedAt/microsecond bug triggered) '
+        'leaves the repository unavailable and safely blocks a new Keep, '
+        'with Kept remaining empty', () async {
+      // Forcing the protected store's own write-verification to fail
+      // reproduces, generically, the same failure mode the unfixed
+      // migration code triggered specifically via microsecond-precision
+      // loss: envelope-replace fails verification, migration throws before
+      // ever placing the envelope file, and bootstrap resolves to
+      // unavailable.
+      roundTrippingStore.forceVerifyFailure = true;
+      final bootstrapper = buildBootstrapper();
+
+      final result = await bootstrapper.run();
+
+      expect(result.bootstrap.isUnavailable, isTrue);
+      expect(result.bootstrap.errorCode, 'envelope-replace');
+      // Kept remains empty / inaccessible.
+      await expectLater(
+        result.service.load(),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+      // A new Keep mutation is safely blocked, not silently written into an
+      // empty fabricated state.
+      await expectLater(
+        result.repository.keepOccurrence(
+          revealId: 'b6f4d222-2222-4222-8222-222222222222',
+          wisdomText: 'A brand new wisdom.',
+          revealedAt: DateTime.utc(2026, 8, 2),
+          isKeeper: false,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+      // The legacy key was never removed — nothing was silently discarded.
+      expect(legacyStore.entries, [recoveredPayload]);
+    });
+
+    test(
+        '2. after the fix, the migrated Build 25 record is visible, the '
+        'repository becomes available, a new reveal can be kept '
+        'successfully, both records remain present, and no duplicate '
+        'migrated record is created', () async {
+      final bootstrapper = buildBootstrapper();
+
+      final result = await bootstrapper.run();
+
+      expect(result.bootstrap.isReady, isTrue);
+      expect(result.bootstrap.isUnavailable, isFalse);
+
+      final afterMigration = await result.service.load();
+      expect(afterMigration, hasLength(1));
+      expect(afterMigration.single.id, 'sr-v1-1785622374122602-0');
+      expect(afterMigration.single.text, 'Some doors open after surrender.');
+
+      // A new, valid reveal occurrence can be kept successfully — the
+      // repository/service the migrated record came from is genuinely
+      // available, not merely reporting success while still fail-closed.
+      final afterKeep = await result.service.toggle(
+        revealId: 'b6f4d222-2222-4222-8222-222222222222',
+        text: 'A brand new wisdom.',
+        date: 'August 2, 2026',
+        revealedAt: DateTime.utc(2026, 8, 2),
+        isKeeper: false,
+      );
+
+      expect(afterKeep.limitReached, isFalse);
+      expect(afterKeep.items, hasLength(2));
+      final ids = afterKeep.items.map((item) => item.id).toList();
+      // Both records remain present...
+      expect(ids, contains('sr-v1-1785622374122602-0'));
+      expect(ids.where((id) => id == 'sr-v1-1785622374122602-0'), hasLength(1));
+      // ...and no duplicate of the migrated record was created by keeping
+      // the new one.
+      expect(ids.toSet(), hasLength(2));
+
+      // Re-loading independently confirms both records persisted, not just
+      // the in-memory mutation result. This is itself proof the new record
+      // survived a real JSON round-trip: JsonRoundTrippingKeptStateStore's
+      // own replace() throws on any encode/decode mismatch, so `toggle`
+      // above could not have succeeded otherwise.
+      final reloaded = await result.service.load();
+      expect(reloaded, hasLength(2));
+      final storedDirectly = (await roundTrippingStore.load())!.activeRecords;
+      expect(storedDirectly, hasLength(2));
+    });
+
+    test(
+        '3. after migration, a new Reflection on the migrated record '
+        'survives a real JSON round-trip', () async {
+      final bootstrapper = buildBootstrapper();
+      final result = await bootstrapper.run();
+      expect(result.bootstrap.isReady, isTrue);
+
+      final afterReflection = await result.service.saveReflection(
+        itemId: 'sr-v1-1785622374122602-0',
+        reflection: 'A brand new reflection, added at runtime.',
+        isKeeper: false,
+        reflectedAt: DateTime.utc(2026, 8, 3, 9, 0, 0, 250, 250),
+      );
+
+      expect(afterReflection.limitReached, isFalse);
+      // The migrated record already had a Reflection from Build 25, so this
+      // edits it — reflectionLimitReached must not fire for an edit.
+      expect(afterReflection.reflectionLimitReached, isFalse);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(
+        record.reflectionText,
+        'A brand new reflection, added at runtime.',
+      );
+      // Canonicalized to millisecond precision, exactly like every other
+      // normal-runtime write — otherwise this save would itself have failed
+      // the store's own encode/decode verification.
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 3, 9, 0, 0, 250));
+    });
+
+    test(
+        '4. no duplicate migrated record is created across a simulated app '
+        'relaunch (a fresh coordinator/bootstrapper reusing the same '
+        'persisted stores)', () async {
+      final firstLaunch = buildBootstrapper();
+      final firstResult = await firstLaunch.run();
+      expect(firstResult.bootstrap.isReady, isTrue);
+      expect(
+        (await roundTrippingStore.load())!.activeRecords,
+        hasLength(1),
+      );
+
+      // A second "launch": a brand-new coordinator and bootstrapper (as
+      // `main()` constructs fresh on every real process start), wired to
+      // the exact same underlying stores — simulating relaunching the app
+      // without deleting it, which is exactly the reported real-device
+      // scenario.
+      final secondLaunch = buildBootstrapper();
+      final secondResult = await secondLaunch.run();
+
+      expect(secondResult.bootstrap.isReady, isTrue);
+      final records = (await roundTrippingStore.load())!.activeRecords;
+      expect(records, hasLength(1));
+      expect(records.single.id, 'sr-v1-1785622374122602-0');
+      expect(legacyStore.entries, isNull);
+    });
+  });
 }
 
 /// Counts `load`/`replace` calls on top of the shared in-memory

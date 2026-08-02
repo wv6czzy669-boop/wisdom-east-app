@@ -8,6 +8,7 @@ import '../persistence/kept_state_store.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../utils/canonical_uuid.dart';
 import '../utils/date_formatter.dart';
+import '../utils/kept_timestamp_canonicalizer.dart';
 
 typedef KeptClock = DateTime Function();
 typedef KeptIdFactory = String Function();
@@ -179,13 +180,20 @@ final class KeptRepository {
 
         final id = _generateId();
         final mutationId = _generateId();
-        final keptAt = _clock();
+        // Canonicalized before ever reaching a KeptRecord: both the
+        // caller-supplied authoritative revealedAt and this freshly-read
+        // clock value may carry non-zero microseconds (a real device clock
+        // routinely does) — see kept_timestamp_canonicalizer.dart for why
+        // that would otherwise make this record fail its own protected
+        // store's mandatory post-write read-back verification.
+        final canonicalRevealedAt = canonicalizeKeptTimestamp(revealedAt);
+        final keptAt = canonicalizeKeptTimestamp(_clock());
 
         final record = KeptRecord(
           id: id,
           revealId: revealId,
           wisdomText: wisdomText,
-          revealedAt: revealedAt,
+          revealedAt: canonicalRevealedAt,
           keptAt: keptAt,
           updatedAt: keptAt,
           mutationId: mutationId,
@@ -259,7 +267,10 @@ final class KeptRepository {
           );
         }
 
-        final mutationTime = reflectedAt ?? _clock();
+        // Canonicalized: a caller-supplied reflectedAt (e.g. from
+        // ReflectionScreen) or this freshly-read clock value may carry
+        // non-zero microseconds — see kept_timestamp_canonicalizer.dart.
+        final mutationTime = canonicalizeKeptTimestamp(reflectedAt ?? _clock());
         final updated = existing.copyWith(
           reflectionText: normalized,
           reflectedAt: mutationTime,
@@ -304,7 +315,7 @@ final class KeptRepository {
 
         final updated = existing.copyWith(
           clearReflection: true,
-          updatedAt: _clock(),
+          updatedAt: canonicalizeKeptTimestamp(_clock()),
           mutationId: _generateId(),
         );
 
@@ -366,7 +377,7 @@ final class KeptRepository {
         // exactly, since KeptRecord.copyWith deliberately cannot alter any
         // of them.
         final restoredRecord = removed.record.copyWith(
-          updatedAt: _clock(),
+          updatedAt: canonicalizeKeptTimestamp(_clock()),
           mutationId: _generateId(),
         );
 

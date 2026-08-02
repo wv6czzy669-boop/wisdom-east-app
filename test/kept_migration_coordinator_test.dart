@@ -12,6 +12,9 @@ import 'package:wisdom_app/persistence/kept_state_store.dart';
 import 'package:wisdom_app/persistence/legacy_favorites_store.dart';
 import 'package:wisdom_app/persistence/stored_favorite_entry_codec.dart';
 import 'package:wisdom_app/services/kept_migration_coordinator.dart';
+import 'package:wisdom_app/utils/date_formatter.dart';
+
+import 'persistence_test_helpers.dart';
 
 class _FakeLegacyFavoritesStore implements LegacyFavoritesStore {
   List<String>? entries;
@@ -1392,6 +1395,330 @@ void main() {
         coordinator.migrateIfNeeded(),
         throwsA(isA<KeptMigrationException>()),
       );
+    });
+  });
+
+  group('Phase 3D-D real-device migration hotfix', () {
+    // Every KeptStateStore fake above this group (_FakeKeptStateStore, and
+    // the shared InMemoryKeptStateStore used elsewhere in this suite)
+    // stores the KeptStateEnvelope *object* directly on replace() — it
+    // never actually serializes to JSON, so it can never reproduce a defect
+    // that only manifests through genuine encode/decode. This group's own
+    // JsonRoundTrippingKeptStateStore (persistence_test_helpers.dart) does
+    // real JSON round-tripping, mirroring ProtectedFileKeptStateStore's own
+    // mandatory post-write verification exactly (compare the decoded-back
+    // envelope against the intended one before ever considering the write
+    // durable) — this is what actually proves/disproves the hypothesis.
+    late JsonRoundTrippingKeptStateStore roundTrippingStore;
+
+    setUp(() {
+      roundTrippingStore = JsonRoundTrippingKeptStateStore();
+    });
+
+    KeptMigrationCoordinator buildRoundTrippingCoordinator() {
+      return KeptMigrationCoordinator(
+        legacyFavoritesStore: legacy,
+        journalStore: journalStore,
+        artifactStore: artifactStore,
+        keptStateStore: roundTrippingStore,
+        migrationIdFactory: () => migrationId,
+        clock: () => startedAt,
+      );
+    }
+
+    // Byte-exact recovered `flutter.favorites` entry from the reported
+    // Build 25 -> 26 upgrade incident.
+    const recoveredPayload = '{"schemaVersion":2,'
+        '"id":"sr-v1-1785622374122602-0",'
+        '"date":"August 2, 2026",'
+        '"text":"Some doors open after surrender.",'
+        '"reflection":"Ibne galatasaray",'
+        '"reflectedAt":"2026-08-02T01:13:07.484133"}';
+
+    test(
+        '1. the exact recovered physical-device payload migrates cleanly '
+        'end-to-end through real JSON serialization', () async {
+      // PRE-FIX ANALYSIS (this is what a focused reproduction against the
+      // code as it existed before this change proves — see this group's
+      // doc comment and the final report's root-cause section for the
+      // full trace):
+      //   _convertToKeptRecord parsed "August 2, 2026" to the deterministic
+      //   noon anchor (keptAt = revealedAt = 2026-08-02T12:00:00.000Z) and
+      //   reinterpreted "2026-08-02T01:13:07.484133" (offset-free) via a
+      //   bare `DateTime.parse(...).toUtc()` — non-deterministic across
+      //   devices/timezones, and never truncated to millisecond precision.
+      //   Because the parsed reflectedAt was *earlier* than the noon
+      //   anchor on every plausible real-world timezone, the pre-fix
+      //   `updatedAt` clamp already avoided a `KeptRecord` validation
+      //   exception — so the primary hypothesis (a rejected
+      //   updatedAt/keptAt ordering) is DISPROVEN by direct trace: no such
+      //   exception is thrown here. The actual failure is different and
+      //   more subtle: the genuine, non-zero ".133" microsecond remainder
+      //   in ".484133" survived into the in-memory KeptRecord but is
+      //   dropped by KeptRecord.encode()'s millisecond-only wire format
+      //   (`reflectedAtMs`). ProtectedFileKeptStateStore._replace's own
+      //   mandatory post-write verification (steps 10-11: encode, decode,
+      //   compare by value) — reproduced exactly by
+      //   JsonRoundTrippingKeptStateStore.replace — found the
+      //   freshly-decoded record unequal to the in-memory original, threw
+      //   KeptStateStoreException('replace-verify-temp', ...), which
+      //   KeptMigrationCoordinator wraps as
+      //   KeptMigrationException('envelope-replace', ...), which
+      //   KeptStorageBootstrapper maps to
+      //   KeptBootstrapResult.unavailable('envelope-replace'). The temp
+      //   file is deleted (best-effort) before ever being renamed into
+      //   place, so no east_kept_state_v3.json is ever durably written —
+      //   exactly matching the reported evidence (protected directory
+      //   created, zero descendant files, legacy key still intact).
+      //
+      // POST-FIX (this test, against the current code): migration
+      // completes cleanly.
+      legacy.entries = [recoveredPayload];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 1);
+      expect(result.corruptCount, 0);
+      expect(result.legacyCleanupCompleted, isTrue);
+      expect(legacy.entries, isNull);
+      expect(journalStore.journal!.state, KeptMigrationState.complete);
+
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.id, 'sr-v1-1785622374122602-0');
+      expect(record.wisdomText, 'Some doors open after surrender.');
+      expect(record.reflectionText, 'Ibne galatasaray');
+      expect(record.revealId, revealIdFor('sr-v1-1785622374122602-0'));
+      expect(record.mutationId, mutationIdFor('sr-v1-1785622374122602-0'));
+      // Same-day, earlier-than-noon reflectedAt: keptAt/revealedAt are
+      // anchored to the real reflectedAt instead of the noon placeholder,
+      // so keptAt is never after reflectedAt.
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 2, 1, 13, 7, 484));
+      expect(record.keptAt, record.reflectedAt);
+      expect(record.revealedAt, record.reflectedAt);
+      expect(record.updatedAt, record.reflectedAt);
+      expect(record.keptAt.isAfter(record.reflectedAt!), isFalse);
+      expect(record.updatedAt.isBefore(record.keptAt), isFalse);
+    });
+
+    test(
+        '2. a same-day early-morning reflection (earlier than the noon '
+        'anchor) anchors keptAt to the real reflectedAt', () async {
+      final item = FavoriteItem(
+        id: 'early-morning-1',
+        date: 'August 2, 2026',
+        text: 'An early riser.',
+        reflection: 'First thought of the day.',
+        reflectedAt: '2026-08-02T03:00:00.000000',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.corruptCount, 0);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 2, 3));
+      expect(record.keptAt, DateTime.utc(2026, 8, 2, 3));
+      expect(record.revealedAt, DateTime.utc(2026, 8, 2, 3));
+      expect(record.updatedAt, DateTime.utc(2026, 8, 2, 3));
+      expect(record.keptAt.isAfter(record.reflectedAt!), isFalse);
+    });
+
+    test(
+        '3. a same-day late-evening reflection (after the noon anchor) '
+        'leaves keptAt at the noon placeholder', () async {
+      final item = FavoriteItem(
+        id: 'late-evening-1',
+        date: 'August 2, 2026',
+        text: 'A night owl.',
+        reflection: 'Last thought of the day.',
+        reflectedAt: '2026-08-02T23:50:00.000000',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.keptAt, DateTime.utc(2026, 8, 2, 12));
+      expect(record.revealedAt, DateTime.utc(2026, 8, 2, 12));
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 2, 23, 50));
+      expect(record.updatedAt, DateTime.utc(2026, 8, 2, 23, 50));
+      expect(record.keptAt.isAfter(record.reflectedAt!), isFalse);
+    });
+
+    test(
+        '4. a legacy Kept record with no Reflection keeps the noon anchor '
+        'for every historical field', () async {
+      final item = FavoriteItem(
+        id: 'no-reflection-1',
+        date: 'August 2, 2026',
+        text: 'Never reflected on.',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.reflectionText, isNull);
+      expect(record.reflectedAt, isNull);
+      expect(record.keptAt, DateTime.utc(2026, 8, 2, 12));
+      expect(record.revealedAt, DateTime.utc(2026, 8, 2, 12));
+      expect(record.updatedAt, DateTime.utc(2026, 8, 2, 12));
+    });
+
+    test(
+        '5. an explicit-timezone-offset reflectedAt converts to its true '
+        'UTC instant and still respects the keptAt-never-after-reflectedAt '
+        'invariant', () async {
+      final item = FavoriteItem(
+        id: 'explicit-offset-1',
+        date: 'August 2, 2026',
+        text: 'Written with an explicit offset.',
+        reflection: 'Offset-aware reflection.',
+        reflectedAt: '2026-08-02T14:13:07+03:00',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.corruptCount, 0);
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      // 2026-08-02T14:13:07+03:00 == 2026-08-02T11:13:07Z, same calendar
+      // day as the display date and earlier than its noon anchor.
+      expect(record.reflectedAt, DateTime.utc(2026, 8, 2, 11, 13, 7));
+      expect(record.keptAt, record.reflectedAt);
+      expect(record.keptAt.isAfter(record.reflectedAt!), isFalse);
+    });
+
+    test(
+        '6. a reflectedAt whose calendar day genuinely precedes the '
+        'display date is preserved as a corrupt/recovery entry, never '
+        'silently reinterpreted', () async {
+      final item = FavoriteItem(
+        id: 'contradiction-1',
+        date: 'August 5, 2026',
+        text: 'Display date is later than the reflection claims.',
+        reflection: 'This cannot have happened before being kept.',
+        reflectedAt: '2026-08-02T10:00:00.000000',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final result = await coordinator.migrateIfNeeded();
+
+      // Never rejected wholesale, and never silently rewritten: the
+      // migration as a whole still completes (0 usable, 1 corrupt), and
+      // the raw legacy entry is preserved byte-exact in the recovery
+      // artifact — the existing, unchanged corrupt/recovery mechanism.
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(result.migratedCount, 0);
+      expect(result.corruptCount, 1);
+      final artifact = artifactStore.recoveryArtifacts[recoveryFileName()]!;
+      expect(artifact.corruptEntries.single.rawValue, item.encode());
+      expect(
+        artifact.corruptEntries.single.stage,
+        KeptMigrationFailureStage.convert,
+      );
+      expect((await roundTrippingStore.load())!.activeRecords, isEmpty);
+    });
+
+    test(
+        '7. the protected envelope is written, read back, and decoded '
+        'correctly, and the legacy key is removed only after that '
+        'verification succeeds', () async {
+      legacy.entries = [recoveredPayload];
+      final coordinator = buildRoundTrippingCoordinator();
+      expect(legacy.entries, isNotNull);
+
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.legacyCleanupCompleted, isTrue);
+      expect(legacy.entries, isNull);
+      // A fresh, independent load() call (simulating a later app launch)
+      // proves the write actually persisted and decodes correctly, not
+      // merely that an in-memory reference survived.
+      final reloaded = await roundTrippingStore.load();
+      expect(reloaded, isNotNull);
+      expect(reloaded!.activeRecords.single.id, 'sr-v1-1785622374122602-0');
+    });
+
+    test(
+        '8. a failure before verification keeps the original '
+        'flutter.favorites value byte-for-byte', () async {
+      legacy.entries = [recoveredPayload];
+      roundTrippingStore.forceVerifyFailure = true;
+      final coordinator = buildRoundTrippingCoordinator();
+
+      await expectLater(
+        coordinator.migrateIfNeeded(),
+        throwsA(isA<KeptMigrationException>()),
+      );
+
+      expect(legacy.entries, [recoveredPayload]);
+      expect(await roundTrippingStore.load(), isNull);
+    });
+
+    test(
+        '9. retrying after the fixed migration is idempotent and creates '
+        'exactly one record', () async {
+      legacy.entries = [recoveredPayload];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      final first = await coordinator.migrateIfNeeded();
+      expect(first.status, KeptMigrationStatus.migrated);
+
+      final second = await coordinator.migrateIfNeeded();
+
+      expect(second.status, KeptMigrationStatus.alreadyComplete);
+      expect(second.migratedCount, 1);
+      expect(
+        (await roundTrippingStore.load())!.activeRecords,
+        hasLength(1),
+      );
+    });
+
+    test(
+        '10. the migrated record preserves wisdom text, reflection text, '
+        'displayed date, stable identity, and valid temporal ordering',
+        () async {
+      // Deliberately a fixture where keptAt stays at the noon anchor (a
+      // late-evening reflection never needs the anchor adjusted), so the
+      // displayed-date assertion below is not itself timezone-fragile —
+      // the noon anchor is specifically designed to be far from any day
+      // boundary under `.toLocal()`.
+      final item = FavoriteItem(
+        id: 'preserve-all-1',
+        date: 'August 2, 2026',
+        text: 'A wisdom worth keeping.',
+        reflection: 'A reflection worth keeping too.',
+        reflectedAt: '2026-08-02T23:50:00.000000',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildRoundTrippingCoordinator();
+
+      await coordinator.migrateIfNeeded();
+
+      final record = (await roundTrippingStore.load())!.activeRecords.single;
+      expect(record.wisdomText, 'A wisdom worth keeping.');
+      expect(record.reflectionText, 'A reflection worth keeping too.');
+      expect(
+        formatFavoriteDisplayDate(record.keptAt.toLocal()),
+        'August 2, 2026',
+      );
+      expect(record.id, 'preserve-all-1');
+      expect(record.revealId, revealIdFor('preserve-all-1'));
+      expect(record.keptAt.isAfter(record.reflectedAt!), isFalse);
+      expect(record.updatedAt.isBefore(record.keptAt), isFalse);
+      expect(record.revealedAt.isAfter(record.keptAt), isFalse);
     });
   });
 }
