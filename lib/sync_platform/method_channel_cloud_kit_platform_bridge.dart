@@ -1,0 +1,128 @@
+import 'package:flutter/services.dart';
+
+import 'cloud_kit_account_change_event.dart';
+import 'cloud_kit_account_snapshot.dart';
+import 'cloud_kit_bridge_info.dart';
+import 'cloud_kit_platform_bridge.dart';
+import 'cloud_kit_platform_error.dart';
+import 'cloud_kit_zone_configuration_result.dart';
+
+/// Build 26 Phase 4B-1: production [CloudKitPlatformBridge], backed by the
+/// native Swift bridge registered in `ios/Runner/CloudKitSyncBridge.swift`
+/// (see `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s Phase 4B-1 section
+/// for the exact channel contract). Follows this codebase's existing
+/// `MethodChannelFileProtectionBridge` convention
+/// (`lib/persistence/file_protection_bridge.dart`): never no-ops on a
+/// platform with no native handler registered -- a missing handler
+/// surfaces as a [CloudKitPlatformException], exactly like any other
+/// failure.
+///
+/// No method here accepts, and no field on any type it returns can hold,
+/// wisdom text, Reflection text, a `KeptRecord`-shaped value, or any
+/// daily-access data -- this file imports nothing from
+/// `lib/models/kept_record.dart` or any daily-access file (see
+/// `test/sync_platform/cloud_kit_platform_privacy_test.dart` for the
+/// enforced proof).
+final class MethodChannelCloudKitPlatformBridge
+    implements CloudKitPlatformBridge {
+  const MethodChannelCloudKitPlatformBridge();
+
+  static const String methodChannelName =
+      'com.dogukan.dailywisdom/cloudkit_sync';
+  static const String eventChannelName =
+      'com.dogukan.dailywisdom/cloudkit_sync_events';
+
+  static const String methodGetAccountSnapshot = 'getAccountSnapshot';
+  static const String methodConfigurePrivateZone = 'configurePrivateZone';
+  static const String methodGetBridgeInfo = 'getBridgeInfo';
+
+  static const MethodChannel _methodChannel = MethodChannel(methodChannelName);
+  static const EventChannel _eventChannel = EventChannel(eventChannelName);
+
+  @override
+  Future<CloudKitAccountSnapshot> getAccountSnapshot() async {
+    final raw = await _invoke(methodGetAccountSnapshot);
+    final snapshot = _asMap(raw) == null
+        ? null
+        : CloudKitAccountSnapshot.tryParse(_asMap(raw)!);
+    if (snapshot == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return snapshot;
+  }
+
+  @override
+  Future<CloudKitZoneConfigurationResult> configurePrivateZone() async {
+    final raw = await _invoke(methodConfigurePrivateZone);
+    final result = _asMap(raw) == null
+        ? null
+        : CloudKitZoneConfigurationResult.tryParse(_asMap(raw)!);
+    if (result == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return result;
+  }
+
+  @override
+  Future<CloudKitBridgeInfo> getBridgeInfo() async {
+    final raw = await _invoke(methodGetBridgeInfo);
+    final info =
+        _asMap(raw) == null ? null : CloudKitBridgeInfo.tryParse(_asMap(raw)!);
+    if (info == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return info;
+  }
+
+  @override
+  Stream<CloudKitAccountChangeEvent> get accountChangeEvents async* {
+    await for (final raw in _eventChannel.receiveBroadcastStream()) {
+      final event = CloudKitAccountChangeEvent.tryParse(raw);
+      // A malformed or unrecognized event is dropped, never surfaced as a
+      // stream error and never crashes the listener -- fail closed by
+      // omission, consistent with this design's other "skip the one bad
+      // item, keep going" rules (design doc §2.8).
+      if (event != null) {
+        yield event;
+      }
+    }
+  }
+
+  Map<Object?, Object?>? _asMap(Object? raw) {
+    if (raw is Map<Object?, Object?>) return raw;
+    return null;
+  }
+
+  Future<Object?> _invoke(String method) async {
+    try {
+      return await _methodChannel.invokeMethod(method);
+    } on MissingPluginException {
+      // No native handler is registered for this channel at all --
+      // distinct from a PlatformException, where a handler ran but
+      // returned an error. See
+      // ios/Runner/AppDelegate.swift's registerCloudKitSyncChannel.
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.noNativeHandlerCode,
+      );
+    } on PlatformException catch (error) {
+      // Only the symbolic .code is ever forwarded -- .message may contain
+      // a CloudKit-localized, unpredictable string and is never read here.
+      final code = error.code.trim();
+      throw CloudKitPlatformException(
+        code.isEmpty
+            ? CloudKitPlatformException.unrecognizedNativeErrorCode
+            : code,
+      );
+    } catch (_) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.unrecognizedNativeErrorCode,
+      );
+    }
+  }
+}

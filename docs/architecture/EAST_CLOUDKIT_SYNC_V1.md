@@ -1,6 +1,6 @@
-# EAST. CloudKit Sync Design v1.0 (Phase 4A)
+# EAST. CloudKit Sync Design v1.0 (Phase 4A, updated for Phase 4B-1)
 
-**Status:** Architecture and sync-domain foundation only. No CloudKit container, entitlement, or network call exists yet. This document is the precise design ADR-007 (`docs/decisions/ADR-007-build-26-local-storage-and-icloud-sync.md`) requires its implementation phases to follow.
+**Status:** Phase 4A's architecture and pure Dart sync-domain foundation are implemented (Sections 1-9). Phase 4B-1 (Section 10) additionally implements a native Swift CloudKit bridge **foundation** — account snapshot, private-zone configuration, static bridge info, and account-change events — behind a narrow Dart platform-bridge layer. **No iCloud capability, entitlement, or CloudKit container is registered yet, and no Kept/Reflection record has ever been uploaded, downloaded, merged, or deleted.** Every CloudKit call Phase 4B-1 adds is inert in production today: nothing in this app's startup path or repository code invokes it. This document is the precise design ADR-007 (`docs/decisions/ADR-007-build-26-local-storage-and-icloud-sync.md`) requires its implementation phases to follow.
 
 **Scope of this document:** the CloudKit boundary, record schema, local-first behavior, conflict/deletion rules, account-boundary behavior, sync-engine choice, and the future native bridge contract. It does not implement any of these — see `docs/architecture/EAST_ARCHITECTURE_V1.md` Section 33 for the one-paragraph product-level summary, and ADR-007 for the original decision record.
 
@@ -240,6 +240,92 @@ All of the following live under `lib/sync/`, are pure (no `dart:io`, no platform
 
 No durable outbox store, no real queue persistence, and no platform channel implementation are added in this phase — those belong to the later subphase that actually implements Phase 4B.
 
-## 9. Explicit non-goals (this phase)
+## 9. Explicit non-goals (Phase 4A)
 
 Restated from the Phase 4A instruction, for a single authoritative list in this document: no iCloud entitlement, no CloudKit container, no network calls, no change to application/ritual behavior, no syncing of the rolling 24-hour lock or the current daily wisdom, no analytics, no rating-request changes, no export/delete UI, no Keeper/monetization changes, no package/version changes, and no start of Phase 4B.
+
+(Phase 4B-1, Section 10 below, is the controlled start of Phase 4B this note anticipated — it does not retroactively change anything in Sections 1-9.)
+
+## 10. Phase 4B-1 — native CloudKit bridge foundation (implemented this phase)
+
+**Scope:** a compiling native Swift bridge and a Dart platform-bridge layer that can report account status, idempotently configure the private zone, report static bridge info, and emit content-free account-change events. **No user-content sync exists yet** — no method here uploads, downloads, merges, or deletes a Kept/Reflection record, and nothing in this phase adds the iCloud capability, registers a container, or deploys a CloudKit schema.
+
+### 10.1 Bridge boundary
+
+- **Two new native files categories:** six focused Swift types under `ios/Runner/` (`CloudKitSyncBridgeConstants`, `CloudKitAccountStatusMapper`, `CloudKitErrorClassifier`, `CloudKitAccountFingerprintUtility`, `CloudKitPrivateZoneCoordinator`, `CloudKitSyncBridge`), and a Dart platform-bridge layer under `lib/sync_platform/`, deliberately separate from the pure Phase 4A sync domain (`lib/sync/`).
+- **`CloudKitSyncBridge` is registered** in `AppDelegate.didInitializeImplicitFlutterEngine` via `registerCloudKitSyncChannel`, following the exact same `registry.registrar(forPlugin:)` pattern already used for the Phase 3B file-protection channel. **Registration itself performs no CloudKit network request, no account lookup, and no zone creation** — every CloudKit call happens lazily, only in direct response to an explicit Dart method invocation.
+- **`lib/sync_platform/cloud_kit_platform_bridge.dart` (`CloudKitPlatformBridge`) is deliberately not `lib/sync/sync_engine.dart`'s `SyncEngine`.** `SyncEngine`'s `startSync`/`requestImmediateSync`/`enqueueLocalChange`/`remoteChanges` describe real record synchronization, which does not exist yet — implementing `SyncEngine` now, with those methods missing or stubbed, would misrepresent capability that is not actually present. A future phase's real `SyncEngine` implementation may compose this bridge as one of its collaborators.
+- **No production code invokes any of this in Phase 4B-1.** `lib/main.dart` and every repository/service file are unchanged; nothing outside `lib/sync_platform/` imports `MethodChannelCloudKitPlatformBridge` (enforced by `test/sync_platform/cloud_kit_platform_privacy_test.dart`).
+- **Production code always uses `CKContainer.default()`**, never an explicit container identifier — Xcode-managed entitlements remain the single source of truth for which container is actually used once Phase 4B-2 activates the capability. The proposed identifier `iCloud.com.dogukan.dailywisdom` is written down (`CloudKitSyncBridgeConstants.proposedContainerIdentifierForPhase4B2`) but referenced nowhere else in bridge code.
+
+### 10.2 Exact channel contract
+
+| | Name |
+|---|---|
+| MethodChannel | `com.dogukan.dailywisdom/cloudkit_sync` |
+| EventChannel | `com.dogukan.dailywisdom/cloudkit_sync_events` |
+
+**Methods** (`MethodChannelCloudKitPlatformBridge` / `CloudKitSyncBridge.handle`):
+
+| Method | Result shape (all fields content-free) |
+|---|---|
+| `getAccountSnapshot` | `{status, isPrivateDatabaseUsable, accountFingerprint?, fingerprintResolved, bridgeVersion}` |
+| `configurePrivateZone` | `{success, zoneCreated, zoneAlreadyExisted, accountStatus, errorCode?}` |
+| `getBridgeInfo` | `{bridgeVersion, expectedZoneName, expectedRecordTypes, privateDatabaseOnly, capabilityActivationExpected}` |
+
+`status`/`accountStatus` values: `available`, `noAccount`, `restricted`, `couldNotDetermine`, `temporarilyUnavailable` (native), normalized on the Dart side (`CloudKitAccountAvailability`) with an additional `unknown` case for any value Dart does not recognize — never silently coerced to `available`.
+
+**Event channel payload:** `{"event": "accountChanged"}` — the only event this phase ever emits, and the only content it ever carries.
+
+**Error reporting:** every failure response carries a symbolic error code from the exact vocabulary `lib/sync/sync_error_classification.dart` already defines (`CloudKitErrorClassifier`'s Swift constants mirror those Dart constants by literal string value) — Swift only reports what happened; Dart classifies retryability by calling the existing `classifySyncErrorCode`, never a second, native-side classification scheme.
+
+### 10.3 Account-fingerprint privacy treatment
+
+- Derived only when `accountStatus == .available`, via `CKContainer.fetchUserRecordID` followed by `CloudKitAccountFingerprintUtility.fingerprint(for:)` — a namespaced (`com.dogukan.dailywisdom.cloudkit.account.v1`) SHA-256 hash of the record's `recordName`, computed with CryptoKit (no new dependency).
+- **Never the raw CloudKit record name or user record ID** — only the opaque hash ever crosses the channel.
+- **Never logged, in Swift or Dart**, and **never persisted anywhere in Phase 4B-1** — it exists solely to support a future same-account/different-account boundary check (Section 5).
+- **An identity-fetch failure never falsely reports a different account** — `fingerprintResolved` simply stays `false`; the already-known account status is unaffected.
+- Omitted from every Dart-side `toLogSafeSummary()`/`toString()` (`CloudKitAccountSnapshot`) — only `fingerprintResolved` (a boolean) is ever surfaced there.
+
+### 10.4 Account-change event behavior
+
+- `CloudKitSyncBridge` observes `NotificationCenter`'s `.CKAccountChanged` lazily, only while the Dart `EventChannel` has an active listener (`onListen`/`onCancel`) — registration/removal is idempotent (a repeated `onListen` without an intervening `onCancel` never double-registers).
+- Delivered to the Flutter event sink only after hopping to the main thread (`DispatchQueue.main.async`), regardless of which queue `NotificationCenter` posted the underlying notification on.
+- Carries no account identity, old or new — Dart must explicitly call `getAccountSnapshot` afterward to learn anything further (Section 5).
+- Never itself triggers a sync operation, a zone configuration call, or anything else — it is purely advisory.
+- A malformed/unrecognized raw event on the Dart side is silently dropped (`CloudKitAccountChangeEvent.tryParse` returns `null`), never surfaced as a stream error.
+
+### 10.5 Zone-configuration behavior
+
+- `CloudKitPrivateZoneCoordinator.configureZone` first attempts `CKDatabase.fetch(withRecordZoneID:)`; if the zone already exists, that is reported as success (`zoneAlreadyExisted: true`), never an error.
+- Only when the fetch fails with `CKError.Code.zoneNotFound` does it proceed to create the zone via `CKModifyRecordZonesOperation` — the exact operation named in the Phase 4B-1 instruction.
+- Scoped to exactly `CKContainer.default().privateCloudDatabase` and exactly the one Phase 4A custom zone name (`EASTKeptZone`) — never the public or shared database, never a second zone, never a subscription, never a user-content record.
+- `configurePrivateZone` first checks `accountStatus`; if not `.available`, it reports failure with the symbolic code `accountTemporarilyUnavailable` without ever attempting a zone operation.
+- **Never invoked automatically.** No app-startup or repository code calls `configurePrivateZone` in Phase 4B-1 — it exists only for a future, explicit call site.
+
+### 10.6 Capability/container activation status
+
+**Not yet applied.** No entitlements file exists in this repository. `ios/Runner.xcodeproj/project.pbxproj` has no iCloud/CloudKit capability, no container reference, and no Push Notifications/Background Modes addition. `getBridgeInfo().capabilityActivationExpected` is hardcoded `false` in this phase specifically so a future caller can distinguish "the bridge foundation exists" from "the capability has been activated."
+
+### 10.7 Phase 4B-2 manual checklist (not yet performed)
+
+Performed by a human in Xcode, on the developer's own machine, after this subphase is reviewed and approved — never automated, never performed by this coding session:
+
+1. Open `ios/Runner.xcworkspace`.
+2. Select the Runner target.
+3. Verify the correct Apple Development Team and bundle ID.
+4. Add the iCloud capability through Xcode.
+5. Enable CloudKit only — not iCloud Documents or key-value storage.
+6. Select or create `iCloud.com.dogukan.dailywisdom` (Section 10.1's proposed identifier).
+7. Confirm Xcode-created entitlements and container association.
+8. Allow Xcode to update signing assets.
+9. Inspect any automatically added Push Notifications capability.
+10. Build and run on the existing physical iPhone without uninstalling EAST.
+11. Call only bridge-info/account-status/zone-configuration smoke operations.
+12. Verify no Kept/Reflection record upload occurs.
+13. Inspect the CloudKit development environment only.
+14. Do not deploy schema to production.
+
+### 10.8 Explicit non-goals (Phase 4B-1)
+
+No iCloud capability, no container registration, no production CloudKit entitlements, no CloudKit schema deployment, no automatic CloudKit invocation during app startup, no record upload/download/merge/delete, no private-zone creation during normal application execution, no durable outbox, no background modes, no notification handling, no `aps-environment`, no third-party dependency, no minimum-iOS-version increase, no public/shared database use, and no start of Phase 4C.

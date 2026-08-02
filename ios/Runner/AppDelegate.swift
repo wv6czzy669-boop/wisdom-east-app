@@ -4,6 +4,10 @@ import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  /// Build 26 Phase 4B-1: retains `CloudKitSyncBridge` for the app's
+  /// lifetime -- see `registerCloudKitSyncChannel` below.
+  private var cloudKitSyncBridge: CloudKitSyncBridge?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -24,7 +28,59 @@ import UserNotifications
     NSLog("EAST_KEPT_DIAGNOSTIC didInitializeImplicitFlutterEngine-begin")
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     registerFileProtectionChannel(with: engineBridge.pluginRegistry)
+    registerCloudKitSyncChannel(with: engineBridge.pluginRegistry)
     NSLog("EAST_KEPT_DIAGNOSTIC didInitializeImplicitFlutterEngine-end")
+  }
+
+  /// Build 26 Phase 4B-1: registers the native CloudKit bridge foundation
+  /// (`CloudKitSyncBridge.swift`) -- account snapshot, private-zone
+  /// configuration, static bridge info, and account-change events only.
+  ///
+  /// This registration itself performs no CloudKit network request, no
+  /// account lookup, and no zone creation -- `CloudKitSyncBridge` only ever
+  /// makes a CloudKit call lazily, in direct response to an explicit Dart
+  /// method invocation. `cloudKitSyncBridge` is retained for the app's
+  /// lifetime so its `NotificationCenter` observer (registered lazily, only
+  /// when Dart first listens to the event channel) is never deallocated
+  /// out from under an active registration.
+  ///
+  /// Build 26 Phase 4B-1 native-test-host correction: a missing registrar
+  /// must never abort the process. Under a native-test-host launch (the
+  /// Runner app running as the XCTest `TEST_HOST`), or under any other
+  /// unusual launch context, `registry.registrar(forPlugin:)` returning
+  /// `nil` is a real, reachable condition, not a "this can never happen"
+  /// invariant -- `assertionFailure` (which aborts in exactly the
+  /// Debug/testable configuration `xcodebuild test` uses, since
+  /// `ENABLE_NS_ASSERTIONS` is only disabled in Release) previously turned
+  /// that reachable condition into a launch-time crash before Dart or
+  /// XCTest could ever establish a connection. This channel simply stays
+  /// unregistered instead: any later Dart call surfaces as an ordinary,
+  /// already-handled `MissingPluginException` /
+  /// `CloudKitPlatformException.noNativeHandlerCode`
+  /// (`lib/sync_platform/method_channel_cloud_kit_platform_bridge.dart`),
+  /// never a process abort.
+  private func registerCloudKitSyncChannel(with registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "EastCloudKitSyncChannel") else {
+      NSLog("EAST_CLOUDKIT_DIAGNOSTIC cloudkit-sync-registrar-nil -- channel left unregistered")
+      return
+    }
+
+    let bridge = CloudKitSyncBridge()
+    cloudKitSyncBridge = bridge
+
+    let methodChannel = FlutterMethodChannel(
+      name: CloudKitSyncBridgeConstants.methodChannelName,
+      binaryMessenger: registrar.messenger()
+    )
+    methodChannel.setMethodCallHandler { call, result in
+      bridge.handle(call, result: result)
+    }
+
+    let eventChannel = FlutterEventChannel(
+      name: CloudKitSyncBridgeConstants.eventChannelName,
+      binaryMessenger: registrar.messenger()
+    )
+    eventChannel.setStreamHandler(bridge)
   }
 
   /// Build 26 Phase 3B: registers the one small native bridge the

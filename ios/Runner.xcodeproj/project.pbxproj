@@ -7,8 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000D64F1780418629EF46358 /* CloudKitSyncBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */; };
+		12EC13957B35BA0E817D19DA /* CloudKitPrivateZoneCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EA6EF4FDC3F1BAA720EF7C2 /* CloudKitPrivateZoneCoordinator.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
+		4BD89155BF8BAC2512A037FC /* CloudKitErrorClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */; };
+		665F3ADD240938B15D08348A /* CloudKitAccountFingerprintUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F46F09478559DBF3E9AF9CD /* CloudKitAccountFingerprintUtility.swift */; };
+		EF3EFA03BF40F2A6384D13E7 /* CloudKitSyncBridgeConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06EBDCBC9B147636B57BA3AC /* CloudKitSyncBridgeConstants.swift */; };
+		F88720FF7409A5547D72F49E /* CloudKitAccountStatusMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
@@ -42,6 +48,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		06EBDCBC9B147636B57BA3AC /* CloudKitSyncBridgeConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncBridgeConstants.swift; sourceTree = "<group>"; };
+		3F46F09478559DBF3E9AF9CD /* CloudKitAccountFingerprintUtility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountFingerprintUtility.swift; sourceTree = "<group>"; };
+		7EA6EF4FDC3F1BAA720EF7C2 /* CloudKitPrivateZoneCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPrivateZoneCoordinator.swift; sourceTree = "<group>"; };
+		C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountStatusMapper.swift; sourceTree = "<group>"; };
+		D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncBridge.swift; sourceTree = "<group>"; };
+		FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitErrorClassifier.swift; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
@@ -132,6 +144,12 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				06EBDCBC9B147636B57BA3AC /* CloudKitSyncBridgeConstants.swift */,
+				C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */,
+				FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */,
+				3F46F09478559DBF3E9AF9CD /* CloudKitAccountFingerprintUtility.swift */,
+				7EA6EF4FDC3F1BAA720EF7C2 /* CloudKitPrivateZoneCoordinator.swift */,
+				D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -300,6 +318,12 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				EF3EFA03BF40F2A6384D13E7 /* CloudKitSyncBridgeConstants.swift in Sources */,
+				F88720FF7409A5547D72F49E /* CloudKitAccountStatusMapper.swift in Sources */,
+				4BD89155BF8BAC2512A037FC /* CloudKitErrorClassifier.swift in Sources */,
+				665F3ADD240938B15D08348A /* CloudKitAccountFingerprintUtility.swift in Sources */,
+				12EC13957B35BA0E817D19DA /* CloudKitPrivateZoneCoordinator.swift in Sources */,
+				000D64F1780418629EF46358 /* CloudKitSyncBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
