@@ -18,6 +18,11 @@ enum CloudKitSyncBridgeConstants {
   static let methodConfigurePrivateZone = "configurePrivateZone"
   static let methodGetBridgeInfo = "getBridgeInfo"
 
+  /// Build 26 Phase 4C-2: the two record-transport methods. Names chosen to
+  /// match the Phase 4C-2 instruction's own suggested naming exactly.
+  static let methodModifyPrivateRecords = "modifyPrivateRecords"
+  static let methodFetchPrivateZoneChanges = "fetchPrivateZoneChanges"
+
   /// Bumped whenever the wire shape of any method's result changes.
   static let bridgeVersion = 1
 
@@ -30,14 +35,21 @@ enum CloudKitSyncBridgeConstants {
   /// `syncStateRecordType`.
   static let expectedRecordTypes = ["CKKeptWisdom", "CKEastSyncState"]
 
-  /// Documented, proposed default container identifier for Phase 4B-2
-  /// (`docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s Phase 4B-1 section) --
-  /// deliberately **not referenced anywhere else in this bridge's code**.
-  /// Production code always uses `CKContainer.default()` so Xcode-managed
-  /// entitlements remain the single source of truth for which container is
-  /// actually used; this string exists only so the proposed identifier is
-  /// written down before Phase 4B-2 registers it for real.
-  static let proposedContainerIdentifierForPhase4B2 = "iCloud.com.dogukan.dailywisdom"
+  /// The container identifier Phase 4B-2 registered in
+  /// `ios/Runner/Runner.entitlements`
+  /// (`com.apple.developer.icloud-container-identifiers`). Phase 4B-1's
+  /// account-status/zone-configuration bridge (`getAccountSnapshot`,
+  /// `configurePrivateZone`) still resolves `CKContainer.default()`,
+  /// unmodified by this correction, per the standing rule against touching
+  /// pre-Phase-4C-2 account/zone code without necessity.
+  ///
+  /// Build 26 Phase 4C-2 correction: the private record transport
+  /// (`modifyPrivateRecords`/`fetchPrivateZoneChanges`) does **not** use
+  /// `CKContainer.default()` -- it constructs `CKContainer(identifier:
+  /// containerIdentifier)` explicitly (see `CloudKitSyncBridge
+  /// .transportContainer`), so the transport's container is never left to
+  /// depend on which entitlement Xcode happens to resolve `.default()` to.
+  static let containerIdentifier = "iCloud.com.dogukan.dailywisdom"
 
   /// Content-free account-change event payload key/value -- mirrors
   /// `CloudKitAccountChangeEventKind.accountChanged` on the Dart side.

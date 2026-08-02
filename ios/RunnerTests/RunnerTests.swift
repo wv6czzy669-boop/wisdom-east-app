@@ -83,6 +83,23 @@ class RunnerTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(CloudKitSyncBridgeConstants.bridgeVersion, 1)
   }
 
+  // Build 26 Phase 4C-2 correction: the private record transport
+  // (`CloudKitSyncBridge.transportContainer`) constructs
+  // `CKContainer(identifier: CloudKitSyncBridgeConstants.containerIdentifier)`
+  // explicitly -- this locks the exact identifier value that source
+  // constructs with. `transportContainer` itself is `private` and cannot be
+  // introspected directly even via `@testable import` (Swift access control
+  // is unaffected by `@testable`), so the accompanying `grep -RIn
+  // "CKContainer(identifier:"` / `grep -RIn "CKContainer.default()"` source
+  // checks in this correction's completion report are the authoritative
+  // proof that only `CloudKitSyncBridge.transportContainer` (never
+  // `handleModifyPrivateRecords`/`handleFetchPrivateZoneChanges` calling
+  // `container` instead) is what the two transport handlers actually use.
+  func testTransportContainerIdentifierConstantIsExact() {
+    XCTAssertEqual(
+      CloudKitSyncBridgeConstants.containerIdentifier, "iCloud.com.dogukan.dailywisdom")
+  }
+
   func testErrorClassifierMapsServerRejectedRequest() {
     XCTAssertEqual(
       CloudKitErrorClassifier.symbolicCode(for: CKError(.serverRejectedRequest)),
@@ -555,6 +572,611 @@ class RunnerTests: XCTestCase {
       XCTAssertEqual(fieldName, CloudKitRecordSchema.KeptWisdomField.wisdomText)
       XCTAssertFalse(fieldName.contains("wisdom text must never appear"))
     }
+  }
+
+  // MARK: - Build 26 Phase 4C-2: private CloudKit record transport tests
+  //
+  // `FakeRecordTransportDatabase` implements `CloudKitZoneOperationDatabase`
+  // (the same seam `CloudKitPrivateZoneCoordinator` already uses --
+  // reused, not duplicated) entirely in-memory and synchronously. No real
+  // CloudKit network call, no real iCloud account, no real zone.
+  //
+  // One disclosed, unavoidable limitation of this test file: `CKServerChangeToken`
+  // has no public initializer anywhere in the CloudKit SDK -- it can only
+  // ever be produced by CloudKit itself, never constructed in an offline
+  // unit test. Every test below that exercises `CloudKitRecordTransportCoordinator
+  // .fetchZoneChanges` therefore validates every behavior that does not
+  // require asserting on a genuinely successful outcome's own `serverToken`
+  // value (record decoding/aggregation ordering, deletion pass-through,
+  // token-expiry precedence, corrupt-archive rejection, zone/database
+  // scoping) -- a true success-path round trip additionally requires a
+  // real device/simulator fetch against actual iCloud, which is out of
+  // scope for this offline test target and is called out explicitly in
+  // this phase's completion report as not directly verified here.
+
+  private final class FakeRecordTransportDatabase: CloudKitZoneOperationDatabase {
+    var fetchOutcome: (CKRecordZone?, Error?) = (nil, CKError(.zoneNotFound))
+    private(set) var addedOperations: [CKDatabaseOperation] = []
+
+    /// One entry per record in the `CKModifyRecordsOperation`'s own
+    /// `recordsToSave` order -- `nil` means that record's save succeeds.
+    /// Fewer entries than records simulates a truncated/cancelled
+    /// operation (some records never receive a per-record callback).
+    var perRecordModifyErrors: [Error?] = []
+    var modifyOverallError: Error?
+
+    var zoneChangesRecordsToReport: [CKRecord] = []
+    var zoneChangesDeletedRecordIDs: [(CKRecord.ID, String)] = []
+    var zoneChangesFetchError: Error?
+    var zoneChangesOverallError: Error?
+
+    func fetch(
+      withRecordZoneID zoneID: CKRecordZone.ID,
+      completionHandler: @escaping (CKRecordZone?, Error?) -> Void
+    ) {
+      completionHandler(fetchOutcome.0, fetchOutcome.1)
+    }
+
+    func add(_ operation: CKDatabaseOperation) {
+      addedOperations.append(operation)
+
+      if let modifyOperation = operation as? CKModifyRecordsOperation {
+        let records = modifyOperation.recordsToSave ?? []
+        for (index, record) in records.enumerated() {
+          guard index < perRecordModifyErrors.count else { continue }
+          modifyOperation.perRecordCompletionBlock?(record, perRecordModifyErrors[index])
+        }
+        modifyOperation.modifyRecordsCompletionBlock?(nil, nil, modifyOverallError)
+        return
+      }
+
+      if let fetchOperation = operation as? CKFetchRecordZoneChangesOperation {
+        for record in zoneChangesRecordsToReport {
+          fetchOperation.recordChangedBlock?(record)
+        }
+        for (recordID, recordType) in zoneChangesDeletedRecordIDs {
+          fetchOperation.recordWithIDWasDeletedBlock?(recordID, recordType)
+        }
+        fetchOperation.recordZoneFetchCompletionBlock?(
+          CloudKitRecordIdentity.zoneID, nil, nil, false, zoneChangesFetchError)
+        fetchOperation.fetchRecordZoneChangesCompletionBlock?(zoneChangesOverallError)
+        return
+      }
+    }
+  }
+
+  private func validKeptWisdomChannelEntry(revealId: String) -> [String: Any] {
+    [
+      "recordType": CloudKitRecordSchema.keptWisdomRecordType,
+      "fields": [
+        "recordType": CloudKitRecordSchema.keptWisdomRecordType,
+        "zoneName": CloudKitRecordSchema.zoneName,
+        "recordName": "east-kept-\(revealId)",
+        "isTombstone": false,
+        "revealId": revealId,
+        "wisdomText": "Be still and know.",
+        "revealedAtMs": Int64(1_754_078_400_000),
+        "keptAtMs": Int64(1_754_078_700_000),
+        "updatedAtMs": Int64(1_754_078_700_000),
+        "mutationId": phase4CMutationId,
+        "dataEpoch": phase4CDataEpoch,
+        "schemaVersion": CloudKitRecordSchema.keptWisdomActiveSchemaVersion,
+      ],
+    ]
+  }
+
+  // 1. Valid record modification request construction.
+  func testArgumentParserBuildsValidKeptWisdomRecord() {
+    let entry = validKeptWisdomChannelEntry(revealId: phase4CRevealIdA)
+    switch CloudKitRecordEnvelopeArgumentParser.buildRecord(fromChannelEntry: entry) {
+    case .success(let record):
+      XCTAssertEqual(record.recordType, CloudKitRecordSchema.keptWisdomRecordType)
+      XCTAssertEqual(record.recordID.recordName, "east-kept-\(phase4CRevealIdA)")
+    case .failure(let error):
+      XCTFail("Expected a successfully-built record, got \(error)")
+    }
+  }
+
+  // 2. Private database and correct zone enforcement.
+  func testArgumentParserBuiltRecordIsAlwaysInEASTKeptZone() {
+    let entry = validKeptWisdomChannelEntry(revealId: phase4CRevealIdA)
+    guard case .success(let record) = CloudKitRecordEnvelopeArgumentParser.buildRecord(fromChannelEntry: entry)
+    else {
+      return XCTFail("Expected a successfully-built record")
+    }
+    XCTAssertEqual(record.recordID.zoneID.zoneName, CloudKitRecordSchema.zoneName)
+  }
+
+  // 3. Wrong-zone request rejection (defense-in-depth at the transport
+  // coordinator itself, not only at the argument parser).
+  func testModifyRecordsRejectsARecordConstructedInTheWrongZone() {
+    let wrongZoneID = CKRecordZone.default().zoneID
+    let recordID = CKRecord.ID(recordName: "east-kept-\(phase4CRevealIdA)", zoneID: wrongZoneID)
+    let wrongZoneRecord = CKRecord(recordType: CloudKitRecordSchema.keptWisdomRecordType, recordID: recordID)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: wrongZoneRecord, previousSystemFields: nil)]
+    ) { result in
+      XCTAssertEqual(result.outcomes.count, 1)
+      XCTAssertFalse(result.outcomes[0].success)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+    // No CKModifyRecordsOperation was ever created -- the only record
+    // requested was rejected before an operation could be built.
+    XCTAssertEqual(fakeDatabase.addedOperations.count, 0)
+  }
+
+  // 4. Invalid codec payload rejected before operation creation.
+  func testArgumentParserRejectsAMalformedPayloadAndNoOperationIsEverCreated() {
+    var malformedEntry = validKeptWisdomChannelEntry(revealId: phase4CRevealIdA)
+    var fields = malformedEntry["fields"] as! [String: Any]
+    fields.removeValue(forKey: "wisdomText")
+    malformedEntry["fields"] = fields
+
+    switch CloudKitRecordEnvelopeArgumentParser.buildRecord(fromChannelEntry: malformedEntry) {
+    case .success:
+      XCTFail("Expected a missing-required-field rejection")
+    case .failure(let error):
+      XCTAssertEqual(error, .missingRequiredField("wisdomText"))
+    }
+
+    // With zero valid inputs, the coordinator never creates an operation.
+    let fakeDatabase = FakeRecordTransportDatabase()
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords([]) { result in
+      XCTAssertEqual(result.overallStatus, .allSucceeded)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+    XCTAssertEqual(fakeDatabase.addedOperations.count, 0)
+  }
+
+  // 5. Successful record result mapping.
+  func testModifyRecordsMapsASuccessfulSaveToASuccessOutcomeWithSystemFields() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [nil]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: record, previousSystemFields: nil)]
+    ) { result in
+      XCTAssertEqual(result.overallStatus, .allSucceeded)
+      XCTAssertEqual(result.outcomes.count, 1)
+      XCTAssertTrue(result.outcomes[0].success)
+      XCTAssertNotNil(result.outcomes[0].systemFields)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 6. Partial failure mapping.
+  func testModifyRecordsMapsMixedOutcomesToPartialFailure() throws {
+    let recordA = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let recordB = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdB, wisdomText: "B", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [nil, CKError(.networkFailure)]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords([
+      CloudKitRecordTransportCoordinator.ModifyInput(record: recordA, previousSystemFields: nil),
+      CloudKitRecordTransportCoordinator.ModifyInput(record: recordB, previousSystemFields: nil),
+    ]) { result in
+      XCTAssertEqual(result.overallStatus, .partialFailure)
+      XCTAssertEqual(result.outcomes.count, 2)
+      XCTAssertTrue(result.outcomes[0].success)
+      XCTAssertFalse(result.outcomes[1].success)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 7. Server-record-changed mapping.
+  func testModifyRecordsMapsServerRecordChangedAsADistinctPerRecordFailure() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [CKError(.serverRecordChanged)]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: record, previousSystemFields: nil)]
+    ) { result in
+      XCTAssertEqual(result.overallStatus, .partialFailure)
+      XCTAssertEqual(result.outcomes[0].errorCode, CloudKitErrorClassifier.serverRecordChanged)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 8. Retry-after classification without leaking raw metadata.
+  func testModifyRecordsClassifiesRequestRateLimitedWithoutRawMetadata() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [
+      CKError(.requestRateLimited, userInfo: [CKErrorRetryAfterKey: 30.0])
+    ]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: record, previousSystemFields: nil)]
+    ) { result in
+      let code = result.outcomes[0].errorCode ?? ""
+      XCTAssertEqual(code, CloudKitErrorClassifier.requestRateLimited)
+      XCTAssertFalse(code.contains("30"))
+      XCTAssertFalse(code.contains(" "))
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 9. Initial zone-change fetch (no prior token).
+  func testFetchZoneChangesConfiguresNoPreviousTokenForAnInitialFetch() {
+    let fakeDatabase = FakeRecordTransportDatabase()
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { _ in
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    guard
+      let fetchOperation = fakeDatabase.addedOperations.first as? CKFetchRecordZoneChangesOperation
+    else {
+      return XCTFail("Expected a CKFetchRecordZoneChangesOperation to have been added")
+    }
+    let configuration = fetchOperation.configurationsByRecordZoneID?[CloudKitRecordIdentity.zoneID]
+    XCTAssertNil(configuration?.previousServerChangeToken)
+  }
+
+  // 10. Ordering/aggregation correctness across multiple changed-record
+  // callbacks -- see this section's own top comment for why this validates
+  // ordering (via changeTokenExpired precedence) rather than a successful
+  // result's own content, given CKServerChangeToken cannot be constructed
+  // in this offline test target.
+  func testFetchZoneChangesNeverReportsPartialDataWhenTokenExpiresAfterRecordCallbacks() throws {
+    let recordA = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let recordB = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdB, wisdomText: "B", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let syncStateRecord = CloudKitSyncStateCodec.encode(
+      dataEpoch: phase4CDataEpoch, resetAtMs: nil, mutationId: phase4CMutationId)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesRecordsToReport = [recordA, recordB, syncStateRecord]
+    fakeDatabase.zoneChangesOverallError = CKError(.changeTokenExpired)
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    // previousServerToken: nil (an initial fetch) is used here deliberately,
+    // not a fabricated non-nil string -- `CKServerChangeToken` has no public
+    // initializer (see this section's own top comment), so any non-nil
+    // string this test could supply would have to be a plain, non-archived
+    // fixture, which `CloudKitOpaqueArchive.unarchiveServerChangeToken`
+    // correctly (and must continue to) reject before this coordinator ever
+    // constructs a `CKFetchRecordZoneChangesOperation` at all -- that
+    // rejection is itself covered by `testCorruptArchivesAreRejectedSafely`
+    // and must never be weakened to make a fixture "pass." Passing `nil`
+    // instead sidesteps that unrelated decode step entirely (the `guard let
+    // previousServerToken = previousServerToken` branch in
+    // `fetchZoneChanges` is simply never entered), so the operation is
+    // actually constructed and handed to `fakeDatabase.add(_:)`, which is
+    // what lets this test reach and assert on the scripted
+    // `.changeTokenExpired` completion this test is actually about.
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      // Every fed record was processed (no crash, no early abort), but the
+      // final outcome is tokenExpired -- never a success carrying whatever
+      // was collected before the expiry was discovered.
+      XCTAssertEqual(result.outcome, .tokenExpired)
+      XCTAssertNil(result.errorCode)
+      XCTAssertNil(result.serverToken)
+      XCTAssertTrue(result.changedKeptWisdomRecords.isEmpty)
+      XCTAssertTrue(result.changedSyncStateRecords.isEmpty)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 11. Changed-record strict decoding -- a malformed changed record is
+  // never silently dropped in favor of reporting an empty successful
+  // change set.
+  func testFetchZoneChangesFailsClosedWhenACallbackRecordIsMalformed() {
+    let recordID = try! CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    let malformedRecord = CKRecord(recordType: CloudKitRecordSchema.keptWisdomRecordType, recordID: recordID)
+    // Missing every required field -- decode must fail.
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesRecordsToReport = [malformedRecord]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      XCTAssertEqual(result.outcome, .failure)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 12. Physical deletion handling per architecture: this transport never
+  // issues one (recordIDsToDelete is always nil), but a deletion
+  // notification CloudKit itself reports is still surfaced defensively,
+  // never silently discarded.
+  func testModifyRecordsNeverUsesPhysicalDeletion() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [nil]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: record, previousSystemFields: nil)]
+    ) { _ in calledOnce.fulfill() }
+    waitForExpectations(timeout: 1)
+
+    guard let modifyOperation = fakeDatabase.addedOperations.first as? CKModifyRecordsOperation else {
+      return XCTFail("Expected a CKModifyRecordsOperation to have been added")
+    }
+    XCTAssertNil(modifyOperation.recordIDsToDelete)
+  }
+
+  func testFetchZoneChangesFailsClosedOnAnOutOfBandPhysicalDeletion() {
+    let recordID = try! CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesDeletedRecordIDs = [(recordID, CloudKitRecordSchema.keptWisdomRecordType)]
+    // A concurrent, otherwise-normal error is also scripted here on
+    // purpose: this proves the unexpected-physical-deletion outcome takes
+    // priority over every other outcome this fetch could have reported,
+    // per this coordinator's own doc comment ("checked first, before every
+    // other outcome").
+    fakeDatabase.zoneChangesOverallError = CKError(.networkFailure)
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      XCTAssertEqual(result.outcome, .unexpectedPhysicalDeletion)
+      XCTAssertNil(result.errorCode)
+      XCTAssertNil(result.serverToken)
+      XCTAssertTrue(result.changedKeptWisdomRecords.isEmpty)
+      XCTAssertTrue(result.changedSyncStateRecords.isEmpty)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // The deleted record's own identity must never be capturable through
+  // this coordinator's public result -- not even indirectly. There is no
+  // API on `ZoneChangesResult` that could expose it (no `deletedRecordNames`
+  // field exists at all), so this test proves that structurally: the
+  // result type's own stored properties, enumerated by name, contain
+  // nothing deletion-identity-shaped.
+  func testUnexpectedPhysicalDeletionResultExposesNoRecordIdentity() {
+    let recordID = try! CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesDeletedRecordIDs = [(recordID, CloudKitRecordSchema.keptWisdomRecordType)]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      let mirror = Mirror(reflecting: result)
+      for child in mirror.children {
+        XCTAssertFalse(
+          "\(child.value)".contains(recordID.recordName),
+          "Expected no field of the result to contain the deleted record's name")
+      }
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 13. System-fields secure archive round trip (CKRecord's own
+  // NSSecureCoding conformance -- unlike CKServerChangeToken, a CKRecord
+  // can be constructed directly in a test).
+  func testSystemFieldsArchiveRoundTripsRecordIdentity() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    guard let archived = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
+      return XCTFail("Expected system-fields archiving to succeed")
+    }
+    guard let restored = CloudKitOpaqueArchive.unarchiveSystemFields(archived) else {
+      return XCTFail("Expected system-fields unarchiving to succeed")
+    }
+    XCTAssertEqual(restored.recordID.recordName, record.recordID.recordName)
+    XCTAssertEqual(restored.recordID.zoneID, record.recordID.zoneID)
+    XCTAssertEqual(restored.recordType, record.recordType)
+  }
+
+  // 14. Corrupt archive rejection -- both token and system-fields
+  // unarchiving fail closed on garbage input, never crash.
+  func testCorruptArchivesAreRejectedSafely() {
+    XCTAssertNil(CloudKitOpaqueArchive.unarchiveServerChangeToken("not-valid-base64!!!"))
+    XCTAssertNil(CloudKitOpaqueArchive.unarchiveServerChangeToken(""))
+    XCTAssertNil(CloudKitOpaqueArchive.unarchiveSystemFields("not-valid-base64!!!"))
+    XCTAssertNil(CloudKitOpaqueArchive.unarchiveSystemFields(""))
+  }
+
+  // 15. Change-token-expired mapping is a distinct outcome, never a
+  // generic errorCode.
+  func testFetchZoneChangesMapsChangeTokenExpiredToADistinctOutcome() {
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesOverallError = CKError(.changeTokenExpired)
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    // previousServerToken: nil, not a fabricated non-nil string -- see the
+    // matching comment on
+    // testFetchZoneChangesNeverReportsPartialDataWhenTokenExpiresAfterRecordCallbacks
+    // for why: a plain string like "stale-token" is correctly rejected by
+    // CloudKitOpaqueArchive.unarchiveServerChangeToken (it is not a securely
+    // archived CKServerChangeToken, and CKServerChangeToken has no public
+    // initializer this test could use to build a real one), which returns
+    // .failure/invalidArguments *before* this coordinator ever constructs a
+    // CKFetchRecordZoneChangesOperation -- never reaching, let alone
+    // exercising, the changeTokenExpired mapping this test exists to prove.
+    // `nil` (an initial fetch) skips that unrelated decode step entirely so
+    // the fake database's scripted completion is actually reached.
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      XCTAssertEqual(result.outcome, .tokenExpired)
+      XCTAssertNil(result.errorCode)
+      XCTAssertNil(result.serverToken)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 16. Operation completion exactly once, across modify and fetch.
+  func testModifyAndFetchEachCompleteExactlyOnce() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let modifyDatabase = FakeRecordTransportDatabase()
+    modifyDatabase.perRecordModifyErrors = [nil]
+    let modifyCoordinator = CloudKitRecordTransportCoordinator(database: modifyDatabase)
+    var modifyCompletionCount = 0
+    let modifyCalledOnce = expectation(description: "modify completion called exactly once")
+    modifyCoordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: record, previousSystemFields: nil)]
+    ) { _ in
+      modifyCompletionCount += 1
+      modifyCalledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+    XCTAssertEqual(modifyCompletionCount, 1)
+
+    let fetchDatabase = FakeRecordTransportDatabase()
+    fetchDatabase.zoneChangesOverallError = CKError(.networkUnavailable)
+    let fetchCoordinator = CloudKitRecordTransportCoordinator(database: fetchDatabase)
+    var fetchCompletionCount = 0
+    let fetchCalledOnce = expectation(description: "fetch completion called exactly once")
+    fetchCoordinator.fetchZoneChanges(previousServerToken: nil) { _ in
+      fetchCompletionCount += 1
+      fetchCalledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+    XCTAssertEqual(fetchCompletionCount, 1)
+  }
+
+  // 17. No content ever appears in safe error output for the transport
+  // operations -- only known symbolic codes, never localized/raw content.
+  func testTransportErrorCodesNeverExposeLocalizedOrRawContent() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "This exact wisdom text must never appear in an errorCode.",
+      revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let knownCodes: Set<String> = [
+      CloudKitErrorClassifier.networkUnavailable,
+      CloudKitErrorClassifier.networkFailure,
+      CloudKitErrorClassifier.serviceUnavailable,
+      CloudKitErrorClassifier.requestRateLimited,
+      CloudKitErrorClassifier.zoneBusy,
+      CloudKitErrorClassifier.serverRecordChanged,
+      CloudKitErrorClassifier.accountTemporarilyUnavailable,
+      CloudKitErrorClassifier.notAuthenticated,
+      CloudKitErrorClassifier.invalidArguments,
+      CloudKitErrorClassifier.unknownItem,
+      CloudKitErrorClassifier.incompatibleVersion,
+      CloudKitErrorClassifier.quotaExceeded,
+      CloudKitErrorClassifier.serverRejectedRequest,
+      CloudKitErrorClassifier.permissionFailure,
+      CloudKitErrorClassifier.zoneNotFound,
+      CloudKitErrorClassifier.badContainer,
+      CloudKitErrorClassifier.badDatabase,
+      CloudKitErrorClassifier.changeTokenExpired,
+      CloudKitErrorClassifier.unrecognizedNativeError,
+    ]
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [
+      CKError(.serverRejectedRequest, userInfo: [NSLocalizedDescriptionKey: "raw localized text"])
+    ]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [CloudKitRecordTransportCoordinator.ModifyInput(record: record, previousSystemFields: nil)]
+    ) { result in
+      let code = result.outcomes[0].errorCode ?? ""
+      XCTAssertTrue(knownCodes.contains(code))
+      XCTAssertFalse(code.contains(" "))
+      XCTAssertFalse(code.contains("raw localized text"))
+      XCTAssertFalse(code.contains("wisdom text must never appear"))
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 18. Existing account/zone bridge tests continue passing -- proven by
+  // reusing the exact same FakeZoneOperationDatabase-conforming seam for
+  // both CloudKitPrivateZoneCoordinator (Phase 4B-2, unmodified) and the
+  // new CloudKitRecordTransportCoordinator side by side, showing this
+  // phase's addition does not interfere with the existing coordinator.
+  func testExistingZoneConfigurationCoordinatorStillWorksAlongsideTheNewTransportCoordinator() {
+    let fakeZoneDatabase = FakeZoneOperationDatabase()
+    fakeZoneDatabase.fetchOutcome = .zoneExists
+    let zoneCoordinator = CloudKitPrivateZoneCoordinator(database: fakeZoneDatabase)
+
+    let zoneCalledOnce = expectation(description: "zone completion called")
+    zoneCoordinator.configureZone { result in
+      XCTAssertTrue(result.success)
+      zoneCalledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    let fakeTransportDatabase = FakeRecordTransportDatabase()
+    let transportCoordinator = CloudKitRecordTransportCoordinator(database: fakeTransportDatabase)
+    let transportCalledOnce = expectation(description: "transport completion called")
+    transportCoordinator.modifyRecords([]) { result in
+      XCTAssertEqual(result.overallStatus, .allSucceeded)
+      transportCalledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
   }
 
 }

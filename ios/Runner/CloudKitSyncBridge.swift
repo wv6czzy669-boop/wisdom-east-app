@@ -40,6 +40,9 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
   }
 
   /// Resolves (and caches) the real `CKContainer` on first access only.
+  /// Used only by the Phase 4B-1 account-status/zone-configuration
+  /// handlers below -- unmodified by the Phase 4C-2 correction that added
+  /// `transportContainer`.
   private var container: CKContainer {
     if let resolvedContainer = resolvedContainer {
       return resolvedContainer
@@ -47,6 +50,27 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
     let container = containerProvider()
     resolvedContainer = container
     return container
+  }
+
+  private var resolvedTransportContainer: CKContainer?
+
+  /// Build 26 Phase 4C-2 correction: the private record transport
+  /// (`modifyPrivateRecords`/`fetchPrivateZoneChanges`) resolves its own,
+  /// explicitly-identified `CKContainer` -- never `container`'s
+  /// `CKContainer.default()` above. Resolved lazily, once, only on first
+  /// use by one of the two transport handlers, exactly like `container`
+  /// is -- constructing `CKContainer(identifier:)` performs no network
+  /// request by itself, so this remains consistent with this file's
+  /// existing "nothing touches `CloudKit.framework` until Dart explicitly
+  /// invokes a method" rule.
+  private var transportContainer: CKContainer {
+    if let resolvedTransportContainer = resolvedTransportContainer {
+      return resolvedTransportContainer
+    }
+    let transportContainer = CKContainer(
+      identifier: CloudKitSyncBridgeConstants.containerIdentifier)
+    resolvedTransportContainer = transportContainer
+    return transportContainer
   }
 
   // MARK: - Method channel
@@ -59,9 +83,186 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
       handleConfigurePrivateZone(result: result)
     case CloudKitSyncBridgeConstants.methodGetBridgeInfo:
       result(bridgeInfoPayload())
+    case CloudKitSyncBridgeConstants.methodModifyPrivateRecords:
+      handleModifyPrivateRecords(call: call, result: result)
+    case CloudKitSyncBridgeConstants.methodFetchPrivateZoneChanges:
+      handleFetchPrivateZoneChanges(call: call, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // MARK: - Build 26 Phase 4C-2: record transport (modify / fetch)
+
+  private func handleModifyPrivateRecords(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any] else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+    let allowedTopLevelKeys: Set<String> = ["records"]
+    guard Set(arguments.keys).isSubset(of: allowedTopLevelKeys) else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+    guard let rawRecords = arguments["records"] as? [[String: Any]] else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+
+    let allowedEntryKeys: Set<String> = ["recordType", "fields", "previousSystemFields"]
+    var inputs: [CloudKitRecordTransportCoordinator.ModifyInput] = []
+    for entry in rawRecords {
+      guard Set(entry.keys).isSubset(of: allowedEntryKeys) else {
+        result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+        return
+      }
+      var previousSystemFields: String?
+      if let rawPreviousSystemFields = entry["previousSystemFields"] {
+        guard let stringValue = rawPreviousSystemFields as? String else {
+          result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+          return
+        }
+        previousSystemFields = stringValue
+      }
+
+      switch CloudKitRecordEnvelopeArgumentParser.buildRecord(fromChannelEntry: entry) {
+      case .success(let record):
+        inputs.append(
+          CloudKitRecordTransportCoordinator.ModifyInput(
+            record: record, previousSystemFields: previousSystemFields))
+      case .failure:
+        // A malformed/invalid record envelope fails the entire call closed
+        // before any CKModifyRecordsOperation is ever created -- never a
+        // partial attempt against only the valid entries.
+        result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+        return
+      }
+    }
+
+    let coordinator = CloudKitRecordTransportCoordinator(
+      database: transportContainer.privateCloudDatabase)
+    coordinator.modifyRecords(inputs) { transportResult in
+      DispatchQueue.main.async {
+        result(self.modifyRecordsPayload(transportResult))
+      }
+    }
+  }
+
+  private func handleFetchPrivateZoneChanges(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any] else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+    let allowedKeys: Set<String> = ["previousServerToken"]
+    guard Set(arguments.keys).isSubset(of: allowedKeys) else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+
+    var previousServerToken: String?
+    if let rawValue = arguments["previousServerToken"], !(rawValue is NSNull) {
+      guard let stringValue = rawValue as? String else {
+        result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+        return
+      }
+      previousServerToken = stringValue
+    }
+
+    let coordinator = CloudKitRecordTransportCoordinator(
+      database: transportContainer.privateCloudDatabase)
+    coordinator.fetchZoneChanges(previousServerToken: previousServerToken) { transportResult in
+      DispatchQueue.main.async {
+        result(self.zoneChangesPayload(transportResult))
+      }
+    }
+  }
+
+  private func modifyRecordsPayload(
+    _ transportResult: CloudKitRecordTransportCoordinator.ModifyResult
+  ) -> [String: Any?] {
+    [
+      "overallStatus": transportResult.overallStatus.rawValue,
+      "outcomes": transportResult.outcomes.map { outcome -> [String: Any?] in
+        [
+          "recordName": outcome.recordName,
+          "success": outcome.success,
+          "systemFields": outcome.systemFields,
+          "errorCode": outcome.errorCode,
+        ]
+      },
+      "errorCode": transportResult.errorCode,
+    ]
+  }
+
+  private func zoneChangesPayload(
+    _ transportResult: CloudKitRecordTransportCoordinator.ZoneChangesResult
+  ) -> [String: Any?] {
+    [
+      "outcome": transportResult.outcome.rawValue,
+      "changedKeptWisdomRecords": transportResult.changedKeptWisdomRecords.map {
+        keptWisdomWirePayload($0)
+      },
+      "changedSyncStateRecords": transportResult.changedSyncStateRecords.map {
+        syncStateWirePayload($0)
+      },
+      "serverToken": transportResult.serverToken,
+      "errorCode": transportResult.errorCode,
+    ]
+  }
+
+  /// Re-serializes a decoded native envelope back into the exact wire `Map`
+  /// shape `CloudKeptWisdomWireEnvelope.encode`/`.tryDecode` already define
+  /// on the Dart side (`lib/sync_platform/cloud_kept_wisdom_wire_envelope.dart`)
+  /// -- never a second, competing wire shape.
+  private func keptWisdomWirePayload(_ envelope: CloudKitKeptWisdomWireEnvelope) -> [String: Any?] {
+    if envelope.isTombstone {
+      return [
+        "recordType": CloudKitRecordSchema.keptWisdomRecordType,
+        "zoneName": CloudKitRecordSchema.zoneName,
+        "recordName": envelope.recordName,
+        "isTombstone": true,
+        "deletedAtMs": envelope.deletedAtMs,
+        "updatedAtMs": envelope.updatedAtMs,
+        "mutationId": envelope.mutationId,
+        "dataEpoch": envelope.dataEpoch,
+        "schemaVersion": envelope.schemaVersion,
+      ]
+    }
+
+    var payload: [String: Any?] = [
+      "recordType": CloudKitRecordSchema.keptWisdomRecordType,
+      "zoneName": CloudKitRecordSchema.zoneName,
+      "recordName": envelope.recordName,
+      "isTombstone": false,
+      "revealId": envelope.revealId,
+      "wisdomText": envelope.wisdomText,
+      "revealedAtMs": envelope.revealedAtMs,
+      "keptAtMs": envelope.keptAtMs,
+      "updatedAtMs": envelope.updatedAtMs,
+      "mutationId": envelope.mutationId,
+      "dataEpoch": envelope.dataEpoch,
+      "schemaVersion": envelope.schemaVersion,
+    ]
+    if let reflectionText = envelope.reflectionText {
+      payload["reflectionText"] = reflectionText
+    }
+    if let reflectedAtMs = envelope.reflectedAtMs {
+      payload["reflectedAtMs"] = reflectedAtMs
+    }
+    return payload
+  }
+
+  /// Mirrors `CloudEastSyncStateWireEnvelope.encode` exactly.
+  private func syncStateWirePayload(_ envelope: CloudKitSyncStateWireEnvelope) -> [String: Any?] {
+    [
+      "recordType": CloudKitRecordSchema.syncStateRecordType,
+      "zoneName": CloudKitRecordSchema.zoneName,
+      "recordName": CloudKitRecordSchema.syncStateRecordName,
+      "dataEpoch": envelope.dataEpoch,
+      "resetAtMs": envelope.resetAtMs,
+      "mutationId": envelope.mutationId,
+      "schemaVersion": envelope.schemaVersion,
+    ]
   }
 
   private func handleGetAccountSnapshot(result: @escaping FlutterResult) {

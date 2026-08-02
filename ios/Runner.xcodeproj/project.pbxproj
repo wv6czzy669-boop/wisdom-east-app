@@ -24,6 +24,9 @@
 		F88720FF7409A5547D72F49E /* CloudKitAccountStatusMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */; };
 		E749858BF163D25704FC6203 /* CloudKitRecordSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */; };
 		090478D0F6C231A32358E085 /* CloudKitRecordIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */; };
+		03F5CC19EBB74C9A9E3FA3CB /* CloudKitOpaqueArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */; };
+		CEA701F0EAA34864B5E0CD02 /* CloudKitRecordEnvelopeArgumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */; };
+		E42766DA3C9E488A8F14014C /* CloudKitRecordTransportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */; };
 		D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */; };
 		A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */; };
 /* End PBXBuildFile section */
@@ -78,6 +81,9 @@
 		FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitErrorClassifier.swift; sourceTree = "<group>"; };
 		B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordSchema.swift; sourceTree = "<group>"; };
 		6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordIdentity.swift; sourceTree = "<group>"; };
+		FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitOpaqueArchive.swift; sourceTree = "<group>"; };
+		3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordEnvelopeArgumentParser.swift; sourceTree = "<group>"; };
+		A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordTransportCoordinator.swift; sourceTree = "<group>"; };
 		B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitKeptWisdomCodec.swift; sourceTree = "<group>"; };
 		40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncStateCodec.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -162,6 +168,9 @@
 				D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */,
 				B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */,
 				6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */,
+				FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */,
+				3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */,
+				A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */,
 				B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */,
 				40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */,
 			);
@@ -340,6 +349,9 @@
 				000D64F1780418629EF46358 /* CloudKitSyncBridge.swift in Sources */,
 				E749858BF163D25704FC6203 /* CloudKitRecordSchema.swift in Sources */,
 				090478D0F6C231A32358E085 /* CloudKitRecordIdentity.swift in Sources */,
+				03F5CC19EBB74C9A9E3FA3CB /* CloudKitOpaqueArchive.swift in Sources */,
+				CEA701F0EAA34864B5E0CD02 /* CloudKitRecordEnvelopeArgumentParser.swift in Sources */,
+				E42766DA3C9E488A8F14014C /* CloudKitRecordTransportCoordinator.swift in Sources */,
 				D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */,
 				A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */,
 			);

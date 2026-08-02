@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'cloud_kit_account_change_event.dart';
 import 'cloud_kit_account_snapshot.dart';
 import 'cloud_kit_bridge_info.dart';
+import 'cloud_kit_modify_records_contract.dart';
 import 'cloud_kit_platform_bridge.dart';
 import 'cloud_kit_platform_error.dart';
+import 'cloud_kit_zone_changes_contract.dart';
 import 'cloud_kit_zone_configuration_result.dart';
 
 /// Build 26 Phase 4B-1: production [CloudKitPlatformBridge], backed by the
@@ -35,6 +37,12 @@ final class MethodChannelCloudKitPlatformBridge
   static const String methodGetAccountSnapshot = 'getAccountSnapshot';
   static const String methodConfigurePrivateZone = 'configurePrivateZone';
   static const String methodGetBridgeInfo = 'getBridgeInfo';
+
+  /// Build 26 Phase 4C-2. Existing method names above are unchanged and
+  /// still take no arguments -- these two are the only methods on this
+  /// channel that do.
+  static const String methodModifyPrivateRecords = 'modifyPrivateRecords';
+  static const String methodFetchPrivateZoneChanges = 'fetchPrivateZoneChanges';
 
   static const MethodChannel _methodChannel = MethodChannel(methodChannelName);
   static const EventChannel _eventChannel = EventChannel(eventChannelName);
@@ -94,6 +102,40 @@ final class MethodChannelCloudKitPlatformBridge
     }
   }
 
+  @override
+  Future<CloudKitModifyRecordsResult> modifyPrivateRecords(
+    CloudKitModifyRecordsRequest request,
+  ) async {
+    final raw = await _invokeWithArguments(
+      methodModifyPrivateRecords,
+      request.toChannelArguments(),
+    );
+    final map = _asMap(raw);
+    if (map == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return CloudKitModifyRecordsResult.tryParse(map);
+  }
+
+  @override
+  Future<CloudKitZoneChangesResult> fetchPrivateZoneChanges(
+    CloudKitZoneChangesRequest request,
+  ) async {
+    final raw = await _invokeWithArguments(
+      methodFetchPrivateZoneChanges,
+      request.toChannelArguments(),
+    );
+    final map = _asMap(raw);
+    if (map == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return CloudKitZoneChangesResult.tryParse(map);
+  }
+
   Map<Object?, Object?>? _asMap(Object? raw) {
     if (raw is Map<Object?, Object?>) return raw;
     return null;
@@ -102,6 +144,36 @@ final class MethodChannelCloudKitPlatformBridge
   Future<Object?> _invoke(String method) async {
     try {
       return await _methodChannel.invokeMethod(method);
+    } on MissingPluginException {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.noNativeHandlerCode,
+      );
+    } on PlatformException catch (error) {
+      final code = error.code.trim();
+      throw CloudKitPlatformException(
+        code.isEmpty
+            ? CloudKitPlatformException.unrecognizedNativeErrorCode
+            : code,
+      );
+    } catch (_) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.unrecognizedNativeErrorCode,
+      );
+    }
+  }
+
+  /// Build 26 Phase 4C-2: identical error handling to [_invoke], for the
+  /// two methods that carry an argument payload. Kept as a separate,
+  /// parallel helper (rather than adding an optional parameter to
+  /// [_invoke]) so every one of the three existing, argument-less methods
+  /// above is provably unchanged -- neither its call site nor this
+  /// method's own body was touched by this phase.
+  Future<Object?> _invokeWithArguments(
+    String method,
+    Map<Object?, Object?> arguments,
+  ) async {
+    try {
+      return await _methodChannel.invokeMethod(method, arguments);
     } on MissingPluginException {
       // No native handler is registered for this channel at all --
       // distinct from a PlatformException, where a handler ran but

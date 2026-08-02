@@ -2,7 +2,9 @@
 // contract, malformed-result fail-closed behavior, and safe error mapping.
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_error.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/method_channel_cloud_kit_platform_bridge.dart';
 
 void main() {
@@ -243,6 +245,99 @@ void main() {
       // *emitted* event this stream produces is the valid one.
       final event = await bridge.accountChangeEvents.first;
       expect(event.kind.name, 'accountChanged');
+    });
+  });
+
+  group(
+      '6. Phase 4C-2: existing three methods remain backward compatible '
+      'after the two new argument-carrying methods were added', () {
+    test(
+        'getAccountSnapshot/configurePrivateZone/getBridgeInfo still '
+        'invoke with no arguments', () async {
+      final capturedArguments = <Object?>[];
+      setMethodHandler((call) async {
+        capturedArguments.add(call.arguments);
+        switch (call.method) {
+          case 'getAccountSnapshot':
+            return validSnapshot();
+          case 'configurePrivateZone':
+            return validZoneResult();
+          case 'getBridgeInfo':
+            return validBridgeInfo();
+        }
+        return null;
+      });
+
+      await bridge.getAccountSnapshot();
+      await bridge.configurePrivateZone();
+      await bridge.getBridgeInfo();
+
+      expect(capturedArguments, [null, null, null]);
+    });
+  });
+
+  group('7. Phase 4C-2: modifyPrivateRecords/fetchPrivateZoneChanges wiring',
+      () {
+    test(
+        'modifyPrivateRecords invokes the exact method name with the '
+        'request arguments', () async {
+      MethodCall? captured;
+      setMethodHandler((call) async {
+        captured = call;
+        return {'overallStatus': 'allSucceeded', 'outcomes': <Object?>[]};
+      });
+
+      const request = CloudKitModifyRecordsRequest(records: []);
+      final result = await bridge.modifyPrivateRecords(request);
+
+      expect(captured!.method, 'modifyPrivateRecords');
+      expect(captured!.arguments, isA<Map<Object?, Object?>>());
+      expect(
+        result.overallStatus,
+        CloudKitModifyRecordsOverallStatus.allSucceeded,
+      );
+    });
+
+    test(
+        'fetchPrivateZoneChanges invokes the exact method name with the '
+        'request arguments', () async {
+      MethodCall? captured;
+      setMethodHandler((call) async {
+        captured = call;
+        return {
+          'outcome': 'success',
+          'changedKeptWisdomRecords': <Object?>[],
+          'changedSyncStateRecords': <Object?>[],
+          'serverToken': 'token-1',
+        };
+      });
+
+      const request = CloudKitZoneChangesRequest();
+      final result = await bridge.fetchPrivateZoneChanges(request);
+
+      expect(captured!.method, 'fetchPrivateZoneChanges');
+      expect(
+        (captured!.arguments as Map<Object?, Object?>)['previousServerToken'],
+        isNull,
+      );
+      expect(result.outcome, CloudKitZoneChangesOutcome.success);
+      expect(result.serverToken, 'token-1');
+    });
+
+    test('a malformed modifyPrivateRecords result throws malformedResultCode',
+        () async {
+      setMethodHandler((call) async => 'not a map');
+      const request = CloudKitModifyRecordsRequest(records: []);
+      await expectLater(
+        bridge.modifyPrivateRecords(request),
+        throwsA(
+          isA<CloudKitPlatformException>().having(
+            (e) => e.code,
+            'code',
+            CloudKitPlatformException.malformedResultCode,
+          ),
+        ),
+      );
     });
   });
 }

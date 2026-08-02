@@ -1,6 +1,8 @@
 import 'cloud_kit_account_change_event.dart';
 import 'cloud_kit_account_snapshot.dart';
 import 'cloud_kit_bridge_info.dart';
+import 'cloud_kit_modify_records_contract.dart';
+import 'cloud_kit_zone_changes_contract.dart';
 import 'cloud_kit_zone_configuration_result.dart';
 
 /// Build 26 Phase 4B-1: the Dart-side contract for the native CloudKit
@@ -9,16 +11,16 @@ import 'cloud_kit_zone_configuration_result.dart';
 /// `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s Phase 4B-1 section for
 /// the exact channel contract this is the Dart-side shape of.
 ///
-/// Deliberately **not** `lib/sync/sync_engine.dart`'s `SyncEngine`: that
-/// interface's `startSync`/`requestImmediateSync`/`enqueueLocalChange`/
-/// `remoteChanges` describe real record synchronization, which does not
-/// exist yet in this subphase -- no record is ever uploaded, downloaded,
-/// merged, or deleted by anything behind this interface. Implementing
-/// `SyncEngine` now, with those methods missing or stubbed, would
-/// misrepresent capability that is not actually present. A future phase's
-/// real `SyncEngine` implementation may compose this bridge as one of its
-/// collaborators; this interface never pretends to be that implementation
-/// itself.
+/// Build 26 Phase 4C-2 extends this interface, narrowly, with the two
+/// record-transport operations ([modifyPrivateRecords]/
+/// [fetchPrivateZoneChanges]) -- still **not** `lib/sync/sync_engine.dart`'s
+/// `SyncEngine`: neither new method here starts a sync cycle, applies a
+/// remote change locally, resolves a conflict, or persists a change token --
+/// they are narrow, one-shot record-transport primitives a future
+/// `SyncEngine` implementation may compose, exactly as
+/// [configurePrivateZone] already is. Nothing behind this interface is
+/// called from application/repository/startup code in this phase (see
+/// `test/sync_platform/cloud_kit_platform_privacy_test.dart`).
 abstract interface class CloudKitPlatformBridge {
   /// A content-free snapshot of the current CloudKit account state. Never
   /// throws for "no account" or "restricted" -- those are ordinary,
@@ -42,4 +44,24 @@ abstract interface class CloudKitPlatformBridge {
   /// account identity -- callers must explicitly call [getAccountSnapshot]
   /// afterward (design doc §5). Never itself triggers any sync operation.
   Stream<CloudKitAccountChangeEvent> get accountChangeEvents;
+
+  /// Build 26 Phase 4C-2: atomically saves [request.records] in
+  /// `EASTKeptZone`, using the already-frozen Phase 4C-1 record schema and
+  /// codecs. Never called automatically -- there is no outbox, retry
+  /// scheduler, or startup/repository call site behind this interface in
+  /// this phase; a caller (outside this phase's scope) decides when to
+  /// invoke it and what to do with the result.
+  Future<CloudKitModifyRecordsResult> modifyPrivateRecords(
+    CloudKitModifyRecordsRequest request,
+  );
+
+  /// Build 26 Phase 4C-2: fetches every `EASTKeptZone` record change since
+  /// [request.previousServerToken] (or every record currently in the zone,
+  /// for an initial `null`-token request), aggregating every page CloudKit
+  /// reports internally before returning once. Never applies a returned
+  /// change to local storage, never persists the returned token, and never
+  /// resolves a conflict -- purely a read primitive.
+  Future<CloudKitZoneChangesResult> fetchPrivateZoneChanges(
+    CloudKitZoneChangesRequest request,
+  );
 }

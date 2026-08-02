@@ -40,6 +40,37 @@ enum CloudKitErrorClassifier {
   /// existing authoritative rule making a rejected request retryable.
   static let serverRejectedRequest = "serverRejectedRequest"
 
+  /// Build 26 Phase 4C-2: five additional stable symbolic codes, needed
+  /// because the record-transport operations (`CKModifyRecordsOperation`/
+  /// `CKFetchRecordZoneChangesOperation`) can surface `CKError` codes the
+  /// zone-configuration-only Phase 4B-1/4B-2 classifier never had to name.
+  /// Each mirrors a literal string this classifier's own convention already
+  /// establishes (the bare, lowerCamelCase `CKError.Code` case name) --
+  /// consistent with every existing constant above, not a new naming
+  /// scheme. None of these five is added to
+  /// `lib/sync/sync_error_classification.dart`'s explicit lookup table:
+  /// that function already defaults any code it does not recognize by name
+  /// to `SyncErrorCategory.permanent` (fail closed), which is the correct,
+  /// intended category for all five (none is safely retryable without a
+  /// change in circumstance a blind retry cannot produce) -- exactly the
+  /// same reasoning already applied to `serverRejectedRequest` above.
+  static let permissionFailure = "permissionFailure"
+  static let zoneNotFound = "zoneNotFound"
+  static let badContainer = "badContainer"
+  static let badDatabase = "badDatabase"
+
+  /// `CKError.Code.changeTokenExpired` -- `CloudKitRecordTransportCoordinator`
+  /// intercepts this *before* it would ever reach this classifier for a
+  /// zone-changes fetch (surfaced instead as a dedicated
+  /// `CloudKitZoneChangesOutcome.tokenExpired`, never a generic errorCode,
+  /// since its correct handling -- discard the token, resync from `nil` --
+  /// is categorically different from an ordinary retryable/permanent
+  /// failure). This constant exists so the symbolic vocabulary still has a
+  /// name for the underlying `CKError` case if it is ever encountered
+  /// somewhere other than that one dedicated fetch path (e.g. a defensive
+  /// catch-all), and so native tests can assert on it directly.
+  static let changeTokenExpired = "changeTokenExpired"
+
   /// Reported for any error this classifier does not recognize, including
   /// a non-`CKError` failure. Dart's `classifySyncErrorCode` already
   /// defaults any code it does not recognize to `permanent` (fail closed),
@@ -76,6 +107,16 @@ enum CloudKitErrorClassifier {
       return quotaExceeded
     case .serverRejectedRequest:
       return serverRejectedRequest
+    case .permissionFailure:
+      return permissionFailure
+    case .zoneNotFound:
+      return zoneNotFound
+    case .badContainer:
+      return badContainer
+    case .badDatabase:
+      return badDatabase
+    case .changeTokenExpired:
+      return changeTokenExpired
     default:
       if #available(iOS 15.0, *), ckError.code == .accountTemporarilyUnavailable {
         return accountTemporarilyUnavailable
