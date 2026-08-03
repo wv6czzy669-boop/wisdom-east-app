@@ -440,3 +440,108 @@ Still exactly one channel, `com.dogukan.dailywisdom/cloudkit_sync` (never a seco
 ### 12.8 Explicit non-goals (Phase 4C-2)
 
 No repository, startup, UI, outbox, retry-scheduling, background-task, subscription, push-handling, Settings/sync-status UI, or account-change wiring of any kind calls either new method. No change-token or system-fields value is persisted anywhere in this phase — a caller outside this phase's scope is responsible for that. No application-level conflict resolution is implemented here (`serverRecordChanged` is surfaced, never resolved, by this phase). No change to `lib/main.dart`, daily-access behavior, Keeper/purchase logic, notifications, protected Kept/Reflection storage, entitlements, capability settings, bundle/container identifier, deployment target, build number, or package dependencies. No automated test in this phase contacts real CloudKit.
+
+## 13. Phase 4D-1 — durable local sync-state and outbox persistence foundation (implemented this phase)
+
+**Scope:** the durable local persistence foundation a future sync orchestrator will need: an account-scoped opaque server change token, a durable pending-outbound-mutation outbox, opaque per-record CloudKit system fields, all inside one versioned, protected, atomically-replaced local envelope. **This phase contacts CloudKit for nothing.** No method added by this phase calls `modifyPrivateRecords` or `fetchPrivateZoneChanges` (Section 12), inspects or modifies the live Kept repository, triggers on a Keep/Reflection/reveal event, runs at startup, applies an incoming record, resolves a conflict, schedules a retry, or listens for an account-change event. Every rule in Sections 9/10.8/11.5/12.8 restricting those things remains in force.
+
+### 13.1 Deliberate, disclosed refinement of ADR-007's single-envelope sketch
+
+ADR-007's Local state envelope section describes `outbox` and `syncMetadata` (server change token, per-record pending-operation state) as additive top-level fields of the *same* `east_kept_state_v3.json` file `KeptStateEnvelope` (Phase 3B) already owns — and, as of this phase, `KeptStateEnvelope` still serializes only `activeRecords`; none of `dataEpoch`, `pendingUndoDeletions`, `tombstones`, `outbox`, `syncMetadata`, or `pendingEpochCleanup` has been added to it by any phase to date.
+
+This phase's own instruction is explicit and newer, in the same manner Section 0 above already documents one supersession of ADR-007's original record model: keep this durable sync state in a **separate** protected store, never inside the existing authoritative Kept envelope, and never alter `KeptStateEnvelope`'s own format. That instruction is followed here, not silently reconciled with ADR-007's original sketch. Concretely: a new file, `east_sync_state_v1.json`, in its own `east_sync_state` directory, distinct from `east_kept_state`'s directory and file, is introduced. `KeptStateEnvelope` and `ProtectedFileKeptStateStore` are untouched by this phase.
+
+### 13.2 Persisted concepts, derived from the architecture
+
+| ADR-007 / design-doc concept | This phase's persisted representation |
+|---|---|
+| "the zone's server change token" (ADR-007 Local state envelope; design doc §6, §12.2 row 4) | `AccountSyncState.serverChangeToken` — the exact opaque Base64 string Phase 4C-2's `fetchPrivateZoneChanges` already returns. Never decoded, interpreted, or re-encoded. |
+| "durable, not-yet-synced local mutations" / "a pending-operation type per record (create/update/delete)" (ADR-007 Local state envelope, Deletion/outbox strategy) | `AccountSyncState.outbox` — a list of `PersistedOutboxMutation`, each wrapping an already-validated Phase 4A `SyncChange` (kind + `CloudKeptWisdomProjection` + enqueued-at timestamp) plus a persistence-only outcome `status` (`pending`/`failed`/`conflicted`). No new mutation-shape model was introduced — `SyncChange` already is ADR-007's pending-outbox-mutation shape (design doc §8 item 5), and reusing it directly means kind/tombstone-form consistency is enforced exactly once, by `SyncChange`'s own constructor. |
+| "archived `CKRecord` system fields or equivalent server change-tag state per record" (ADR-007 Local state envelope) | `AccountSyncState.recordSystemFields` — a `Map<recordName, opaque Base64 systemFields>`, populated only from a caller-confirmed `CloudKitRecordModifyOutcome.systemFields` (Section 12.4). Never decoded, never associated by wisdom text. |
+| Account-scoping / iCloud account change boundary (ADR-007; design doc §5) | The whole envelope is keyed by the opaque CloudKit account fingerprint (`CloudKitAccountSnapshot.accountFingerprint`, Section 10.3) — see §13.3. |
+| `dataEpoch` (ADR-007's Data epoch and Delete All reset safety; design doc §4.1) | **Correction, now authoritative:** every `AccountSyncState` account bucket carries a mandatory `dataEpoch` (reusing exactly the `DataEpoch` type Section 8 item 2 and the Phase 4A sync projections already established — never a new epoch type, never a normalization rule of this phase's own invention). There is no default: a bucket cannot be constructed or decoded without one (§13.6). |
+| Schema version | `SyncPersistenceEnvelope.currentSchemaVersion = 1`, checked exactly like `KeptStateEnvelope.currentSchemaVersion`; an unrecognized version fails the whole load closed. |
+
+**Genuine, disclosed gaps this phase still does not fill:** ADR-007's `pendingUndoDeletions`, `tombstones` (as a *live* Kept-domain collection), and `pendingEpochCleanup` remain envelope-level concepts belonging to the live Kept/Reflection repository and the Delete-All-Synced-Data reset flow — neither exists yet in code this phase touches, and this phase does not read or write the live Kept repository at all (an explicit boundary above). **This phase performs no automatic epoch reset and no reset orchestration of any kind** — `dataEpoch` is persisted and enforced (§13.6), never generated, rotated, or reconciled by this phase; a genuine epoch reset (Delete All Synced Data) remains entirely a future orchestrator's responsibility. Similarly, ADR-007's "retry metadata" is not added beyond the single `pending`/`failed`/`conflicted` status already described above — no attempt counter, no last-error code, no backoff timestamp — since no phase to date has approved a richer retry-metadata shape.
+
+### 13.3 Account scoping
+
+Every persisted value lives under `SyncPersistenceEnvelope.accounts[accountFingerprint]` (an `AccountSyncState`), where `accountFingerprint` is the exact opaque, namespaced SHA-256 hash Section 10.3 already defines — never a raw CloudKit user/record identifier, never derived from email, Apple ID, or device name. Two fingerprints' state can never mix: each is a distinct map entry, validated on decode to look like the native fingerprint's shape (64 lowercase hex characters) and rejected (fail-closed) otherwise. An unresolved or unknown fingerprint reading through `loadAccountState` receives `null`, never another fingerprint's state.
+
+**The account fingerprint is never written into a file path, and never logged.** Unlike `ProtectedFileKeptStateStore` (whose directory path carries no per-account component and is therefore safe to log), this phase's fingerprint-scoping happens entirely inside the JSON *content* of one fingerprint-independent file (`east_sync_state_v1.json`) — the file path this store reads and writes is always exactly the same string regardless of which fingerprint an operation targets. This was a deliberate design choice specifically so a fingerprint could never leak through this store's own diagnostic path logging.
+
+`SyncPersistenceEnvelope` additionally distinguishes an *active* account (`accounts`) from a *quarantined* one (`quarantinedAccounts`) — see §13.9's `quarantineAccountState`/`clearAccountState` — so a future account-change-boundary layer (design doc §5) has an explicit, safe way to set a previous account's state aside without destroying it, without this phase itself implementing any account-change orchestration.
+
+### 13.4 Storage location and atomic-write guarantees
+
+A new directory, `east_sync_state`, and a new file, `east_sync_state_v1.json`, both beneath the platform's Application Support directory, entirely separate from `east_kept_state`'s directory/file. iOS file protection (`NSFileProtectionComplete`, via the existing, unmodified `FileProtectionBridge`/`MethodChannelFileProtectionBridge`) is applied to the directory, every temporary file, every backup file, and the final file — exactly the same protection this codebase already requires for `east_kept_state`.
+
+The atomic-write algorithm (`ProtectedSyncPersistenceStore`) mirrors `ProtectedFileKeptStateStore`'s already-reviewed algorithm step for step: write a temporary file, protect and read back the temporary file to verify it byte-for-byte, back up and verify any existing final file, atomically rename the temporary file into place, protect and read back the final file to verify it, and — on any failure after the rename — restore the backed-up prior final file and re-verify it before surfacing the original failure. A first-ever write that fails before its rename step leaves no final file behind at all. Every operation for this store's one resource key is serialized through the same, unmodified `PersistenceOperationCoordinator` primitive `ProtectedFileKeptStateStore` already uses, under its own distinct resource key (`protected_sync_state_file`) — a load can never observe a half-completed replace, and two mutations against this envelope, for any fingerprint, can never interleave.
+
+The tested primitives (`FileProtectionBridge`, `PersistenceOperationCoordinator`) are reused unmodified; the atomic-write *control flow* is necessarily re-implemented for the new envelope type rather than factored into a shared generic base class, since doing so would require modifying the already-reviewed `ProtectedFileKeptStateStore` — out of scope for this phase, and against the standing instruction not to refactor unrelated Kept-storage code broadly. This is a disclosed trade-off.
+
+Malformed authoritative data — an unrecognized top-level or nested key, a wrong type, an unsupported schema version, a token or system-fields value that does not look like opaque Base64, a record name that does not look like a real `CKKeptWisdom` record name, a duplicate outbox `mutationId`, or two outbox entries for the same record name — fails the **entire load** closed (the raw bytes are preserved to a separate `.corrupt-` file for later inspection, mirroring `ProtectedFileKeptStateStore`'s own corruption handling) rather than silently discarding just the malformed piece. Nothing is ever silently reset to empty because of corruption.
+
+### 13.5 Opaque server change token
+
+Persisted exactly as Phase 4C-2's `fetchPrivateZoneChanges` returns it — an opaque Base64 string, validated only for outer shape (Base64 charset) on load, never decoded or interpreted. A `null` token means "no successful fetch has completed yet for this account" — the next fetch must be an initial one (`previousServerToken: null`). A corrupt persisted token fails the whole account-state load closed (§13.4), never silently treated as absent and never auto-cleared. `clearServerChangeToken` is the one explicit, atomic API a future orchestrator uses after observing `CloudKitZoneChangesOutcome.tokenExpired` (Section 12.2 row 5) — it clears only the token, leaving the outbox and every stored system-fields value completely untouched in the same atomic write.
+
+### 13.6 Outbox model
+
+Mutation identity is the enqueued `SyncChange.projection.mutationId` — a stable UUID for the lifetime of that specific queued entry, even though a later, different local edit to the same occurrence would carry a different `mutationId` of its own (design doc §2.3). Record identity is `SyncChange.projection.recordName`, the same deterministic `east-kept-<revealId>` derivation used everywhere else in this design — never wisdom text, never a display date. Two outbox entries for two different `revealId` values with byte-identical `wisdomText` are and remain two fully independent entries; wisdom text and display dates are never inputs to outbox identity or deduplication.
+
+**dataEpoch enforcement, frozen this round:** every queued mutation's own `projection.dataEpoch` must equal its account bucket's `dataEpoch`. Enqueueing against an existing bucket with a mismatched epoch fails closed as `MutationEpochMismatchException` before anything is written; a bucket freshly created by the first enqueue for a fingerprint simply adopts that first mutation's `dataEpoch` as its own. Loading a persisted account whose stored mutation epoch differs from its own stored bucket epoch fails the whole account-state load closed (§13.4), exactly like any other malformed-data case — never silently repaired or defaulted. `clearServerChangeToken`, `applyMutationOutcomes`, and `replaceRecordSystemFields` all preserve `dataEpoch` structurally: `AccountSyncState.copyWith` has no `dataEpoch` parameter at all, so no call path through this store can change an account's epoch. No automatic epoch reset or reconciliation is implemented by this phase (§13.2).
+
+Enqueue rules, now the frozen, authoritative policy for this phase (superseding the original draft's stricter "second pending mutation for the same record throws" behavior):
+
+1. An exact repeat of an already-queued mutation (identical `mutationId` and byte/value-equivalent projection content) is **idempotent** — a no-op, not an error.
+2. A different mutation sharing an already-queued `mutationId` (a value collision with different content) is rejected as `ConflictingMutationIdentityException` — an impossible state this store refuses to silently resolve either way.
+3. A mutation with a new `mutationId` for a record name with no existing pending entry is appended as a new outbox entry, in deterministic order (see below).
+4. A mutation with a new `mutationId` for a record name that already has a distinct pending entry queued **atomically supersedes** that existing entry in place: the newer local enqueue call's projection becomes the record's sole desired outbound state, stored under the new `mutationId`, overwriting the old entry at its **existing list index** rather than being removed and re-appended. Active may supersede active, a tombstone may supersede a pending active entry, and an active entry may supersede a pending tombstone — `revealId`/`recordName` identity is what is compared, never wisdom text or a display date. No CloudKit call occurs during a supersession, no mutation is marked successful, and any system fields already stored for that record name in `recordSystemFields` are left completely untouched (they are associated by record name, independent of the outbox).
+
+Outbox order is the **stored list order**: an entry occupies the position it was first inserted at, and a supersession (rule 4) overwrites that same position rather than moving it to the end — so a record that is repeatedly edited before it syncs can never starve other queued records of their turn. `readPendingMutations` returns entries in exactly this stored order, regardless of status; it never re-sorts by timestamp or `mutationId`.
+
+Outcomes are applied atomically and only on explicit confirmed input (`applyMutationOutcomes`), and acknowledgment is strictly **mutationId-specific**: only the exact `mutationId` currently occupying an outbox slot may be acknowledged and removed. Acknowledging an older `mutationId` that a supersession (rule 4) has since replaced is a no-op — it does not remove the newer, currently-queued mutation, since that would silently drop a local edit the caller never confirmed as synced. Every other named mutation id has its status updated to `failed` or `conflicted` and remains queued; any mutation id named in neither collection — the representation of a retryable transport failure — is left completely unchanged. Tombstones are ordinary outbox entries like any other (`SyncChangeKind.delete`, tombstone-form projection); active and tombstone-form entries can never be confused, since `SyncChange`'s own constructor rejects any mismatch between `kind` and `projection.isTombstone`.
+
+### 13.7 Record system fields
+
+Stored as `AccountSyncState.recordSystemFields`, a `Map<recordName, opaque Base64 systemFields>`. Associated only with the exact deterministic record name a caller supplies after confirming that record's own save succeeded — never by wisdom text, never inferred. A corrupt stored value (present but not shaped like opaque Base64) fails the whole account-state load closed, exactly like a corrupt token. No native decoding of a system-fields value occurs anywhere in this phase.
+
+### 13.8 Storage envelope schema
+
+```
+east_sync_state_v1.json
+{
+  "schemaVersion": 1,
+  "accounts": {
+    "<64-hex-char opaque account fingerprint>": {
+      "dataEpoch": "<canonical UUID v4, mandatory -- no default, never absent>",
+      "serverChangeToken": "<opaque Base64>",           // omitted, never null-valued, when absent
+      "recordSystemFields": { "<recordName>": "<opaque Base64>" },
+      "outbox": [
+        {
+          "kind": "create" | "update" | "delete",
+          "status": "pending" | "failed" | "conflicted",
+          "enqueuedAtMs": <Int64, UTC, non-negative>,
+          "record": { /* Phase 4D-1's own local domain-projection encode shape (recordName, isTombstone, revealId/wisdomText/timestamps or deletedAtMs, reflection fields when present, mutationId, dataEpoch, schemaVersion) -- CloudKeptWisdomProjection's own fields only, never the platform-bridge wire envelope's recordType/zoneName tags; carries its own dataEpoch, which must equal the account bucket's dataEpoch */ }
+        }
+      ]
+    }
+  },
+  "quarantinedAccounts": { /* same per-account shape, set aside rather than destroyed */ }
+}
+```
+
+Parsing is a strict allowlist at every level (top-level keys; per-account keys; per-outbox-entry keys); an unrecognized key, a wrong type, a missing or malformed `dataEpoch`, a mutation `dataEpoch` that does not match its account bucket's `dataEpoch`, an unrecognized `kind`/`status` value, a negative `enqueuedAtMs`, a malformed record name, a malformed fingerprint, an unsupported `schemaVersion`, a duplicate outbox `mutationId`, a duplicate outbox `recordName`, or an impossible active/tombstone combination all fail the parse closed. A fingerprint can never appear in both `accounts` and `quarantinedAccounts` at once. Malformed persisted state is never silently repaired.
+
+### 13.9 Public Dart interfaces (`lib/sync_persistence/`)
+
+`SyncPersistenceStore` (interface) / `ProtectedSyncPersistenceStore` (implementation): `loadAccountState`, `replaceAccountState`, `enqueueMutation`, `applyMutationOutcomes`, `readPendingMutations`, `replaceRecordSystemFields`, `storeServerChangeToken`, `clearServerChangeToken`, `clearAccountState` (permanent, no recovery), `quarantineAccountState` (reversible set-aside, not yet paired with a restore API — a future phase's explicit responsibility). No method exposes a mutable collection; no method calls a `MethodChannel` or CloudKit method of any kind.
+
+### 13.10 Privacy rules, structurally enforced
+
+None of the following is ever written into a log line, an exception message/`toString`, or diagnostic output produced by this phase's own code: wisdom text, reflection text, a record name, a `revealId`, a `mutationId`, the account fingerprint, the server token, a record's system fields, or raw persisted JSON. Every exception type this phase adds (`SyncPersistenceStoreException`, `ConflictingMutationIdentityException`, `MutationEpochMismatchException`, `AccountSyncStateFormatException`) carries only a stage name and/or a stable, content-free description. No new `print`/`debugPrint`/`NSLog` call was added beyond reusing the existing, `kDebugMode`-gated `keptDiagnostic` helper with stage-name-and-count-only messages, exactly as `ProtectedFileKeptStateStore` already does.
+
+### 13.11 Explicit non-goals (Phase 4D-1)
+
+No CloudKit call of any kind (`modifyPrivateRecords`, `fetchPrivateZoneChanges`, or any native method). No live Kept/Reflection repository read or write. No trigger on Keep/Reflection/reveal. No startup wiring. No conflict resolution, no incoming-record application, no retry scheduling, no account-change listener, no background execution, no subscription/push handling, no sync-status UI, no Settings toggle. No change to `lib/main.dart`, daily-access behavior, Keeper/purchase logic, notifications, analytics, the existing protected Kept/Reflection envelope or its migration semantics, native CloudKit transport, entitlements, capability settings, bundle/container identifier, deployment target, build number, or package dependencies. No automated test in this phase contacts real CloudKit or a real native file-protection channel.
