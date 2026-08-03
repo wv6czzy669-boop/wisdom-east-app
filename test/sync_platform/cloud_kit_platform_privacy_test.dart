@@ -241,36 +241,232 @@ void main() {
   });
 
   group(
-      '5. no app startup/repository code invokes CloudKit methods (Phase '
-      '4B-1 never wires this bridge into production app startup)', () {
-    test('lib/main.dart never mentions CloudKit or the sync-platform layer',
-        () {
-      final mainFile = File('lib/main.dart');
-      expect(mainFile.existsSync(), isTrue);
-      final content = mainFile.readAsStringSync();
-      expect(content, isNot(contains('CloudKit')));
-      expect(content, isNot(contains('sync_platform')));
-      expect(content, isNot(contains('cloudkit_sync')));
-    });
+      '5. only the isolated sync_orchestration layer may consume CloudKit '
+      'platform contracts; startup, repositories, UI, services, '
+      'persistence, and unrelated production code may not', () {
+    // Build 26 Phase 4D-2 correction: this group previously encoded the
+    // Phase 4B-1 boundary ("no production file outside lib/sync_platform/
+    // may import the platform bridge"), which was correct only while the
+    // bridge foundation was intentionally unwired. The approved Phase 4D-2
+    // architecture explicitly allows `lib/sync_orchestration/` to consume
+    // the abstract platform contracts (never the concrete MethodChannel
+    // adapter) -- see docs/architecture/EAST_CLOUDKIT_SYNC_V1.md §14. This
+    // group therefore uses a directory allowlist (sync_platform itself,
+    // plus its one approved consumer sync_orchestration) rather than a
+    // blanket "nothing outside sync_platform" rule, while still asserting
+    // sync_orchestration's own narrower rules explicitly below -- it is
+    // never excluded from scanning without its own checks.
 
-    test(
-        'no production lib/ file outside lib/sync_platform/ imports the '
-        'platform-bridge adapter', () {
-      final libDir = Directory('lib');
-      final allDartFiles = libDir
+    final orchestrationDir = Directory('lib/sync_orchestration');
+    final persistenceDir = Directory('lib/sync_persistence');
+    final repositoriesDir = Directory('lib/repositories');
+    final servicesDir = Directory('lib/services');
+
+    List<File> dartFilesIn(Directory dir) {
+      if (!dir.existsSync()) return const [];
+      return dir
           .listSync(recursive: true)
           .whereType<File>()
           .where((f) => f.path.endsWith('.dart'))
-          .where((f) => !f.path.contains(
-              '${Platform.pathSeparator}sync_platform${Platform.pathSeparator}'))
+          .toList();
+    }
+
+    List<String> importExportLines(File file) => file
+        .readAsLinesSync()
+        .map((line) => line.trimLeft())
+        .where(
+            (line) => line.startsWith('import ') || line.startsWith('export '))
+        .toList();
+
+    test(
+        'app startup (lib/main.dart, lib/app.dart) never mentions CloudKit, '
+        'the sync-platform layer, or the sync orchestrator -- no production '
+        'startup invocation of runSyncPass() exists yet', () {
+      for (final path in ['lib/main.dart', 'lib/app.dart']) {
+        final file = File(path);
+        expect(file.existsSync(), isTrue, reason: '$path must exist.');
+        final content = file.readAsStringSync();
+        expect(content, isNot(contains('CloudKit')), reason: path);
+        expect(content, isNot(contains('sync_platform')), reason: path);
+        expect(content, isNot(contains('cloudkit_sync')), reason: path);
+        expect(content, isNot(contains('sync_orchestration')), reason: path);
+        expect(content, isNot(contains('SyncOrchestrator')), reason: path);
+        expect(content, isNot(contains('runSyncPass')), reason: path);
+      }
+    });
+
+    test(
+        'every production file that imports a sync_platform path, or '
+        'references the concrete MethodChannelCloudKitPlatformBridge '
+        'adapter in code, lives under lib/sync_orchestration/ -- the only '
+        'currently approved non-platform consumer (Phase 4D-2); no '
+        'unrelated production directory may do either', () {
+      final allDartFiles = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
           .toList();
 
       final violations = <String>[];
       for (final file in allDartFiles) {
-        final content = file.readAsStringSync();
-        if (content.contains('sync_platform/') ||
-            content.contains('MethodChannelCloudKitPlatformBridge')) {
-          violations.add(file.path);
+        final normalizedPath = file.path.replaceAll('\\', '/');
+        final isPlatformFile = normalizedPath.contains('/sync_platform/');
+        final isOrchestrationFile =
+            normalizedPath.contains('/sync_orchestration/');
+        if (isPlatformFile || isOrchestrationFile) {
+          // The platform layer may reference itself; sync_orchestration's
+          // own narrower rules are asserted separately below -- never
+          // silently skipped without its own checks.
+          continue;
+        }
+        for (final line in importExportLines(file)) {
+          if (line.contains('sync_platform/')) {
+            violations.add('${file.path}: "$line"');
+          }
+        }
+        final codeOnly = _stripComments(file.readAsStringSync());
+        if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+          violations.add(
+            '${file.path} references MethodChannelCloudKitPlatformBridge '
+            'in code',
+          );
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'lib/sync_orchestration/ may import the abstract CloudKit platform '
+        'contracts required for Phase 4D-2, but never imports the concrete '
+        'method_channel_cloud_kit_platform_bridge.dart adapter file, and '
+        'never constructs/references MethodChannelCloudKitPlatformBridge '
+        'in code', () {
+      final orchestrationFiles = dartFilesIn(orchestrationDir);
+      expect(orchestrationFiles, isNotEmpty);
+
+      final violations = <String>[];
+      for (final file in orchestrationFiles) {
+        for (final line in importExportLines(file)) {
+          if (line.contains('sync_platform/') &&
+              line.contains('method_channel_cloud_kit_platform_bridge.dart')) {
+            violations.add('${file.path}: "$line"');
+          }
+        }
+        final codeOnly = _stripComments(file.readAsStringSync());
+        if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+          violations.add(
+            '${file.path} references MethodChannelCloudKitPlatformBridge '
+            'in real code (a doc-comment mention would already have been '
+            'stripped above)',
+          );
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'lib/sync_persistence/ has zero sync-platform imports (restated '
+        'here as a regression guard for this specific privacy boundary, '
+        'alongside the equivalent check already enforced by '
+        'test/sync_orchestration/sync_orchestration_layering_test.dart)', () {
+      final persistenceFiles = dartFilesIn(persistenceDir);
+      expect(persistenceFiles, isNotEmpty);
+
+      final violations = <String>[];
+      for (final file in persistenceFiles) {
+        for (final line in importExportLines(file)) {
+          if (line.contains('sync_platform')) {
+            violations.add('${file.path}: "$line"');
+          }
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'repository and Reflection/daily-access service files (including '
+        'migration and bootstrap coordinators under lib/services/) never '
+        'import, mention, or invoke CloudKit platform code', () {
+      final targets = <File>[
+        ...dartFilesIn(repositoriesDir),
+        ...dartFilesIn(servicesDir),
+      ];
+      expect(targets, isNotEmpty);
+
+      const forbidden = [
+        'CloudKit',
+        'sync_platform',
+        'MethodChannelCloudKitPlatformBridge',
+        'SyncOrchestrator',
+        'runSyncPass',
+      ];
+
+      final violations = <String>[];
+      for (final file in targets) {
+        final codeOnly = _stripComments(file.readAsStringSync());
+        for (final term in forbidden) {
+          if (codeOnly.contains(term)) {
+            violations.add('${file.path} contains "$term" in code');
+          }
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'no production file outside lib/sync_platform/ references the '
+        'concrete CloudKit MethodChannel/EventChannel by name -- the only '
+        'legitimate direct channel usage is inside the adapter itself', () {
+      const forbiddenChannelNames = [
+        'com.dogukan.dailywisdom/cloudkit_sync',
+        'com.dogukan.dailywisdom/cloudkit_sync_events',
+      ];
+      final allDartFiles = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
+          .where(
+              (f) => !f.path.replaceAll('\\', '/').contains('/sync_platform/'))
+          .toList();
+
+      final violations = <String>[];
+      for (final file in allDartFiles) {
+        final codeOnly = _stripComments(file.readAsStringSync());
+        for (final channel in forbiddenChannelNames) {
+          if (codeOnly.contains(channel)) {
+            violations.add('${file.path} references "$channel" directly');
+          }
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'lib/sync_orchestration/ carries no daily-access identifier -- the '
+        'same daily-access isolation group 1 enforces on the platform '
+        'layer extends to its one approved consumer', () {
+      const forbiddenDailyAccessSubstrings = [
+        'DailyWisdomRecord',
+        'DailyAccessRepository',
+        'DailyWisdomAccessService',
+        'daily_wisdom_access',
+        'daily_wisdom_record.dart',
+        'daily_access_repository.dart',
+        'unlockAt',
+        'lockDuration',
+        'pending_daily_wisdom_reveal',
+        'PendingDailyWisdomReveal',
+      ];
+      final orchestrationFiles = dartFilesIn(orchestrationDir);
+      expect(orchestrationFiles, isNotEmpty);
+
+      final violations = <String>[];
+      for (final file in orchestrationFiles) {
+        final codeOnly = _stripComments(file.readAsStringSync());
+        for (final forbidden in forbiddenDailyAccessSubstrings) {
+          if (codeOnly.contains(forbidden)) {
+            violations.add('${file.path} contains "$forbidden" in code');
+          }
         }
       }
       expect(violations, isEmpty, reason: violations.join('\n'));
