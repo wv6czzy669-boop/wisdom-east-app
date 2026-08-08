@@ -55,6 +55,97 @@ final RegExp _keptWisdomRecordNamePattern = RegExp(
 bool looksLikeKeptWisdomRecordName(String value) =>
     _keptWisdomRecordNamePattern.hasMatch(value);
 
+/// Build 26 Phase 4E-1: the account-scoped first-association/bootstrap
+/// progress for one account bucket -- a categorical status only, never a
+/// timestamp, never a raw CloudKit identifier, and never rendered by any
+/// `toLogSafeSummary()`/`toString()` in this codebase beyond its own bare
+/// name (see `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s Phase 4E-1
+/// section for the full bootstrap-order contract this status tracks).
+///
+/// Deliberately scoped to *this* bucket's own [AccountSyncState.dataEpoch]:
+/// there is no separate epoch field on this status, because
+/// [AccountSyncState.copyWith] already structurally cannot change
+/// [AccountSyncState.dataEpoch] -- a genuine epoch reset always means
+/// constructing a brand-new [AccountSyncState] from scratch (out of this
+/// phase's scope), so this status is automatically "tied to the exact
+/// dataEpoch" of whichever bucket instance carries it, with no second,
+/// independently-maintained epoch value to keep in sync.
+///
+/// This phase defines the vocabulary and persists it durably; it does not
+/// implement the bootstrap flow itself (that is Phase 4E-4), and nothing in
+/// this phase automatically transitions any bucket into
+/// [associationRequired] (that requires an account-change detection this
+/// phase does not implement) or adds any user-facing UI for it.
+enum AccountBootstrapState {
+  /// No first-association/bootstrap attempt has been recorded for this
+  /// bucket yet. This is also the conservative default a legacy bucket
+  /// (persisted before this phase existed) decodes to -- see
+  /// [AccountSyncState.tryDecode] -- since a bucket written before this
+  /// concept existed can never be assumed to have already completed a
+  /// bootstrap process that did not yet exist when it was written.
+  notStarted,
+
+  /// The remote `CKEastSyncState`/initial zone baseline fetch for this
+  /// account is in progress or has been durably recorded as the next step,
+  /// but has not yet been confirmed complete.
+  remoteBaselinePending,
+
+  /// The remote baseline has been established; reconciling local Kept/
+  /// Reflection state into the outbox (Phase 4E-4) is the remaining step.
+  localReconciliationPending,
+
+  /// First association/bootstrap for this exact account bucket is fully,
+  /// durably complete.
+  complete,
+
+  /// An account change was detected and an explicit, future user
+  /// confirmation is required (design doc §5) before any further
+  /// association/reconciliation proceeds. Never set automatically by this
+  /// phase; defined here only so a future phase has an explicit, already-
+  /// tested place to persist it, rather than inventing one under time
+  /// pressure later.
+  associationRequired,
+}
+
+/// Build 26 Phase 4E-1: the explicit, exhaustive allowlist of valid
+/// [AccountBootstrapState] transitions -- deliberately a single choke point
+/// so no call site can invent a new transition ad hoc. `from == to` (a
+/// no-op re-assertion of the current state) is always valid, for every
+/// state, so retrying an identical checkpoint request stays idempotent.
+bool isValidBootstrapTransition(
+  AccountBootstrapState from,
+  AccountBootstrapState to,
+) {
+  if (from == to) return true;
+
+  const forwardChain = {
+    AccountBootstrapState.notStarted:
+        AccountBootstrapState.remoteBaselinePending,
+    AccountBootstrapState.remoteBaselinePending:
+        AccountBootstrapState.localReconciliationPending,
+    AccountBootstrapState.localReconciliationPending:
+        AccountBootstrapState.complete,
+  };
+  if (forwardChain[from] == to) return true;
+
+  // An account change may be detected while bootstrap is at any stage
+  // (never while already `associationRequired` -- that is already covered
+  // by the `from == to` case above).
+  if (to == AccountBootstrapState.associationRequired &&
+      from != AccountBootstrapState.associationRequired) {
+    return true;
+  }
+
+  // Once a detected account change is explicitly resolved (a future
+  // phase's responsibility), bootstrap restarts fresh.
+  if (from == AccountBootstrapState.associationRequired &&
+      to == AccountBootstrapState.notStarted) {
+    return true;
+  }
+
+  return false;
+}
+
 /// One account's complete durable sync state: the authoritative
 /// account-scoped [dataEpoch], the opaque server change token, opaque
 /// per-record system fields, and the durable outbox.
@@ -87,6 +178,7 @@ final class AccountSyncState {
     String? serverChangeToken,
     Map<String, String> recordSystemFields = const {},
     List<PersistedOutboxMutation> outbox = const [],
+    AccountBootstrapState bootstrapState = AccountBootstrapState.notStarted,
   }) {
     _validate(
       dataEpoch: dataEpoch,
@@ -99,6 +191,7 @@ final class AccountSyncState {
       serverChangeToken: serverChangeToken,
       recordSystemFields: Map.unmodifiable(recordSystemFields),
       outbox: List.unmodifiable(outbox),
+      bootstrapState: bootstrapState,
     );
   }
 
@@ -107,6 +200,7 @@ final class AccountSyncState {
     required this.serverChangeToken,
     required this.recordSystemFields,
     required this.outbox,
+    required this.bootstrapState,
   });
 
   /// The empty state a never-yet-synced account starts from, under the
@@ -141,12 +235,22 @@ final class AccountSyncState {
   /// deterministic enqueue order.
   final List<PersistedOutboxMutation> outbox;
 
+  /// Build 26 Phase 4E-1: this bucket's account-scoped first-association/
+  /// bootstrap progress. See [AccountBootstrapState]'s own doc comment for
+  /// the full contract. Defaults to [AccountBootstrapState.notStarted] for
+  /// every newly-constructed bucket and for every bucket decoded from
+  /// pre-Phase-4E-1 persisted state that has no `bootstrapState` key at all
+  /// -- never defaulted to [AccountBootstrapState.complete], which would
+  /// falsely claim a bootstrap process this bucket never actually ran.
+  final AccountBootstrapState bootstrapState;
+
   /// Deliberately has no `dataEpoch` parameter -- see the class doc comment.
   /// Every other field defaults to "unchanged" exactly as before.
   AccountSyncState copyWith({
     Object? serverChangeToken = _unset,
     Map<String, String>? recordSystemFields,
     List<PersistedOutboxMutation>? outbox,
+    AccountBootstrapState? bootstrapState,
   }) {
     return AccountSyncState(
       dataEpoch: dataEpoch,
@@ -155,17 +259,22 @@ final class AccountSyncState {
           : serverChangeToken as String?,
       recordSystemFields: recordSystemFields ?? this.recordSystemFields,
       outbox: outbox ?? this.outbox,
+      bootstrapState: bootstrapState ?? this.bootstrapState,
     );
   }
 
   /// Encodes this state into the loosely-typed `Map` shape the sync-state
   /// envelope's JSON file stores. [dataEpoch] is always present -- there is
-  /// no "absent means default" case for this field.
+  /// no "absent means default" case for this field. [bootstrapState] is
+  /// always present on every freshly-encoded state (Phase 4E-1 onward);
+  /// [tryDecode] treats its *absence* on a decoded legacy payload as
+  /// [AccountBootstrapState.notStarted], never as a decode failure.
   Map<String, Object?> encode() => {
         'dataEpoch': dataEpoch.value,
         if (serverChangeToken != null) 'serverChangeToken': serverChangeToken,
         'recordSystemFields': recordSystemFields,
         'outbox': outbox.map((entry) => entry.encode()).toList(),
+        'bootstrapState': bootstrapState.name,
       };
 
   /// Strictly parses one raw account-state map. Returns `null` for anything
@@ -182,9 +291,30 @@ final class AccountSyncState {
       'serverChangeToken',
       'recordSystemFields',
       'outbox',
+      'bootstrapState',
     };
     for (final key in raw.keys) {
       if (key is! String || !allowedKeys.contains(key)) return null;
+    }
+
+    // Build 26 Phase 4E-1: absent means a pre-Phase-4E-1 legacy bucket --
+    // decodes conservatively to `notStarted`, never `complete`. A *present*
+    // but unrecognized value fails the whole decode closed, exactly like
+    // every other enum-shaped field in this codebase's persisted state
+    // (never silently coerced to the nearest known value).
+    final bootstrapStateValue = raw['bootstrapState'];
+    AccountBootstrapState bootstrapState;
+    if (bootstrapStateValue == null) {
+      bootstrapState = AccountBootstrapState.notStarted;
+    } else if (bootstrapStateValue is! String) {
+      return null;
+    } else {
+      AccountBootstrapState? parsed;
+      for (final candidate in AccountBootstrapState.values) {
+        if (candidate.name == bootstrapStateValue) parsed = candidate;
+      }
+      if (parsed == null) return null;
+      bootstrapState = parsed;
     }
 
     // Mandatory, never defaulted: a missing or malformed dataEpoch fails the
@@ -235,6 +365,7 @@ final class AccountSyncState {
         serverChangeToken: tokenValue as String?,
         recordSystemFields: recordSystemFields,
         outbox: outbox,
+        bootstrapState: bootstrapState,
       );
     } on AccountSyncStateFormatException {
       return null;
@@ -298,7 +429,8 @@ final class AccountSyncState {
         other.dataEpoch == dataEpoch &&
         other.serverChangeToken == serverChangeToken &&
         _mapEquals(other.recordSystemFields, recordSystemFields) &&
-        _listEquals(other.outbox, outbox);
+        _listEquals(other.outbox, outbox) &&
+        other.bootstrapState == bootstrapState;
   }
 
   @override
@@ -309,6 +441,7 @@ final class AccountSyncState {
           recordSystemFields.entries.map((e) => Object.hash(e.key, e.value)),
         ),
         Object.hashAll(outbox),
+        bootstrapState,
       );
 
   static bool _mapEquals(Map<String, String> a, Map<String, String> b) {

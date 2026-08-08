@@ -8,6 +8,7 @@ import '../persistence/persistence_operation_coordinator.dart';
 import '../sync/sync_change.dart';
 import '../utils/kept_diagnostics.dart';
 import 'account_sync_state.dart';
+import 'incoming_batch_checkpoint.dart';
 import 'persisted_outbox_mutation.dart';
 import 'sync_persistence_envelope.dart';
 import 'sync_persistence_store.dart';
@@ -330,6 +331,264 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
         );
       },
     );
+  }
+
+  // -----------------------------------------------------------------------
+  // Build 26 Phase 4E-1: one atomic incoming-batch checkpoint. Every
+  // business-rule failure is returned as a typed, non-`committed` result --
+  // never thrown -- computed inside exactly one coordinator-serialized
+  // read-modify-replace operation, so this never issues two separate
+  // envelope writes (one for system fields, one for the token) the way
+  // calling `replaceRecordSystemFields` then `storeServerChangeToken`
+  // separately would.
+  // -----------------------------------------------------------------------
+
+  @override
+  Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
+    CommitIncomingBatchCheckpointRequest request,
+  ) async {
+    final structuralFailure = _validateCheckpointRequestShape(request);
+    if (structuralFailure != null) {
+      return CommitIncomingBatchCheckpointResult(status: structuralFailure);
+    }
+
+    return _coordinator.runExclusive<CommitIncomingBatchCheckpointResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.accounts[request.accountFingerprint];
+
+        if (request.mode == IncomingCheckpointMode.bootstrapCreate) {
+          return _commitBootstrapCreate(envelope, current, request);
+        }
+        return _commitExistingBucket(envelope, current, request);
+      },
+    );
+  }
+
+  Future<CommitIncomingBatchCheckpointResult> _commitBootstrapCreate(
+    SyncPersistenceEnvelope envelope,
+    AccountSyncState? current,
+    CommitIncomingBatchCheckpointRequest request,
+  ) async {
+    if (current != null) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.bucketAlreadyExists,
+      );
+    }
+
+    final expected =
+        request.expectedBootstrapState ?? AccountBootstrapState.notStarted;
+    if (expected != AccountBootstrapState.notStarted) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.bootstrapStateMismatch,
+      );
+    }
+    final nextBootstrapState =
+        request.nextBootstrapState ?? AccountBootstrapState.notStarted;
+    if (!isValidBootstrapTransition(
+      AccountBootstrapState.notStarted,
+      nextBootstrapState,
+    )) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidBootstrapTransition,
+      );
+    }
+
+    final mergedFields = _mergeSystemFields(
+      const {},
+      request.recordSystemFieldsUpdates,
+    );
+
+    final newState = AccountSyncState(
+      dataEpoch: request.bootstrapTargetDataEpoch!,
+      serverChangeToken: request.pendingServerChangeToken,
+      recordSystemFields: mergedFields,
+      bootstrapState: nextBootstrapState,
+    );
+    await _replaceEnvelope(
+      envelope.withAccount(request.accountFingerprint, newState),
+    );
+    keptDiagnostic(
+      'sync-persistence-store: incoming-checkpoint-bootstrap-create-ok '
+      'systemFieldCount=${request.recordSystemFieldsUpdates.length}',
+    );
+
+    return CommitIncomingBatchCheckpointResult(
+      status: IncomingCheckpointStatus.committed,
+      systemFieldCount: request.recordSystemFieldsUpdates.length,
+      bootstrapStateChanged:
+          nextBootstrapState != AccountBootstrapState.notStarted,
+      tokenChanged: true,
+    );
+  }
+
+  Future<CommitIncomingBatchCheckpointResult> _commitExistingBucket(
+    SyncPersistenceEnvelope envelope,
+    AccountSyncState? current,
+    CommitIncomingBatchCheckpointRequest request,
+  ) async {
+    if (current == null) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.bucketMissing,
+      );
+    }
+    if (current.dataEpoch != request.expectedCurrentDataEpoch) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.dataEpochMismatch,
+      );
+    }
+
+    // Idempotent-retry shortcut: a caller that crashed or dropped a
+    // response after a checkpoint durably committed cannot always tell
+    // whether its prior identical request already succeeded. If the bucket
+    // already reflects exactly the state this request would produce (same
+    // token, same bootstrap state, every requested system-fields entry
+    // already holding the exact requested value), this call is a genuine
+    // no-op repeat -- report it as committed without a second envelope
+    // write, rather than failing it on `expectedPreviousServerToken`, which
+    // necessarily no longer matches once the first attempt already
+    // advanced the token. This mirrors `enqueueMutation`'s own
+    // same-content idempotent-repeat rule.
+    if (_alreadyMatchesCheckpointTarget(current, request)) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.committed,
+        systemFieldCount: 0,
+        bootstrapStateChanged: false,
+        tokenChanged: false,
+      );
+    }
+
+    if (current.serverChangeToken != request.expectedPreviousServerToken) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.previousTokenMismatch,
+      );
+    }
+    if (request.expectedBootstrapState != null &&
+        current.bootstrapState != request.expectedBootstrapState) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.bootstrapStateMismatch,
+      );
+    }
+    final nextBootstrapState =
+        request.nextBootstrapState ?? current.bootstrapState;
+    if (!isValidBootstrapTransition(
+        current.bootstrapState, nextBootstrapState)) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidBootstrapTransition,
+      );
+    }
+
+    final mergedFields = _mergeSystemFields(
+      current.recordSystemFields,
+      request.recordSystemFieldsUpdates,
+    );
+
+    final tokenChanged =
+        current.serverChangeToken != request.pendingServerChangeToken;
+    final bootstrapStateChanged = nextBootstrapState != current.bootstrapState;
+
+    final newState = current.copyWith(
+      serverChangeToken: request.pendingServerChangeToken,
+      recordSystemFields: mergedFields,
+      bootstrapState: nextBootstrapState,
+    );
+    await _replaceEnvelope(
+      envelope.withAccount(request.accountFingerprint, newState),
+    );
+    keptDiagnostic(
+      'sync-persistence-store: incoming-checkpoint-existing-bucket-ok '
+      'systemFieldCount=${request.recordSystemFieldsUpdates.length}',
+    );
+
+    return CommitIncomingBatchCheckpointResult(
+      status: IncomingCheckpointStatus.committed,
+      systemFieldCount: request.recordSystemFieldsUpdates.length,
+      bootstrapStateChanged: bootstrapStateChanged,
+      tokenChanged: tokenChanged,
+    );
+  }
+
+  /// Pure, bucket-independent request-shape validation -- runs before the
+  /// envelope is ever loaded. Returns `null` when the request shape itself
+  /// is valid (bucket-dependent checks still follow inside the coordinator
+  /// block); otherwise returns the exact [IncomingCheckpointStatus] failure
+  /// this malformed request represents.
+  IncomingCheckpointStatus? _validateCheckpointRequestShape(
+    CommitIncomingBatchCheckpointRequest request,
+  ) {
+    if (!looksLikeOpaqueBase64(request.pendingServerChangeToken)) {
+      return IncomingCheckpointStatus.invalidRequest;
+    }
+
+    switch (request.mode) {
+      case IncomingCheckpointMode.existingBucket:
+        if (request.expectedCurrentDataEpoch == null) {
+          return IncomingCheckpointStatus.invalidRequest;
+        }
+        if (request.bootstrapTargetDataEpoch != null) {
+          return IncomingCheckpointStatus.invalidRequest;
+        }
+      case IncomingCheckpointMode.bootstrapCreate:
+        if (request.expectedCurrentDataEpoch != null ||
+            request.expectedPreviousServerToken != null) {
+          return IncomingCheckpointStatus.invalidRequest;
+        }
+        if (request.bootstrapTargetDataEpoch == null) {
+          return IncomingCheckpointStatus.invalidRequest;
+        }
+    }
+
+    if (request.nextBootstrapState != null &&
+        request.expectedBootstrapState == null) {
+      return IncomingCheckpointStatus.invalidRequest;
+    }
+
+    final seenRecordNames = <String>{};
+    for (final update in request.recordSystemFieldsUpdates) {
+      if (!seenRecordNames.add(update.recordName)) {
+        return IncomingCheckpointStatus.duplicateRecordName;
+      }
+      if (!looksLikeKeptWisdomRecordName(update.recordName) ||
+          !looksLikeOpaqueBase64(update.systemFields)) {
+        return IncomingCheckpointStatus.invalidRecordSystemFields;
+      }
+    }
+
+    return null;
+  }
+
+  /// Whether [current] already exactly equals the post-state [request]
+  /// would produce, i.e. this call would be a genuine no-op repeat of an
+  /// already-durable checkpoint. See the call site's doc comment.
+  bool _alreadyMatchesCheckpointTarget(
+    AccountSyncState current,
+    CommitIncomingBatchCheckpointRequest request,
+  ) {
+    if (current.serverChangeToken != request.pendingServerChangeToken) {
+      return false;
+    }
+    final targetBootstrapState =
+        request.nextBootstrapState ?? current.bootstrapState;
+    if (current.bootstrapState != targetBootstrapState) return false;
+    for (final update in request.recordSystemFieldsUpdates) {
+      if (current.recordSystemFields[update.recordName] !=
+          update.systemFields) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Map<String, String> _mergeSystemFields(
+    Map<String, String> existing,
+    List<IncomingRecordSystemFieldsUpdate> updates,
+  ) {
+    final merged = Map<String, String>.from(existing);
+    for (final update in updates) {
+      merged[update.recordName] = update.systemFields;
+    }
+    return merged;
   }
 
   // -----------------------------------------------------------------------

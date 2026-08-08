@@ -19,6 +19,7 @@ library;
 import '../sync/sync_change.dart';
 
 import 'account_sync_state.dart';
+import 'incoming_batch_checkpoint.dart';
 import 'persisted_outbox_mutation.dart';
 
 /// Thrown by [SyncPersistenceStore] implementations on any failure to load,
@@ -229,4 +230,33 @@ abstract interface class SyncPersistenceStore {
   /// for it afterward -- without discarding it. A no-op if the fingerprint
   /// has no active state to quarantine.
   Future<void> quarantineAccountState(String accountFingerprint);
+
+  /// Build 26 Phase 4E-1: atomically commits an incoming CloudKit batch's
+  /// durable checkpoint -- every requested record's system-fields value,
+  /// the new server change token, and (optionally) a validated
+  /// [AccountBootstrapState] transition -- in exactly **one** sync-envelope
+  /// read-modify-replace operation.
+  ///
+  /// This method never mutates the Kept/Reflection envelope, never applies
+  /// an incoming record to any repository, and never acknowledges or
+  /// otherwise touches the outbox -- it exists solely to give a future
+  /// Phase 4E-3 incoming-apply transaction one atomic place to durably
+  /// record "this batch's system fields and checkpoint are now safe,"
+  /// after -- never before -- that transaction has already durably applied
+  /// the batch's Kept/Reflection changes elsewhere.
+  ///
+  /// Returns a [CommitIncomingBatchCheckpointResult] describing exactly
+  /// what happened; every business-rule failure this method's own doc
+  /// comment on [CommitIncomingBatchCheckpointRequest]/
+  /// [IncomingCheckpointStatus] describes is reported as a typed,
+  /// non-[IncomingCheckpointStatus.committed] result -- never a thrown
+  /// exception -- so a caller can distinguish every failure reason without
+  /// a catch-cascade. Only a genuine underlying storage failure (the same
+  /// class of failure every other method on this interface can throw) is
+  /// still reported as a thrown [SyncPersistenceStoreException]; in that
+  /// case, neither the token nor any system-fields value changes, exactly
+  /// as this interface's other atomic methods already guarantee.
+  Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
+    CommitIncomingBatchCheckpointRequest request,
+  );
 }

@@ -23,6 +23,7 @@ import 'package:wisdom_app/sync_orchestration/pending_incoming_sync_batch.dart';
 import 'package:wisdom_app/sync_orchestration/sync_orchestrator.dart';
 import 'package:wisdom_app/sync_orchestration/sync_pass_result.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
+import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
@@ -167,6 +168,15 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
   int clearAccountStateCallCount = 0;
   int quarantineAccountStateCallCount = 0;
 
+  /// Build 26 Phase 4E-1: `SyncOrchestrator` is Phase 4D-2 -- it must never
+  /// call the Phase 4E incoming-checkpoint API (that is Phase 4E-3's own,
+  /// separate responsibility once it exists). This fake therefore never
+  /// forwards to a real implementation: any call is itself the test
+  /// failure, so it records the call and then fails immediately with a
+  /// static, content-safe `StateError` rather than fabricating a
+  /// successful checkpoint result.
+  int commitIncomingBatchCheckpointCallCount = 0;
+
   /// When non-null, the *next* call to `replaceRecordSystemFields` throws
   /// this and is not forwarded to the delegate.
   Object? throwOnNextReplaceRecordSystemFields;
@@ -278,6 +288,17 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
     quarantineAccountStateCallCount += 1;
     callOrder.add('quarantineAccountState');
     return _delegate.quarantineAccountState(accountFingerprint);
+  }
+
+  @override
+  Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
+    CommitIncomingBatchCheckpointRequest request,
+  ) async {
+    commitIncomingBatchCheckpointCallCount += 1;
+    callOrder.add('commitIncomingBatchCheckpoint');
+    throw StateError(
+      'Incoming checkpoint must not be called by SyncOrchestrator.',
+    );
   }
 }
 
@@ -1095,7 +1116,11 @@ void main() {
     expect(batch.accountFingerprint, fingerprintA);
   });
 
-  test('2. a successful fetch never calls storeServerChangeToken', () async {
+  test(
+      '2. a successful fetch never calls storeServerChangeToken, and never '
+      'calls the Phase 4E-1 incoming-checkpoint API (Phase 4D-2\'s own '
+      'SyncOrchestrator does not call it; that remains Phase 4E-3\'s '
+      'separate responsibility once it exists)', () async {
     final recordingStore = _RecordingSyncPersistenceStore(buildStore());
     final bridge = _FakeCloudKitPlatformBridge();
     bridge.accountSnapshotSequence = [availableSnapshot()];
@@ -1114,6 +1139,7 @@ void main() {
 
     expect(result.status, SyncPassStatus.completed);
     expect(recordingStore.storeServerChangeTokenCallCount, 0);
+    expect(recordingStore.commitIncomingBatchCheckpointCallCount, 0);
   });
 
   test(
