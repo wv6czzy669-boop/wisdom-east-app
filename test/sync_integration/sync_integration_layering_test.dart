@@ -161,8 +161,9 @@ void main() {
   test(
       'every import under lib/sync_integration/ resolves to dart:, '
       'package:path_provider, package:uuid, sync_integration itself, '
-      'sync_persistence, sync, persistence, or utils -- never repositories, '
-      'services, screens, or widgets', () {
+      'sync_persistence, sync, persistence, utils, or the exact narrow '
+      'Phase 4E-2 KeptRepository/model dependency -- never any other '
+      'repository, services, screens, or widgets', () {
     final allowedPrefixes = [
       'dart:',
       'package:path_provider/',
@@ -176,6 +177,20 @@ void main() {
       '../sync/',
       '../persistence/',
       '../utils/',
+      // Build 26 Phase 4E-2: KeptSyncIntegrationCoordinator composes
+      // KeptRepository with the durable sync layers from the outside, per
+      // the locked dependency direction (sync_integration -> KeptRepository
+      // / domain models -- never the reverse). These are deliberately exact,
+      // full-path allowances, never a broad `../models/` or
+      // `../repositories/` directory exemption -- no other model or
+      // repository file may be imported here without its own explicit,
+      // justified addition to this list.
+      '../models/favorite_item.dart',
+      '../models/kept_record.dart',
+      '../repositories/kept_repository.dart',
+      'package:wisdom_app/models/favorite_item.dart',
+      'package:wisdom_app/models/kept_record.dart',
+      'package:wisdom_app/repositories/kept_repository.dart',
       // Bare same-directory relative imports (this codebase's own
       // sync_integration files importing one another directly).
       'local_sync_intent',
@@ -233,8 +248,10 @@ void main() {
   });
 
   test(
-      'KeptRepository still imports no CloudKit/sync-platform adapter and '
-      'no sync_integration type', () {
+      'KeptRepository still imports no CloudKit/sync-platform adapter, no '
+      'sync_integration type, and no sync_persistence type -- the '
+      'dependency direction is always sync_integration -> KeptRepository, '
+      'never the reverse', () {
     final matches = allLibFiles
         .where((file) => file.path.replaceAll('\\', '/').endsWith(
               'lib/repositories/kept_repository.dart',
@@ -252,16 +269,144 @@ void main() {
       expect(trimmed.contains('sync_platform'), isFalse,
           reason: 'kept_repository.dart must not import sync_platform: '
               '"$trimmed"');
+      // Build 26 Phase 4E-2: this is a permanent architectural invariant,
+      // not a "not yet wired" placeholder -- KeptRepository remains
+      // completely CloudKit/account/sync-unaware forever.
+      // KeptSyncIntegrationCoordinator composes KeptRepository from the
+      // outside; KeptRepository must never import sync_integration or
+      // sync_persistence in either direction.
       expect(trimmed.contains('sync_integration'), isFalse,
-          reason: 'kept_repository.dart must not import sync_integration '
-              'in Phase 4E-1 (no wiring yet): "$trimmed"');
+          reason: 'kept_repository.dart must never import sync_integration: '
+              '"$trimmed"');
+      expect(trimmed.contains('sync_persistence'), isFalse,
+          reason: 'kept_repository.dart must never import sync_persistence: '
+              '"$trimmed"');
     }
   });
 
   test(
-      'no file outside lib/sync_integration/ imports anything from '
-      'lib/sync_integration/ -- Phase 4E-1 establishes the layer without '
-      'wiring any real call site to it yet', () {
+      'no startup, foreground, lifecycle, or network trigger anywhere under '
+      'lib/ (outside KeptSyncIntegrationCoordinator\'s own definition file) '
+      'calls reconcileForAssociatedAccount -- it remains callable but '
+      'uncalled by any production code path in Phase 4E-2', () {
+    final violations = <String>[];
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      if (normalizedPath.endsWith(
+        'lib/sync_integration/kept_sync_integration_coordinator.dart',
+      )) {
+        continue;
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('reconcileForAssociatedAccount(')) {
+        violations.add(file.path);
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'SavedReflectionsService is the intended service-level importer of '
+      'KeptSyncIntegrationCoordinator -- a positive proof, not merely the '
+      'absence of other importers', () {
+    final matches = allLibFiles
+        .where((file) => file.path.replaceAll('\\', '/').endsWith(
+              'lib/services/saved_reflections_service.dart',
+            ))
+        .toList();
+    expect(matches, hasLength(1),
+        reason: 'Expected to find exactly one saved_reflections_service.dart '
+            'under lib/services/.');
+    final source = matches.single.readAsStringSync();
+
+    final importsSyncIntegration = source
+        .split('\n')
+        .map((line) => line.trimLeft())
+        .where(
+            (line) => line.startsWith('import ') || line.startsWith('export '))
+        .any((line) => line.contains('sync_integration'));
+    expect(importsSyncIntegration, isTrue,
+        reason: 'saved_reflections_service.dart is expected to import '
+            'something from lib/sync_integration/.');
+
+    final codeOnly = _stripComments(source);
+    expect(codeOnly.contains('KeptSyncIntegrationCoordinator'), isTrue,
+        reason: 'saved_reflections_service.dart is expected to reference '
+            'KeptSyncIntegrationCoordinator directly.');
+  });
+
+  test(
+      'privileged KeptRepository replay parameters (presetId:, '
+      'presetMutationId:, presetKeptAt:, presetUpdatedAt:, onAuthorized:) '
+      'are used at a call site only in kept_repository.dart (declares them) '
+      'and kept_sync_integration_coordinator.dart (the single authorized '
+      'production caller) -- never anywhere else under lib/', () {
+    // Build 26 Phase 4E-2 correction (final-audit blocker): KeptRepository
+    // recognizes a crash-recovery replay of an already-authorized mutation
+    // structurally, by the exact call shape "a preset identity/timestamp
+    // supplied with no `onAuthorized`" -- see KeptRepository's own class doc
+    // comment. That shape is only ever safe because, today,
+    // KeptSyncIntegrationCoordinator is the *only* production caller that
+    // ever supplies these parameters. Nothing in the type system enforces
+    // that -- `keptRepository` is a bare public global
+    // (`app_services.dart`) and `keepOccurrence`/`saveReflection` are public
+    // methods, so any other production file could, in principle, reproduce
+    // this exact shape and silently bypass the free-tier Keep/Reflection
+    // limit for a call that never went through a real, durably-recorded,
+    // previously-authorized mutation. This test converts that
+    // convention-only invariant into a machine-enforced one: an exact,
+    // two-file allowlist -- never a directory-wide exemption for
+    // `repositories/`, `sync_integration/`, `services/`, or any other
+    // directory. Deliberately an exact-token scan (never a fragile
+    // multiline regex trying to recognize specific method invocations),
+    // matching the instruction that produced this correction.
+    const privilegedTokens = [
+      'presetId:',
+      'presetMutationId:',
+      'presetKeptAt:',
+      'presetUpdatedAt:',
+      'onAuthorized:',
+    ];
+    const allowedFiles = {
+      'lib/repositories/kept_repository.dart',
+      'lib/sync_integration/kept_sync_integration_coordinator.dart',
+    };
+
+    final violations = <String>[];
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final isAllowed =
+          allowedFiles.any((allowed) => normalizedPath.endsWith(allowed));
+      if (isAllowed) continue;
+
+      final codeOnly = _stripComments(file.readAsStringSync());
+      for (final token in privilegedTokens) {
+        if (codeOnly.contains(token)) {
+          violations.add('$normalizedPath uses privileged token "$token"');
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'no screen or widget file imports anything from lib/sync_integration/ '
+      '-- Build 26 Phase 4E-2 wires real call sites only through '
+      'SavedReflectionsService/app_services.dart, never directly from the UI '
+      'layer', () {
+    // Phase 4E-2 correction: Phase 4E-1's version of this test forbade
+    // *every* file outside lib/sync_integration/ from importing it at all,
+    // because no real call site existed yet. Phase 4E-2's entire purpose is
+    // to wire exactly two such call sites
+    // (`lib/services/saved_reflections_service.dart` and
+    // `lib/services/app_services.dart`) -- so those two are the only
+    // permitted exceptions now; every screen and widget file remains
+    // forbidden, unchanged from Phase 4E-1's intent.
+    const allowedImporters = {
+      'lib/services/saved_reflections_service.dart',
+      'lib/services/app_services.dart',
+    };
+
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
@@ -269,12 +414,14 @@ void main() {
           normalizedPath.startsWith('lib/sync_integration/')) {
         continue;
       }
+      final isAllowed =
+          allowedImporters.any((allowed) => normalizedPath.endsWith(allowed));
       for (final line in file.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {
           continue;
         }
-        if (trimmed.contains('sync_integration')) {
+        if (trimmed.contains('sync_integration') && !isAllowed) {
           violations.add('$normalizedPath: "$trimmed"');
         }
       }
@@ -283,21 +430,28 @@ void main() {
   });
 
   test(
-      'no screen, widget, service, or main.dart file references any '
-      'sync_integration type name in real code', () {
+      'no screen, widget, or main.dart file references any sync_integration '
+      'type name in real code -- only SavedReflectionsService/'
+      'app_services.dart may', () {
     const typeNames = [
       'LocalSyncIntent',
       'LocalSyncIntentPayload',
       'LocalSyncIntentKind',
+      'LocalSyncIntentOperation',
       'LocalSyncIntentStage',
       'LocalSyncIntentStore',
       'ProtectedLocalSyncIntentStore',
       'LocalSyncIntentEnvelope',
-      'KeptSyncIntegrationCoordinatorBoundary',
+      'KeptSyncIntegrationCoordinator',
+      'AssociatedSyncAccountContext',
     ];
 
     final scanTargets = allLibFiles.where((file) {
       final p = file.path.replaceAll('\\', '/');
+      final isAllowed =
+          p.endsWith('lib/services/saved_reflections_service.dart') ||
+              p.endsWith('lib/services/app_services.dart');
+      if (isAllowed) return false;
       return p.contains('/lib/screens/') ||
           p.contains('/lib/widgets/') ||
           p.contains('/lib/services/') ||
@@ -394,6 +548,7 @@ void main() {
       kind: LocalSyncIntentKind.update,
       payload: LocalSyncIntentPayload.active(
         revealId: revealId,
+        operation: LocalSyncIntentOperation.reflectionSave,
         wisdomText: wisdomText,
         revealedAtMs: 1000,
         keptAtMs: 2000,

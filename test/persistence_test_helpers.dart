@@ -17,7 +17,10 @@ import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'sync_integration/in_memory_sync_test_doubles.dart';
 
 typedef PersistString = Future<void> Function();
 typedef ReadString = Future<String?> Function();
@@ -355,11 +358,32 @@ class KeptRepositoryTestGraph {
       freeKeptLimit: freeKeptLimit,
       freeReflectionLimit: freeReflectionLimit,
     );
-    service = SavedReflectionsService(keptRepository: repository);
+    // Build 26 Phase 4E-2: widget tests exercise `SavedReflectionsService`
+    // through the real `KeptSyncIntegrationCoordinator`, exactly as
+    // production does, but backed by purely in-memory intent/outbox test
+    // doubles -- no widget test in this codebase asserts on sync-intent
+    // content, so these doubles only need to keep the coordinator's own
+    // invariants (idempotent enqueue, stage-advance) satisfied.
+    intentStore = InMemoryLocalSyncIntentStore();
+    syncPersistenceStore = InMemorySyncPersistenceStore();
+    syncCoordinator = KeptSyncIntegrationCoordinator(
+      keptRepository: repository,
+      intentStore: intentStore,
+      syncPersistenceStore: syncPersistenceStore,
+      idFactory: idFactory,
+      clock: clock,
+    );
+    service = SavedReflectionsService(
+      keptRepository: repository,
+      syncCoordinator: syncCoordinator,
+    );
   }
 
   final InMemoryKeptStateStore store;
   late final KeptRepository repository;
+  late final InMemoryLocalSyncIntentStore intentStore;
+  late final InMemorySyncPersistenceStore syncPersistenceStore;
+  late final KeptSyncIntegrationCoordinator syncCoordinator;
   late final SavedReflectionsService service;
 
   /// Seeds [store] directly with [records] as the authoritative active

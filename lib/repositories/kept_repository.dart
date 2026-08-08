@@ -71,13 +71,13 @@ class RemovedKeptOccurrence {
   final List<FavoriteItem> items;
 }
 
-/// Additive, fully isolated Phase 3D-B Kept repository.
-///
-/// Not yet used by production: nothing in `app_services.dart`, `main.dart`,
-/// or any screen constructs or calls this class. It exists so later phases
-/// can migrate `SavedReflectionsService`'s callers onto it deliberately,
-/// one call site at a time, instead of switching all production Kept
-/// reads/writes over in one step.
+/// The authoritative, production Kept repository (Build 26 Phase 3D-C
+/// production cutover; wired via `app_services.dart`'s `keptRepository`
+/// global and consumed through `SavedReflectionsService`). This doc comment
+/// previously claimed "not yet used by production" — that was accurate only
+/// during Phase 3D-B and is corrected here as of Phase 4E-2, which adds the
+/// optional authorization/preset parameters below without changing anything
+/// about who owns this repository's storage.
 ///
 /// Every dependency is constructor-injected — this repository never reads
 /// `SharedPreferences` directly, never touches `LegacyFavoritesStore` or
@@ -95,6 +95,46 @@ class RemovedKeptOccurrence {
 /// this repository always acquires from *inside* its own
 /// [resourceKey] exclusive block — repository key first, store key second,
 /// never the reverse, and never migration acquired from inside either.
+///
+/// **Build 26 Phase 4E-2 — optional authorization hook and identity
+/// presets.** [keepOccurrence], [saveReflection], and [deleteReflection]
+/// each accept optional `preset*` identity/timestamp parameters and an
+/// optional `onAuthorized` callback; [remove] accepts only `onAuthorized`.
+/// This repository remains completely unaware of CloudKit, accounts,
+/// `DataEpoch`, `SyncPersistenceStore`, or `LocalSyncIntentStore` — it
+/// imports none of `lib/sync_integration/` or `lib/sync_persistence/`, and
+/// every new parameter here is an ordinary domain value (`String`,
+/// `DateTime`, or a plain callback over [KeptRecord]). The one caller of
+/// these parameters is `KeptSyncIntegrationCoordinator`
+/// (`lib/sync_integration/kept_sync_integration_coordinator.dart`), which
+/// composes this repository with the sync layers from the outside — never
+/// the reverse.
+///
+/// `onAuthorized`, when supplied, is invoked exactly once per call, with the
+/// complete target [KeptRecord] this method is about to (or, for [remove],
+/// is about to stop referencing) persist — always *after* every existing
+/// validation/no-op/limit check has already concluded a real mutation will
+/// occur, and always *before* the physical envelope write. It may be async,
+/// is always awaited, and is never caught: if it throws, the physical Kept
+/// write does not happen and the whole method call fails. This is what lets
+/// a caller durably record "this mutation is about to happen" with a
+/// crash-safe guarantee that the physical write never outruns that record.
+///
+/// **Replay of an already-authorized mutation.** [keepOccurrence] and
+/// [saveReflection] each have exactly one *business-authorization* gate (the
+/// free-tier Kept/Reflection limit) that must run exactly once per genuine
+/// new local user action — never again on crash-recovery replay of a
+/// mutation that already passed it. A replay call is recognized structurally
+/// (never via a mutable flag): it is the combination of a `preset*` identity
+/// parameter being supplied *and* `onAuthorized` being omitted — a shape only
+/// `KeptSyncIntegrationCoordinator`'s own replay path ever produces (its
+/// normal, first-attempt user-mutation path always supplies *both* a preset
+/// and `onAuthorized` together; an ordinary caller supplying neither always
+/// gets the full check, unchanged). When that shape is detected, the
+/// free-tier limit check is skipped for that call only — every other check
+/// (idempotency-by-identity, missing-item, unchanged-content, input
+/// validity) still runs unconditionally on every call, replay or not, since
+/// those are structural safety checks, not new-action authorization gates.
 final class KeptRepository {
   KeptRepository({
     required KeptStateStore store,
@@ -145,6 +185,10 @@ final class KeptRepository {
     required String wisdomText,
     required DateTime revealedAt,
     required bool isKeeper,
+    String? presetId,
+    String? presetMutationId,
+    DateTime? presetKeptAt,
+    Future<void> Function(KeptRecord target)? onAuthorized,
   }) {
     return _coordinator.runExclusive<KeptRepositoryMutationResult>(
       resourceKey: resourceKey,
@@ -183,15 +227,24 @@ final class KeptRepository {
           );
         }
 
-        if (!isKeeper && envelope.activeRecords.length >= freeKeptLimit) {
+        // Build 26 Phase 4E-2: a replay of an already-authorized mutation
+        // (see the class doc comment) skips only this business-authorization
+        // gate — never the idempotency check above, which always runs.
+        final isReplayOfAuthorizedMutation =
+            presetId != null && onAuthorized == null;
+        if (!isKeeper &&
+            !isReplayOfAuthorizedMutation &&
+            envelope.activeRecords.length >= freeKeptLimit) {
           return KeptRepositoryMutationResult(
             items: _mapAll(envelope),
             limitReached: true,
           );
         }
 
-        final id = _generateId();
-        final mutationId = _generateId();
+        final id = presetId != null ? _validateId(presetId) : _generateId();
+        final mutationId = presetMutationId != null
+            ? _validateId(presetMutationId)
+            : _generateId();
         // Canonicalized before ever reaching a KeptRecord: both the
         // caller-supplied authoritative revealedAt and this freshly-read
         // clock value may carry non-zero microseconds (a real device clock
@@ -199,7 +252,7 @@ final class KeptRepository {
         // that would otherwise make this record fail its own protected
         // store's mandatory post-write read-back verification.
         final canonicalRevealedAt = canonicalizeKeptTimestamp(revealedAt);
-        final keptAt = canonicalizeKeptTimestamp(_clock());
+        final keptAt = canonicalizeKeptTimestamp(presetKeptAt ?? _clock());
 
         final record = KeptRecord(
           id: id,
@@ -210,6 +263,10 @@ final class KeptRepository {
           updatedAt: keptAt,
           mutationId: mutationId,
         );
+
+        if (onAuthorized != null) {
+          await onAuthorized(record);
+        }
 
         final nextEnvelope = envelope.copyWith(
           activeRecords: [...envelope.activeRecords, record],
@@ -229,6 +286,9 @@ final class KeptRepository {
     required String reflection,
     required bool isKeeper,
     DateTime? reflectedAt,
+    String? presetMutationId,
+    DateTime? presetUpdatedAt,
+    Future<void> Function(KeptRecord target)? onAuthorized,
   }) {
     return _coordinator.runExclusive<KeptRepositoryMutationResult>(
       resourceKey: resourceKey,
@@ -257,8 +317,13 @@ final class KeptRepository {
 
         final existing = envelope.activeRecords[index];
         final isFirstReflection = existing.reflectionText == null;
+        // Build 26 Phase 4E-2: see keepOccurrence's identical replay
+        // recognition -- skips only this business-authorization gate.
+        final isReplayOfAuthorizedMutation =
+            presetMutationId != null && onAuthorized == null;
         if (isFirstReflection &&
             !isKeeper &&
+            !isReplayOfAuthorizedMutation &&
             envelope.activeRecords
                     .where((record) => record.reflectionText != null)
                     .length >=
@@ -283,12 +348,22 @@ final class KeptRepository {
         // ReflectionScreen) or this freshly-read clock value may carry
         // non-zero microseconds — see kept_timestamp_canonicalizer.dart.
         final mutationTime = canonicalizeKeptTimestamp(reflectedAt ?? _clock());
+        final updatedAt = presetUpdatedAt != null
+            ? canonicalizeKeptTimestamp(presetUpdatedAt)
+            : mutationTime;
+        final mutationId = presetMutationId != null
+            ? _validateId(presetMutationId)
+            : _generateId();
         final updated = existing.copyWith(
           reflectionText: normalized,
           reflectedAt: mutationTime,
-          updatedAt: mutationTime,
-          mutationId: _generateId(),
+          updatedAt: updatedAt,
+          mutationId: mutationId,
         );
+
+        if (onAuthorized != null) {
+          await onAuthorized(updated);
+        }
 
         final nextEnvelope = envelope.copyWith(
           activeRecords: _replacingAt(envelope.activeRecords, index, updated),
@@ -303,7 +378,12 @@ final class KeptRepository {
     );
   }
 
-  Future<List<FavoriteItem>> deleteReflection({required String itemId}) {
+  Future<List<FavoriteItem>> deleteReflection({
+    required String itemId,
+    String? presetMutationId,
+    DateTime? presetUpdatedAt,
+    Future<void> Function(KeptRecord target)? onAuthorized,
+  }) {
     return _coordinator.runExclusive<List<FavoriteItem>>(
       resourceKey: resourceKey,
       operation: () async {
@@ -325,11 +405,24 @@ final class KeptRepository {
           return _mapAll(envelope);
         }
 
+        // No free-tier limit gates a deletion, so there is no
+        // business-authorization gate to skip on replay here — every check
+        // above always runs, replay or not.
+        final updatedAt = presetUpdatedAt != null
+            ? canonicalizeKeptTimestamp(presetUpdatedAt)
+            : canonicalizeKeptTimestamp(_clock());
+        final mutationId = presetMutationId != null
+            ? _validateId(presetMutationId)
+            : _generateId();
         final updated = existing.copyWith(
           clearReflection: true,
-          updatedAt: canonicalizeKeptTimestamp(_clock()),
-          mutationId: _generateId(),
+          updatedAt: updatedAt,
+          mutationId: mutationId,
         );
+
+        if (onAuthorized != null) {
+          await onAuthorized(updated);
+        }
 
         final nextEnvelope = envelope.copyWith(
           activeRecords: _replacingAt(envelope.activeRecords, index, updated),
@@ -341,7 +434,10 @@ final class KeptRepository {
     );
   }
 
-  Future<RemovedKeptOccurrence?> remove({required String itemId}) {
+  Future<RemovedKeptOccurrence?> remove({
+    required String itemId,
+    Future<void> Function(KeptRecord removedRecord)? onAuthorized,
+  }) {
     return _coordinator.runExclusive<RemovedKeptOccurrence?>(
       resourceKey: resourceKey,
       operation: () async {
@@ -354,6 +450,22 @@ final class KeptRepository {
         if (index < 0) return null;
 
         final removedRecord = envelope.activeRecords[index];
+
+        // Build 26 Phase 4E-2: [removedRecord] still exists in the envelope
+        // at this exact point -- this is deliberately the last moment before
+        // physical deletion at which a caller can capture its complete,
+        // still-live state (in particular `revealId`, needed for CloudKit
+        // identity) for a durable tombstone. No preset identity is accepted
+        // here: removal mints no new content identity of its own inside this
+        // repository (a tombstone's own fresh deletion-event mutationId is
+        // an independent identity a caller mints outside this repository —
+        // see `KeptSyncIntegrationCoordinator`), and there is no free-tier
+        // limit gating removal, so there is no replay-authorization
+        // distinction to make here either.
+        if (onAuthorized != null) {
+          await onAuthorized(removedRecord);
+        }
+
         final remaining = [...envelope.activeRecords]..removeAt(index);
         final nextEnvelope = envelope.copyWith(activeRecords: remaining);
         await _replaceEnvelope(nextEnvelope);
@@ -558,8 +670,13 @@ final class KeptRepository {
     }
   }
 
-  String _generateId() {
-    final id = _idFactory();
+  String _generateId() => _validateId(_idFactory());
+
+  /// Build 26 Phase 4E-2: the same canonical-UUID-v4 validation an
+  /// internally-generated id already received, applied uniformly to a
+  /// caller-supplied `preset*` identity too — an externally-supplied id is
+  /// never trusted merely because it came from a caller.
+  String _validateId(String id) {
     if (!isCanonicalUuidV4(id)) {
       throw const KeptRepositoryException(
         'invalid-generated-id',

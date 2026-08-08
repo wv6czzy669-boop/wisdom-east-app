@@ -101,6 +101,7 @@ void main() {
       kind: LocalSyncIntentKind.create,
       payload: LocalSyncIntentPayload.active(
         revealId: revealId,
+        operation: LocalSyncIntentOperation.keep,
         wisdomText: wisdomText,
         revealedAtMs: 1000,
         keptAtMs: 2000,
@@ -627,7 +628,8 @@ void main() {
     expect(rendered, isNot(contains(intentId1)));
     expect(
       rendered,
-      'LocalSyncIntent({kind: create, stage: pendingLocalApplication, '
+      'LocalSyncIntent({kind: create, operation: keep, '
+      'stage: pendingLocalApplication, '
       'hasPrivatePayload: true, isTombstone: false, hasReflection: true})',
     );
 

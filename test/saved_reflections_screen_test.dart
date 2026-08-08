@@ -6,9 +6,11 @@ import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 
 import 'persistence_test_helpers.dart';
+import 'sync_integration/in_memory_sync_test_doubles.dart';
 
 void main() {
   late KeptRepositoryTestGraph graph;
@@ -53,7 +55,15 @@ void main() {
       bootstrap: const KeptBootstrapResult.ready(),
       operationCoordinator: PersistenceOperationCoordinator(),
     );
-    return SavedReflectionsService(keptRepository: repository);
+    final coordinator = KeptSyncIntegrationCoordinator(
+      keptRepository: repository,
+      intentStore: InMemoryLocalSyncIntentStore(),
+      syncPersistenceStore: InMemorySyncPersistenceStore(),
+    );
+    return SavedReflectionsService(
+      keptRepository: repository,
+      syncCoordinator: coordinator,
+    );
   }
 
   testWidgets('Kept shows newest first, full year, and exact states',

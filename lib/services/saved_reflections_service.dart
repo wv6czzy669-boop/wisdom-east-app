@@ -1,6 +1,7 @@
 import '../models/favorite_item.dart';
 import '../models/kept_record.dart';
 import '../repositories/kept_repository.dart';
+import '../sync_integration/kept_sync_integration_coordinator.dart';
 
 class SavedReflectionsResult {
   const SavedReflectionsResult({
@@ -42,14 +43,32 @@ class RemovedSavedReflection {
 /// `SavedReflectionsScreen`, `ReflectionScreen`) keep their existing
 /// method/result shapes (`SavedReflectionsResult`, `RemovedSavedReflection`)
 /// without depending on `KeptRepository` types directly.
+///
+/// **Build 26 Phase 4E-2:** the four real local user mutation paths --
+/// [toggle]'s Keep branch, [toggle]'s Remove branch (a non-null
+/// `existingId`), [saveReflection], and [deleteReflection] -- now route
+/// through [KeptSyncIntegrationCoordinator] instead of calling
+/// [KeptRepository] directly, so each one durably records a crash-safe
+/// [LocalSyncIntent](../sync_integration/local_sync_intent.dart) before its
+/// physical Kept write. Every read path ([load],
+/// [resolveLegacyMigratedRevealIdForOccurrence]) and [restore] continue to
+/// call [KeptRepository] directly and unchanged -- [restore] has no live UI
+/// call site and is deliberately outside this phase's four-operation scope
+/// (see the class doc comment on `KeptSyncIntegrationCoordinator`), so it
+/// does not create a sync intent. No screen needed to change: every public
+/// method here keeps its exact pre-existing signature.
 class SavedReflectionsService {
-  SavedReflectionsService({required KeptRepository keptRepository})
-      : _keptRepository = keptRepository;
+  SavedReflectionsService({
+    required KeptRepository keptRepository,
+    required KeptSyncIntegrationCoordinator syncCoordinator,
+  })  : _keptRepository = keptRepository,
+        _syncCoordinator = syncCoordinator;
 
   static const int maximumReflectionLength = KeptRecord.maximumReflectionLength;
   static const int freeReflectionLimit = 3;
 
   final KeptRepository _keptRepository;
+  final KeptSyncIntegrationCoordinator _syncCoordinator;
 
   Future<List<FavoriteItem>> load() => _keptRepository.load();
 
@@ -81,12 +100,12 @@ class SavedReflectionsService {
     String? existingId,
   }) async {
     if (existingId != null) {
-      final removed = await _keptRepository.remove(itemId: existingId);
+      final removed = await _syncCoordinator.recordRemove(itemId: existingId);
       final items = removed?.items ?? await _keptRepository.load();
       return SavedReflectionsResult(items: items, limitReached: false);
     }
 
-    final result = await _keptRepository.keepOccurrence(
+    final result = await _syncCoordinator.recordKeep(
       revealId: revealId,
       wisdomText: text,
       revealedAt: revealedAt,
@@ -104,7 +123,7 @@ class SavedReflectionsService {
     required bool isKeeper,
     DateTime? reflectedAt,
   }) async {
-    final result = await _keptRepository.saveReflection(
+    final result = await _syncCoordinator.recordReflectionSave(
       itemId: itemId,
       reflection: reflection,
       isKeeper: isKeeper,
@@ -118,11 +137,11 @@ class SavedReflectionsService {
   }
 
   Future<List<FavoriteItem>> deleteReflection({required String itemId}) {
-    return _keptRepository.deleteReflection(itemId: itemId);
+    return _syncCoordinator.recordReflectionDelete(itemId: itemId);
   }
 
   Future<RemovedSavedReflection?> remove({required String itemId}) async {
-    final removed = await _keptRepository.remove(itemId: itemId);
+    final removed = await _syncCoordinator.recordRemove(itemId: itemId);
     if (removed == null) return null;
     return RemovedSavedReflection(occurrence: removed);
   }

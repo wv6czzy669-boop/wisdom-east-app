@@ -33,6 +33,28 @@ import '../utils/canonical_uuid.dart';
 /// `SyncChangeKind.create`/`.update` and [delete] to `SyncChangeKind.delete`.
 enum LocalSyncIntentKind { create, update, delete }
 
+/// Build 26 Phase 4E-2: the *local* user-operation category a durable
+/// [LocalSyncIntent] represents -- i.e. which `KeptRepository` method must be
+/// replayed to complete this intent. Deliberately **not** the same concept
+/// as [LocalSyncIntentKind] (which mirrors the sync domain's own
+/// create/update/delete vocabulary) or `SyncChangeKind` (the eventual wire
+/// operation) -- this enum exists purely so replay dispatch is an explicit,
+/// exhaustive `switch` over a closed local vocabulary, never an inference
+/// from payload shape (wisdom text, a displayed date, or reflection-text
+/// presence alone can never disambiguate which operation produced a given
+/// payload; see `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s Phase 4E-2
+/// section for the full rationale).
+///
+/// Every value here maps to exactly one active/tombstone shape and exactly
+/// one [LocalSyncIntentKind] -- enforced in [LocalSyncIntent]'s own
+/// constructor, never left to a caller's discipline alone:
+/// [keep] <-> active-form payload, [LocalSyncIntentKind.create];
+/// [reflectionSave] <-> active-form payload (with `reflectionText` present),
+/// [LocalSyncIntentKind.update]; [reflectionDelete] <-> active-form payload
+/// (with `reflectionText` absent), [LocalSyncIntentKind.update]; [remove] <->
+/// tombstone-form payload, [LocalSyncIntentKind.delete].
+enum LocalSyncIntentOperation { keep, reflectionSave, reflectionDelete, remove }
+
 /// The minimum two recovery stages a durable [LocalSyncIntent] needs to
 /// distinguish -- see the class doc comment on [LocalSyncIntent] for the
 /// exact crash-window each one exists to close. There is no third
@@ -67,6 +89,7 @@ final class LocalSyncIntentPayload {
   LocalSyncIntentPayload._({
     required this.revealId,
     required this.isTombstone,
+    required this.operation,
     required this.updatedAtMs,
     required this.mutationId,
     this.localId,
@@ -81,6 +104,7 @@ final class LocalSyncIntentPayload {
       revealId: revealId,
       mutationId: mutationId,
       isTombstone: isTombstone,
+      operation: operation,
       wisdomText: wisdomText,
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
@@ -91,12 +115,25 @@ final class LocalSyncIntentPayload {
     );
   }
 
-  /// Builds the active-form payload for a new Keep, a Reflection add/edit,
-  /// a Reflection deletion (pass `reflectionText: null`), or a re-Keep after
-  /// a prior tombstone -- every scenario that produces an active-form
-  /// `CloudKeptWisdomProjection` eventually.
+  /// Builds the active-form payload for a new Keep
+  /// ([LocalSyncIntentOperation.keep]), a Reflection add/edit
+  /// ([LocalSyncIntentOperation.reflectionSave]), a Reflection deletion
+  /// ([LocalSyncIntentOperation.reflectionDelete], pass `reflectionText:
+  /// null`), or a re-Keep after a prior tombstone (also [
+  /// LocalSyncIntentOperation.keep]) -- every scenario that produces an
+  /// active-form `CloudKeptWisdomProjection` eventually. [operation] must be
+  /// one of [LocalSyncIntentOperation.keep],
+  /// [LocalSyncIntentOperation.reflectionSave], or
+  /// [LocalSyncIntentOperation.reflectionDelete] -- never
+  /// [LocalSyncIntentOperation.remove], which only ever pairs with
+  /// [tombstone]. [localId] may be populated for every one of these
+  /// operations (including [LocalSyncIntentOperation.keep], once the
+  /// coordinator has already pre-minted the target `KeptRecord.id` before
+  /// the physical write) -- this payload does not constrain its
+  /// nullability by [operation].
   factory LocalSyncIntentPayload.active({
     required String revealId,
+    required LocalSyncIntentOperation operation,
     required String wisdomText,
     required int revealedAtMs,
     required int keptAtMs,
@@ -109,6 +146,7 @@ final class LocalSyncIntentPayload {
     return LocalSyncIntentPayload._(
       revealId: revealId,
       isTombstone: false,
+      operation: operation,
       wisdomText: wisdomText,
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
@@ -122,7 +160,10 @@ final class LocalSyncIntentPayload {
 
   /// Builds the tombstone-form payload for a Kept removal -- carries no
   /// content field at all, mirroring `SyncTombstone`/
-  /// `CloudKeptWisdomProjection.tombstone`'s own minimal shape.
+  /// `CloudKeptWisdomProjection.tombstone`'s own minimal shape. Always
+  /// [LocalSyncIntentOperation.remove] -- there is no other operation a
+  /// tombstone-form payload can represent, so this factory does not expose
+  /// an `operation` parameter at all.
   factory LocalSyncIntentPayload.tombstone({
     required String revealId,
     required int deletedAtMs,
@@ -133,6 +174,7 @@ final class LocalSyncIntentPayload {
     return LocalSyncIntentPayload._(
       revealId: revealId,
       isTombstone: true,
+      operation: LocalSyncIntentOperation.remove,
       deletedAtMs: deletedAtMs,
       updatedAtMs: updatedAtMs,
       mutationId: mutationId,
@@ -150,6 +192,14 @@ final class LocalSyncIntentPayload {
 
   /// `false` for the active form, `true` for the tombstone form.
   final bool isTombstone;
+
+  /// Which local `KeptRepository` operation this payload represents --
+  /// always [LocalSyncIntentOperation.remove] when [isTombstone] is `true`,
+  /// and always one of [LocalSyncIntentOperation.keep],
+  /// [LocalSyncIntentOperation.reflectionSave], or
+  /// [LocalSyncIntentOperation.reflectionDelete] when [isTombstone] is
+  /// `false` -- enforced by [_validate], never left ambiguous.
+  final LocalSyncIntentOperation operation;
 
   /// The deleted `KeptRecord.id`, retained only for local bookkeeping
   /// continuity -- never sent anywhere beyond this local store, mirroring
@@ -176,6 +226,7 @@ final class LocalSyncIntentPayload {
   Map<String, Object?> encode() => {
         'revealId': revealId,
         'isTombstone': isTombstone,
+        'operation': operation.name,
         if (localId != null) 'localId': localId,
         if (wisdomText != null) 'wisdomText': wisdomText,
         if (revealedAtMs != null) 'revealedAtMs': revealedAtMs,
@@ -194,6 +245,7 @@ final class LocalSyncIntentPayload {
     const allowedKeys = {
       'revealId',
       'isTombstone',
+      'operation',
       'localId',
       'wisdomText',
       'revealedAtMs',
@@ -213,6 +265,18 @@ final class LocalSyncIntentPayload {
 
     final isTombstone = raw['isTombstone'];
     if (isTombstone is! bool) return null;
+
+    // Build 26 Phase 4E-2: strictly required -- no Phase 4E-2 production
+    // intent has ever existed before this field was introduced, so there is
+    // no legacy payload to silently default. A missing or unrecognized value
+    // fails decode entirely, exactly like every other field here.
+    final operationValue = raw['operation'];
+    if (operationValue is! String) return null;
+    LocalSyncIntentOperation? operation;
+    for (final candidate in LocalSyncIntentOperation.values) {
+      if (candidate.name == operationValue) operation = candidate;
+    }
+    if (operation == null) return null;
 
     final updatedAtMs = raw['updatedAtMs'];
     if (updatedAtMs is! int) return null;
@@ -245,6 +309,7 @@ final class LocalSyncIntentPayload {
       return LocalSyncIntentPayload._(
         revealId: revealId,
         isTombstone: isTombstone,
+        operation: operation,
         localId: localId as String?,
         wisdomText: wisdomText as String?,
         revealedAtMs: revealedAtMs as int?,
@@ -264,6 +329,7 @@ final class LocalSyncIntentPayload {
     required String revealId,
     required String mutationId,
     required bool isTombstone,
+    required LocalSyncIntentOperation operation,
     required String? wisdomText,
     required int? revealedAtMs,
     required int? keptAtMs,
@@ -281,6 +347,19 @@ final class LocalSyncIntentPayload {
     if (updatedAtMs < 0) {
       throw const FormatException(
         'Local sync intent updatedAtMs cannot be negative.',
+      );
+    }
+
+    // Build 26 Phase 4E-2: [operation] and [isTombstone] must always agree
+    // -- [LocalSyncIntentOperation.remove] is the only operation a
+    // tombstone-form payload may represent, and every other operation is
+    // active-form only. This is what makes "remove must be tombstone" a
+    // structural guarantee rather than a caller convention.
+    final operationIsRemove = operation == LocalSyncIntentOperation.remove;
+    if (operationIsRemove != isTombstone) {
+      throw const FormatException(
+        'Local sync intent operation is inconsistent with its active/'
+        'tombstone form.',
       );
     }
 
@@ -339,6 +418,31 @@ final class LocalSyncIntentPayload {
         'Local sync intent reflectionText cannot be blank.',
       );
     }
+
+    // Build 26 Phase 4E-2: within the active form, [operation] further
+    // narrows which Reflection-presence shape is legal -- never inferred
+    // from `reflectionText` alone (a `keep` payload's `reflectionText` may
+    // legitimately be null or, for a re-Keep after a Reflection existed on a
+    // prior occurrence of the same revealId, could in principle be non-null;
+    // this check exists only to pin down [reflectionSave]/[reflectionDelete]
+    // exactly, per the audited requirement that "reflectionDelete must
+    // remain ACTIVE/update and Reflection must be absent" and
+    // "reflectionSave must remain ACTIVE/update and Reflection must be
+    // present").
+    if (operation == LocalSyncIntentOperation.reflectionSave &&
+        reflectionText == null) {
+      throw const FormatException(
+        'A reflectionSave local sync intent payload requires '
+        'reflectionText.',
+      );
+    }
+    if (operation == LocalSyncIntentOperation.reflectionDelete &&
+        reflectionText != null) {
+      throw const FormatException(
+        'A reflectionDelete local sync intent payload must not carry '
+        'reflectionText.',
+      );
+    }
   }
 
   @override
@@ -347,6 +451,7 @@ final class LocalSyncIntentPayload {
     return other is LocalSyncIntentPayload &&
         other.revealId == revealId &&
         other.isTombstone == isTombstone &&
+        other.operation == operation &&
         other.localId == localId &&
         other.wisdomText == wisdomText &&
         other.revealedAtMs == revealedAtMs &&
@@ -362,6 +467,7 @@ final class LocalSyncIntentPayload {
   int get hashCode => Object.hash(
         revealId,
         isTombstone,
+        operation,
         localId,
         wisdomText,
         revealedAtMs,
@@ -407,6 +513,24 @@ final class LocalSyncIntent {
       throw const FormatException(
         'A create/update-kind local sync intent must carry an active-form '
         'payload.',
+      );
+    }
+
+    // Build 26 Phase 4E-2: [kind] and [payload.operation] must always agree
+    // -- each [LocalSyncIntentOperation] maps to exactly one [kind], never
+    // left to a caller's discipline alone. Combined with
+    // [LocalSyncIntentPayload]'s own operation/isTombstone check, this is
+    // what makes "keep must remain ACTIVE/create" and "reflectionSave/
+    // reflectionDelete must remain ACTIVE/update" structural guarantees.
+    final requiredKind = switch (payload.operation) {
+      LocalSyncIntentOperation.keep => LocalSyncIntentKind.create,
+      LocalSyncIntentOperation.reflectionSave => LocalSyncIntentKind.update,
+      LocalSyncIntentOperation.reflectionDelete => LocalSyncIntentKind.update,
+      LocalSyncIntentOperation.remove => LocalSyncIntentKind.delete,
+    };
+    if (kind != requiredKind) {
+      throw const FormatException(
+        'Local sync intent kind does not match its operation.',
       );
     }
   }
@@ -507,6 +631,7 @@ final class LocalSyncIntent {
   /// `reflectionText` value, and never this intent's own [intentId].
   Map<String, Object?> toLogSafeSummary() => {
         'kind': kind.name,
+        'operation': payload.operation.name,
         'stage': stage.name,
         'hasPrivatePayload': true,
         'isTombstone': payload.isTombstone,

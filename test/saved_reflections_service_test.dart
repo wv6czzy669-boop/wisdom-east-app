@@ -12,8 +12,10 @@ import 'package:wisdom_app/models/kept_bootstrap_result.dart';
 import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 
 import 'persistence_test_helpers.dart';
+import 'sync_integration/in_memory_sync_test_doubles.dart';
 
 void main() {
   late KeptRepositoryTestGraph graph;
@@ -578,15 +580,25 @@ void main() {
   });
 
   group('constructor', () {
-    test('requires an explicit KeptRepository (no hidden default)', () {
+    test(
+        'requires an explicit KeptRepository and KeptSyncIntegrationCoordinator '
+        '(no hidden default)', () {
       final repository = KeptRepository(
         store: InMemoryKeptStateStore(),
         bootstrap: const KeptBootstrapResult.ready(),
         operationCoordinator: PersistenceOperationCoordinator(),
       );
+      final coordinator = KeptSyncIntegrationCoordinator(
+        keptRepository: repository,
+        intentStore: InMemoryLocalSyncIntentStore(),
+        syncPersistenceStore: InMemorySyncPersistenceStore(),
+      );
 
       expect(
-        () => SavedReflectionsService(keptRepository: repository),
+        () => SavedReflectionsService(
+          keptRepository: repository,
+          syncCoordinator: coordinator,
+        ),
         returnsNormally,
       );
     });

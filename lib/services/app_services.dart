@@ -7,6 +7,9 @@ import '../persistence/legacy_favorites_store.dart';
 import '../persistence/storage_preferences_adapter.dart';
 import '../repositories/daily_access_repository.dart';
 import '../repositories/kept_repository.dart';
+import '../sync_integration/kept_sync_integration_coordinator.dart';
+import '../sync_integration/protected_local_sync_intent_store.dart';
+import '../sync_persistence/protected_sync_persistence_store.dart';
 import 'daily_wisdom_access_service.dart';
 import 'kept_discovery_hint_service.dart';
 import 'kept_migration_coordinator.dart';
@@ -91,6 +94,43 @@ final KeptMigrationCoordinator keptMigrationCoordinator =
   operationCoordinator: keptOperationCoordinator,
 );
 
+// ---------------------------------------------------------------------
+// Build 26 Phase 4E-2: sync integration wiring.
+//
+// `syncIntegrationOperationCoordinator` is a dedicated
+// `PersistenceOperationCoordinator` instance used for exactly one resource
+// key (`KeptSyncIntegrationCoordinator.resourceKey`,
+// `kept_sync_integration_v1`) -- never shared with `keptOperationCoordinator`
+// (KeptRepository's own `kept_repository_v1`) or with either durable sync
+// store's own internal coordinator below. `localSyncIntentStore` and
+// `syncPersistenceStore` are each constructed with no `operationCoordinator`
+// argument, so each defaults to its own separate internal instance (per
+// their own constructors) -- distinct directories/files
+// (`east_sync_integration_state`, `east_sync_state`), distinct resource
+// keys, distinct coordinator instances, exactly as required.
+//
+// No CloudKit/native account lookup and no reconciliation trigger is wired
+// here or anywhere else in this file --
+// `keptSyncIntegrationCoordinator.reconcileForAssociatedAccount` remains
+// callable but uncalled by any production code path in this phase.
+// ---------------------------------------------------------------------
+
+final PersistenceOperationCoordinator syncIntegrationOperationCoordinator =
+    PersistenceOperationCoordinator();
+final ProtectedLocalSyncIntentStore localSyncIntentStore =
+    ProtectedLocalSyncIntentStore();
+final ProtectedSyncPersistenceStore syncPersistenceStore =
+    ProtectedSyncPersistenceStore();
+
+/// Populated exactly once, as a side effect of `buildService` below, inside
+/// the same single bootstrap attempt that populates [keptRepository]/
+/// [savedReflectionsService] — never constructed a second time. Exposed as
+/// its own global (mirroring [keptRepository]) so a future phase's explicit
+/// account-association/bootstrap flow has a single, already-correctly-wired
+/// instance to call [KeptSyncIntegrationCoordinator
+/// .reconcileForAssociatedAccount] on; nothing in this phase calls it.
+late final KeptSyncIntegrationCoordinator keptSyncIntegrationCoordinator;
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -105,8 +145,18 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
     bootstrap: bootstrap,
     operationCoordinator: keptOperationCoordinator,
   ),
-  buildService: (repository) =>
-      SavedReflectionsService(keptRepository: repository),
+  buildService: (repository) {
+    keptSyncIntegrationCoordinator = KeptSyncIntegrationCoordinator(
+      keptRepository: repository,
+      intentStore: localSyncIntentStore,
+      syncPersistenceStore: syncPersistenceStore,
+      integrationCoordinator: syncIntegrationOperationCoordinator,
+    );
+    return SavedReflectionsService(
+      keptRepository: repository,
+      syncCoordinator: keptSyncIntegrationCoordinator,
+    );
+  },
 );
 
 late final KeptBootstrapResult keptBootstrapResult;
