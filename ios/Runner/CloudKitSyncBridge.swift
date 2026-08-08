@@ -214,6 +214,11 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
   /// shape `CloudKeptWisdomWireEnvelope.encode`/`.tryDecode` already define
   /// on the Dart side (`lib/sync_platform/cloud_kept_wisdom_wire_envelope.dart`)
   /// -- never a second, competing wire shape.
+  ///
+  /// Build 26 Phase 4E-3a: also includes `envelope.systemFields` -- opaque
+  /// CloudKit transport metadata, never logged or printed here or anywhere
+  /// else in this file, and never part of the record's own occurrence
+  /// identity/content fields above.
   private func keptWisdomWirePayload(_ envelope: CloudKitKeptWisdomWireEnvelope) -> [String: Any?] {
     if envelope.isTombstone {
       return [
@@ -226,6 +231,7 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
         "mutationId": envelope.mutationId,
         "dataEpoch": envelope.dataEpoch,
         "schemaVersion": envelope.schemaVersion,
+        "systemFields": envelope.systemFields,
       ]
     }
 
@@ -242,6 +248,7 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
       "mutationId": envelope.mutationId,
       "dataEpoch": envelope.dataEpoch,
       "schemaVersion": envelope.schemaVersion,
+      "systemFields": envelope.systemFields,
     ]
     if let reflectionText = envelope.reflectionText {
       payload["reflectionText"] = reflectionText

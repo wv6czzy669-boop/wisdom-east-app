@@ -1754,6 +1754,41 @@ void main() {
     expect(batch.toLogSafeSummary()['hasPendingCheckpoint'], isTrue);
   });
 
+  test(
+      '9c. Build 26 Phase 4E-3a: incomingKeptWisdomRecordSystemFields '
+      'defaults to empty, accepts a real value, and is unmodifiable', () {
+    final defaultBatch = PendingIncomingSyncBatch(
+      accountFingerprint: fingerprintA,
+      baseDataEpoch: epoch,
+      previousServerChangeToken: null,
+      pendingServerChangeToken: 'dG9rZW4=',
+      incomingKeptWisdomProjections: const [],
+      incomingSyncStateProjections: const [],
+    );
+    expect(defaultBatch.incomingKeptWisdomRecordSystemFields, isEmpty);
+
+    final populatedBatch = PendingIncomingSyncBatch(
+      accountFingerprint: fingerprintA,
+      baseDataEpoch: epoch,
+      previousServerChangeToken: null,
+      pendingServerChangeToken: 'dG9rZW4=',
+      incomingKeptWisdomProjections: const [],
+      incomingSyncStateProjections: const [],
+      incomingKeptWisdomRecordSystemFields: const {
+        'east-kept-aaaaaaaa-1111-4111-8111-111111111111': 'c3lzdGVtRmllbGRz',
+      },
+    );
+    expect(
+      populatedBatch.incomingKeptWisdomRecordSystemFields[
+          'east-kept-aaaaaaaa-1111-4111-8111-111111111111'],
+      'c3lzdGVtRmllbGRz',
+    );
+    expect(
+      () => populatedBatch.incomingKeptWisdomRecordSystemFields['x'] = 'y',
+      throwsUnsupportedError,
+    );
+  });
+
   // ---------------------------------------------------------------------
   // 13. constructing/returning the batch is a pure in-memory operation --
   //     no persistence mutation occurs merely because a batch with a full
@@ -1932,6 +1967,125 @@ void main() {
       bucket!.recordSystemFields['east-kept-$revealId'],
       'c3lzdGVtZmllbGRz',
     );
+  });
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 4E-3a: fetched system fields are plumbed straight
+  // through into PendingIncomingSyncBatch, with no other behavior change.
+  // ---------------------------------------------------------------------
+  group('Build 26 Phase 4E-3a: fetched system fields transport plumbing', () {
+    test(
+        'a successful fetch carries the exact recordName-to-systemFields '
+        'association into PendingIncomingSyncBatch, for active and '
+        'soft-tombstone records alike', () async {
+      final store = buildStore();
+      final bridge = _FakeCloudKitPlatformBridge();
+      bridge.accountSnapshotSequence = [availableSnapshot()];
+      bridge.zoneConfigurationProvider = () => successZoneResult;
+      bridge.modifyProvider =
+          (_) => CloudKitModifyRecordsResult.allSucceeded(const []);
+
+      const activeRevealId = 'aaaaaaaa-1111-4111-8111-111111111111';
+      const tombstoneRevealId = 'bbbbbbbb-2222-4222-8222-222222222222';
+      final activeRecordName = 'east-kept-$activeRevealId';
+      final tombstoneRecordName = 'east-kept-$tombstoneRevealId';
+      const activeSystemFields = 'YWN0aXZlU3lzdGVtRmllbGRz';
+      const tombstoneSystemFields = 'dG9tYnN0b25lU3lzdGVtRmllbGRz';
+
+      final active = activeProjection(revealId: activeRevealId);
+      final tombstone = CloudKeptWisdomProjection.tombstone(
+        SyncTombstone(
+          revealId: tombstoneRevealId,
+          dataEpoch: epoch,
+          updatedAt: DateTime.utc(2026, 8, 1, 11),
+          deletedAt: DateTime.utc(2026, 8, 1, 11),
+          mutationId: _mutationIdFor(tombstoneRevealId),
+        ),
+      );
+
+      bridge.fetchProvider = (_) => CloudKitZoneChangesResult.success(
+            changedKeptWisdomRecords: [active, tombstone],
+            changedSyncStateRecords: const [],
+            serverToken: 'bmV3dG9rZW4=',
+            keptWisdomRecordSystemFields: {
+              activeRecordName: activeSystemFields,
+              tombstoneRecordName: tombstoneSystemFields,
+            },
+          );
+      final orchestrator =
+          SyncOrchestrator(bridge: bridge, persistenceStore: store);
+
+      final result = await orchestrator.runSyncPass();
+
+      expect(result.status, SyncPassStatus.completed);
+      final batch = result.pendingIncomingBatch;
+      expect(batch, isNotNull);
+      // Existing projections/account/epoch/token behavior is unaffected --
+      // this phase adds a new field, it does not change any existing one.
+      expect(batch!.incomingKeptWisdomProjections, hasLength(2));
+      expect(batch.accountFingerprint, fingerprintA);
+      expect(batch.baseDataEpoch, isNull);
+      expect(batch.pendingServerChangeToken, 'bmV3dG9rZW4=');
+
+      expect(
+        batch.incomingKeptWisdomRecordSystemFields[activeRecordName],
+        activeSystemFields,
+      );
+      expect(
+        batch.incomingKeptWisdomRecordSystemFields[tombstoneRecordName],
+        tombstoneSystemFields,
+      );
+      expect(batch.incomingKeptWisdomRecordSystemFields, hasLength(2));
+
+      // Build 26 Phase 4E-3a is transport-only: no checkpoint is performed
+      // and no persistence mutation results from merely carrying this new
+      // metadata through -- the account bucket's own durable
+      // recordSystemFields (a wholly separate, already-existing concept
+      // populated only by a successful *upload*) remains untouched.
+      final persistedBucket = await store.loadAccountState(fingerprintA);
+      expect(persistedBucket, isNull);
+    });
+
+    test(
+        'keptWisdomRecordSystemFields is never rendered by SyncPassResult or '
+        'PendingIncomingSyncBatch diagnostics', () async {
+      final store = buildStore();
+      final bridge = _FakeCloudKitPlatformBridge();
+      bridge.accountSnapshotSequence = [availableSnapshot()];
+      bridge.zoneConfigurationProvider = () => successZoneResult;
+      bridge.modifyProvider =
+          (_) => CloudKitModifyRecordsResult.allSucceeded(const []);
+
+      const revealIdHere = 'cccccccc-3333-4333-8333-333333333333';
+      const secretSystemFields = 'dGhpc0lzQVNlY3JldFN5c3RlbUZpZWxkc1ZhbHVl';
+      final recordName = 'east-kept-$revealIdHere';
+
+      bridge.fetchProvider = (_) => CloudKitZoneChangesResult.success(
+            changedKeptWisdomRecords: [
+              activeProjection(revealId: revealIdHere),
+            ],
+            changedSyncStateRecords: const [],
+            serverToken: 'bmV3dG9rZW4=',
+            keptWisdomRecordSystemFields: {recordName: secretSystemFields},
+          );
+      final orchestrator =
+          SyncOrchestrator(bridge: bridge, persistenceStore: store);
+
+      final result = await orchestrator.runSyncPass();
+      expect(result.status, SyncPassStatus.completed);
+
+      expect(result.toString(), isNot(contains(secretSystemFields)));
+      expect(
+        result.toLogSafeSummary().values.map((v) => v.toString()),
+        isNot(contains(secretSystemFields)),
+      );
+      final batch = result.pendingIncomingBatch!;
+      expect(batch.toString(), isNot(contains(secretSystemFields)));
+      expect(
+        batch.toLogSafeSummary().values.map((v) => v.toString()),
+        isNot(contains(secretSystemFields)),
+      );
+    });
   });
 }
 

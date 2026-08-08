@@ -47,6 +47,14 @@
 /// account and local sync baseline it came from before ever applying it or
 /// committing its checkpoint, and can fail closed on a stale or
 /// account-mismatched batch instead of guessing.
+///
+/// **Build 26 Phase 4E-3a (transport hardening only):** a successful
+/// fetch's [CloudKitZoneChangesResult.keptWisdomRecordSystemFields] is now
+/// also plumbed straight through into the returned
+/// [PendingIncomingSyncBatch.incomingKeptWisdomRecordSystemFields], with no
+/// other change to this class's own behavior -- this orchestrator still
+/// never applies a record, never checkpoints anything, and still commits
+/// nothing beyond what it already committed before this phase.
 library;
 
 import '../sync/sync_error_classification.dart';
@@ -395,6 +403,12 @@ final class SyncOrchestrator {
           pendingServerChangeToken: fetchResult.serverToken,
           incomingKeptWisdomProjections: fetchResult.changedKeptWisdomRecords,
           incomingSyncStateProjections: fetchResult.changedSyncStateRecords,
+          // Build 26 Phase 4E-3a: plumbed through unchanged -- this phase
+          // never validates, applies, or checkpoints it. See
+          // `PendingIncomingSyncBatch.incomingKeptWisdomRecordSystemFields`'s
+          // own doc comment.
+          incomingKeptWisdomRecordSystemFields:
+              fetchResult.keptWisdomRecordSystemFields,
         );
         keptDiagnostic('sync-orchestrator: pass-completed');
         return SyncPassResult.completed(

@@ -7,6 +7,22 @@ import Foundation
 /// §2.3/§2.4 define, nothing more. This struct carries no custom
 /// `description`/`debugDescription` override; nothing in this codec ever
 /// logs one of its instances or any of its fields.
+///
+/// **Build 26 Phase 4E-3a addition:** [systemFields] is opaque CloudKit
+/// transport metadata (this record's archived identity + change tag, via
+/// `CloudKitOpaqueArchive.archiveSystemFields(of:)` -- the same mechanism
+/// `CloudKitRecordTransportCoordinator`'s modify/save path already uses),
+/// never occurrence identity, content, or conflict-resolution metadata. It
+/// is populated only by [decode] -- this struct is never produced on the
+/// outgoing/save path at all (that path builds a `CKRecord` directly via
+/// [encodeActive]/[encodeTombstone] plus
+/// `CloudKitRecordEnvelopeArgumentParser`, never this wire envelope type),
+/// so there is no competing "encoded, systemFields-less" shape of this
+/// struct to reconcile. Present, non-empty, and required on both the
+/// active and soft-tombstone forms alike -- a soft tombstone is still a
+/// real, addressable `CKRecord` with its own identity and change tag. See
+/// `CloudKitRecordTransportCoordinator.fetchZoneChanges`, the only call
+/// site that archives and supplies this value to [decode].
 struct CloudKitKeptWisdomWireEnvelope: Equatable {
   let recordName: String
   let isTombstone: Bool
@@ -27,6 +43,13 @@ struct CloudKitKeptWisdomWireEnvelope: Equatable {
   let mutationId: String
   let dataEpoch: String
   let schemaVersion: Int
+
+  /// Build 26 Phase 4E-3a: opaque, archived CloudKit system fields for the
+  /// exact `CKRecord` this envelope was decoded from. Always non-empty for
+  /// a value produced by [CloudKitKeptWisdomCodec.decode] from a genuinely
+  /// fetched changed record. Never logged, never printed, never compared
+  /// for equality against decoded content.
+  let systemFields: String
 }
 
 /// Build 26 Phase 4C-1: strict, transport-free encode/decode between
@@ -134,7 +157,21 @@ enum CloudKitKeptWisdomCodec {
   /// malformed, wrong-zone, wrong-type, or record-name-mismatched input --
   /// mirroring `CloudKeptWisdomProjection.tryParseRemote`'s Dart-side
   /// contract exactly (§2.6/§2.8).
-  static func decode(_ record: CKRecord) -> Result<CloudKitKeptWisdomWireEnvelope, DecodeError> {
+  ///
+  /// Build 26 Phase 4E-3a: `systemFields` is `record`'s own already-archived
+  /// opaque CloudKit system fields (via
+  /// `CloudKitOpaqueArchive.archiveSystemFields(of:)`), archived by the
+  /// caller *before* calling this function -- this codec never archives it
+  /// itself and never validates its shape beyond requiring it to be
+  /// non-empty, since archiving/validity is `CloudKitRecordTransportCoordinator`'s
+  /// own responsibility (including failing the whole fetch closed if
+  /// archiving itself ever fails). Passed straight through onto the
+  /// returned envelope's own `systemFields` field, on both the active and
+  /// tombstone decode paths, with no other effect on this function's
+  /// existing content/identity validation.
+  static func decode(
+    _ record: CKRecord, systemFields: String
+  ) -> Result<CloudKitKeptWisdomWireEnvelope, DecodeError> {
     guard record.recordType == CloudKitRecordSchema.keptWisdomRecordType else {
       return .failure(.wrongRecordType)
     }
@@ -190,7 +227,8 @@ enum CloudKitKeptWisdomCodec {
         schemaVersion: schemaVersion,
         updatedAtMs: updatedAtMs,
         mutationId: mutationId,
-        dataEpoch: dataEpoch
+        dataEpoch: dataEpoch,
+        systemFields: systemFields
       )
     }
 
@@ -200,7 +238,8 @@ enum CloudKitKeptWisdomCodec {
       schemaVersion: schemaVersion,
       updatedAtMs: updatedAtMs,
       mutationId: mutationId,
-      dataEpoch: dataEpoch
+      dataEpoch: dataEpoch,
+      systemFields: systemFields
     )
   }
 
@@ -210,7 +249,8 @@ enum CloudKitKeptWisdomCodec {
     schemaVersion: Int,
     updatedAtMs: Int64,
     mutationId: String,
-    dataEpoch: String
+    dataEpoch: String,
+    systemFields: String
   ) -> Result<CloudKitKeptWisdomWireEnvelope, DecodeError> {
     guard schemaVersion == CloudKitRecordSchema.keptWisdomTombstoneSchemaVersion else {
       return .failure(.unrecognizedSchemaVersion)
@@ -243,7 +283,8 @@ enum CloudKitKeptWisdomCodec {
         updatedAtMs: updatedAtMs,
         mutationId: mutationId,
         dataEpoch: dataEpoch,
-        schemaVersion: schemaVersion
+        schemaVersion: schemaVersion,
+        systemFields: systemFields
       ))
   }
 
@@ -253,7 +294,8 @@ enum CloudKitKeptWisdomCodec {
     schemaVersion: Int,
     updatedAtMs: Int64,
     mutationId: String,
-    dataEpoch: String
+    dataEpoch: String,
+    systemFields: String
   ) -> Result<CloudKitKeptWisdomWireEnvelope, DecodeError> {
     guard schemaVersion == CloudKitRecordSchema.keptWisdomActiveSchemaVersion else {
       return .failure(.unrecognizedSchemaVersion)
@@ -327,7 +369,8 @@ enum CloudKitKeptWisdomCodec {
         updatedAtMs: updatedAtMs,
         mutationId: mutationId,
         dataEpoch: dataEpoch,
-        schemaVersion: schemaVersion
+        schemaVersion: schemaVersion,
+        systemFields: systemFields
       ))
   }
 }

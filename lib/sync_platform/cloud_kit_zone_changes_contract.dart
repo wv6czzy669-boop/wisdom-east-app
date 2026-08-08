@@ -3,12 +3,40 @@
 /// CloudKit record transport. See `cloud_kit_modify_records_contract.dart`'s
 /// doc comment for the same transport-boundary-only rationale; this file is
 /// its fetch-side counterpart.
+///
+/// **Build 26 Phase 4E-3a addition:** a successful result also carries
+/// [CloudKitZoneChangesResult.keptWisdomRecordSystemFields] -- every changed
+/// `CKKeptWisdom` record's opaque, fetch-only CloudKit system fields, keyed
+/// by the same [CloudKeptWisdomProjection.recordName] identity already used
+/// throughout this codebase's sync-persistence layer. This is transport
+/// metadata only, never occurrence identity/content/conflict metadata, and
+/// is deliberately carried as a sibling map alongside
+/// [changedKeptWisdomRecords], never merged into any projection.
 library;
 
 import '../sync/cloud_east_sync_state_projection.dart';
 import '../sync/cloud_kept_wisdom_projection.dart';
 import 'cloud_east_sync_state_wire_envelope.dart';
 import 'cloud_kept_wisdom_wire_envelope.dart';
+
+/// Build 26 Phase 4E-3a: the result of successfully decoding every entry of
+/// one fetch's `changedKeptWisdomRecords` payload -- the ordinary
+/// projections, for conflict/domain use, and the same records' opaque
+/// system-fields transport metadata, keyed by `recordName`. Kept as two
+/// separate fields (never merged) so system fields never become
+/// occurrence/conflict content, mirroring
+/// [IncomingKeptWisdomWireRecord]'s own split. Private to this file --
+/// [CloudKitZoneChangesResult.success] is the only public shape a caller
+/// ever sees.
+final class _DecodedIncomingKeptWisdomBatch {
+  const _DecodedIncomingKeptWisdomBatch({
+    required this.projections,
+    required this.systemFieldsByRecordName,
+  });
+
+  final List<CloudKeptWisdomProjection> projections;
+  final Map<String, String> systemFieldsByRecordName;
+}
 
 /// A request to fetch every `EASTKeptZone` change since [previousServerToken]
 /// -- or, when `null`, every record currently in the zone (an initial,
@@ -87,6 +115,7 @@ final class CloudKitZoneChangesResult {
     required this.outcome,
     required this.changedKeptWisdomRecords,
     required this.changedSyncStateRecords,
+    this.keptWisdomRecordSystemFields = const {},
     this.serverToken,
     this.errorCode,
   });
@@ -95,11 +124,14 @@ final class CloudKitZoneChangesResult {
     required List<CloudKeptWisdomProjection> changedKeptWisdomRecords,
     required List<CloudEastSyncStateProjection> changedSyncStateRecords,
     required String serverToken,
+    Map<String, String> keptWisdomRecordSystemFields = const {},
   }) =>
       CloudKitZoneChangesResult._(
         outcome: CloudKitZoneChangesOutcome.success,
         changedKeptWisdomRecords: List.unmodifiable(changedKeptWisdomRecords),
         changedSyncStateRecords: List.unmodifiable(changedSyncStateRecords),
+        keptWisdomRecordSystemFields:
+            Map.unmodifiable(keptWisdomRecordSystemFields),
         serverToken: serverToken,
       );
 
@@ -132,6 +164,20 @@ final class CloudKitZoneChangesResult {
   final CloudKitZoneChangesOutcome outcome;
   final List<CloudKeptWisdomProjection> changedKeptWisdomRecords;
   final List<CloudEastSyncStateProjection> changedSyncStateRecords;
+
+  /// Build 26 Phase 4E-3a: every changed `CKKeptWisdom` record's opaque
+  /// system fields, keyed by [CloudKeptWisdomProjection.recordName]. Always
+  /// empty for every outcome other than [CloudKitZoneChangesOutcome.success]
+  /// (there are no changed records to key it by). For a successful result,
+  /// always in exact 1:1 correspondence with [changedKeptWisdomRecords] --
+  /// every entry's `recordName` has exactly one matching key here, and every
+  /// key here matches exactly one entry's `recordName` -- enforced by
+  /// [_tryParseKeptWisdomRecords] failing the whole parse closed on any
+  /// duplicate `recordName`, never by a partial/best-effort map. Never
+  /// rendered by [toString] beyond a presence/count-style summary; the
+  /// opaque values themselves are never logged, printed, or compared here.
+  final Map<String, String> keptWisdomRecordSystemFields;
+
   final String? serverToken;
   final String? errorCode;
 
@@ -170,14 +216,14 @@ final class CloudKitZoneChangesResult {
     final outcomeValue = raw['outcome'];
     switch (outcomeValue) {
       case 'success':
-        final keptRecords = _tryParseKeptWisdomRecords(
+        final decodedKeptWisdom = _tryParseKeptWisdomRecords(
           raw['changedKeptWisdomRecords'],
         );
         final syncStateRecords = _tryParseSyncStateRecords(
           raw['changedSyncStateRecords'],
         );
         final serverToken = raw['serverToken'];
-        if (keptRecords == null ||
+        if (decodedKeptWisdom == null ||
             syncStateRecords == null ||
             serverToken is! String ||
             serverToken.isEmpty) {
@@ -188,9 +234,11 @@ final class CloudKitZoneChangesResult {
           );
         }
         return CloudKitZoneChangesResult.success(
-          changedKeptWisdomRecords: keptRecords,
+          changedKeptWisdomRecords: decodedKeptWisdom.projections,
           changedSyncStateRecords: syncStateRecords,
           serverToken: serverToken,
+          keptWisdomRecordSystemFields:
+              decodedKeptWisdom.systemFieldsByRecordName,
         );
       case 'tokenExpired':
         return CloudKitZoneChangesResult.tokenExpired();
@@ -215,18 +263,44 @@ final class CloudKitZoneChangesResult {
     }
   }
 
-  static List<CloudKeptWisdomProjection>? _tryParseKeptWisdomRecords(
+  /// Build 26 Phase 4E-3a: decodes every entry of a fetch's
+  /// `changedKeptWisdomRecords` payload via
+  /// [CloudKeptWisdomWireEnvelope.tryDecodeIncoming] -- requiring, not just
+  /// tolerating, each entry's own system fields (§7 of this phase's own
+  /// design: "for every incoming projection, there must be exactly one
+  /// matching system-fields entry keyed by that projection's `recordName`").
+  /// This is the narrowest boundary at which that invariant can be enforced
+  /// as a single, atomic, fail-closed check: it is built in the same loop
+  /// that produces [_DecodedIncomingKeptWisdomBatch.projections], so the two
+  /// outputs can never drift apart -- every successfully-parsed projection
+  /// has its corresponding system fields inserted in the very same
+  /// iteration, and a **duplicate** `recordName` within the batch fails the
+  /// whole parse closed immediately, before ever silently overwriting a
+  /// prior entry's system fields with a later one.
+  static _DecodedIncomingKeptWisdomBatch? _tryParseKeptWisdomRecords(
     Object? raw,
   ) {
     if (raw is! List) return null;
     final parsed = <CloudKeptWisdomProjection>[];
+    final systemFieldsByRecordName = <String, String>{};
     for (final entry in raw) {
       if (entry is! Map<Object?, Object?>) return null;
-      final projection = CloudKeptWisdomWireEnvelope.tryDecode(entry);
-      if (projection == null) return null;
-      parsed.add(projection);
+      final decoded = CloudKeptWisdomWireEnvelope.tryDecodeIncoming(entry);
+      if (decoded == null) return null;
+      final recordName = decoded.projection.recordName;
+      if (systemFieldsByRecordName.containsKey(recordName)) {
+        // A duplicate recordName within one fetch batch must never silently
+        // overwrite a prior entry's system fields -- fail the whole batch
+        // closed rather than guess which is authoritative.
+        return null;
+      }
+      systemFieldsByRecordName[recordName] = decoded.systemFields;
+      parsed.add(decoded.projection);
     }
-    return parsed;
+    return _DecodedIncomingKeptWisdomBatch(
+      projections: parsed,
+      systemFieldsByRecordName: systemFieldsByRecordName,
+    );
   }
 
   static List<CloudEastSyncStateProjection>? _tryParseSyncStateRecords(

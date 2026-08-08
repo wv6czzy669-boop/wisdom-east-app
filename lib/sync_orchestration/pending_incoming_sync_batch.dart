@@ -55,10 +55,13 @@ final class PendingIncomingSyncBatch {
     required this.pendingServerChangeToken,
     required List<CloudKeptWisdomProjection> incomingKeptWisdomProjections,
     required List<CloudEastSyncStateProjection> incomingSyncStateProjections,
+    Map<String, String> incomingKeptWisdomRecordSystemFields = const {},
   })  : incomingKeptWisdomProjections =
             List.unmodifiable(incomingKeptWisdomProjections),
         incomingSyncStateProjections =
-            List.unmodifiable(incomingSyncStateProjections);
+            List.unmodifiable(incomingSyncStateProjections),
+        incomingKeptWisdomRecordSystemFields =
+            Map.unmodifiable(incomingKeptWisdomRecordSystemFields);
 
   /// The opaque SHA-256 account fingerprint resolved at the start of the
   /// pass that produced this batch -- the existing opaque fingerprint
@@ -96,6 +99,16 @@ final class PendingIncomingSyncBatch {
   /// Validated, already-decoded incoming `CKEastSyncState` projections, if
   /// any. Same non-application rule as [incomingKeptWisdomProjections].
   final List<CloudEastSyncStateProjection> incomingSyncStateProjections;
+
+  /// Build 26 Phase 4E-3a: every entry of [incomingKeptWisdomProjections]'s
+  /// own opaque, fetch-only CloudKit system fields, keyed by
+  /// [CloudKeptWisdomProjection.recordName] -- carried through unchanged
+  /// from [CloudKitZoneChangesResult.keptWisdomRecordSystemFields]. Never
+  /// occurrence identity/content/conflict metadata, never merged into any
+  /// projection, and never applied, checkpointed, or otherwise acted on by
+  /// this phase -- a future Phase 4E-3b consumes it. Never rendered by
+  /// [toLogSafeSummary]/[toString] beyond a presence/count-style summary.
+  final Map<String, String> incomingKeptWisdomRecordSystemFields;
 
   /// A privacy-safe summary suitable for logs/diagnostics: counts and
   /// booleans only -- never [accountFingerprint], never [baseDataEpoch]'s

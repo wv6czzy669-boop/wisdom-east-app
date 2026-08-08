@@ -64,6 +64,23 @@ import Foundation
 /// different from an ordinary retryable/permanent failure, so folding it
 /// into the generic error vocabulary would misrepresent what a caller must
 /// actually do about it.
+///
+/// **Build 26 Phase 4E-3a (fetched system-fields transport hardening):**
+/// every changed `CKKeptWisdom` record this coordinator returns (active or
+/// soft-tombstone alike) now also carries that exact `CKRecord`'s own
+/// archived system fields (`CloudKitOpaqueArchive.archiveSystemFields(of:)`
+/// -- the same mechanism `modifyRecords`'s `perRecordCompletionBlock`
+/// already uses on the save path), so a future local edit to a
+/// remotely-adopted record can use CloudKit's own
+/// `.ifServerRecordUnchanged` optimistic-concurrency precondition instead
+/// of an unconditional overwrite. Archiving happens in `fetchZoneChanges`
+/// itself, immediately inside `recordChangedBlock`, *before* handing the
+/// record to `CloudKitKeptWisdomCodec.decode` -- if archiving ever fails or
+/// produces an empty value, that one record fails closed via the same
+/// `sawUndecodableRecord` mechanism an undecodable record already uses;
+/// this coordinator never emits a changed `CKKeptWisdom` record with
+/// missing or fabricated system fields. `CKEastSyncState` records and the
+/// physical-deletion path are unaffected by this change.
 final class CloudKitRecordTransportCoordinator {
   // MARK: - Modify (save)
 
@@ -293,7 +310,23 @@ final class CloudKitRecordTransportCoordinator {
       }
       switch record.recordType {
       case CloudKitRecordSchema.keptWisdomRecordType:
-        switch CloudKitKeptWisdomCodec.decode(record) {
+        // Build 26 Phase 4E-3a: archive this record's own opaque CloudKit
+        // system fields *before* decoding it -- using the exact same
+        // mechanism the modify/save path already relies on
+        // (`CloudKitOpaqueArchive.archiveSystemFields(of:)`). A changed
+        // `CKKeptWisdom` record (active or soft-tombstone alike; both are
+        // real, addressable `CKRecord`s) that this coordinator cannot
+        // archive system fields for is never silently treated as though it
+        // were conflict-safe -- it fails this one record closed via the
+        // exact same `sawUndecodableRecord` mechanism an undecodable
+        // record already uses, never a fabricated or empty fallback value.
+        guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record),
+          !systemFields.isEmpty
+        else {
+          sawUndecodableRecord = true
+          return
+        }
+        switch CloudKitKeptWisdomCodec.decode(record, systemFields: systemFields) {
         case .success(let envelope):
           changedKeptWisdomRecords.append(envelope)
         case .failure:

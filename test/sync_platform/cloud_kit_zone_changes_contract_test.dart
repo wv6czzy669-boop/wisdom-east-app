@@ -8,10 +8,18 @@ void main() {
   const mutationId = '22222222-2222-4222-8222-222222222222';
   const dataEpoch = '11111111-1111-4111-8111-111111111111';
 
-  Map<Object?, Object?> validKeptWisdomWire() => {
+  // Build 26 Phase 4E-3a: a genuinely fetched changed CKKeptWisdom record
+  // always carries its own opaque system fields -- this default fixture
+  // reflects that, so every pre-existing test below (which exercises
+  // ordinary decode success/failure, not this phase's own system-fields
+  // invariant specifically) continues to exercise a payload shape the real
+  // native side would actually produce.
+  const systemFields = 'c3lzdGVtRmllbGRzQmxvYg==';
+
+  Map<Object?, Object?> validKeptWisdomWire({String? recordNameOverride}) => {
         'recordType': 'CKKeptWisdom',
         'zoneName': 'EASTKeptZone',
-        'recordName': 'east-kept-$revealId',
+        'recordName': recordNameOverride ?? 'east-kept-$revealId',
         'isTombstone': false,
         'revealId': revealId,
         'wisdomText': 'Be still and know.',
@@ -21,6 +29,7 @@ void main() {
         'mutationId': mutationId,
         'dataEpoch': dataEpoch,
         'schemaVersion': 3,
+        'systemFields': systemFields,
       };
 
   Map<Object?, Object?> validSyncStateWire() => {
@@ -78,6 +87,123 @@ void main() {
       expect(result.outcome, CloudKitZoneChangesOutcome.success);
       expect(result.changedKeptWisdomRecords.single.revealId, revealId);
       expect(result.changedSyncStateRecords.single.mutationId, mutationId);
+      // Build 26 Phase 4E-3a: the changed record's own system fields are
+      // carried through, keyed by its exact recordName.
+      expect(
+        result.keptWisdomRecordSystemFields['east-kept-$revealId'],
+        systemFields,
+      );
+      expect(result.keptWisdomRecordSystemFields, hasLength(1));
+    });
+  });
+
+  group('Build 26 Phase 4E-3a: fetched system-fields invariants', () {
+    test(
+        'a changed CKKeptWisdom record missing systemFields fails the whole '
+        'batch closed, never a partial success with a missing entry', () {
+      final raw = validKeptWisdomWire();
+      raw.remove('systemFields');
+      final result = CloudKitZoneChangesResult.tryParse({
+        'outcome': 'success',
+        'changedKeptWisdomRecords': [raw],
+        'changedSyncStateRecords': <Object?>[],
+        'serverToken': 'new-token',
+      });
+      expect(result.outcome, CloudKitZoneChangesOutcome.unknown);
+      expect(result.keptWisdomRecordSystemFields, isEmpty);
+    });
+
+    test('an empty-string systemFields value fails the whole batch closed', () {
+      final raw = validKeptWisdomWire()..['systemFields'] = '';
+      final result = CloudKitZoneChangesResult.tryParse({
+        'outcome': 'success',
+        'changedKeptWisdomRecords': [raw],
+        'changedSyncStateRecords': <Object?>[],
+        'serverToken': 'new-token',
+      });
+      expect(result.outcome, CloudKitZoneChangesOutcome.unknown);
+    });
+
+    test(
+        'a soft-tombstone changed record also requires and carries valid '
+        'system fields', () {
+      final tombstoneWire = {
+        'recordType': 'CKKeptWisdom',
+        'zoneName': 'EASTKeptZone',
+        'recordName': 'east-kept-$revealId',
+        'isTombstone': true,
+        'deletedAtMs': 1754078800000,
+        'updatedAtMs': 1754078800000,
+        'mutationId': mutationId,
+        'dataEpoch': dataEpoch,
+        'schemaVersion': 1,
+        'systemFields': systemFields,
+      };
+      final result = CloudKitZoneChangesResult.tryParse({
+        'outcome': 'success',
+        'changedKeptWisdomRecords': [tombstoneWire],
+        'changedSyncStateRecords': <Object?>[],
+        'serverToken': 'new-token',
+      });
+      expect(result.outcome, CloudKitZoneChangesOutcome.success);
+      expect(result.changedKeptWisdomRecords.single.isTombstone, isTrue);
+      expect(
+        result.keptWisdomRecordSystemFields['east-kept-$revealId'],
+        systemFields,
+      );
+    });
+
+    test(
+        'a duplicate recordName within one batch fails the whole batch '
+        'closed rather than silently overwriting one system-fields entry', () {
+      const otherSystemFields = 'b3RoZXJTeXN0ZW1GaWVsZHM=';
+      final first = validKeptWisdomWire();
+      final duplicate = validKeptWisdomWire()
+        ..['systemFields'] = otherSystemFields;
+      // Same recordName as `first` (both default to east-kept-$revealId),
+      // different content otherwise -- exactly the ambiguous case that must
+      // never be resolved by "last write wins".
+      final result = CloudKitZoneChangesResult.tryParse({
+        'outcome': 'success',
+        'changedKeptWisdomRecords': [first, duplicate],
+        'changedSyncStateRecords': <Object?>[],
+        'serverToken': 'new-token',
+      });
+      expect(result.outcome, CloudKitZoneChangesOutcome.unknown);
+      expect(result.changedKeptWisdomRecords, isEmpty);
+      expect(result.keptWisdomRecordSystemFields, isEmpty);
+    });
+
+    test(
+        'every non-success outcome carries an empty keptWisdomRecordSystemFields '
+        'map', () {
+      expect(
+        CloudKitZoneChangesResult.tokenExpired().keptWisdomRecordSystemFields,
+        isEmpty,
+      );
+      expect(
+        CloudKitZoneChangesResult.unexpectedPhysicalDeletion()
+            .keptWisdomRecordSystemFields,
+        isEmpty,
+      );
+      expect(
+        CloudKitZoneChangesResult.failure('zoneBusy')
+            .keptWisdomRecordSystemFields,
+        isEmpty,
+      );
+    });
+
+    test(
+        'the system-fields value is never rendered by toString, even when '
+        'populated', () {
+      final result = CloudKitZoneChangesResult.tryParse({
+        'outcome': 'success',
+        'changedKeptWisdomRecords': [validKeptWisdomWire()],
+        'changedSyncStateRecords': <Object?>[],
+        'serverToken': 'new-token',
+      });
+      expect(result.outcome, CloudKitZoneChangesOutcome.success);
+      expect(result.toString(), isNot(contains(systemFields)));
     });
   });
 

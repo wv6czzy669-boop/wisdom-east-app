@@ -329,6 +329,21 @@ class RunnerTests: XCTestCase {
   private let phase4CMutationId = "22222222-2222-4222-8222-222222222222"
   private let phase4CDataEpoch = "11111111-1111-4111-8111-111111111111"
 
+  // Build 26 Phase 4E-3a: `CloudKitKeptWisdomCodec.decode` now requires the
+  // caller to have already archived `record`'s own system fields (exactly
+  // as `CloudKitRecordTransportCoordinator.fetchZoneChanges` itself does)
+  // before decoding it. Every pre-existing decode test below uses this
+  // helper -- the *real* `CloudKitOpaqueArchive.archiveSystemFields(of:)`
+  // mechanism, never a fabricated placeholder string -- so these tests
+  // continue to exercise the exact production archiving path.
+  private func sampleSystemFields(for record: CKRecord, file: StaticString = #filePath, line: UInt = #line) -> String {
+    guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
+      XCTFail("Expected archiveSystemFields to succeed for a synthetic CKRecord", file: file, line: line)
+      return ""
+    }
+    return systemFields
+  }
+
   // 1. Valid Kept encode/decode round trip (active form).
   func testKeptWisdomCodecRoundTripsActiveForm() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
@@ -343,7 +358,7 @@ class RunnerTests: XCTestCase {
       dataEpoch: phase4CDataEpoch
     )
 
-    switch CloudKitKeptWisdomCodec.decode(record) {
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
     case .success(let envelope):
       XCTAssertFalse(envelope.isTombstone)
       XCTAssertEqual(envelope.revealId, phase4CRevealIdA)
@@ -430,7 +445,7 @@ class RunnerTests: XCTestCase {
       CloudKitRecordSchema.keptWisdomActiveSchemaVersion as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.isTombstone] = false as CKRecordValue
 
-    switch CloudKitKeptWisdomCodec.decode(record) {
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
     case .success:
       XCTFail("Expected a wrong-zone rejection")
     case .failure(let error):
@@ -471,7 +486,7 @@ class RunnerTests: XCTestCase {
     // wisdomText is required to be a String; store a number instead.
     record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = 12345 as CKRecordValue
 
-    switch CloudKitKeptWisdomCodec.decode(record) {
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
     case .success:
       XCTFail("Expected a malformed-field rejection")
     case .failure(let error):
@@ -496,7 +511,7 @@ class RunnerTests: XCTestCase {
     // revealId field now claims to be a different, equally-valid occurrence.
     record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdB as CKRecordValue
 
-    switch CloudKitKeptWisdomCodec.decode(record) {
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
     case .success:
       XCTFail("Expected a record-name-mismatch rejection")
     case .failure(let error):
@@ -519,7 +534,9 @@ class RunnerTests: XCTestCase {
     XCTAssertNil(tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.wisdomText])
     XCTAssertNil(tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.revealId])
 
-    switch CloudKitKeptWisdomCodec.decode(tombstoneRecord) {
+    switch CloudKitKeptWisdomCodec.decode(
+      tombstoneRecord, systemFields: sampleSystemFields(for: tombstoneRecord)
+    ) {
     case .success(let envelope):
       XCTAssertTrue(envelope.isTombstone)
       XCTAssertNil(envelope.wisdomText)
@@ -533,7 +550,9 @@ class RunnerTests: XCTestCase {
     // A tombstone-shaped record that also carries a forbidden content
     // field indicates corruption or tampering -- never tolerated.
     tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "smuggled content" as CKRecordValue
-    switch CloudKitKeptWisdomCodec.decode(tombstoneRecord) {
+    switch CloudKitKeptWisdomCodec.decode(
+      tombstoneRecord, systemFields: sampleSystemFields(for: tombstoneRecord)
+    ) {
     case .success:
       XCTFail("Expected rejection of a tombstone carrying forbidden content")
     case .failure(let error):
@@ -558,7 +577,7 @@ class RunnerTests: XCTestCase {
     )
     record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = 999 as CKRecordValue
 
-    switch CloudKitKeptWisdomCodec.decode(record) {
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
     case .success:
       XCTFail("Expected a malformed-field rejection")
     case .failure(let error):
@@ -572,6 +591,145 @@ class RunnerTests: XCTestCase {
       XCTAssertEqual(fieldName, CloudKitRecordSchema.KeptWisdomField.wisdomText)
       XCTAssertFalse(fieldName.contains("wisdom text must never appear"))
     }
+  }
+
+  // MARK: - Build 26 Phase 4E-3a: fetched CloudKit system-fields tests
+  //
+  // These prove the archive/decode mechanism itself (fully offline-testable:
+  // `CloudKitOpaqueArchive.archiveSystemFields`/`unarchiveSystemFields` need
+  // only a locally-constructed `CKRecord`, never a real `CKServerChangeToken`
+  // or a live CloudKit fetch). A genuine end-to-end
+  // `fetchZoneChanges(...) -> .success` assertion carrying these values is
+  // not reachable from this offline test target for the same, already
+  // disclosed reason noted at the top of the Phase 4C-2 transport section
+  // below (`CKServerChangeToken` has no public initializer) -- these tests
+  // instead exercise every step up to and including
+  // `CloudKitKeptWisdomCodec.decode(_:systemFields:)`, which is exactly
+  // where `CloudKitRecordTransportCoordinator.fetchZoneChanges` itself calls
+  // this mechanism.
+
+  // 1. An active CKKeptWisdom record's system fields archive successfully
+  // and are non-empty -- the same precondition `fetchZoneChanges` itself
+  // requires before it will ever decode a changed record.
+  func testActiveKeptWisdomRecordSystemFieldsAreArchiveable() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
+      return XCTFail("Expected archiveSystemFields to succeed for an active record")
+    }
+    XCTAssertFalse(systemFields.isEmpty)
+  }
+
+  // 2. A soft-tombstone CKKeptWisdom record is still a real, addressable
+  // CKRecord -- its system fields archive identically to an active record's.
+  func testSoftTombstoneKeptWisdomRecordSystemFieldsAreArchiveable() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
+      return XCTFail("Expected archiveSystemFields to succeed for a soft-tombstone record")
+    }
+    XCTAssertFalse(systemFields.isEmpty)
+  }
+
+  // 3. The archived system-fields blob round-trips through the existing
+  // opaque archive mechanism -- unarchiving it recovers a CKRecord carrying
+  // the exact same identity, for both the active and soft-tombstone forms.
+  func testKeptWisdomSystemFieldsRoundTripThroughOpaqueArchiveForBothForms() throws {
+    let activeRecord = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    guard let archivedActive = CloudKitOpaqueArchive.archiveSystemFields(of: activeRecord) else {
+      return XCTFail("Expected archiveSystemFields to succeed for an active record")
+    }
+    guard let unarchivedActive = CloudKitOpaqueArchive.unarchiveSystemFields(archivedActive) else {
+      return XCTFail("Expected unarchiveSystemFields to succeed for a valid active archive")
+    }
+    XCTAssertEqual(unarchivedActive.recordID.recordName, activeRecord.recordID.recordName)
+
+    let tombstoneRecord = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    guard let archivedTombstone = CloudKitOpaqueArchive.archiveSystemFields(of: tombstoneRecord) else {
+      return XCTFail("Expected archiveSystemFields to succeed for a soft-tombstone record")
+    }
+    guard let unarchivedTombstone = CloudKitOpaqueArchive.unarchiveSystemFields(archivedTombstone) else {
+      return XCTFail("Expected unarchiveSystemFields to succeed for a valid tombstone archive")
+    }
+    XCTAssertEqual(unarchivedTombstone.recordID.recordName, tombstoneRecord.recordID.recordName)
+  }
+
+  // 4. CloudKitKeptWisdomCodec.decode threads the caller-supplied,
+  // already-archived systemFields value onto the resulting envelope
+  // unchanged, for both forms, with no effect on any existing
+  // identity/content field.
+  func testKeptWisdomCodecDecodeAttachesGivenSystemFieldsOnBothForms() throws {
+    let activeRecord = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let activeSystemFields = sampleSystemFields(for: activeRecord)
+
+    switch CloudKitKeptWisdomCodec.decode(activeRecord, systemFields: activeSystemFields) {
+    case .success(let envelope):
+      XCTAssertEqual(envelope.systemFields, activeSystemFields)
+      XCTAssertFalse(envelope.systemFields.isEmpty)
+      XCTAssertEqual(envelope.revealId, phase4CRevealIdA)
+    case .failure(let error):
+      XCTFail("Expected successful decode, got \(error)")
+    }
+
+    let tombstoneRecord = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let tombstoneSystemFields = sampleSystemFields(for: tombstoneRecord)
+
+    switch CloudKitKeptWisdomCodec.decode(tombstoneRecord, systemFields: tombstoneSystemFields) {
+    case .success(let envelope):
+      XCTAssertEqual(envelope.systemFields, tombstoneSystemFields)
+      XCTAssertFalse(envelope.systemFields.isEmpty)
+      XCTAssertTrue(envelope.isTombstone)
+    case .failure(let error):
+      XCTFail("Expected successful tombstone decode, got \(error)")
+    }
+  }
+
+  // 5. `CloudKitKeptWisdomWireEnvelope.systemFields` is a non-optional
+  // `String`, never `String?` -- this is a compile-time, type-system-level
+  // guarantee (not merely a runtime check) that no successfully-constructed
+  // envelope can ever carry a missing system-fields value. Combined with
+  // `CloudKitRecordTransportCoordinator.fetchZoneChanges`'s own
+  // `guard let systemFields = ..., !systemFields.isEmpty else { ... return }`
+  // (which fails that one record closed via the same `sawUndecodableRecord`
+  // path a malformed record already uses, *before* ever calling `decode`),
+  // an archive failure structurally cannot become a successful changed
+  // record with missing system fields. Forcing a genuine
+  // `CloudKitOpaqueArchive.archiveSystemFields` failure is not possible from
+  // this offline test target -- `NSKeyedArchiver`/`CKRecord
+  // .encodeSystemFields` expose no way to make it fail for a real,
+  // in-memory `CKRecord` -- this is a disclosed limitation of this test
+  // target, exactly like this section's own pre-existing note on
+  // `CKServerChangeToken` above.
+  func testKeptWisdomWireEnvelopeSystemFieldsIsNonOptionalByConstruction() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    guard case .success(let envelope) =
+      CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record))
+    else {
+      return XCTFail("Expected successful decode")
+    }
+    // This line's mere existence is the proof: `systemFields` has static
+    // type `String`, not `String?` -- the compiler would reject any attempt
+    // to treat it as optional.
+    let systemFields: String = envelope.systemFields
+    XCTAssertFalse(systemFields.isEmpty)
   }
 
   // MARK: - Build 26 Phase 4C-2: private CloudKit record transport tests
@@ -1004,6 +1162,32 @@ class RunnerTests: XCTestCase {
           "\(child.value)".contains(recordID.recordName),
           "Expected no field of the result to contain the deleted record's name")
       }
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // Build 26 Phase 4E-3a: the physical-deletion callback receives only a
+  // `CKRecordID` (never a full `CKRecord`), so there is no system-fields
+  // value it could possibly report -- this path remains exactly as
+  // fail-closed as before, and this phase adds nothing to it. Reuses the
+  // same structural, no-record-identity-exposed proof style as
+  // `testUnexpectedPhysicalDeletionResultExposesNoRecordIdentity` above,
+  // scoped specifically to system fields.
+  func testUnexpectedPhysicalDeletionResultCarriesNoSystemFields() {
+    let recordID = try! CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesDeletedRecordIDs = [(recordID, CloudKitRecordSchema.keptWisdomRecordType)]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      XCTAssertEqual(result.outcome, .unexpectedPhysicalDeletion)
+      // No changed CKKeptWisdom record -- and therefore no system-fields
+      // entry of any kind -- is ever reported once a physical deletion has
+      // been observed, regardless of what else this fetch may have
+      // otherwise collected.
+      XCTAssertTrue(result.changedKeptWisdomRecords.isEmpty)
       calledOnce.fulfill()
     }
     waitForExpectations(timeout: 1)

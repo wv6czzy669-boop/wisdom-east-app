@@ -298,4 +298,119 @@ void main() {
       expect(toStringRendered, isNot(contains(secretReflection)));
     });
   });
+
+  // Build 26 Phase 4E-3a: tryDecodeIncoming -- the fetch-only entry point
+  // that requires and separately exposes a record's opaque system fields.
+  group('13. tryDecodeIncoming -- active form', () {
+    const systemFields = 'c3lzdGVtRmllbGRzQmxvYg==';
+
+    test('accepts valid non-empty system fields', () {
+      final raw = validRawActivePayload()..['systemFields'] = systemFields;
+      final decoded = CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.systemFields, systemFields);
+      expect(decoded.projection.revealId, revealIdA);
+    });
+
+    test('missing systemFields fails closed', () {
+      final raw = validRawActivePayload();
+      expect(raw.containsKey('systemFields'), isFalse);
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+
+    test('empty-string systemFields fails closed', () {
+      final raw = validRawActivePayload()..['systemFields'] = '';
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+
+    test('non-String systemFields fails closed', () {
+      final raw = validRawActivePayload()..['systemFields'] = 12345;
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+
+    test('non-Base64-shaped systemFields fails closed', () {
+      final raw = validRawActivePayload()
+        ..['systemFields'] = 'not base64!! contains spaces and bangs';
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+
+    test('an unknown key still fails closed even with valid systemFields', () {
+      final raw = validRawActivePayload()
+        ..['systemFields'] = systemFields
+        ..['someFutureField'] = 'anything';
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+
+    test(
+        'projection content is byte-identical to plain tryDecode -- '
+        'presence of systemFields has no effect on occurrence/conflict '
+        'content', () {
+      final rawWithoutSystemFields = validRawActivePayload();
+      final rawWithSystemFields = validRawActivePayload()
+        ..['systemFields'] = systemFields;
+
+      final plain = CloudKeptWisdomWireEnvelope.tryDecode(
+        rawWithoutSystemFields,
+      );
+      final incoming = CloudKeptWisdomWireEnvelope.tryDecodeIncoming(
+        rawWithSystemFields,
+      );
+
+      expect(plain, isNotNull);
+      expect(incoming, isNotNull);
+      expect(incoming!.projection, equals(plain));
+    });
+
+    test(
+        'systemFields never enters CloudKeptWisdomProjection -- its '
+        'toLogSafeSummary/toString/equality are unaffected by the value', () {
+      final raw = validRawActivePayload()..['systemFields'] = systemFields;
+      final decoded = CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw);
+
+      expect(decoded, isNotNull);
+      final summary = decoded!.projection.toLogSafeSummary();
+      expect(summary.values, isNot(contains(systemFields)));
+      expect(decoded.projection.toString(), isNot(contains(systemFields)));
+    });
+  });
+
+  group('14. tryDecodeIncoming -- tombstone form', () {
+    const systemFields = 'dG9tYnN0b25lU3lzdGVtRmllbGRz';
+
+    Map<Object?, Object?> validRawTombstonePayload() {
+      final tombstone = SyncTombstone(
+        revealId: revealIdA,
+        dataEpoch: epoch,
+        updatedAt: updatedAt,
+        deletedAt: updatedAt,
+        mutationId: mutationId,
+      );
+      return CloudKeptWisdomWireEnvelope.encode(
+        CloudKeptWisdomProjection.tombstone(tombstone),
+      );
+    }
+
+    test('accepts valid non-empty system fields', () {
+      final raw = validRawTombstonePayload()..['systemFields'] = systemFields;
+      final decoded = CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.systemFields, systemFields);
+      expect(decoded.projection.isTombstone, isTrue);
+      // A soft tombstone is still a real record -- it follows the exact
+      // same system-fields requirement an active record does.
+      expect(decoded.projection.revealId, isNull);
+    });
+
+    test('missing systemFields fails closed', () {
+      final raw = validRawTombstonePayload();
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+
+    test('empty-string systemFields fails closed', () {
+      final raw = validRawTombstonePayload()..['systemFields'] = '';
+      expect(CloudKeptWisdomWireEnvelope.tryDecodeIncoming(raw), isNull);
+    });
+  });
 }
