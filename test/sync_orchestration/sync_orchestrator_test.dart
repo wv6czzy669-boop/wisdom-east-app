@@ -24,6 +24,7 @@ import 'package:wisdom_app/sync_orchestration/sync_orchestrator.dart';
 import 'package:wisdom_app/sync_orchestration/sync_pass_result.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
+import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
@@ -177,6 +178,18 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
   /// successful checkpoint result.
   int commitIncomingBatchCheckpointCallCount = 0;
 
+  /// Build 26 Phase 4E-3b: `retireOutboxMutationIfCurrent` is the incoming-
+  /// apply loser-cleanup API `IncomingKeptSyncCoordinator` alone owns --
+  /// exactly like `commitIncomingBatchCheckpoint` immediately above,
+  /// `SyncOrchestrator` (Phase 4D-2) never calls it and never legitimately
+  /// could (production confirms no `lib/sync_orchestration/` file references
+  /// it). This fake mirrors that same fail-loud precedent rather than
+  /// forwarding to `_delegate`: any call here is itself the test failure,
+  /// so it records the call and then fails immediately with a static,
+  /// content-safe `StateError` rather than fabricating a successful
+  /// retirement result.
+  int retireOutboxMutationIfCurrentCallCount = 0;
+
   /// When non-null, the *next* call to `replaceRecordSystemFields` throws
   /// this and is not forwarded to the delegate.
   Object? throwOnNextReplaceRecordSystemFields;
@@ -298,6 +311,17 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
     callOrder.add('commitIncomingBatchCheckpoint');
     throw StateError(
       'Incoming checkpoint must not be called by SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<RetireOutboxMutationResult> retireOutboxMutationIfCurrent(
+    RetireOutboxMutationRequest request,
+  ) async {
+    retireOutboxMutationIfCurrentCallCount += 1;
+    callOrder.add('retireOutboxMutationIfCurrent');
+    throw StateError(
+      'Outbox mutation retirement must not be called by SyncOrchestrator.',
     );
   }
 }

@@ -191,6 +191,14 @@ void main() {
       'package:wisdom_app/models/favorite_item.dart',
       'package:wisdom_app/models/kept_record.dart',
       'package:wisdom_app/repositories/kept_repository.dart',
+      // Build 26 Phase 4E-3b: `IncomingKeptSyncCoordinator` consumes
+      // `PendingIncomingSyncBatch` -- a single, exact, full-path allowance
+      // for this one type's own definition file, never a broad
+      // `../sync_orchestration/` directory exemption. Mirrors
+      // `test/sync_orchestration/sync_orchestration_layering_test.dart`'s own
+      // matching exception for this same, disclosed dependency.
+      '../sync_orchestration/pending_incoming_sync_batch.dart',
+      'package:wisdom_app/sync_orchestration/pending_incoming_sync_batch.dart',
       // Bare same-directory relative imports (this codebase's own
       // sync_integration files importing one another directly).
       'local_sync_intent',
@@ -306,6 +314,70 @@ void main() {
   });
 
   test(
+      'no startup, foreground, lifecycle, or network trigger anywhere under '
+      'lib/ (outside IncomingKeptSyncCoordinator\'s own definition file) '
+      'calls applyIncomingBatch -- Build 26 Phase 4E-3b: it remains callable '
+      'but uncalled by any production code path; a future phase owns wiring '
+      'an automatic trigger', () {
+    final violations = <String>[];
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      if (normalizedPath.endsWith(
+        'lib/sync_integration/incoming_kept_sync_coordinator.dart',
+      )) {
+        continue;
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('applyIncomingBatch(')) {
+        violations.add(file.path);
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'app_services.dart constructs exactly one production '
+      'IncomingKeptSyncCoordinator, sharing the same '
+      'syncIntegrationOperationCoordinator instance and resource key that '
+      'KeptSyncIntegrationCoordinator uses -- a positive proof that an '
+      'incoming apply and every outgoing user mutation always serialize '
+      'against each other', () {
+    final matches = allLibFiles
+        .where((file) => file.path
+            .replaceAll('\\', '/')
+            .endsWith('lib/services/app_services.dart'))
+        .toList();
+    expect(matches, hasLength(1),
+        reason: 'Expected to find exactly one app_services.dart under '
+            'lib/services/.');
+    final source = matches.single.readAsStringSync();
+
+    final importsIncomingCoordinator = source
+        .split('\n')
+        .map((line) => line.trimLeft())
+        .where(
+            (line) => line.startsWith('import ') || line.startsWith('export '))
+        .any((line) => line.contains('incoming_kept_sync_coordinator.dart'));
+    expect(importsIncomingCoordinator, isTrue,
+        reason: 'app_services.dart is expected to import '
+            'incoming_kept_sync_coordinator.dart.');
+
+    final codeOnly = _stripComments(source);
+    expect(codeOnly.contains('IncomingKeptSyncCoordinator('), isTrue,
+        reason: 'app_services.dart is expected to construct '
+            'IncomingKeptSyncCoordinator directly.');
+    expect(
+      codeOnly.contains(
+        'integrationCoordinator: syncIntegrationOperationCoordinator,',
+      ),
+      isTrue,
+      reason: 'app_services.dart is expected to pass the shared '
+          'syncIntegrationOperationCoordinator instance to both '
+          'coordinators.',
+    );
+  });
+
+  test(
       'SavedReflectionsService is the intended service-level importer of '
       'KeptSyncIntegrationCoordinator -- a positive proof, not merely the '
       'absence of other importers', () {
@@ -390,6 +462,59 @@ void main() {
   });
 
   test(
+      'privileged KeptRepository raw-envelope surface (.loadAllRecords( and '
+      '.replaceAllRecords() is called only in kept_repository.dart (declares '
+      'them) and incoming_kept_sync_coordinator.dart (the sole authorized '
+      'production consumer) -- never anywhere else under lib/', () {
+    // Build 26 Phase 4E-3b final-audit correction (BLOCKING finding):
+    // `KeptRepository.loadAllRecords`/`replaceAllRecords` are a privileged,
+    // sync-unaware raw-envelope surface that `IncomingKeptSyncCoordinator`
+    // must use to apply a whole incoming batch as one atomic replacement.
+    // `replaceAllRecords` intentionally bypasses the normal user-action
+    // free-tier Keep limit, exactly like the `KeptRepository` replay
+    // parameters guarded by the test immediately above -- and, exactly like
+    // that surface, nothing in the type system stops a future screen,
+    // widget, feature service, import/restore feature, or unrelated
+    // coordinator from calling `keptRepository.replaceAllRecords(...)` or
+    // `.loadAllRecords()` directly and silently bypassing that limit.
+    // `keptRepository` is a bare public global (`app_services.dart`) and
+    // both methods are bare public instance methods, so this invariant is
+    // convention-only until a test enforces it. This test converts it into
+    // a machine-enforced one: an exact, two-file allowlist -- never a
+    // directory-wide exemption for `repositories/`, `sync_integration/`,
+    // `services/`, or any other directory -- mirroring the privileged
+    // replay-parameter guard's own exact-token, exact-file-allowlist
+    // design precisely.
+    const privilegedCallPatterns = [
+      '.loadAllRecords(',
+      '.replaceAllRecords(',
+    ];
+    const allowedFiles = {
+      'lib/repositories/kept_repository.dart',
+      'lib/sync_integration/incoming_kept_sync_coordinator.dart',
+    };
+
+    final violations = <String>[];
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final isAllowed =
+          allowedFiles.any((allowed) => normalizedPath.endsWith(allowed));
+      if (isAllowed) continue;
+
+      final codeOnly = _stripComments(file.readAsStringSync());
+      for (final pattern in privilegedCallPatterns) {
+        if (codeOnly.contains(pattern)) {
+          violations.add(
+            '$normalizedPath calls privileged KeptRepository method '
+            '"$pattern"',
+          );
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
       'no screen or widget file imports anything from lib/sync_integration/ '
       '-- Build 26 Phase 4E-2 wires real call sites only through '
       'SavedReflectionsService/app_services.dart, never directly from the UI '
@@ -444,6 +569,10 @@ void main() {
       'LocalSyncIntentEnvelope',
       'KeptSyncIntegrationCoordinator',
       'AssociatedSyncAccountContext',
+      // Build 26 Phase 4E-3b additions.
+      'IncomingKeptSyncCoordinator',
+      'IncomingApplyResult',
+      'IncomingApplyStatus',
     ];
 
     final scanTargets = allLibFiles.where((file) {

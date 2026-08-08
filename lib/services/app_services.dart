@@ -7,6 +7,7 @@ import '../persistence/legacy_favorites_store.dart';
 import '../persistence/storage_preferences_adapter.dart';
 import '../repositories/daily_access_repository.dart';
 import '../repositories/kept_repository.dart';
+import '../sync_integration/incoming_kept_sync_coordinator.dart';
 import '../sync_integration/kept_sync_integration_coordinator.dart';
 import '../sync_integration/protected_local_sync_intent_store.dart';
 import '../sync_persistence/protected_sync_persistence_store.dart';
@@ -131,6 +132,18 @@ final ProtectedSyncPersistenceStore syncPersistenceStore =
 /// .reconcileForAssociatedAccount] on; nothing in this phase calls it.
 late final KeptSyncIntegrationCoordinator keptSyncIntegrationCoordinator;
 
+/// Build 26 Phase 4E-3b: the production incoming-CloudKit-apply coordinator.
+/// Populated in the same single bootstrap attempt, alongside
+/// [keptSyncIntegrationCoordinator] — shares the exact same
+/// [syncIntegrationOperationCoordinator] instance and resource key
+/// (`kept_sync_integration_v1`), never a second, separately-constructed
+/// integration coordinator, so an incoming apply and every outgoing user
+/// mutation/reconciliation step always serialize against each other. Nothing
+/// in this phase (or any production code path) calls
+/// [IncomingKeptSyncCoordinator.applyIncomingBatch] automatically — Phase 4F
+/// owns wiring an automatic trigger.
+late final IncomingKeptSyncCoordinator incomingKeptSyncCoordinator;
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -147,6 +160,12 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
   ),
   buildService: (repository) {
     keptSyncIntegrationCoordinator = KeptSyncIntegrationCoordinator(
+      keptRepository: repository,
+      intentStore: localSyncIntentStore,
+      syncPersistenceStore: syncPersistenceStore,
+      integrationCoordinator: syncIntegrationOperationCoordinator,
+    );
+    incomingKeptSyncCoordinator = IncomingKeptSyncCoordinator(
       keptRepository: repository,
       intentStore: localSyncIntentStore,
       syncPersistenceStore: syncPersistenceStore,

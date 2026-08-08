@@ -9,6 +9,7 @@ import '../sync/sync_change.dart';
 import '../utils/kept_diagnostics.dart';
 import 'account_sync_state.dart';
 import 'incoming_batch_checkpoint.dart';
+import 'outbox_mutation_retirement.dart';
 import 'persisted_outbox_mutation.dart';
 import 'sync_persistence_envelope.dart';
 import 'sync_persistence_store.dart';
@@ -589,6 +590,63 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
       merged[update.recordName] = update.systemFields;
     }
     return merged;
+  }
+
+  // -----------------------------------------------------------------------
+  // Build 26 Phase 4E-3b: one atomic, narrowly-guarded outbox-mutation
+  // retirement -- never `applyMutationOutcomes` (see
+  // `outbox_mutation_retirement.dart`'s own doc comment for why a remote
+  // conflict loss is never represented as a CloudKit-acknowledged upload).
+  // -----------------------------------------------------------------------
+
+  @override
+  Future<RetireOutboxMutationResult> retireOutboxMutationIfCurrent(
+    RetireOutboxMutationRequest request,
+  ) {
+    return _coordinator.runExclusive<RetireOutboxMutationResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.accounts[request.accountFingerprint];
+        if (current == null) {
+          return const RetireOutboxMutationResult(
+            RetireOutboxMutationStatus.accountMissing,
+          );
+        }
+        if (current.dataEpoch != request.expectedDataEpoch) {
+          return const RetireOutboxMutationResult(
+            RetireOutboxMutationStatus.dataEpochMismatch,
+          );
+        }
+
+        final index = current.outbox.indexWhere(
+          (entry) => entry.recordName == request.recordName,
+        );
+        if (index == -1) {
+          return const RetireOutboxMutationResult(
+            RetireOutboxMutationStatus.recordNotFound,
+          );
+        }
+        if (current.outbox[index].mutationId != request.mutationId) {
+          return const RetireOutboxMutationResult(
+            RetireOutboxMutationStatus.mutationIdMismatch,
+          );
+        }
+
+        final nextOutbox = List<PersistedOutboxMutation>.of(current.outbox)
+          ..removeAt(index);
+        final nextState = current.copyWith(outbox: nextOutbox);
+        await _replaceEnvelope(
+          envelope.withAccount(request.accountFingerprint, nextState),
+        );
+        keptDiagnostic(
+          'sync-persistence-store: retire-outbox-mutation-if-current-ok',
+        );
+        return const RetireOutboxMutationResult(
+          RetireOutboxMutationStatus.retired,
+        );
+      },
+    );
   }
 
   // -----------------------------------------------------------------------

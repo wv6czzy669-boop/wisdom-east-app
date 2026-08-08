@@ -18,6 +18,7 @@ import 'package:wisdom_app/sync_integration/local_sync_intent.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent_store.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
+import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
 
@@ -227,15 +228,165 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
     if (current != null) _quarantined.add(accountFingerprint);
   }
 
+  /// Build 26 Phase 4E-3b: a faithful (if simplified -- no bootstrap-create
+  /// mode support, since no test needs it) in-memory reproduction of
+  /// [ProtectedSyncPersistenceStore]'s own
+  /// `commitIncomingBatchCheckpoint` request-validation and existing-bucket
+  /// commit logic, so incoming-apply-coordinator tests can exercise the real
+  /// documented contract (epoch/token/duplicate-record validation, atomic
+  /// system-fields-plus-token commit) without any file I/O.
   @override
   Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
     CommitIncomingBatchCheckpointRequest request,
-  ) {
-    throw UnimplementedError(
-      'InMemorySyncPersistenceStore does not implement incoming-batch '
-      'checkpointing -- no Phase 4E-2 test exercises it.',
+  ) async {
+    if (!_looksLikeOpaqueBase64(request.pendingServerChangeToken)) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidRequest,
+      );
+    }
+    if (request.mode == IncomingCheckpointMode.bootstrapCreate) {
+      throw UnimplementedError(
+        'InMemorySyncPersistenceStore does not implement bootstrapCreate -- '
+        'no Phase 4E-3b test exercises it.',
+      );
+    }
+    if (request.expectedCurrentDataEpoch == null ||
+        request.bootstrapTargetDataEpoch != null) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidRequest,
+      );
+    }
+    if (request.nextBootstrapState != null &&
+        request.expectedBootstrapState == null) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidRequest,
+      );
+    }
+
+    final seenRecordNames = <String>{};
+    for (final update in request.recordSystemFieldsUpdates) {
+      if (!seenRecordNames.add(update.recordName)) {
+        return const CommitIncomingBatchCheckpointResult(
+          status: IncomingCheckpointStatus.duplicateRecordName,
+        );
+      }
+      if (!looksLikeKeptWisdomRecordName(update.recordName) ||
+          !_looksLikeOpaqueBase64(update.systemFields)) {
+        return const CommitIncomingBatchCheckpointResult(
+          status: IncomingCheckpointStatus.invalidRecordSystemFields,
+        );
+      }
+    }
+
+    final current = _accounts[request.accountFingerprint];
+    if (current == null) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.bucketMissing,
+      );
+    }
+    if (current.dataEpoch != request.expectedCurrentDataEpoch) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.dataEpochMismatch,
+      );
+    }
+
+    // Idempotent-retry shortcut, mirroring the production store exactly.
+    final alreadyMatches =
+        current.serverChangeToken == request.pendingServerChangeToken &&
+            (request.nextBootstrapState ?? current.bootstrapState) ==
+                current.bootstrapState &&
+            request.recordSystemFieldsUpdates.every(
+              (update) =>
+                  current.recordSystemFields[update.recordName] ==
+                  update.systemFields,
+            );
+    if (alreadyMatches) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.committed,
+      );
+    }
+
+    if (current.serverChangeToken != request.expectedPreviousServerToken) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.previousTokenMismatch,
+      );
+    }
+    if (request.expectedBootstrapState != null &&
+        current.bootstrapState != request.expectedBootstrapState) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.bootstrapStateMismatch,
+      );
+    }
+    final nextBootstrapState =
+        request.nextBootstrapState ?? current.bootstrapState;
+    if (!isValidBootstrapTransition(
+        current.bootstrapState, nextBootstrapState)) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidBootstrapTransition,
+      );
+    }
+
+    final mergedFields = Map<String, String>.from(current.recordSystemFields);
+    for (final update in request.recordSystemFieldsUpdates) {
+      mergedFields[update.recordName] = update.systemFields;
+    }
+    final tokenChanged =
+        current.serverChangeToken != request.pendingServerChangeToken;
+    final bootstrapStateChanged = nextBootstrapState != current.bootstrapState;
+
+    _accounts[request.accountFingerprint] = current.copyWith(
+      serverChangeToken: request.pendingServerChangeToken,
+      recordSystemFields: mergedFields,
+      bootstrapState: nextBootstrapState,
+    );
+
+    return CommitIncomingBatchCheckpointResult(
+      status: IncomingCheckpointStatus.committed,
+      systemFieldCount: request.recordSystemFieldsUpdates.length,
+      bootstrapStateChanged: bootstrapStateChanged,
+      tokenChanged: tokenChanged,
     );
   }
+
+  /// Build 26 Phase 4E-3b: in-memory reproduction of
+  /// [ProtectedSyncPersistenceStore.retireOutboxMutationIfCurrent]'s exact
+  /// documented guard order.
+  @override
+  Future<RetireOutboxMutationResult> retireOutboxMutationIfCurrent(
+    RetireOutboxMutationRequest request,
+  ) async {
+    final current = _accounts[request.accountFingerprint];
+    if (current == null) {
+      return const RetireOutboxMutationResult(
+        RetireOutboxMutationStatus.accountMissing,
+      );
+    }
+    if (current.dataEpoch != request.expectedDataEpoch) {
+      return const RetireOutboxMutationResult(
+        RetireOutboxMutationStatus.dataEpochMismatch,
+      );
+    }
+    final index = current.outbox.indexWhere(
+      (entry) => entry.recordName == request.recordName,
+    );
+    if (index == -1) {
+      return const RetireOutboxMutationResult(
+        RetireOutboxMutationStatus.recordNotFound,
+      );
+    }
+    if (current.outbox[index].mutationId != request.mutationId) {
+      return const RetireOutboxMutationResult(
+        RetireOutboxMutationStatus.mutationIdMismatch,
+      );
+    }
+    final nextOutbox = List<PersistedOutboxMutation>.of(current.outbox)
+      ..removeAt(index);
+    _accounts[request.accountFingerprint] =
+        current.copyWith(outbox: nextOutbox);
+    return const RetireOutboxMutationResult(RetireOutboxMutationStatus.retired);
+  }
+
+  bool _looksLikeOpaqueBase64(String value) => looksLikeOpaqueBase64(value);
 
   /// Test-only convenience: directly seeds a bucket without going through
   /// [enqueueMutation]/[replaceAccountState]'s own semantics, for account-

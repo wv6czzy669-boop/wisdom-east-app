@@ -208,13 +208,26 @@ void main() {
 
   test(
       'no file under lib/ outside lib/sync_orchestration/ has an '
-      'import/export directive referencing sync_orchestration -- no '
-      'repository, service, screen, or startup file is wired to it yet', () {
+      'import/export directive referencing sync_orchestration, except the '
+      'one Build 26 Phase 4E-3b consumer -- no repository, service, screen, '
+      'or startup file is wired to it', () {
+    // Build 26 Phase 4E-3b: `IncomingKeptSyncCoordinator` is the first, and
+    // only, consumer of `PendingIncomingSyncBatch`
+    // (`SyncPassResult.pendingIncomingBatch`'s own doc comment always
+    // anticipated exactly this future consumer -- see
+    // `lib/sync_orchestration/pending_incoming_sync_batch.dart`). This is a
+    // narrow, deliberate, disclosed exception to the prior "nothing outside
+    // sync_orchestration depends on it yet" rule -- every other file outside
+    // lib/sync_orchestration/ (every repository, service, screen, and
+    // lib/main.dart) remains forbidden from importing it.
+    const allowedExternalConsumerPath =
+        'lib/sync_integration/incoming_kept_sync_coordinator.dart';
+
     final violations = <String>[];
     for (final file in allLibFiles) {
-      if (file.path.replaceAll('\\', '/').contains('/sync_orchestration/')) {
-        continue;
-      }
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      if (normalizedPath.contains('/sync_orchestration/')) continue;
+      if (normalizedPath.endsWith(allowedExternalConsumerPath)) continue;
       for (final line in file.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {

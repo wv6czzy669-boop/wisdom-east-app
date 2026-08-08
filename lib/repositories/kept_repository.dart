@@ -587,6 +587,64 @@ final class KeptRepository {
     );
   }
 
+  /// Build 26 Phase 4E-3b: the minimal, sync-unaware full-envelope
+  /// read/replace surface an external incoming-apply coordinator needs to
+  /// durably write a *complete*, already fully-computed target Kept state --
+  /// never record-by-record, never with any of this repository's own
+  /// id/timestamp generation, free-tier gating, or `onAuthorized` hook.
+  ///
+  /// This repository remains completely unaware of what "incoming",
+  /// "remote", "conflict", or "sync" mean -- [loadAllRecords]/
+  /// [replaceAllRecords] are exactly as sync-domain-free as [load]/
+  /// [keepOccurrence] above; the caller (`IncomingKeptSyncCoordinator`,
+  /// `lib/sync_integration/incoming_kept_sync_coordinator.dart`) is solely
+  /// responsible for computing the complete next [KeptRecord] list (which
+  /// existing records to keep unchanged, which to replace with adopted
+  /// remote content, which to remove for a winning remote tombstone) before
+  /// ever calling [replaceAllRecords].
+  ///
+  /// Returns the complete, currently active [KeptRecord] collection, in
+  /// storage order. Never mapped to [FavoriteItem] -- a sync coordinator
+  /// needs the protected-domain fields (`revealId`, `mutationId`, raw
+  /// timestamps) a display-only [FavoriteItem] does not carry.
+  Future<List<KeptRecord>> loadAllRecords() {
+    return _coordinator.runExclusive<List<KeptRecord>>(
+      resourceKey: resourceKey,
+      operation: () async {
+        _requireReady();
+        final envelope = await _loadEnvelope();
+        return envelope.activeRecords;
+      },
+    );
+  }
+
+  /// Atomically and unconditionally replaces the complete active [KeptRecord]
+  /// collection with [records] -- one single read-modify-replace operation,
+  /// never a per-record write. [records] must already be the caller's
+  /// complete, final target list (every record unaffected by this
+  /// transaction included unchanged, exactly as it already was); this method
+  /// performs no merge, no dedup, no id/timestamp minting, and invokes no
+  /// `onAuthorized`-style callback. [KeptStateEnvelope]'s own constructor
+  /// still enforces its structural invariants (no duplicate `id`, no
+  /// duplicate `revealId`) -- a caller that computed a duplicate-producing
+  /// target list fails this call closed via that existing, unmodified
+  /// validation, exactly as [keepOccurrence] and every other mutation above
+  /// already rely on.
+  ///
+  /// Returns the complete resulting [KeptRecord] collection.
+  Future<List<KeptRecord>> replaceAllRecords(List<KeptRecord> records) {
+    return _coordinator.runExclusive<List<KeptRecord>>(
+      resourceKey: resourceKey,
+      operation: () async {
+        _requireReady();
+        final envelope = await _loadEnvelope();
+        final nextEnvelope = envelope.copyWith(activeRecords: records);
+        await _replaceEnvelope(nextEnvelope);
+        return nextEnvelope.activeRecords;
+      },
+    );
+  }
+
   Future<List<FavoriteItem>> restore(RemovedKeptOccurrence removed) {
     return _coordinator.runExclusive<List<FavoriteItem>>(
       resourceKey: resourceKey,

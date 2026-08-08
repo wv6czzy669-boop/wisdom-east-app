@@ -20,6 +20,7 @@ import '../sync/sync_change.dart';
 
 import 'account_sync_state.dart';
 import 'incoming_batch_checkpoint.dart';
+import 'outbox_mutation_retirement.dart';
 import 'persisted_outbox_mutation.dart';
 
 /// Thrown by [SyncPersistenceStore] implementations on any failure to load,
@@ -258,5 +259,27 @@ abstract interface class SyncPersistenceStore {
   /// as this interface's other atomic methods already guarantee.
   Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
     CommitIncomingBatchCheckpointRequest request,
+  );
+
+  /// Build 26 Phase 4E-3b: atomically retires (permanently removes) exactly
+  /// one outbox mutation, but only if the outbox's *current* entry for
+  /// [RetireOutboxMutationRequest.recordName] still exactly matches
+  /// [RetireOutboxMutationRequest.mutationId] under
+  /// [RetireOutboxMutationRequest.expectedDataEpoch] -- never a blind
+  /// "remove whatever is queued for this record" operation, and never
+  /// [SyncPersistenceStore.applyMutationOutcomes] (whose acknowledgment
+  /// semantics mean CloudKit explicitly confirmed an upload -- see
+  /// `outbox_mutation_retirement.dart`'s own doc comment for why a remote
+  /// conflict loss must never be represented that way).
+  ///
+  /// Every failure mode is a typed, non-thrown
+  /// [RetireOutboxMutationStatus] -- a missing account, a `dataEpoch`
+  /// mismatch, a missing record, or a `mutationId` mismatch (a newer
+  /// mutation already superseded the one this request targeted) are all
+  /// safe no-ops, never a thrown exception and never a destructive
+  /// best-effort removal. Only a genuine underlying storage failure is still
+  /// reported as a thrown [SyncPersistenceStoreException].
+  Future<RetireOutboxMutationResult> retireOutboxMutationIfCurrent(
+    RetireOutboxMutationRequest request,
   );
 }
