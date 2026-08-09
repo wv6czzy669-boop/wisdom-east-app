@@ -11,8 +11,10 @@ import '../sync_integration/incoming_kept_sync_coordinator.dart';
 import '../sync_integration/kept_sync_bootstrap_coordinator.dart';
 import '../sync_integration/kept_sync_integration_coordinator.dart';
 import '../sync_integration/protected_local_sync_intent_store.dart';
+import '../sync_orchestration/sync_orchestrator.dart';
 import '../sync_persistence/protected_sync_persistence_store.dart';
 import '../sync_platform/method_channel_cloud_kit_platform_bridge.dart';
+import '../sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
 import 'daily_wisdom_access_service.dart';
 import 'kept_discovery_hint_service.dart';
 import 'kept_migration_coordinator.dart';
@@ -169,6 +171,33 @@ late final KeptSyncBootstrapCoordinator keptSyncBootstrapCoordinator;
 const MethodChannelCloudKitPlatformBridge cloudKitPlatformBridge =
     MethodChannelCloudKitPlatformBridge();
 
+/// Build 26 Phase 4F: the first production [SyncOrchestrator] instance
+/// anywhere in this app. Shares the exact same [cloudKitPlatformBridge] and
+/// [syncPersistenceStore] instances every other sync coordinator above
+/// already uses -- never a second, separately-constructed bridge or
+/// persistence store. `SyncOrchestrator` has its own internal single-flight
+/// de-dup and does not use [syncIntegrationOperationCoordinator] (it does not
+/// touch `LocalSyncIntent`/Kept envelope state at all -- only the outbox/
+/// server-token/system-fields state already owned by [syncPersistenceStore]
+/// itself). Populated in the same single bootstrap attempt as the other
+/// sync coordinators, alongside [cloudKitSyncRuntimeCoordinator] below.
+late final SyncOrchestrator syncOrchestrator;
+
+/// Build 26 Phase 4F: the one production runtime trigger/retry/lifecycle
+/// coordinator. Constructed over the four real coordinators above (never a
+/// second, separately-constructed coordinator graph) plus
+/// [cloudKitPlatformBridge] directly (for `accountChangeEvents` -- see its
+/// own doc comment for why this coordinator subscribes to that stream
+/// itself rather than through any of the four coordinators, none of which
+/// expose or consume it). `lib/main.dart` calls
+/// [CloudKitSyncRuntimeCoordinator.requestSync] on startup and on
+/// `AppLifecycleState.resumed`; the account-change subscription started in
+/// this coordinator's own constructor is the only other production trigger
+/// in this phase. No Keep/Reflection/Remove call site calls [CloudKitSyncRuntimeCoordinator
+/// .requestSync] in this phase -- see the coordinator's own "No
+/// local-mutation nudge in this phase" doc section.
+late final CloudKitSyncRuntimeCoordinator cloudKitSyncRuntimeCoordinator;
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -202,6 +231,18 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       intentStore: localSyncIntentStore,
       syncPersistenceStore: syncPersistenceStore,
       integrationCoordinator: syncIntegrationOperationCoordinator,
+    );
+    syncOrchestrator = SyncOrchestrator(
+      bridge: cloudKitPlatformBridge,
+      persistenceStore: syncPersistenceStore,
+    );
+    cloudKitSyncRuntimeCoordinator = CloudKitSyncRuntimeCoordinator(
+      bootstrapCoordinator: keptSyncBootstrapCoordinator,
+      integrationCoordinator: keptSyncIntegrationCoordinator,
+      incomingCoordinator: incomingKeptSyncCoordinator,
+      orchestrator: syncOrchestrator,
+      syncPersistenceStore: syncPersistenceStore,
+      bridge: cloudKitPlatformBridge,
     );
     return SavedReflectionsService(
       keptRepository: repository,

@@ -346,15 +346,19 @@ void main() {
 
   test(
       'no startup, foreground, lifecycle, or network trigger anywhere under '
-      'lib/ (outside KeptSyncIntegrationCoordinator\'s own definition file) '
-      'calls reconcileForAssociatedAccount -- it remains callable but '
-      'uncalled by any production code path in Phase 4E-2', () {
+      'lib/ calls reconcileForAssociatedAccount, except '
+      'KeptSyncIntegrationCoordinator\'s own definition file and the single '
+      'Build 26 Phase 4F runtime coordinator '
+      '(lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart)', () {
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
       if (normalizedPath.endsWith(
-        'lib/sync_integration/kept_sync_integration_coordinator.dart',
-      )) {
+            'lib/sync_integration/kept_sync_integration_coordinator.dart',
+          ) ||
+          normalizedPath.endsWith(
+            'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart',
+          )) {
         continue;
       }
       final codeOnly = _stripComments(file.readAsStringSync());
@@ -367,16 +371,19 @@ void main() {
 
   test(
       'no startup, foreground, lifecycle, or network trigger anywhere under '
-      'lib/ (outside IncomingKeptSyncCoordinator\'s own definition file) '
-      'calls applyIncomingBatch -- Build 26 Phase 4E-3b: it remains callable '
-      'but uncalled by any production code path; a future phase owns wiring '
-      'an automatic trigger', () {
+      'lib/ calls applyIncomingBatch, except IncomingKeptSyncCoordinator\'s '
+      'own definition file and the single Build 26 Phase 4F runtime '
+      'coordinator (lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart)',
+      () {
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
       if (normalizedPath.endsWith(
-        'lib/sync_integration/incoming_kept_sync_coordinator.dart',
-      )) {
+            'lib/sync_integration/incoming_kept_sync_coordinator.dart',
+          ) ||
+          normalizedPath.endsWith(
+            'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart',
+          )) {
         continue;
       }
       final codeOnly = _stripComments(file.readAsStringSync());
@@ -388,33 +395,45 @@ void main() {
   });
 
   test(
-      'Build 26 Phase 4E-4: no startup, foreground, lifecycle, screen, '
+      'Build 26 Phase 4F: no startup, foreground, lifecycle, screen, '
       'widget, or network trigger anywhere under lib/ (outside '
       'kept_sync_bootstrap_coordinator.dart\'s own definition file -- '
       'app_services.dart only ever constructs the coordinator, it never '
       'calls any of these methods) calls evaluateAssociation/'
-      'authorizeAssociation/repairLegacyAssociationMarker/runBootstrap -- '
-      'every one remains callable but uncalled by any production code '
-      'path; a future phase owns wiring an automatic trigger', () {
-    const automaticTriggerMethodCalls = [
+      'authorizeAssociation/repairLegacyAssociationMarker -- every one '
+      'remains callable but uncalled by any production code path outside '
+      'its own definition file; runBootstrap is additionally, and solely, '
+      'called by the single Build 26 Phase 4F runtime coordinator '
+      '(lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart), which '
+      'never calls the other three directly (runBootstrap already owns '
+      'that decision tree internally)', () {
+    const neverCalledOutsideOwnFile = [
       '.evaluateAssociation(',
       '.authorizeAssociation(',
       '.repairLegacyAssociationMarker(',
-      '.runBootstrap(',
     ];
+    const runtimeCoordinatorFile =
+        'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
-      if (normalizedPath.endsWith(
+      final isOwnDefinitionFile = normalizedPath.endsWith(
         'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
-      )) {
-        continue;
-      }
+      );
+      final isRuntimeCoordinatorFile =
+          normalizedPath.endsWith(runtimeCoordinatorFile);
       final codeOnly = _stripComments(file.readAsStringSync());
-      for (final pattern in automaticTriggerMethodCalls) {
-        if (codeOnly.contains(pattern)) {
-          violations.add('${file.path} contains "$pattern"');
+      if (!isOwnDefinitionFile) {
+        for (final pattern in neverCalledOutsideOwnFile) {
+          if (codeOnly.contains(pattern)) {
+            violations.add('${file.path} contains "$pattern"');
+          }
         }
+      }
+      if (!isOwnDefinitionFile &&
+          !isRuntimeCoordinatorFile &&
+          codeOnly.contains('.runBootstrap(')) {
+        violations.add('${file.path} contains ".runBootstrap("');
       }
     }
     expect(violations, isEmpty, reason: violations.join('\n'));
@@ -666,37 +685,42 @@ void main() {
 
   test(
       'no screen or widget file imports anything from lib/sync_integration/ '
-      '-- Build 26 Phase 4E-2 wires real call sites only through '
-      'SavedReflectionsService/app_services.dart, never directly from the UI '
-      'layer', () {
-    // Phase 4E-2 correction: Phase 4E-1's version of this test forbade
-    // *every* file outside lib/sync_integration/ from importing it at all,
-    // because no real call site existed yet. Phase 4E-2's entire purpose is
-    // to wire exactly two such call sites
-    // (`lib/services/saved_reflections_service.dart` and
-    // `lib/services/app_services.dart`) -- so those two are the only
-    // permitted exceptions now; every screen and widget file remains
-    // forbidden, unchanged from Phase 4E-1's intent.
-    const allowedImporters = {
-      'lib/services/saved_reflections_service.dart',
-      'lib/services/app_services.dart',
-    };
-
+      '-- scanned by actual UI path (lib/screens/, lib/widgets/), never by '
+      'process of elimination over every other file under lib/. Build 26 '
+      'Phase 4E-2 wires real call sites only through '
+      'SavedReflectionsService/app_services.dart, and Build 26 Phase 4F '
+      'additionally wires lib/sync_runtime/ -- none of those are UI, so '
+      'none of them belong in this test\'s candidate set at all; they have '
+      'their own dedicated positive-proof/allowlist guards elsewhere in '
+      'this suite', () {
+    // Phase 4E-2 correction (superseded further here): Phase 4E-1's version
+    // of this test forbade *every* file outside lib/sync_integration/ from
+    // importing it, because no real call site existed yet. That "everything
+    // except sync_integration itself" candidate set was never actually
+    // "screens and widgets" -- it silently included services,
+    // sync_orchestration, sync_platform, and (once Build 26 Phase 4F
+    // introduced it) lib/sync_runtime/ too, which is runtime infrastructure,
+    // not UI, and may legitimately import the integration coordinators.
+    // This test now scans exactly the two real UI directories its own title
+    // names -- the same lib/screens/ and lib/widgets/ path classification
+    // this suite's own type-name-reference test (below) already uses -- so a
+    // genuinely non-UI importer can never trip it again, and a real future
+    // UI violation still fails loudly instead of being masked by an
+    // ever-growing exception list.
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
-      if (normalizedPath.contains('/lib/sync_integration/') ||
-          normalizedPath.startsWith('lib/sync_integration/')) {
-        continue;
-      }
-      final isAllowed =
-          allowedImporters.any((allowed) => normalizedPath.endsWith(allowed));
+      final isScreenOrWidget = normalizedPath.contains('/lib/screens/') ||
+          normalizedPath.startsWith('lib/screens/') ||
+          normalizedPath.contains('/lib/widgets/') ||
+          normalizedPath.startsWith('lib/widgets/');
+      if (!isScreenOrWidget) continue;
       for (final line in file.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {
           continue;
         }
-        if (trimmed.contains('sync_integration') && !isAllowed) {
+        if (trimmed.contains('sync_integration')) {
           violations.add('$normalizedPath: "$trimmed"');
         }
       }
@@ -756,16 +780,34 @@ void main() {
   });
 
   test(
-      'no production runSyncPass() startup invocation exists anywhere under '
-      'lib/ outside sync_orchestration\'s own definition file', () {
+      'Build 26 Phase 4F: production runSyncPass() invocation is permitted '
+      'only from its own definition file '
+      '(lib/sync_orchestration/sync_orchestrator.dart) and the single '
+      'runtime pipeline owner '
+      '(lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart) -- no '
+      'other production file under lib/ (no screen, no widget, no service, '
+      'no main.dart, and no other file under lib/sync_runtime/ itself) may '
+      'call it', () {
+    // Supersedes the prior Phase 4E invariant ("no production caller
+    // exists at all"), which is now obsolete by design: Build 26 Phase 4F's
+    // entire purpose is to introduce exactly one production runtime caller
+    // of runSyncPass(). This allowlist is deliberately an exact,
+    // normalized-path, two-file allowlist -- never a directory-wide
+    // exemption for lib/sync_runtime/ (which would also silently permit a
+    // second, unaudited runSyncPass() caller to be added anywhere else
+    // under that directory), never main.dart, never app_services.dart,
+    // never a screen, and never an arbitrary service. The exact runtime
+    // coordinator file remains the sole permitted runtime caller.
+    const allowedExactFiles = {
+      'lib/sync_orchestration/sync_orchestrator.dart',
+      'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart',
+    };
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
-      if (normalizedPath.endsWith(
-        'lib/sync_orchestration/sync_orchestrator.dart',
-      )) {
-        continue;
-      }
+      final isAllowed =
+          allowedExactFiles.any((allowed) => normalizedPath.endsWith(allowed));
+      if (isAllowed) continue;
       final codeOnly = _stripComments(file.readAsStringSync());
       if (codeOnly.contains('runSyncPass()') ||
           codeOnly.contains('.runSyncPass(')) {

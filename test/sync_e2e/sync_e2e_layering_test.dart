@@ -306,36 +306,71 @@ void main() {
   });
 
   test(
-      'Build 26 Phase 4E-5 introduces no NEW production invocation of any '
-      'sync/bootstrap trigger API anywhere under lib/ (outside each API\'s '
-      'own definition file) -- runBootstrap/evaluateAssociation/'
-      'authorizeAssociation/repairLegacyAssociationMarker/'
-      'reconcileForAssociatedAccount/applyIncomingBatch/runSyncPass all '
-      'remain callable but uncalled by any production code path; only this '
-      'test harness (test/sync_e2e/, already proven test-only above) and '
-      'existing coordinator-level test suites call them', () {
-    const triggerCallsByOwnDefinitionFile = {
-      '.runBootstrap(':
-          'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
-      '.evaluateAssociation(':
-          'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
-      '.authorizeAssociation(':
-          'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
-      '.repairLegacyAssociationMarker(':
-          'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
-      '.reconcileForAssociatedAccount(':
-          'lib/sync_integration/kept_sync_integration_coordinator.dart',
-      '.applyIncomingBatch(':
-          'lib/sync_integration/incoming_kept_sync_coordinator.dart',
-      '.runSyncPass(': 'lib/sync_orchestration/sync_orchestrator.dart',
+      'every production invocation of a sync/bootstrap trigger API anywhere '
+      'under lib/ is confined to that API\'s own definition file or the '
+      'single Build 26 Phase 4F runtime coordinator -- '
+      'evaluateAssociation/authorizeAssociation/repairLegacyAssociationMarker '
+      'remain callable but uncalled by any production code path outside '
+      'their own definition file (Phase 4F never calls them directly -- '
+      'runBootstrap() already owns that decision tree internally); '
+      'runBootstrap/reconcileForAssociatedAccount/applyIncomingBatch/'
+      'runSyncPass are each called by exactly one production file beyond '
+      'their own definition -- '
+      'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart -- and by no '
+      'other production file. This test harness (test/sync_e2e/, already '
+      'proven test-only above) and existing coordinator-level test suites '
+      'may call any of them freely; this test only ever scans lib/.', () {
+    const runtimeCoordinatorFile =
+        'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
+
+    // Pattern -> (own definition file, whether the Phase 4F runtime
+    // coordinator is also an allowed caller). `evaluateAssociation`/
+    // `authorizeAssociation`/`repairLegacyAssociationMarker` are NOT
+    // extended to the runtime coordinator: `CloudKitSyncRuntimeCoordinator`
+    // only ever calls `runBootstrap()` itself, which already owns the full
+    // association decision tree internally -- calling any of these three
+    // directly from the runtime coordinator would duplicate that decision.
+    const triggerCallSpecs = {
+      '.runBootstrap(': (
+        ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
+        runtimeCoordinatorAllowed: true,
+      ),
+      '.evaluateAssociation(': (
+        ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
+        runtimeCoordinatorAllowed: false,
+      ),
+      '.authorizeAssociation(': (
+        ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
+        runtimeCoordinatorAllowed: false,
+      ),
+      '.repairLegacyAssociationMarker(': (
+        ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
+        runtimeCoordinatorAllowed: false,
+      ),
+      '.reconcileForAssociatedAccount(': (
+        ownFile: 'lib/sync_integration/kept_sync_integration_coordinator.dart',
+        runtimeCoordinatorAllowed: true,
+      ),
+      '.applyIncomingBatch(': (
+        ownFile: 'lib/sync_integration/incoming_kept_sync_coordinator.dart',
+        runtimeCoordinatorAllowed: true,
+      ),
+      '.runSyncPass(': (
+        ownFile: 'lib/sync_orchestration/sync_orchestrator.dart',
+        runtimeCoordinatorAllowed: true,
+      ),
     };
 
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
       final codeOnly = _stripComments(file.readAsStringSync());
-      triggerCallsByOwnDefinitionFile.forEach((pattern, ownFile) {
-        if (normalizedPath.endsWith(ownFile)) return;
+      triggerCallSpecs.forEach((pattern, spec) {
+        if (normalizedPath.endsWith(spec.ownFile)) return;
+        if (spec.runtimeCoordinatorAllowed &&
+            normalizedPath.endsWith(runtimeCoordinatorFile)) {
+          return;
+        }
         if (codeOnly.contains(pattern)) {
           violations.add('${file.path} contains "$pattern"');
         }

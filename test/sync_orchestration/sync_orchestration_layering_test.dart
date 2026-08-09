@@ -209,25 +209,35 @@ void main() {
   test(
       'no file under lib/ outside lib/sync_orchestration/ has an '
       'import/export directive referencing sync_orchestration, except the '
-      'one Build 26 Phase 4E-3b consumer -- no repository, service, screen, '
-      'or startup file is wired to it', () {
-    // Build 26 Phase 4E-3b: `IncomingKeptSyncCoordinator` is the first, and
-    // only, consumer of `PendingIncomingSyncBatch`
+      'disclosed consumers -- no repository, service, screen, or other '
+      'startup file is wired to it', () {
+    // Build 26 Phase 4E-3b: `IncomingKeptSyncCoordinator` is the first
+    // consumer of `PendingIncomingSyncBatch`
     // (`SyncPassResult.pendingIncomingBatch`'s own doc comment always
     // anticipated exactly this future consumer -- see
-    // `lib/sync_orchestration/pending_incoming_sync_batch.dart`). This is a
-    // narrow, deliberate, disclosed exception to the prior "nothing outside
-    // sync_orchestration depends on it yet" rule -- every other file outside
-    // lib/sync_orchestration/ (every repository, service, screen, and
-    // lib/main.dart) remains forbidden from importing it.
-    const allowedExternalConsumerPath =
-        'lib/sync_integration/incoming_kept_sync_coordinator.dart';
+    // `lib/sync_orchestration/pending_incoming_sync_batch.dart`).
+    //
+    // Build 26 Phase 4F adds exactly two more, both disclosed in that
+    // phase's own scope: `lib/sync_runtime/cloud_kit_sync_runtime_coordinator
+    // .dart` (the one production caller of `SyncOrchestrator.runSyncPass`)
+    // and `lib/services/app_services.dart` (which constructs the one
+    // production `SyncOrchestrator` instance, and constructs -- but never
+    // calls a trigger method on -- the runtime coordinator). Every other
+    // file outside lib/sync_orchestration/ (every repository, other service,
+    // screen, and lib/main.dart itself) remains forbidden from importing it.
+    const allowedExternalConsumerPaths = {
+      'lib/sync_integration/incoming_kept_sync_coordinator.dart',
+      'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart',
+      'lib/services/app_services.dart',
+    };
 
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
       if (normalizedPath.contains('/sync_orchestration/')) continue;
-      if (normalizedPath.endsWith(allowedExternalConsumerPath)) continue;
+      if (allowedExternalConsumerPaths.any(normalizedPath.endsWith)) {
+        continue;
+      }
       for (final line in file.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {
@@ -243,7 +253,9 @@ void main() {
 
   test(
       'lib/main.dart never mentions SyncOrchestrator, runSyncPass, or '
-      'sync_orchestration in real code', () {
+      'sync_orchestration in real code -- Build 26 Phase 4F wires main.dart '
+      'only to CloudKitSyncRuntimeCoordinator.requestSync, never directly to '
+      'the orchestration layer', () {
     final mainFile = File('lib/main.dart');
     expect(mainFile.existsSync(), isTrue);
     final codeOnly = _stripComments(mainFile.readAsStringSync());

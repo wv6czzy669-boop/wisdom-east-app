@@ -292,6 +292,15 @@ void main() {
     const bootstrapCoordinatorPath =
         'lib/sync_integration/kept_sync_bootstrap_coordinator.dart';
     const appServicesPath = 'lib/services/app_services.dart';
+    // Build 26 Phase 4F Exception 3: the one production runtime trigger/
+    // retry/lifecycle coordinator. Like kept_sync_bootstrap_coordinator.dart
+    // (Exception 1), it depends on abstract sync_platform CONTRACTS only
+    // (CloudKitPlatformBridge, CloudKitAccountChangeEvent) -- never the
+    // concrete method_channel_cloud_kit_platform_bridge.dart adapter, and
+    // never MethodChannelCloudKitPlatformBridge in code. This is an exact
+    // file-path exception, never a directory-wide one.
+    const runtimeCoordinatorPath =
+        'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
 
     List<File> dartFilesIn(Directory dir) {
       if (!dir.existsSync()) return const [];
@@ -310,29 +319,55 @@ void main() {
         .toList();
 
     test(
-        'app startup (lib/main.dart, lib/app.dart) never mentions CloudKit, '
-        'the sync-platform layer, or the sync orchestrator -- no production '
-        'startup invocation of runSyncPass() exists yet', () {
-      for (final path in ['lib/main.dart', 'lib/app.dart']) {
-        final file = File(path);
-        expect(file.existsSync(), isTrue, reason: '$path must exist.');
-        final content = file.readAsStringSync();
-        expect(content, isNot(contains('CloudKit')), reason: path);
-        expect(content, isNot(contains('sync_platform')), reason: path);
-        expect(content, isNot(contains('cloudkit_sync')), reason: path);
-        expect(content, isNot(contains('sync_orchestration')), reason: path);
-        expect(content, isNot(contains('SyncOrchestrator')), reason: path);
-        expect(content, isNot(contains('runSyncPass')), reason: path);
-      }
+        'lib/app.dart never mentions CloudKit, the sync-platform layer, the '
+        'sync orchestrator, or the sync runtime layer -- it remains a pure '
+        'MaterialApp shell with no lifecycle or sync ownership of any kind',
+        () {
+      const path = 'lib/app.dart';
+      final file = File(path);
+      expect(file.existsSync(), isTrue, reason: '$path must exist.');
+      final content = file.readAsStringSync();
+      expect(content, isNot(contains('CloudKit')), reason: path);
+      expect(content, isNot(contains('sync_platform')), reason: path);
+      expect(content, isNot(contains('cloudkit_sync')), reason: path);
+      expect(content, isNot(contains('sync_orchestration')), reason: path);
+      expect(content, isNot(contains('SyncOrchestrator')), reason: path);
+      expect(content, isNot(contains('runSyncPass')), reason: path);
+      expect(content, isNot(contains('sync_runtime')), reason: path);
+    });
+
+    test(
+        'lib/main.dart never mentions the sync-platform transport layer or '
+        'the sync orchestrator directly -- Build 26 Phase 4F wires startup '
+        'and foreground triggers only through '
+        'CloudKitSyncRuntimeCoordinator.requestSync (lib/sync_runtime/), '
+        'never directly to CloudKitPlatformBridge, MethodChannel, or '
+        'SyncOrchestrator.runSyncPass', () {
+      const path = 'lib/main.dart';
+      final file = File(path);
+      expect(file.existsSync(), isTrue, reason: '$path must exist.');
+      final content = file.readAsStringSync();
+      expect(content, isNot(contains('sync_platform')), reason: path);
+      expect(content, isNot(contains('MethodChannel')), reason: path);
+      expect(content, isNot(contains('cloudkit_sync')), reason: path);
+      expect(content, isNot(contains('sync_orchestration')), reason: path);
+      expect(content, isNot(contains('SyncOrchestrator')), reason: path);
+      expect(content, isNot(contains('runSyncPass')), reason: path);
+      // Build 26 Phase 4F: main.dart IS now expected to reference the
+      // runtime coordinator -- this is this phase's own, disclosed startup
+      // wiring, not a regression of the boundary above.
+      expect(content, contains('sync_runtime'), reason: path);
+      expect(content, contains('cloudKitSyncRuntimeCoordinator'), reason: path);
     });
 
     test(
         'every production file that imports a sync_platform path lives '
-        'under lib/sync_orchestration/, or is one of the two exact Phase '
-        '4E-4 exceptions (kept_sync_bootstrap_coordinator.dart for '
-        'CONTRACTS, app_services.dart as the composition root) -- and no '
-        'production file anywhere except app_services.dart references the '
-        'concrete MethodChannelCloudKitPlatformBridge adapter in code', () {
+        'under lib/sync_orchestration/, or is one of the three exact '
+        'exceptions (kept_sync_bootstrap_coordinator.dart and '
+        'cloud_kit_sync_runtime_coordinator.dart for CONTRACTS, '
+        'app_services.dart as the composition root) -- and no production '
+        'file anywhere except app_services.dart references the concrete '
+        'MethodChannelCloudKitPlatformBridge adapter in code', () {
       final allDartFiles = Directory('lib')
           .listSync(recursive: true)
           .whereType<File>()
@@ -347,11 +382,14 @@ void main() {
             normalizedPath.contains('/sync_orchestration/');
         final isBootstrapCoordinator =
             normalizedPath.endsWith(bootstrapCoordinatorPath);
+        final isRuntimeCoordinator =
+            normalizedPath.endsWith(runtimeCoordinatorPath);
         final isAppServices = normalizedPath.endsWith(appServicesPath);
 
         if (!isPlatformFile &&
             !isOrchestrationFile &&
             !isBootstrapCoordinator &&
+            !isRuntimeCoordinator &&
             !isAppServices) {
           for (final line in importExportLines(file)) {
             if (line.contains('sync_platform/')) {
@@ -370,8 +408,9 @@ void main() {
 
         // The concrete MethodChannel adapter may only ever be referenced
         // from the composition root (app_services.dart) -- not even the
-        // bootstrap coordinator, which is asserted (in its own dedicated
-        // test below) to depend on abstract contracts only.
+        // bootstrap coordinator or the runtime coordinator, each of which is
+        // asserted (in its own dedicated test below) to depend on abstract
+        // contracts only.
         final codeOnly = _stripComments(file.readAsStringSync());
         if (codeOnly.contains('MethodChannelCloudKitPlatformBridge') &&
             !isAppServices) {
@@ -426,6 +465,35 @@ void main() {
       if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
         violations.add(
           '$bootstrapCoordinatorPath references '
+          'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
+          'mention would already have been stripped above)',
+        );
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'cloud_kit_sync_runtime_coordinator.dart never imports the concrete '
+        'method_channel_cloud_kit_platform_bridge.dart adapter and never '
+        'references MethodChannelCloudKitPlatformBridge in code -- it '
+        'depends on abstract sync_platform CONTRACTS only (Build 26 Phase '
+        '4F Exception 3, mirroring kept_sync_bootstrap_coordinator.dart\'s '
+        'own Exception 1)', () {
+      final file = File(runtimeCoordinatorPath);
+      expect(file.existsSync(), isTrue,
+          reason: '$runtimeCoordinatorPath must exist.');
+
+      final violations = <String>[];
+      for (final line in importExportLines(file)) {
+        if (line.contains('sync_platform/') &&
+            line.contains('method_channel_cloud_kit_platform_bridge.dart')) {
+          violations.add('$runtimeCoordinatorPath: "$line"');
+        }
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+        violations.add(
+          '$runtimeCoordinatorPath references '
           'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
           'mention would already have been stripped above)',
         );
