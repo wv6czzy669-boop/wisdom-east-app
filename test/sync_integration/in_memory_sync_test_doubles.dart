@@ -34,6 +34,15 @@ class InMemoryLocalSyncIntentStore implements LocalSyncIntentStore {
   /// `InMemoryKeptStateStore.failReplace`'s own contract.
   Object? failNextEnqueueIntent;
 
+  /// Build 26 Phase 4E-5: test-only one-shot fault injection: when
+  /// non-null, the *next* [removeIntent] call throws this instead of
+  /// removing -- resets to `null` immediately after firing. Exists for the
+  /// E2E crash-injection scenario "crash after outbox enqueue before intent
+  /// removal" (`test/sync_e2e/cloudkit_sync_e2e_test.dart`): it must be
+  /// possible to prove a durable outbox enqueue that already succeeded
+  /// survives even when the immediately-following intent removal fails.
+  Object? failNextRemoveIntent;
+
   @override
   Future<List<LocalSyncIntent>> loadIntents() async {
     return List.unmodifiable(_intents);
@@ -82,6 +91,11 @@ class InMemoryLocalSyncIntentStore implements LocalSyncIntentStore {
 
   @override
   Future<void> removeIntent(String intentId) async {
+    final failure = failNextRemoveIntent;
+    if (failure != null) {
+      failNextRemoveIntent = null;
+      throw failure;
+    }
     _intents.removeWhere((i) => i.intentId == intentId);
   }
 }
@@ -143,6 +157,26 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
     _associatedAccountFingerprint = fingerprint;
   }
 
+  /// Build 26 Phase 4E-5: test-only one-shot fault injection: when
+  /// non-null, the *next* [enqueueMutation] call throws this instead of
+  /// persisting -- resets to `null` immediately after firing. Exists for
+  /// the E2E crash-injection scenario "crash after physical local mutation
+  /// before outbox enqueue"
+  /// (`test/sync_e2e/cloudkit_sync_e2e_test.dart`): it must be possible to
+  /// prove a durable local intent survives, at the correct stage, when the
+  /// following outbox enqueue attempt fails.
+  Object? failNextEnqueueMutation;
+
+  /// Build 26 Phase 4E-5: test-only one-shot fault injection: when
+  /// non-null, the *next* [commitIncomingBatchCheckpoint] call throws this
+  /// instead of committing -- resets to `null` immediately after firing.
+  /// Exists for the E2E crash-injection scenario "crash after incoming Kept
+  /// apply before checkpoint": it must be possible to prove the Kept
+  /// envelope replace this call would otherwise have already durably
+  /// applied is unaffected by a checkpoint-commit failure that happens
+  /// strictly after it.
+  Object? failNextCommitIncomingBatchCheckpoint;
+
   @override
   Future<AccountSyncState?> loadAccountState(String accountFingerprint) async {
     return _accounts[accountFingerprint];
@@ -161,6 +195,12 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
     String accountFingerprint,
     SyncChange change,
   ) async {
+    final failure = failNextEnqueueMutation;
+    if (failure != null) {
+      failNextEnqueueMutation = null;
+      throw failure;
+    }
+
     final current = _accounts[accountFingerprint];
     if (current == null) {
       _accounts[accountFingerprint] = AccountSyncState(
@@ -289,6 +329,12 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
   Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
     CommitIncomingBatchCheckpointRequest request,
   ) async {
+    final failure = failNextCommitIncomingBatchCheckpoint;
+    if (failure != null) {
+      failNextCommitIncomingBatchCheckpoint = null;
+      throw failure;
+    }
+
     if (!_looksLikeOpaqueBase64(request.pendingServerChangeToken)) {
       return const CommitIncomingBatchCheckpointResult(
         status: IncomingCheckpointStatus.invalidRequest,

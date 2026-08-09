@@ -614,6 +614,11 @@ final class IncomingKeptSyncCoordinator {
     final retireEverythingLocal =
         !localWon || finalOutcome.reason == ConflictReason.identical;
 
+    // Computed here (rather than after the retirement decision below) because
+    // the "local wins decisively" branch now needs it to decide retirement by
+    // content rather than by candidate-source bookkeeping.
+    final finalProjection = localWon ? current.projection : incomingRemote;
+
     String? intentIdToRetire;
     String? outboxMutationIdToRetire;
     if (retireEverythingLocal) {
@@ -624,21 +629,28 @@ final class IncomingKeptSyncCoordinator {
         outboxMutationIdToRetire = outboxCandidate.mutationId;
       }
     } else {
-      // Local wins decisively: preserve the exact terminal local winner;
-      // retire any other local sibling whose own conflict-resolution
-      // decision already proved it stale/superseded during the local fold
-      // above. Never retires the terminal winner itself.
+      // Local wins decisively over a genuinely differing remote. Retirement
+      // here must be decided by CONTENT supersession, never by which
+      // candidate object the local fold above happened to leave `current`
+      // pointing at: when the local fold's own `identical` tie-break
+      // (`resolveKeptWisdomConflict`'s `local == remote` convention) leaves
+      // `current` referencing e.g. the physical candidate even though an
+      // outbox (or intent) candidate is byte-for-byte the same content, that
+      // outbox/intent entry is NOT stale -- it is still the only durable
+      // vehicle able to carry this exact winning content back to CloudKit,
+      // and must survive so a later `SyncOrchestrator` pass retries it (using
+      // the fresh systemFields this same checkpoint is about to commit
+      // below). Only a sibling whose own content genuinely differs from the
+      // terminal winner has actually been superseded and may be retired.
       if (intentCandidate != null &&
-          current.source != _CandidateSource.intent) {
+          intentCandidate.projection != finalProjection) {
         intentIdToRetire = intentCandidate.intentId;
       }
       if (outboxCandidate != null &&
-          current.source != _CandidateSource.outbox) {
+          outboxCandidate.projection != finalProjection) {
         outboxMutationIdToRetire = outboxCandidate.mutationId;
       }
     }
-
-    final finalProjection = localWon ? current.projection : incomingRemote;
 
     // Section 13/14: id/localId preference -- an existing physical record's
     // own id always wins when this exact occurrence already has one

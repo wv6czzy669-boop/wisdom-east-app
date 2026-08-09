@@ -1028,6 +1028,511 @@ void main() {
         '99999999-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       );
     });
+
+    // -----------------------------------------------------------------
+    // Build 26 Phase 4E-5 convergence correction regression coverage.
+    //
+    // Root cause (confirmed via a real two-device E2E run,
+    // `test/sync_e2e/cloudkit_sync_e2e_test.dart` scenario 8): the local
+    // fold above resolves a content-identical physical/outbox (or
+    // physical/intent) pair as `ConflictReason.identical` and leaves
+    // `current` pointing at whichever candidate was already `current`
+    // (always the physical one, since the fold always starts from
+    // `physicalCandidate`) -- silently discarding the fact that an
+    // outbox/intent sibling tied for that exact content. The old
+    // retirement guard then keyed retirement on `current.source`, which
+    // incorrectly retired that still-not-yet-uploaded outbox/intent entry
+    // merely because it wasn't the object the fold happened to keep,
+    // permanently orphaning the local winner with no path back to
+    // CloudKit. The corrected guard keys retirement on CONTENT
+    // supersession (`candidate.projection != finalProjection`) instead.
+    // -----------------------------------------------------------------
+
+    test(
+        'physical winner content-identical to its own outbox mutation '
+        'survives when local beats a genuinely differing remote', () async {
+      const wisdomText = 'Same wisdom.';
+      const winningMutationId = 'aaaaaaaa-0000-4000-8000-000000000000';
+      final winningUpdatedAt = t0.add(const Duration(minutes: 30));
+
+      // Step 1: adopt the eventual winning content as a genuine physical
+      // record via a real remote-adoption batch -- the same realistic
+      // sequence production always follows (physical write always precedes
+      // its own matching outbox entry).
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final winningProjection = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: winningUpdatedAt,
+        mutationId: winningMutationId,
+      );
+      final adoptResult = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [winningProjection],
+        ),
+      );
+      expect(adoptResult.status, IncomingApplyStatus.applied);
+
+      // Step 2: seed the outbox with a content-identical mutation for that
+      // same winning edit, still awaiting upload (mirrors a prior
+      // `serverRecordChanged` rejection) -- and advance the bucket's own
+      // token to match what step 1 just committed.
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: 'bmV3dG9rZW4=',
+        outbox: [
+          PersistedOutboxMutation(
+            change: SyncChange(
+              kind: SyncChangeKind.create,
+              projection: winningProjection,
+              enqueuedAt: t0,
+            ),
+            status: PersistedOutboxMutationStatus.conflicted,
+          ),
+        ],
+      );
+
+      // Step 3: a genuinely differing (older) remote lands. Local must win
+      // decisively, and the content-identical outbox mutation must survive
+      // so a later sync pass can retry it.
+      final olderRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: t0.add(const Duration(minutes: 10)),
+        mutationId: 'bbbbbbbb-0000-4000-8000-000000000000',
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: 'bmV3dG9rZW4=',
+          pendingServerChangeToken: 'bmV3dG9rZW4yMg==',
+          incomingKeptWisdomProjections: [olderRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredOutboxCount, 0);
+      final record = (await keptRepository.loadAllRecords()).single;
+      expect(record.updatedAt, winningUpdatedAt);
+      expect(record.mutationId, winningMutationId);
+      final bucketAfter = await syncStore.loadAccountState(fingerprintA);
+      expect(bucketAfter!.outbox, hasLength(1));
+      expect(bucketAfter.outbox.single.mutationId, winningMutationId);
+      // The checkpoint still commits the fetched systemFields for the
+      // just-resolved record regardless of which side won -- proving the
+      // preserved mutation's next upload attempt will read this fresh
+      // precondition automatically (never a separately-stored one).
+      expect(
+        bucketAfter.recordSystemFields[olderRemote.recordName],
+        systemFieldsFor(olderRemote.recordName),
+      );
+    });
+
+    test(
+        'physical winner content-identical to its own outbox mutation '
+        'survives for a Reflection edit when local beats a differing '
+        'remote', () async {
+      const wisdomText = 'Same wisdom.';
+      const winningMutationId = 'aaaaaaaa-1111-4111-8111-111111111111';
+      final winningUpdatedAt = t0.add(const Duration(minutes: 30));
+
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final winningProjection = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        reflectionText: 'B, later.',
+        reflectedAt: winningUpdatedAt,
+        updatedAt: winningUpdatedAt,
+        mutationId: winningMutationId,
+      );
+      final adoptResult = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [winningProjection],
+        ),
+      );
+      expect(adoptResult.status, IncomingApplyStatus.applied);
+
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: 'bmV3dG9rZW4=',
+        outbox: [
+          PersistedOutboxMutation(
+            change: SyncChange(
+              kind: SyncChangeKind.update,
+              projection: winningProjection,
+              enqueuedAt: t0,
+            ),
+            status: PersistedOutboxMutationStatus.conflicted,
+          ),
+        ],
+      );
+
+      final olderRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        reflectionText: 'A, earlier.',
+        reflectedAt: t0.add(const Duration(minutes: 10)),
+        updatedAt: t0.add(const Duration(minutes: 10)),
+        mutationId: 'bbbbbbbb-1111-4111-8111-111111111111',
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: 'bmV3dG9rZW4=',
+          pendingServerChangeToken: 'bmV3dG9rZW4yMg==',
+          incomingKeptWisdomProjections: [olderRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredOutboxCount, 0);
+      final record = (await keptRepository.loadAllRecords()).single;
+      expect(record.reflectionText, 'B, later.');
+      final bucketAfter = await syncStore.loadAccountState(fingerprintA);
+      expect(bucketAfter!.outbox, hasLength(1));
+      expect(bucketAfter.outbox.single.mutationId, winningMutationId);
+    });
+
+    test(
+        'physical winner content-identical to its own crash-window intent '
+        'survives when local beats a genuinely differing remote', () async {
+      const wisdomText = 'Same wisdom.';
+      const winningMutationId = 'aaaaaaaa-2222-4222-8222-222222222222';
+      final winningUpdatedAt = t0.add(const Duration(minutes: 30));
+
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final winningProjection = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        reflectionText: 'A crash-window reflection.',
+        reflectedAt: winningUpdatedAt,
+        updatedAt: winningUpdatedAt,
+        mutationId: winningMutationId,
+      );
+      final adoptResult = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [winningProjection],
+        ),
+      );
+      expect(adoptResult.status, IncomingApplyStatus.applied);
+
+      // The crash-window shape: the physical write already landed, but the
+      // matching intent has not yet been promoted into the outbox (or
+      // removed) -- `localCommittedOutboxPending`, exactly the stage
+      // `KeptSyncIntegrationCoordinator` leaves an intent in between its own
+      // `enqueueMutation` and `removeIntent` calls. A `reflectionSave`
+      // payload's own model requires non-null `reflectionText`
+      // (`LocalSyncIntentPayload.active`'s validation) -- supplied here
+      // identically to [winningProjection]'s own `reflectionText`/
+      // `reflectedAtMs` so the two candidates remain genuinely
+      // content-identical, exactly as this test's name requires.
+      await intentStore.enqueueIntent(LocalSyncIntent(
+        intentId: '99999999-3333-4333-8333-333333333333',
+        kind: LocalSyncIntentKind.update,
+        payload: LocalSyncIntentPayload.active(
+          revealId: revealIdA,
+          operation: LocalSyncIntentOperation.reflectionSave,
+          wisdomText: wisdomText,
+          revealedAtMs: t0.millisecondsSinceEpoch,
+          keptAtMs: t0.add(const Duration(minutes: 5)).millisecondsSinceEpoch,
+          updatedAtMs: winningUpdatedAt.millisecondsSinceEpoch,
+          mutationId: winningMutationId,
+          reflectionText: 'A crash-window reflection.',
+          reflectedAtMs: winningUpdatedAt.millisecondsSinceEpoch,
+          localId: 'local-1',
+        ),
+        stage: LocalSyncIntentStage.localCommittedOutboxPending,
+        enqueuedAt: t0,
+      ));
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: 'bmV3dG9rZW4=',
+      );
+
+      final olderRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: t0.add(const Duration(minutes: 10)),
+        mutationId: 'bbbbbbbb-2222-4222-8222-222222222222',
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: 'bmV3dG9rZW4=',
+          pendingServerChangeToken: 'bmV3dG9rZW4yMg==',
+          incomingKeptWisdomProjections: [olderRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredIntentCount, 0);
+      final remainingIntents = await intentStore.loadIntents();
+      expect(remainingIntents, hasLength(1));
+      expect(
+        remainingIntents.single.intentId,
+        '99999999-3333-4333-8333-333333333333',
+      );
+    });
+
+    test(
+        'genuinely superseded outbox mutation is still retired when local '
+        'wins decisively (content differs from the terminal winner)', () async {
+      const wisdomText = 'Same wisdom.';
+      const winningMutationId = 'aaaaaaaa-4444-4444-8444-444444444444';
+      final winningUpdatedAt = t0.add(const Duration(days: 2));
+
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final winningProjection = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        reflectionText: 'The second, newest edit.',
+        reflectedAt: winningUpdatedAt,
+        updatedAt: winningUpdatedAt,
+        mutationId: winningMutationId,
+      );
+      final adoptResult = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [winningProjection],
+        ),
+      );
+      expect(adoptResult.status, IncomingApplyStatus.applied);
+
+      // A genuinely stale, different-content first edit is still sitting in
+      // the outbox (e.g. from before the second edit above was made).
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: 'bmV3dG9rZW4=',
+        outbox: [
+          PersistedOutboxMutation(
+            change: SyncChange(
+              kind: SyncChangeKind.create,
+              projection: activeProjection(
+                revealId: revealIdA,
+                wisdomText: wisdomText,
+                // keptAt/revealedAt are left at the helper's own shared
+                // defaults (t0 / t0+5min) -- exactly matching
+                // [winningProjection] and [olderRemote] below, because
+                // `resolveKeptWisdomConflict` treats revealId/wisdomText/
+                // revealedAtMs/keptAtMs as the fixed identity of one
+                // occurrence: giving this candidate its own different
+                // keptAt would make every pairwise fold (physical vs
+                // outbox, and outbox vs remote) reject with
+                // `ConflictReason.immutableFieldMismatch` instead of
+                // resolving a genuine content conflict. Only the
+                // legitimately mutable fields -- reflectionText/
+                // reflectedAt/updatedAt/mutationId -- differ here,
+                // making this a real (older) edit to the same occurrence
+                // rather than a corrupted one. `updatedAt` is set to
+                // t0+6min so it is not before the shared keptAt default
+                // (t0+5min, `KeptRecord._validate`'s own invariant),
+                // while still being older than both the incoming remote
+                // (t0+30min) and the winning projection (t0+2 days).
+                reflectionText: 'The first, stale edit.',
+                reflectedAt: t0.add(const Duration(minutes: 6)),
+                updatedAt: t0.add(const Duration(minutes: 6)),
+                mutationId: 'cccccccc-4444-4444-8444-444444444444',
+              ),
+              enqueuedAt: t0,
+            ),
+          ),
+        ],
+      );
+
+      final olderRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        reflectionText: 'An even older remote edit.',
+        reflectedAt: t0.add(const Duration(minutes: 30)),
+        updatedAt: t0.add(const Duration(minutes: 30)),
+        mutationId: 'bbbbbbbb-4444-4444-8444-444444444444',
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: 'bmV3dG9rZW4=',
+          pendingServerChangeToken: 'bmV3dG9rZW4yMg==',
+          incomingKeptWisdomProjections: [olderRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredOutboxCount, 1);
+      final bucketAfter = await syncStore.loadAccountState(fingerprintA);
+      expect(bucketAfter!.outbox, isEmpty);
+      final record = (await keptRepository.loadAllRecords()).single;
+      expect(record.reflectionText, 'The second, newest edit.');
+    });
+
+    test(
+        'remote wins outright even when it is content-identical to a '
+        'physical/outbox pair that is NOT the terminal winner', () async {
+      const wisdomText = 'Same wisdom.';
+      const staleMutationId = 'aaaaaaaa-5555-4555-8555-555555555555';
+
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final staleProjection = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: t0.add(const Duration(minutes: 5)),
+        mutationId: staleMutationId,
+      );
+      final adoptResult = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [staleProjection],
+        ),
+      );
+      expect(adoptResult.status, IncomingApplyStatus.applied);
+
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: 'bmV3dG9rZW4=',
+        outbox: [
+          PersistedOutboxMutation(
+            change: SyncChange(
+              kind: SyncChangeKind.create,
+              projection: staleProjection,
+              enqueuedAt: t0,
+            ),
+            status: PersistedOutboxMutationStatus.conflicted,
+          ),
+        ],
+      );
+
+      final newerRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: t0.add(const Duration(days: 1)),
+        mutationId: 'bbbbbbbb-5555-4555-8555-555555555555',
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: 'bmV3dG9rZW4=',
+          pendingServerChangeToken: 'bmV3dG9rZW4yMg==',
+          incomingKeptWisdomProjections: [newerRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredOutboxCount, 1);
+      final bucketAfter = await syncStore.loadAccountState(fingerprintA);
+      expect(bucketAfter!.outbox, isEmpty);
+      final record = (await keptRepository.loadAllRecords()).single;
+      expect(record.mutationId, newerRemote.mutationId);
+    });
+
+    test(
+        'true local/remote identical convergence still retires the '
+        'redundant outbox mutation even through a physical-masked fold '
+        '(case B is not regressed by the content-based retirement fix)',
+        () async {
+      const wisdomText = 'Converged everywhere.';
+      const sharedMutationId = 'aaaaaaaa-6666-4666-8666-666666666666';
+      final sharedUpdatedAt = t0.add(const Duration(minutes: 5));
+
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final sharedProjection = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: sharedUpdatedAt,
+        mutationId: sharedMutationId,
+      );
+      final adoptResult = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [sharedProjection],
+        ),
+      );
+      expect(adoptResult.status, IncomingApplyStatus.applied);
+
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: 'bmV3dG9rZW4=',
+        outbox: [
+          PersistedOutboxMutation(
+            change: SyncChange(
+              kind: SyncChangeKind.create,
+              projection: sharedProjection,
+              enqueuedAt: t0,
+            ),
+            status: PersistedOutboxMutationStatus.conflicted,
+          ),
+        ],
+      );
+
+      // The incoming remote is field-for-field identical to both the
+      // physical record and the outbox mutation -- a genuine converged
+      // state, not a local decisive win. This must still retire the now-
+      // redundant outbox mutation, exactly as before this correction.
+      final identicalRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: wisdomText,
+        updatedAt: sharedUpdatedAt,
+        mutationId: sharedMutationId,
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: 'bmV3dG9rZW4=',
+          pendingServerChangeToken: 'bmV3dG9rZW4yMg==',
+          incomingKeptWisdomProjections: [identicalRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredOutboxCount, 1);
+      final bucketAfter = await syncStore.loadAccountState(fingerprintA);
+      expect(bucketAfter!.outbox, isEmpty);
+    });
+
+    test(
+        'local tombstone winner preserves its own current pending tombstone '
+        'mutation when it beats a genuinely differing remote', () async {
+      const winningMutationId = 'aaaaaaaa-7777-4777-8777-777777777777';
+      final deletedAt = t0.add(const Duration(minutes: 20));
+
+      final winningTombstone = tombstoneProjection(
+        revealId: revealIdA,
+        updatedAt: deletedAt,
+        deletedAt: deletedAt,
+        mutationId: winningMutationId,
+      );
+      seedBucket(
+        AccountBootstrapState.complete,
+        serverChangeToken: null,
+        outbox: [
+          PersistedOutboxMutation(
+            change: SyncChange(
+              kind: SyncChangeKind.delete,
+              projection: winningTombstone,
+              enqueuedAt: t0,
+            ),
+            status: PersistedOutboxMutationStatus.conflicted,
+          ),
+        ],
+      );
+
+      // A genuinely differing (older) remote active record for the same
+      // occurrence -- the local tombstone must win (newerUpdatedAt) and its
+      // own pending outbox mutation must survive.
+      final olderRemote = activeProjection(
+        revealId: revealIdA,
+        updatedAt: t0.add(const Duration(minutes: 5)),
+        mutationId: 'bbbbbbbb-7777-4777-8777-777777777777',
+      );
+      final result = await incomingCoordinator.applyIncomingBatch(
+        buildBatch(
+          previousServerChangeToken: null,
+          incomingKeptWisdomProjections: [olderRemote],
+        ),
+      );
+
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(result.retiredOutboxCount, 0);
+      expect(await keptRepository.loadAllRecords(), isEmpty);
+      final bucketAfter = await syncStore.loadAccountState(fingerprintA);
+      expect(bucketAfter!.outbox, hasLength(1));
+      expect(bucketAfter.outbox.single.mutationId, winningMutationId);
+    });
   });
 
   group('7. crash windows / retry convergence', () {
