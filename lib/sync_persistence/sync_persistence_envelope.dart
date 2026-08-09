@@ -53,17 +53,24 @@ final class SyncPersistenceEnvelope {
   factory SyncPersistenceEnvelope({
     Map<String, AccountSyncState> accounts = const {},
     Map<String, AccountSyncState> quarantinedAccounts = const {},
+    String? associatedAccountFingerprint,
   }) {
-    _validate(accounts: accounts, quarantinedAccounts: quarantinedAccounts);
+    _validate(
+      accounts: accounts,
+      quarantinedAccounts: quarantinedAccounts,
+      associatedAccountFingerprint: associatedAccountFingerprint,
+    );
     return SyncPersistenceEnvelope._(
       accounts: Map.unmodifiable(accounts),
       quarantinedAccounts: Map.unmodifiable(quarantinedAccounts),
+      associatedAccountFingerprint: associatedAccountFingerprint,
     );
   }
 
   const SyncPersistenceEnvelope._({
     required this.accounts,
     required this.quarantinedAccounts,
+    required this.associatedAccountFingerprint,
   });
 
   factory SyncPersistenceEnvelope.empty() => SyncPersistenceEnvelope();
@@ -73,14 +80,41 @@ final class SyncPersistenceEnvelope {
   final Map<String, AccountSyncState> accounts;
   final Map<String, AccountSyncState> quarantinedAccounts;
 
+  /// Build 26 Phase 4E-4: the opaque CloudKit account fingerprint this
+  /// device is durably associated with, or `null` if no association has
+  /// ever been completed. Exactly the same shape/privacy treatment as an
+  /// [accounts] map key -- never written into a file path, a diagnostic
+  /// string, or a log line. `null` is the safe, backward-compatible decode
+  /// default for any envelope written before this field existed. Decoding
+  /// never repairs or infers a value here -- a legacy envelope that already
+  /// has a meaningful account bucket but no marker yet is deliberately left
+  /// as `null` by [decode]; see `KeptSyncBootstrapCoordinator`'s own doc
+  /// comment for the separate, explicit, mutation-capable repair path.
+  final String? associatedAccountFingerprint;
+
   SyncPersistenceEnvelope copyWith({
     Map<String, AccountSyncState>? accounts,
     Map<String, AccountSyncState>? quarantinedAccounts,
+    String? associatedAccountFingerprint,
   }) {
     return SyncPersistenceEnvelope(
       accounts: accounts ?? this.accounts,
       quarantinedAccounts: quarantinedAccounts ?? this.quarantinedAccounts,
+      associatedAccountFingerprint:
+          associatedAccountFingerprint ?? this.associatedAccountFingerprint,
     );
+  }
+
+  /// Returns a copy with [associatedAccountFingerprint] set to
+  /// [fingerprint]. A raw, unconditional envelope-level replacement -- the
+  /// compare-and-swap guard against overwriting a different existing marker
+  /// lives one layer up, in
+  /// `ProtectedSyncPersistenceStore.commitAssociatedAccountFingerprint`,
+  /// never here.
+  SyncPersistenceEnvelope withAssociatedAccountFingerprint(
+    String fingerprint,
+  ) {
+    return copyWith(associatedAccountFingerprint: fingerprint);
   }
 
   /// Returns a copy with [fingerprint]'s active entry set to [state].
@@ -130,12 +164,19 @@ final class SyncPersistenceEnvelope {
         'quarantinedAccounts': quarantinedAccounts.map(
           (fingerprint, state) => MapEntry(fingerprint, state.encode()),
         ),
+        if (associatedAccountFingerprint != null)
+          'associatedAccountFingerprint': associatedAccountFingerprint,
       };
 
   String encodeString() => jsonEncode(encode());
 
   static SyncPersistenceEnvelope decode(Map<String, dynamic> data) {
-    const allowedKeys = {'schemaVersion', 'accounts', 'quarantinedAccounts'};
+    const allowedKeys = {
+      'schemaVersion',
+      'accounts',
+      'quarantinedAccounts',
+      'associatedAccountFingerprint',
+    };
     for (final key in data.keys) {
       if (!allowedKeys.contains(key)) {
         throw const FormatException(
@@ -162,9 +203,28 @@ final class SyncPersistenceEnvelope {
       }
     }
 
+    // Build 26 Phase 4E-4: absent (any envelope written before this field
+    // existed) decodes safely to `null` -- never inferred, never repaired
+    // here. A present-but-malformed value fails the whole decode closed,
+    // exactly like every other opaque-identity field in this codebase.
+    final associatedAccountFingerprintValue =
+        data['associatedAccountFingerprint'];
+    String? associatedAccountFingerprint;
+    if (associatedAccountFingerprintValue != null) {
+      if (associatedAccountFingerprintValue is! String ||
+          !looksLikeAccountFingerprint(associatedAccountFingerprintValue)) {
+        throw const FormatException(
+          'Invalid associated account fingerprint in sync persistence '
+          'envelope.',
+        );
+      }
+      associatedAccountFingerprint = associatedAccountFingerprintValue;
+    }
+
     return SyncPersistenceEnvelope(
       accounts: accounts,
       quarantinedAccounts: quarantinedAccounts,
+      associatedAccountFingerprint: associatedAccountFingerprint,
     );
   }
 
@@ -208,6 +268,7 @@ final class SyncPersistenceEnvelope {
   static void _validate({
     required Map<String, AccountSyncState> accounts,
     required Map<String, AccountSyncState> quarantinedAccounts,
+    required String? associatedAccountFingerprint,
   }) {
     for (final fingerprint in accounts.keys) {
       if (!looksLikeAccountFingerprint(fingerprint)) {
@@ -228,6 +289,13 @@ final class SyncPersistenceEnvelope {
         );
       }
     }
+    if (associatedAccountFingerprint != null &&
+        !looksLikeAccountFingerprint(associatedAccountFingerprint)) {
+      throw const FormatException(
+        'Invalid associated account fingerprint in sync persistence '
+        'envelope.',
+      );
+    }
   }
 
   @override
@@ -235,7 +303,8 @@ final class SyncPersistenceEnvelope {
     if (identical(this, other)) return true;
     return other is SyncPersistenceEnvelope &&
         _mapEquals(other.accounts, accounts) &&
-        _mapEquals(other.quarantinedAccounts, quarantinedAccounts);
+        _mapEquals(other.quarantinedAccounts, quarantinedAccounts) &&
+        other.associatedAccountFingerprint == associatedAccountFingerprint;
   }
 
   @override
@@ -246,6 +315,7 @@ final class SyncPersistenceEnvelope {
         Object.hashAllUnordered(
           quarantinedAccounts.entries.map((e) => Object.hash(e.key, e.value)),
         ),
+        associatedAccountFingerprint,
       );
 
   static bool _mapEquals(

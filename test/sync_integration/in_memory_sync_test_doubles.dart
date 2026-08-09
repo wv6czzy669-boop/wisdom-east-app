@@ -17,6 +17,7 @@ import 'package:wisdom_app/sync/sync_change.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent_store.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
+import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
 import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
@@ -92,6 +93,55 @@ class InMemoryLocalSyncIntentStore implements LocalSyncIntentStore {
 class InMemorySyncPersistenceStore implements SyncPersistenceStore {
   final Map<String, AccountSyncState> _accounts = {};
   final Set<String> _quarantined = {};
+
+  /// Build 26 Phase 4E-4: the durable top-level associated-account marker --
+  /// deliberately a plain field here (never a per-account bucket value),
+  /// mirroring `SyncPersistenceEnvelope.associatedAccountFingerprint`'s own
+  /// top-level, bucket-independent placement exactly.
+  String? _associatedAccountFingerprint;
+
+  @override
+  Future<String?> loadAssociatedAccountFingerprint() async {
+    return _associatedAccountFingerprint;
+  }
+
+  @override
+  Future<CommitAssociatedAccountFingerprintResult>
+      commitAssociatedAccountFingerprint({
+    required String fingerprint,
+    required String? expectedCurrent,
+  }) async {
+    if (_associatedAccountFingerprint == fingerprint) {
+      return const CommitAssociatedAccountFingerprintResult(
+        AssociatedAccountFingerprintCommitStatus.alreadyCommitted,
+      );
+    }
+    if (_associatedAccountFingerprint != expectedCurrent) {
+      return const CommitAssociatedAccountFingerprintResult(
+        AssociatedAccountFingerprintCommitStatus.expectedCurrentMismatch,
+      );
+    }
+    _associatedAccountFingerprint = fingerprint;
+    return const CommitAssociatedAccountFingerprintResult(
+      AssociatedAccountFingerprintCommitStatus.committed,
+    );
+  }
+
+  @override
+  Future<List<String>> loadMeaningfulAccountFingerprints() async {
+    return [
+      for (final entry in _accounts.entries)
+        if (entry.value.bootstrapState != AccountBootstrapState.notStarted)
+          entry.key,
+    ];
+  }
+
+  /// Test-only convenience: directly seeds the associated-account marker
+  /// without going through [commitAssociatedAccountFingerprint]'s own CAS
+  /// semantics, mirroring [seedAccount]'s own precedent.
+  void seedAssociatedAccountFingerprint(String? fingerprint) {
+    _associatedAccountFingerprint = fingerprint;
+  }
 
   @override
   Future<AccountSyncState?> loadAccountState(String accountFingerprint) async {
@@ -244,18 +294,6 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
         status: IncomingCheckpointStatus.invalidRequest,
       );
     }
-    if (request.mode == IncomingCheckpointMode.bootstrapCreate) {
-      throw UnimplementedError(
-        'InMemorySyncPersistenceStore does not implement bootstrapCreate -- '
-        'no Phase 4E-3b test exercises it.',
-      );
-    }
-    if (request.expectedCurrentDataEpoch == null ||
-        request.bootstrapTargetDataEpoch != null) {
-      return const CommitIncomingBatchCheckpointResult(
-        status: IncomingCheckpointStatus.invalidRequest,
-      );
-    }
     if (request.nextBootstrapState != null &&
         request.expectedBootstrapState == null) {
       return const CommitIncomingBatchCheckpointResult(
@@ -276,6 +314,65 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
           status: IncomingCheckpointStatus.invalidRecordSystemFields,
         );
       }
+    }
+
+    // Build 26 Phase 4E-4: a faithful (if simplified) in-memory
+    // reproduction of `ProtectedSyncPersistenceStore._commitBootstrapCreate`
+    // -- needed now that `KeptSyncBootstrapCoordinator` genuinely exercises
+    // this mode for a clean device's first bootstrap.
+    if (request.mode == IncomingCheckpointMode.bootstrapCreate) {
+      if (request.expectedCurrentDataEpoch != null ||
+          request.expectedPreviousServerToken != null ||
+          request.bootstrapTargetDataEpoch == null) {
+        return const CommitIncomingBatchCheckpointResult(
+          status: IncomingCheckpointStatus.invalidRequest,
+        );
+      }
+      if (_accounts.containsKey(request.accountFingerprint)) {
+        return const CommitIncomingBatchCheckpointResult(
+          status: IncomingCheckpointStatus.bucketAlreadyExists,
+        );
+      }
+      final expected =
+          request.expectedBootstrapState ?? AccountBootstrapState.notStarted;
+      if (expected != AccountBootstrapState.notStarted) {
+        return const CommitIncomingBatchCheckpointResult(
+          status: IncomingCheckpointStatus.bootstrapStateMismatch,
+        );
+      }
+      final nextBootstrapState =
+          request.nextBootstrapState ?? AccountBootstrapState.notStarted;
+      if (!isValidBootstrapTransition(
+        AccountBootstrapState.notStarted,
+        nextBootstrapState,
+      )) {
+        return const CommitIncomingBatchCheckpointResult(
+          status: IncomingCheckpointStatus.invalidBootstrapTransition,
+        );
+      }
+      final fields = <String, String>{};
+      for (final update in request.recordSystemFieldsUpdates) {
+        fields[update.recordName] = update.systemFields;
+      }
+      _accounts[request.accountFingerprint] = AccountSyncState(
+        dataEpoch: request.bootstrapTargetDataEpoch!,
+        serverChangeToken: request.pendingServerChangeToken,
+        recordSystemFields: fields,
+        bootstrapState: nextBootstrapState,
+      );
+      return CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.committed,
+        systemFieldCount: request.recordSystemFieldsUpdates.length,
+        bootstrapStateChanged:
+            nextBootstrapState != AccountBootstrapState.notStarted,
+        tokenChanged: true,
+      );
+    }
+    if (request.expectedCurrentDataEpoch == null ||
+        request.bootstrapTargetDataEpoch != null) {
+      return const CommitIncomingBatchCheckpointResult(
+        status: IncomingCheckpointStatus.invalidRequest,
+      );
     }
 
     final current = _accounts[request.accountFingerprint];

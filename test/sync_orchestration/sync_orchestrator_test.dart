@@ -23,6 +23,7 @@ import 'package:wisdom_app/sync_orchestration/pending_incoming_sync_batch.dart';
 import 'package:wisdom_app/sync_orchestration/sync_orchestrator.dart';
 import 'package:wisdom_app/sync_orchestration/sync_pass_result.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
+import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
 import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
@@ -168,6 +169,16 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
   int clearServerChangeTokenCallCount = 0;
   int clearAccountStateCallCount = 0;
   int quarantineAccountStateCallCount = 0;
+
+  /// Build 26 Phase 4E-4: the new associated-account-marker persistence
+  /// surface is owned by `KeptSyncBootstrapCoordinator` alone --
+  /// `SyncOrchestrator` (Phase 4D-2) never calls it and never legitimately
+  /// could. Mirrors the existing `commitIncomingBatchCheckpoint`/
+  /// `retireOutboxMutationIfCurrent` fail-loud precedent immediately above:
+  /// any call here is itself the test failure.
+  int loadAssociatedAccountFingerprintCallCount = 0;
+  int commitAssociatedAccountFingerprintCallCount = 0;
+  int loadMeaningfulAccountFingerprintsCallCount = 0;
 
   /// Build 26 Phase 4E-1: `SyncOrchestrator` is Phase 4D-2 -- it must never
   /// call the Phase 4E incoming-checkpoint API (that is Phase 4E-3's own,
@@ -322,6 +333,40 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
     callOrder.add('retireOutboxMutationIfCurrent');
     throw StateError(
       'Outbox mutation retirement must not be called by SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<String?> loadAssociatedAccountFingerprint() async {
+    loadAssociatedAccountFingerprintCallCount += 1;
+    callOrder.add('loadAssociatedAccountFingerprint');
+    throw StateError(
+      'Associated-account-fingerprint read must not be called by '
+      'SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<CommitAssociatedAccountFingerprintResult>
+      commitAssociatedAccountFingerprint({
+    required String fingerprint,
+    required String? expectedCurrent,
+  }) async {
+    commitAssociatedAccountFingerprintCallCount += 1;
+    callOrder.add('commitAssociatedAccountFingerprint');
+    throw StateError(
+      'Associated-account-fingerprint commit must not be called by '
+      'SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<List<String>> loadMeaningfulAccountFingerprints() async {
+    loadMeaningfulAccountFingerprintsCallCount += 1;
+    callOrder.add('loadMeaningfulAccountFingerprints');
+    throw StateError(
+      'Meaningful-legacy-fingerprint enumeration must not be called by '
+      'SyncOrchestrator.',
     );
   }
 }

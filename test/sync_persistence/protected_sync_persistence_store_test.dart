@@ -12,6 +12,7 @@ import 'package:wisdom_app/sync/cloud_kept_wisdom_projection.dart';
 import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync/sync_change.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
+import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_envelope.dart';
@@ -1454,6 +1455,235 @@ void main() {
       expect(file.path, contains('/east_sync_state'));
       expect(file.path, isNot(contains('east_kept_state')));
     }
+  });
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 4E-4: associatedAccountFingerprint CAS surface and
+  // loadMeaningfulAccountFingerprints.
+  // ---------------------------------------------------------------------
+
+  group('loadAssociatedAccountFingerprint / commitAssociatedAccountFingerprint',
+      () {
+    test('absent marker loads as null', () async {
+      final store = buildStore();
+      expect(await store.loadAssociatedAccountFingerprint(), isNull);
+    });
+
+    test('CAS with expectedCurrent: null writes a fresh marker', () async {
+      final store = buildStore();
+      final result = await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: null,
+      );
+      expect(result.status, AssociatedAccountFingerprintCommitStatus.committed);
+      expect(await store.loadAssociatedAccountFingerprint(), fingerprintA);
+    });
+
+    test(
+        'CAS with expectedCurrent exactly matching the existing marker is '
+        'an idempotent no-op reported as alreadyCommitted', () async {
+      final store = buildStore();
+      await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: null,
+      );
+      final result = await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: fingerprintA,
+      );
+      expect(
+        result.status,
+        AssociatedAccountFingerprintCommitStatus.alreadyCommitted,
+      );
+      expect(await store.loadAssociatedAccountFingerprint(), fingerprintA);
+    });
+
+    test('CAS with the wrong expectedCurrent never writes', () async {
+      final store = buildStore();
+      final result = await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: fingerprintB,
+      );
+      expect(
+        result.status,
+        AssociatedAccountFingerprintCommitStatus.expectedCurrentMismatch,
+      );
+      expect(await store.loadAssociatedAccountFingerprint(), isNull);
+    });
+
+    test(
+        'a different, already-durable marker can never be accidentally '
+        'overwritten by a null-expecting caller', () async {
+      final store = buildStore();
+      await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: null,
+      );
+      final result = await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintB,
+        expectedCurrent: null,
+      );
+      expect(
+        result.status,
+        AssociatedAccountFingerprintCommitStatus.expectedCurrentMismatch,
+      );
+      expect(await store.loadAssociatedAccountFingerprint(), fingerprintA);
+    });
+
+    test(
+        'an invalid (non-fingerprint-shaped) value is rejected before any '
+        'write', () async {
+      final store = buildStore();
+      // The shape check happens synchronously, before the coordinator-
+      // serialized write ever begins -- a closure lets `throwsA` catch a
+      // synchronous throw, unlike passing the call's (never-produced)
+      // Future value directly.
+      expect(
+        () => store.commitAssociatedAccountFingerprint(
+          fingerprint: 'not-a-valid-fingerprint',
+          expectedCurrent: null,
+        ),
+        throwsA(isA<SyncPersistenceStoreException>()),
+      );
+      expect(await store.loadAssociatedAccountFingerprint(), isNull);
+    });
+
+    test('a failed protection write preserves the previous marker value',
+        () async {
+      final bridge = _FakeFileProtectionBridge();
+      final store = buildStore(bridge: bridge);
+      await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: null,
+      );
+
+      // This second `commitAssociatedAccountFingerprint` call still calls
+      // `protectAndVerifyComplete(finalPath())` twice even on its ordinary
+      // CAS-then-write path: once inside `_loadEnvelope`'s own pre-write
+      // re-verify (reading the current marker to compare against
+      // `expectedCurrent`), and again inside `_replaceEnvelope`'s
+      // post-rename verify of the newly written final file -- see
+      // `_FakeFileProtectionBridge.callCountFor`'s doc comment.
+      // `failNextTimeFor` alone would catch the *first* (load-time) call,
+      // never reaching the write this test means to exercise -- so, per
+      // that documented convention, a baseline is captured immediately
+      // before this call and the injected failure targets specifically the
+      // second (write-time, post-rename) call.
+      final baseline = bridge.callCountFor(finalPath());
+      bridge.onProtect = (path) async {
+        if (path == finalPath() && bridge.callCountFor(path) == baseline + 2) {
+          throw const FileProtectionException('Simulated protection failure.');
+        }
+      };
+
+      Object? caught;
+      try {
+        await store.commitAssociatedAccountFingerprint(
+          fingerprint: fingerprintB,
+          expectedCurrent: fingerprintA,
+        );
+      } catch (error) {
+        caught = error;
+      }
+      bridge.onProtect = null;
+
+      // A raw FileProtectionException must never escape a public
+      // ProtectedSyncPersistenceStore operation -- matching every other
+      // protection failure in this suite (e.g. 38b's load-time analogue).
+      // A write-time final-protect failure specifically triggers
+      // `_rollbackAfterRename`, which restores the pre-write backup and, on
+      // a successful rollback, reports `replace-post-rename` while
+      // retaining the original `FileProtectionException` as `cause` --
+      // never surfacing it raw.
+      expect(caught, isA<SyncPersistenceStoreException>());
+      final typed = caught as SyncPersistenceStoreException;
+      expect(typed.stage, 'replace-post-rename');
+      expect(typed.cause, isA<FileProtectionException>());
+
+      expect(await store.loadAssociatedAccountFingerprint(), fingerprintA);
+      // The failed write must never leave behind an AccountSyncState
+      // bucket for either fingerprint, and must never touch unrelated
+      // state.
+      expect(await store.loadAccountState(fingerprintA), isNull);
+      expect(await store.loadAccountState(fingerprintB), isNull);
+    });
+
+    test(
+        'committing the marker never creates an AccountSyncState bucket for '
+        'that fingerprint and never touches an unrelated account\'s state',
+        () async {
+      final store = buildStore();
+      await store.replaceAccountState(
+        fingerprintB,
+        AccountSyncState(dataEpoch: epoch, serverChangeToken: 'QQQQ'),
+      );
+      await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: null,
+      );
+      expect(await store.loadAccountState(fingerprintA), isNull);
+      final unrelated = await store.loadAccountState(fingerprintB);
+      expect(unrelated!.serverChangeToken, 'QQQQ');
+      expect(unrelated.dataEpoch, epoch);
+    });
+
+    test('toString()/toLogSafeSummary() never render the fingerprint value',
+        () async {
+      final store = buildStore();
+      final result = await store.commitAssociatedAccountFingerprint(
+        fingerprint: fingerprintA,
+        expectedCurrent: null,
+      );
+      expect(result.toString().contains(fingerprintA), isFalse);
+      expect(
+          result.toLogSafeSummary().toString().contains(fingerprintA), isFalse);
+    });
+  });
+
+  group('loadMeaningfulAccountFingerprints', () {
+    test('returns an empty list when no accounts exist', () async {
+      final store = buildStore();
+      expect(await store.loadMeaningfulAccountFingerprints(), isEmpty);
+    });
+
+    test('excludes a bucket whose bootstrapState is notStarted', () async {
+      final store = buildStore();
+      await store.replaceAccountState(
+        fingerprintA,
+        AccountSyncState(dataEpoch: epoch),
+      );
+      expect(await store.loadMeaningfulAccountFingerprints(), isEmpty);
+    });
+
+    test('includes a bucket whose bootstrapState is not notStarted', () async {
+      final store = buildStore();
+      await store.replaceAccountState(
+        fingerprintA,
+        AccountSyncState(
+          dataEpoch: epoch,
+          bootstrapState: AccountBootstrapState.remoteBaselinePending,
+        ),
+      );
+      expect(
+        await store.loadMeaningfulAccountFingerprints(),
+        [fingerprintA],
+      );
+    });
+
+    test(
+        'never includes a quarantined account, even one that was '
+        'meaningful before being quarantined', () async {
+      final store = buildStore();
+      await store.replaceAccountState(
+        fingerprintA,
+        AccountSyncState(
+          dataEpoch: epoch,
+          bootstrapState: AccountBootstrapState.complete,
+        ),
+      );
+      await store.quarantineAccountState(fingerprintA);
+      expect(await store.loadMeaningfulAccountFingerprints(), isEmpty);
+    });
   });
 }
 

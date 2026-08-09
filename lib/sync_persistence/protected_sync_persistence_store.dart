@@ -8,6 +8,7 @@ import '../persistence/persistence_operation_coordinator.dart';
 import '../sync/sync_change.dart';
 import '../utils/kept_diagnostics.dart';
 import 'account_sync_state.dart';
+import 'associated_account_fingerprint_commit.dart';
 import 'incoming_batch_checkpoint.dart';
 import 'outbox_mutation_retirement.dart';
 import 'persisted_outbox_mutation.dart';
@@ -645,6 +646,84 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
         return const RetireOutboxMutationResult(
           RetireOutboxMutationStatus.retired,
         );
+      },
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Build 26 Phase 4E-4: the durable device-association marker. A narrow,
+  // single-purpose compare-and-swap pair -- never a generic "set any
+  // envelope field" API. Neither method here ever creates or touches an
+  // [AccountSyncState] bucket, and neither ever fabricates a `DataEpoch`.
+  // -----------------------------------------------------------------------
+
+  @override
+  Future<String?> loadAssociatedAccountFingerprint() {
+    return _coordinator.runExclusive<String?>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        return envelope.associatedAccountFingerprint;
+      },
+    );
+  }
+
+  @override
+  Future<CommitAssociatedAccountFingerprintResult>
+      commitAssociatedAccountFingerprint({
+    required String fingerprint,
+    required String? expectedCurrent,
+  }) {
+    if (!looksLikeAccountFingerprint(fingerprint)) {
+      throw const SyncPersistenceStoreException(
+        'commit-associated-fingerprint-invalid',
+        'Refused to commit a value that does not look like an opaque '
+            'account fingerprint.',
+      );
+    }
+    return _coordinator.runExclusive<CommitAssociatedAccountFingerprintResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.associatedAccountFingerprint;
+
+        // Idempotent-repeat shortcut, mirroring this store's other CAS-style
+        // methods: the target value is already exactly durable.
+        if (current == fingerprint) {
+          return const CommitAssociatedAccountFingerprintResult(
+            AssociatedAccountFingerprintCommitStatus.alreadyCommitted,
+          );
+        }
+        if (current != expectedCurrent) {
+          return const CommitAssociatedAccountFingerprintResult(
+            AssociatedAccountFingerprintCommitStatus.expectedCurrentMismatch,
+          );
+        }
+
+        await _replaceEnvelope(
+          envelope.withAssociatedAccountFingerprint(fingerprint),
+        );
+        keptDiagnostic(
+          'sync-persistence-store: commit-associated-fingerprint-ok',
+        );
+        return const CommitAssociatedAccountFingerprintResult(
+          AssociatedAccountFingerprintCommitStatus.committed,
+        );
+      },
+    );
+  }
+
+  @override
+  Future<List<String>> loadMeaningfulAccountFingerprints() {
+    return _coordinator.runExclusive<List<String>>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        return [
+          for (final entry in envelope.accounts.entries)
+            if (entry.value.bootstrapState != AccountBootstrapState.notStarted)
+              entry.key,
+        ];
       },
     );
   }

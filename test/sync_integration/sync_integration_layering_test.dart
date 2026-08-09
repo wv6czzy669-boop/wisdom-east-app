@@ -142,9 +142,25 @@ void main() {
 
   test(
       'no production file under lib/sync_integration/ has an import/export '
-      'directive referencing the sync_platform layer', () {
+      'directive referencing the sync_platform layer, EXCEPT '
+      'kept_sync_bootstrap_coordinator.dart -- Build 26 Phase 4E-4\'s '
+      'existing-user remote-first bootstrap is the one deliberate, '
+      'disclosed exception to this prior-phase invariant: it alone must '
+      'call the real CloudKit transport primitives '
+      '(getAccountSnapshot/configurePrivateZone/fetchPrivateZoneChanges/'
+      'modifyPrivateRecords) directly to perform its one-time remote '
+      'baseline fetch -- never KeptSyncIntegrationCoordinator or '
+      'IncomingKeptSyncCoordinator, which remain sync_platform-free exactly '
+      'as before', () {
+    const allowedFiles = {
+      'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
+    };
     final violations = <String>[];
     for (final file in integrationFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final isAllowed =
+          allowedFiles.any((allowed) => normalizedPath.endsWith(allowed));
+      if (isAllowed) continue;
       for (final line in file.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {
@@ -206,8 +222,25 @@ void main() {
       'kept_sync_integration_coordinator.dart',
     ];
 
+    // Build 26 Phase 4E-4: kept_sync_bootstrap_coordinator.dart alone may
+    // additionally import from sync_platform -- see the dedicated
+    // sync_platform-exception test immediately above for the full
+    // rationale. This is an exact, single-file addition, never a directory-
+    // wide loosening of the allowlist above.
+    const bootstrapCoordinatorAdditionalPrefixes = [
+      '../sync_platform/',
+      'package:wisdom_app/sync_platform/',
+    ];
+    const bootstrapCoordinatorFile =
+        'lib/sync_integration/kept_sync_bootstrap_coordinator.dart';
+
     final violations = <String>[];
     for (final file in integrationFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final effectivePrefixes =
+          normalizedPath.endsWith(bootstrapCoordinatorFile)
+              ? [...allowedPrefixes, ...bootstrapCoordinatorAdditionalPrefixes]
+              : allowedPrefixes;
       for (final line in file.readAsLinesSync()) {
         final trimmed = line.trimLeft();
         if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {
@@ -217,7 +250,7 @@ void main() {
         if (match == null) continue;
         final target = match.group(1)!;
         final isAllowed =
-            allowedPrefixes.any((prefix) => target.startsWith(prefix));
+            effectivePrefixes.any((prefix) => target.startsWith(prefix));
         if (!isAllowed) {
           violations.add('${file.path}: "$trimmed"');
         }
@@ -227,28 +260,47 @@ void main() {
   });
 
   test(
-      'no MethodChannel/EventChannel invocation and no CloudKit transport '
-      'method or type name exists anywhere under lib/sync_integration/ (in '
-      'real code, not comments)', () {
-    const forbiddenSubstrings = [
+      'no MethodChannel/EventChannel invocation and no raw CloudKit wire/'
+      'native transport type exists anywhere under lib/sync_integration/ '
+      '(in real code, not comments) -- Build 26 Phase 4E-4: '
+      'kept_sync_bootstrap_coordinator.dart alone may call the '
+      'CloudKitPlatformBridge interface\'s own modifyPrivateRecords/'
+      'fetchPrivateZoneChanges methods (never MethodChannel/EventChannel '
+      'directly, never a raw CKRecord/wire-envelope type), since it alone '
+      'performs the one-time remote baseline fetch', () {
+    const alwaysForbiddenSubstrings = [
       'MethodChannel(',
       'EventChannel(',
       'invokeMethod',
-      'modifyPrivateRecords',
-      'fetchPrivateZoneChanges',
       'CKRecord',
       'CKModifyRecordsOperation',
       'CKFetchRecordZoneChangesOperation',
       'CloudKeptWisdomWireEnvelope',
       'MethodChannelCloudKitPlatformBridge',
     ];
+    const onlyForbiddenOutsideBootstrapCoordinator = [
+      'modifyPrivateRecords',
+      'fetchPrivateZoneChanges',
+    ];
+    const bootstrapCoordinatorFile =
+        'lib/sync_integration/kept_sync_bootstrap_coordinator.dart';
 
     final violations = <String>[];
     for (final file in integrationFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final isBootstrapCoordinator =
+          normalizedPath.endsWith(bootstrapCoordinatorFile);
       final codeOnly = _stripComments(file.readAsStringSync());
-      for (final forbidden in forbiddenSubstrings) {
+      for (final forbidden in alwaysForbiddenSubstrings) {
         if (codeOnly.contains(forbidden)) {
           violations.add('${file.path} contains "$forbidden" in code');
+        }
+      }
+      if (!isBootstrapCoordinator) {
+        for (final forbidden in onlyForbiddenOutsideBootstrapCoordinator) {
+          if (codeOnly.contains(forbidden)) {
+            violations.add('${file.path} contains "$forbidden" in code');
+          }
         }
       }
     }
@@ -333,6 +385,102 @@ void main() {
       }
     }
     expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'Build 26 Phase 4E-4: no startup, foreground, lifecycle, screen, '
+      'widget, or network trigger anywhere under lib/ (outside '
+      'kept_sync_bootstrap_coordinator.dart\'s own definition file -- '
+      'app_services.dart only ever constructs the coordinator, it never '
+      'calls any of these methods) calls evaluateAssociation/'
+      'authorizeAssociation/repairLegacyAssociationMarker/runBootstrap -- '
+      'every one remains callable but uncalled by any production code '
+      'path; a future phase owns wiring an automatic trigger', () {
+    const automaticTriggerMethodCalls = [
+      '.evaluateAssociation(',
+      '.authorizeAssociation(',
+      '.repairLegacyAssociationMarker(',
+      '.runBootstrap(',
+    ];
+    final violations = <String>[];
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      if (normalizedPath.endsWith(
+        'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
+      )) {
+        continue;
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      for (final pattern in automaticTriggerMethodCalls) {
+        if (codeOnly.contains(pattern)) {
+          violations.add('${file.path} contains "$pattern"');
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'Build 26 Phase 4E-4: app_services.dart constructs exactly one '
+      'production KeptSyncBootstrapCoordinator, sharing the same '
+      'syncIntegrationOperationCoordinator instance and resource key that '
+      'KeptSyncIntegrationCoordinator/IncomingKeptSyncCoordinator use -- a '
+      'positive proof that bootstrap, every outgoing user mutation, and '
+      'every incoming-apply pass always serialize against each other', () {
+    final matches = allLibFiles
+        .where((file) => file.path
+            .replaceAll('\\', '/')
+            .endsWith('lib/services/app_services.dart'))
+        .toList();
+    expect(matches, hasLength(1),
+        reason: 'Expected to find exactly one app_services.dart under '
+            'lib/services/.');
+    final source = matches.single.readAsStringSync();
+
+    final importsBootstrapCoordinator = source
+        .split('\n')
+        .map((line) => line.trimLeft())
+        .where(
+            (line) => line.startsWith('import ') || line.startsWith('export '))
+        .any((line) => line.contains('kept_sync_bootstrap_coordinator.dart'));
+    expect(importsBootstrapCoordinator, isTrue,
+        reason: 'app_services.dart is expected to import '
+            'kept_sync_bootstrap_coordinator.dart.');
+
+    final codeOnly = _stripComments(source);
+    expect(codeOnly.contains('KeptSyncBootstrapCoordinator('), isTrue,
+        reason: 'app_services.dart is expected to construct '
+            'KeptSyncBootstrapCoordinator directly.');
+    // Exactly one construction call -- never a second, independently
+    // configured instance elsewhere.
+    final constructionCount =
+        RegExp('KeptSyncBootstrapCoordinator\\(').allMatches(codeOnly).length;
+    expect(constructionCount, 1,
+        reason: 'Expected exactly one KeptSyncBootstrapCoordinator( '
+            'construction call in app_services.dart.');
+    expect(
+      codeOnly.contains(
+        'integrationCoordinator: syncIntegrationOperationCoordinator,',
+      ),
+      isTrue,
+      reason: 'app_services.dart is expected to pass the shared '
+          'syncIntegrationOperationCoordinator instance to every '
+          'sync_integration coordinator, including the new bootstrap '
+          'coordinator.',
+    );
+    // Confirm it is never called automatically from within app_services.dart
+    // itself either.
+    const automaticTriggerMethodCalls = [
+      '.evaluateAssociation(',
+      '.authorizeAssociation(',
+      '.repairLegacyAssociationMarker(',
+      '.runBootstrap(',
+    ];
+    for (final pattern in automaticTriggerMethodCalls) {
+      expect(codeOnly.contains(pattern), isFalse,
+          reason: 'app_services.dart must never call "$pattern" -- '
+              'construction only.');
+    }
   });
 
   test(
@@ -464,8 +612,9 @@ void main() {
   test(
       'privileged KeptRepository raw-envelope surface (.loadAllRecords( and '
       '.replaceAllRecords() is called only in kept_repository.dart (declares '
-      'them) and incoming_kept_sync_coordinator.dart (the sole authorized '
-      'production consumer) -- never anywhere else under lib/', () {
+      'them), incoming_kept_sync_coordinator.dart, and (Build 26 Phase 4E-4) '
+      'kept_sync_bootstrap_coordinator.dart -- the sole authorized '
+      'production consumers -- never anywhere else under lib/', () {
     // Build 26 Phase 4E-3b final-audit correction (BLOCKING finding):
     // `KeptRepository.loadAllRecords`/`replaceAllRecords` are a privileged,
     // sync-unaware raw-envelope surface that `IncomingKeptSyncCoordinator`
@@ -492,6 +641,7 @@ void main() {
     const allowedFiles = {
       'lib/repositories/kept_repository.dart',
       'lib/sync_integration/incoming_kept_sync_coordinator.dart',
+      'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
     };
 
     final violations = <String>[];
@@ -573,6 +723,12 @@ void main() {
       'IncomingKeptSyncCoordinator',
       'IncomingApplyResult',
       'IncomingApplyStatus',
+      // Build 26 Phase 4E-4 additions.
+      'KeptSyncBootstrapCoordinator',
+      'AssociationEvaluation',
+      'AssociationAuthorizationResult',
+      'LegacyAssociationRepairResult',
+      'BootstrapRunResult',
     ];
 
     final scanTargets = allLibFiles.where((file) {

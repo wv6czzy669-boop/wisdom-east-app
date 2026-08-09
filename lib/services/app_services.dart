@@ -8,9 +8,11 @@ import '../persistence/storage_preferences_adapter.dart';
 import '../repositories/daily_access_repository.dart';
 import '../repositories/kept_repository.dart';
 import '../sync_integration/incoming_kept_sync_coordinator.dart';
+import '../sync_integration/kept_sync_bootstrap_coordinator.dart';
 import '../sync_integration/kept_sync_integration_coordinator.dart';
 import '../sync_integration/protected_local_sync_intent_store.dart';
 import '../sync_persistence/protected_sync_persistence_store.dart';
+import '../sync_platform/method_channel_cloud_kit_platform_bridge.dart';
 import 'daily_wisdom_access_service.dart';
 import 'kept_discovery_hint_service.dart';
 import 'kept_migration_coordinator.dart';
@@ -144,6 +146,29 @@ late final KeptSyncIntegrationCoordinator keptSyncIntegrationCoordinator;
 /// owns wiring an automatic trigger.
 late final IncomingKeptSyncCoordinator incomingKeptSyncCoordinator;
 
+/// Build 26 Phase 4E-4: the production existing-user remote-first
+/// bootstrap/account-association/legacy-backfill coordinator. Populated in
+/// the same single bootstrap attempt, alongside
+/// [keptSyncIntegrationCoordinator] and [incomingKeptSyncCoordinator] --
+/// shares the exact same [syncIntegrationOperationCoordinator] instance and
+/// resource key (`kept_sync_integration_v1`), so bootstrap, every outgoing
+/// user mutation, and every incoming-apply pass always serialize against
+/// each other. `cloudKitPlatformBridge` below is the first production
+/// construction of a [CloudKitPlatformBridge] anywhere in this app --
+/// [SyncOrchestrator] has no production instance yet either. Nothing in this
+/// phase (or any production code path) calls
+/// [KeptSyncBootstrapCoordinator.evaluateAssociation],
+/// [KeptSyncBootstrapCoordinator.authorizeAssociation],
+/// [KeptSyncBootstrapCoordinator.repairLegacyAssociationMarker], or
+/// [KeptSyncBootstrapCoordinator.runBootstrap] automatically -- Phase 4F
+/// owns wiring an automatic trigger.
+late final KeptSyncBootstrapCoordinator keptSyncBootstrapCoordinator;
+
+/// See [keptSyncBootstrapCoordinator]'s doc comment. `const` -- the
+/// method-channel bridge holds no mutable state of its own.
+const MethodChannelCloudKitPlatformBridge cloudKitPlatformBridge =
+    MethodChannelCloudKitPlatformBridge();
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -166,6 +191,13 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       integrationCoordinator: syncIntegrationOperationCoordinator,
     );
     incomingKeptSyncCoordinator = IncomingKeptSyncCoordinator(
+      keptRepository: repository,
+      intentStore: localSyncIntentStore,
+      syncPersistenceStore: syncPersistenceStore,
+      integrationCoordinator: syncIntegrationOperationCoordinator,
+    );
+    keptSyncBootstrapCoordinator = KeptSyncBootstrapCoordinator(
+      bridge: cloudKitPlatformBridge,
       keptRepository: repository,
       intentStore: localSyncIntentStore,
       syncPersistenceStore: syncPersistenceStore,

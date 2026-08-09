@@ -154,4 +154,100 @@ void main() {
     expect(decoded, envelope);
     expect(decoded.accounts[fingerprintA]!.dataEpoch, epoch);
   });
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 4E-4: associatedAccountFingerprint -- the durable,
+  // top-level, bucket-independent association marker.
+  // ---------------------------------------------------------------------
+
+  group('associatedAccountFingerprint', () {
+    test('absent on a freshly-empty envelope decodes to null', () {
+      final envelope = SyncPersistenceEnvelope.empty();
+      expect(envelope.associatedAccountFingerprint, isNull);
+    });
+
+    test(
+        'a legacy-shaped payload with no associatedAccountFingerprint key '
+        'decodes to null -- backward compatible, never self-healed', () {
+      final decoded = SyncPersistenceEnvelope.decode({
+        'schemaVersion': 1,
+        'accounts': <String, dynamic>{},
+      });
+      expect(decoded.associatedAccountFingerprint, isNull);
+    });
+
+    test('a valid marker round-trips through encode/decode', () {
+      final envelope = SyncPersistenceEnvelope.empty()
+          .withAssociatedAccountFingerprint(fingerprintA);
+      final decoded = SyncPersistenceEnvelope.decode(envelope.encode());
+      expect(decoded.associatedAccountFingerprint, fingerprintA);
+      expect(decoded, envelope);
+    });
+
+    test('a valid marker round-trips through real JSON text', () {
+      final envelope = SyncPersistenceEnvelope.empty()
+          .withAssociatedAccountFingerprint(fingerprintA);
+      final decoded =
+          SyncPersistenceEnvelope.decodeString(envelope.encodeString());
+      expect(decoded.associatedAccountFingerprint, fingerprintA);
+    });
+
+    test('decode rejects a malformed (non-fingerprint-shaped) marker value',
+        () {
+      expect(
+        () => SyncPersistenceEnvelope.decode({
+          'schemaVersion': 1,
+          'accounts': <String, dynamic>{},
+          'associatedAccountFingerprint': 'not-a-valid-fingerprint',
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test(
+        'withAssociatedAccountFingerprint rejects a malformed fingerprint '
+        'at construction time', () {
+      expect(
+        () => SyncPersistenceEnvelope.empty()
+            .withAssociatedAccountFingerprint('not-a-valid-fingerprint'),
+        throwsFormatException,
+      );
+    });
+
+    test(
+        'setting the marker never touches unrelated accounts/outbox/'
+        'systemFields state', () {
+      final envelope = SyncPersistenceEnvelope.empty()
+          .withAccount(
+            fingerprintB,
+            AccountSyncState(dataEpoch: epoch, serverChangeToken: 'QQQQ'),
+          )
+          .withAssociatedAccountFingerprint(fingerprintA);
+
+      expect(envelope.associatedAccountFingerprint, fingerprintA);
+      expect(envelope.accounts[fingerprintB]!.serverChangeToken, 'QQQQ');
+      expect(envelope.accounts[fingerprintB]!.dataEpoch, epoch);
+    });
+
+    test(
+        'setting the marker never creates an account bucket for that '
+        'fingerprint', () {
+      final envelope = SyncPersistenceEnvelope.empty()
+          .withAssociatedAccountFingerprint(fingerprintA);
+      expect(envelope.accounts[fingerprintA], isNull);
+      expect(envelope.accounts, isEmpty);
+    });
+
+    test('equality and hashCode include the marker', () {
+      final withMarker = SyncPersistenceEnvelope.empty()
+          .withAssociatedAccountFingerprint(fingerprintA);
+      final withoutMarker = SyncPersistenceEnvelope.empty();
+      expect(withMarker, isNot(withoutMarker));
+      expect(withMarker.hashCode, isNot(withoutMarker.hashCode));
+
+      final withDifferentMarker = SyncPersistenceEnvelope.empty()
+          .withAssociatedAccountFingerprint(fingerprintB);
+      expect(withMarker, isNot(withDifferentMarker));
+    });
+  });
 }

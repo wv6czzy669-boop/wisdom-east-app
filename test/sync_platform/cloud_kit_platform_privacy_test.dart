@@ -241,9 +241,10 @@ void main() {
   });
 
   group(
-      '5. only the isolated sync_orchestration layer may consume CloudKit '
-      'platform contracts; startup, repositories, UI, services, '
-      'persistence, and unrelated production code may not', () {
+      '5. only the isolated sync_orchestration layer, plus two exact, '
+      'narrowly-approved Phase 4E-4 exceptions, may consume CloudKit '
+      'platform contracts; startup, repositories, screens, widgets, '
+      'services, persistence, and unrelated production code may not', () {
     // Build 26 Phase 4D-2 correction: this group previously encoded the
     // Phase 4B-1 boundary ("no production file outside lib/sync_platform/
     // may import the platform bridge"), which was correct only while the
@@ -256,11 +257,41 @@ void main() {
     // blanket "nothing outside sync_platform" rule, while still asserting
     // sync_orchestration's own narrower rules explicitly below -- it is
     // never excluded from scanning without its own checks.
+    //
+    // Build 26 Phase 4E-4 correction: the locked Phase 4E-4 design adds
+    // exactly two further, file-exact (never directory-wide) exceptions to
+    // that same boundary -- see
+    // docs/architecture/EAST_CLOUDKIT_SYNC_V1.md's Phase 4E-4 section:
+    //
+    //   1. lib/sync_integration/kept_sync_bootstrap_coordinator.dart --
+    //      the only file in lib/sync_integration/ permitted to import
+    //      abstract sync_platform CONTRACTS (it owns remote-first
+    //      bootstrap network sequencing and must not go through
+    //      SyncOrchestrator.runSyncPass). It must never import the
+    //      concrete method_channel_cloud_kit_platform_bridge.dart adapter
+    //      or reference MethodChannelCloudKitPlatformBridge in code --
+    //      asserted explicitly below, never merely assumed.
+    //   2. lib/services/app_services.dart -- the composition root, and the
+    //      only production file anywhere permitted to reference the
+    //      concrete MethodChannelCloudKitPlatformBridge adapter or import
+    //      its file. This is not permission for any other file under
+    //      lib/services/ (or lib/repositories/, lib/screens/,
+    //      lib/widgets/) to do either -- asserted explicitly below.
+    //
+    // Every exception here is an exact file path, never a directory-wide
+    // allowlist entry.
 
     final orchestrationDir = Directory('lib/sync_orchestration');
+    final integrationDir = Directory('lib/sync_integration');
     final persistenceDir = Directory('lib/sync_persistence');
     final repositoriesDir = Directory('lib/repositories');
     final servicesDir = Directory('lib/services');
+    final screensDir = Directory('lib/screens');
+    final widgetsDir = Directory('lib/widgets');
+
+    const bootstrapCoordinatorPath =
+        'lib/sync_integration/kept_sync_bootstrap_coordinator.dart';
+    const appServicesPath = 'lib/services/app_services.dart';
 
     List<File> dartFilesIn(Directory dir) {
       if (!dir.existsSync()) return const [];
@@ -296,11 +327,12 @@ void main() {
     });
 
     test(
-        'every production file that imports a sync_platform path, or '
-        'references the concrete MethodChannelCloudKitPlatformBridge '
-        'adapter in code, lives under lib/sync_orchestration/ -- the only '
-        'currently approved non-platform consumer (Phase 4D-2); no '
-        'unrelated production directory may do either', () {
+        'every production file that imports a sync_platform path lives '
+        'under lib/sync_orchestration/, or is one of the two exact Phase '
+        '4E-4 exceptions (kept_sync_bootstrap_coordinator.dart for '
+        'CONTRACTS, app_services.dart as the composition root) -- and no '
+        'production file anywhere except app_services.dart references the '
+        'concrete MethodChannelCloudKitPlatformBridge adapter in code', () {
       final allDartFiles = Directory('lib')
           .listSync(recursive: true)
           .whereType<File>()
@@ -313,16 +345,113 @@ void main() {
         final isPlatformFile = normalizedPath.contains('/sync_platform/');
         final isOrchestrationFile =
             normalizedPath.contains('/sync_orchestration/');
+        final isBootstrapCoordinator =
+            normalizedPath.endsWith(bootstrapCoordinatorPath);
+        final isAppServices = normalizedPath.endsWith(appServicesPath);
+
+        if (!isPlatformFile &&
+            !isOrchestrationFile &&
+            !isBootstrapCoordinator &&
+            !isAppServices) {
+          for (final line in importExportLines(file)) {
+            if (line.contains('sync_platform/')) {
+              violations.add('${file.path}: "$line"');
+            }
+          }
+        }
+
         if (isPlatformFile || isOrchestrationFile) {
           // The platform layer may reference itself; sync_orchestration's
-          // own narrower rules are asserted separately below -- never
-          // silently skipped without its own checks.
+          // own narrower rules (never the concrete adapter) are asserted
+          // separately below -- never silently skipped without its own
+          // checks. Nothing else to check for these files here.
           continue;
         }
+
+        // The concrete MethodChannel adapter may only ever be referenced
+        // from the composition root (app_services.dart) -- not even the
+        // bootstrap coordinator, which is asserted (in its own dedicated
+        // test below) to depend on abstract contracts only.
+        final codeOnly = _stripComments(file.readAsStringSync());
+        if (codeOnly.contains('MethodChannelCloudKitPlatformBridge') &&
+            !isAppServices) {
+          violations.add(
+            '${file.path} references MethodChannelCloudKitPlatformBridge '
+            'in code',
+          );
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'kept_sync_bootstrap_coordinator.dart is the only file under '
+        'lib/sync_integration/ permitted to import a sync_platform path -- '
+        'this is an exact-file allowlist entry, never a directory-wide '
+        'exception', () {
+      final integrationFiles = dartFilesIn(integrationDir);
+      expect(integrationFiles, isNotEmpty);
+
+      final violations = <String>[];
+      for (final file in integrationFiles) {
+        final normalizedPath = file.path.replaceAll('\\', '/');
+        if (normalizedPath.endsWith(bootstrapCoordinatorPath)) continue;
         for (final line in importExportLines(file)) {
           if (line.contains('sync_platform/')) {
             violations.add('${file.path}: "$line"');
           }
+        }
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'kept_sync_bootstrap_coordinator.dart never imports the concrete '
+        'method_channel_cloud_kit_platform_bridge.dart adapter and never '
+        'references MethodChannelCloudKitPlatformBridge in code -- it '
+        'depends on abstract sync_platform CONTRACTS only (Phase 4E-4 '
+        'Exception 1)', () {
+      final file = File(bootstrapCoordinatorPath);
+      expect(file.existsSync(), isTrue,
+          reason: '$bootstrapCoordinatorPath must exist.');
+
+      final violations = <String>[];
+      for (final line in importExportLines(file)) {
+        if (line.contains('sync_platform/') &&
+            line.contains('method_channel_cloud_kit_platform_bridge.dart')) {
+          violations.add('$bootstrapCoordinatorPath: "$line"');
+        }
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+        violations.add(
+          '$bootstrapCoordinatorPath references '
+          'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
+          'mention would already have been stripped above)',
+        );
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'app_services.dart is the only production file outside '
+        'sync_platform/ and sync_orchestration/ permitted to reference the '
+        'concrete MethodChannelCloudKitPlatformBridge adapter -- restated '
+        'here as its own dedicated, explicitly-named guard (Phase 4E-4 '
+        'Exception 2), independent of the combined scan above', () {
+      final allDartFiles = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
+          .toList();
+
+      final violations = <String>[];
+      for (final file in allDartFiles) {
+        final normalizedPath = file.path.replaceAll('\\', '/');
+        if (normalizedPath.contains('/sync_platform/') ||
+            normalizedPath.contains('/sync_orchestration/') ||
+            normalizedPath.endsWith(appServicesPath)) {
+          continue;
         }
         final codeOnly = _stripComments(file.readAsStringSync());
         if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
@@ -332,6 +461,30 @@ void main() {
           );
         }
       }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'app_services.dart only constructs/wires KeptSyncBootstrapCoordinator '
+        '-- it never calls runBootstrap, evaluateAssociation, '
+        'authorizeAssociation, or repairLegacyAssociationMarker itself '
+        '(Phase 4E-4: app_services is composition wiring only, never a '
+        'caller of bootstrap operations; Phase 4F owns wiring an actual '
+        'trigger)', () {
+      final file = File(appServicesPath);
+      expect(file.existsSync(), isTrue, reason: '$appServicesPath must exist.');
+      final codeOnly = _stripComments(file.readAsStringSync());
+
+      const forbiddenCalls = [
+        '.runBootstrap(',
+        '.evaluateAssociation(',
+        '.authorizeAssociation(',
+        '.repairLegacyAssociationMarker(',
+      ];
+      final violations = <String>[
+        for (final call in forbiddenCalls)
+          if (codeOnly.contains(call)) '$appServicesPath calls "$call"',
+      ];
       expect(violations, isEmpty, reason: violations.join('\n'));
     });
 
@@ -384,12 +537,18 @@ void main() {
     });
 
     test(
-        'repository and Reflection/daily-access service files (including '
-        'migration and bootstrap coordinators under lib/services/) never '
-        'import, mention, or invoke CloudKit platform code', () {
+        'repository, screen, widget, and Reflection/daily-access service '
+        'files (every lib/services/ file except the exact composition-root '
+        'exception app_services.dart, whose narrower, explicit allowances '
+        'are asserted separately above) never import, mention, or invoke '
+        'CloudKit platform code', () {
       final targets = <File>[
         ...dartFilesIn(repositoriesDir),
-        ...dartFilesIn(servicesDir),
+        ...dartFilesIn(servicesDir).where(
+          (f) => !f.path.replaceAll('\\', '/').endsWith(appServicesPath),
+        ),
+        ...dartFilesIn(screensDir),
+        ...dartFilesIn(widgetsDir),
       ];
       expect(targets, isNotEmpty);
 

@@ -19,6 +19,7 @@ library;
 import '../sync/sync_change.dart';
 
 import 'account_sync_state.dart';
+import 'associated_account_fingerprint_commit.dart';
 import 'incoming_batch_checkpoint.dart';
 import 'outbox_mutation_retirement.dart';
 import 'persisted_outbox_mutation.dart';
@@ -282,4 +283,36 @@ abstract interface class SyncPersistenceStore {
   Future<RetireOutboxMutationResult> retireOutboxMutationIfCurrent(
     RetireOutboxMutationRequest request,
   );
+
+  /// Build 26 Phase 4E-4: returns the opaque CloudKit account fingerprint
+  /// this device is durably associated with, or `null` if no association
+  /// has ever been completed. A pure read of whatever
+  /// [SyncPersistenceEnvelope.associatedAccountFingerprint] currently
+  /// holds -- never creates, infers, or repairs a value.
+  Future<String?> loadAssociatedAccountFingerprint();
+
+  /// Build 26 Phase 4E-4: atomically compare-and-swap commits [fingerprint]
+  /// as the device's durably associated account fingerprint, but only if
+  /// the marker's current value exactly equals [expectedCurrent] -- `null`
+  /// meaning "expect no marker yet." Never overwrites a different,
+  /// already-durable marker; never creates or touches an [AccountSyncState]
+  /// bucket; never fabricates a `DataEpoch`. See
+  /// `associated_account_fingerprint_commit.dart` for the full typed result
+  /// contract.
+  Future<CommitAssociatedAccountFingerprintResult>
+      commitAssociatedAccountFingerprint({
+    required String fingerprint,
+    required String? expectedCurrent,
+  });
+
+  /// Build 26 Phase 4E-4: returns every active (never quarantined) account
+  /// fingerprint whose [AccountSyncState.bootstrapState] is not
+  /// [AccountBootstrapState.notStarted] -- every "meaningful" legacy
+  /// bucket, for a bootstrap coordinator's own backward-compatible
+  /// association-marker derivation (a device that already completed some
+  /// bootstrap progress before [associatedAccountFingerprint] existed).
+  /// Never includes a quarantined fingerprint. The returned fingerprints
+  /// are opaque values only -- nothing about this method's return value is
+  /// ever logged.
+  Future<List<String>> loadMeaningfulAccountFingerprints();
 }
