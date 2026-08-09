@@ -75,13 +75,15 @@ final class KeptSyncIntegrationCoordinator {
     PersistenceOperationCoordinator? integrationCoordinator,
     String Function()? idFactory,
     DateTime Function()? clock,
+    void Function()? onMutationCommitted,
   })  : _keptRepository = keptRepository,
         _intentStore = intentStore,
         _syncPersistenceStore = syncPersistenceStore,
         _integrationCoordinator =
             integrationCoordinator ?? PersistenceOperationCoordinator(),
         _idFactory = idFactory ?? (() => const Uuid().v4()),
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _onMutationCommitted = onMutationCommitted;
 
   /// The single Phase 4E-2 integration transaction resource key. See the
   /// library doc comment for the required acquisition order.
@@ -93,6 +95,26 @@ final class KeptSyncIntegrationCoordinator {
   final PersistenceOperationCoordinator _integrationCoordinator;
   final String Function() _idFactory;
   final DateTime Function() _clock;
+
+  /// Build 26 Phase 4F fast-follow: an optional, payload-free notification
+  /// invoked at most once per fresh outward-facing user mutation
+  /// ([recordKeep]/[recordReflectionSave]/[recordReflectionDelete]/
+  /// [recordRemove]) that actually wrote a durable [LocalSyncIntent] --
+  /// never on an idempotent no-op, a free-tier rejection, an unchanged
+  /// reflection, a missing item, or a validation failure (see each method's
+  /// own `writtenIntentId != null` guard), and never during
+  /// [reconcileForAssociatedAccount]'s replay path, which reuses the same
+  /// [_advanceIfIntentWasWritten] helper without triggering this callback.
+  ///
+  /// Deliberately typed as a plain, argument-free `void Function()` --
+  /// this file imports nothing from `lib/sync_runtime/` and never learns
+  /// about `SyncRuntimeTrigger` or `CloudKitSyncRuntimeCoordinator`. The
+  /// caller supplied at construction (`app_services.dart`) is solely
+  /// responsible for what happens next; this coordinator only promises to
+  /// call it, synchronously, with zero payload, and to never let a failure
+  /// inside it affect the mutation that just committed -- see
+  /// [_notifyIfIntentWasWritten].
+  final void Function()? _onMutationCommitted;
 
   // -----------------------------------------------------------------------
   // User-mutation surface. Each method acquires [resourceKey] for its
@@ -145,6 +167,7 @@ final class KeptSyncIntegrationCoordinator {
         );
 
         await _advanceIfIntentWasWritten(writtenIntentId);
+        _notifyIfIntentWasWritten(writtenIntentId);
         return result;
       },
     );
@@ -190,6 +213,7 @@ final class KeptSyncIntegrationCoordinator {
         );
 
         await _advanceIfIntentWasWritten(writtenIntentId);
+        _notifyIfIntentWasWritten(writtenIntentId);
         return result;
       },
     );
@@ -228,6 +252,7 @@ final class KeptSyncIntegrationCoordinator {
         );
 
         await _advanceIfIntentWasWritten(writtenIntentId);
+        _notifyIfIntentWasWritten(writtenIntentId);
         return result;
       },
     );
@@ -271,6 +296,7 @@ final class KeptSyncIntegrationCoordinator {
         );
 
         await _advanceIfIntentWasWritten(writtenIntentId);
+        _notifyIfIntentWasWritten(writtenIntentId);
         return result;
       },
     );
@@ -549,6 +575,33 @@ final class KeptSyncIntegrationCoordinator {
       expectedStage: LocalSyncIntentStage.pendingLocalApplication,
       nextStage: LocalSyncIntentStage.localCommittedOutboxPending,
     );
+  }
+
+  /// Build 26 Phase 4F fast-follow: invokes [_onMutationCommitted] exactly
+  /// once, but only when [intentId] is non-null -- the same durable-write
+  /// signal [_advanceIfIntentWasWritten] itself already uses, never
+  /// re-derived from a mutation's result shape (`limitReached`,
+  /// `reflectionLimitReached`, a `null` return, and so on). Called only from
+  /// the four outward-facing `record*` methods, each *after* their own
+  /// `_advanceIfIntentWasWritten` call has already completed -- never from
+  /// [_replayPendingLocalApplication], which calls
+  /// `_advanceIfIntentWasWritten` directly and deliberately does not reach
+  /// this method, so a runtime-triggered reconciliation replay never
+  /// generates an artificial second nudge back into the runtime coordinator
+  /// that is already driving it.
+  ///
+  /// Synchronous, defensive containment: [_onMutationCommitted] is invoked
+  /// with zero arguments and its result (if any) is ignored, wrapped in a
+  /// `try`/`catch` that swallows every exception -- a failure here can never
+  /// affect the mutation that already durably committed, and is never
+  /// logged with any identifier or content.
+  void _notifyIfIntentWasWritten(String? intentId) {
+    if (intentId == null) return;
+    try {
+      _onMutationCommitted?.call();
+    } catch (_) {
+      // Intentionally contained -- see the doc comment above.
+    }
   }
 
   String _mintId() {

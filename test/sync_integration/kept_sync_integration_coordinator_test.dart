@@ -34,9 +34,11 @@ class _Harness {
   _Harness(
       {DateTime Function()? clock,
       int freeKeptLimit = 3,
-      int freeReflectionLimit = 3})
+      int freeReflectionLimit = 3,
+      InMemoryLocalSyncIntentStore? intentStore,
+      void Function()? onMutationCommitted})
       : store = InMemoryKeptStateStore(),
-        intentStore = InMemoryLocalSyncIntentStore(),
+        intentStore = intentStore ?? InMemoryLocalSyncIntentStore(),
         syncPersistenceStore = InMemorySyncPersistenceStore(),
         _repositoryIdFactory = _SequentialIdFactory(),
         _coordinatorIdFactory = _SequentialIdFactory() {
@@ -51,10 +53,11 @@ class _Harness {
     );
     coordinator = KeptSyncIntegrationCoordinator(
       keptRepository: repository,
-      intentStore: intentStore,
+      intentStore: this.intentStore,
       syncPersistenceStore: syncPersistenceStore,
       idFactory: _coordinatorIdFactory.call,
       clock: clock,
+      onMutationCommitted: onMutationCommitted,
     );
   }
 
@@ -65,6 +68,32 @@ class _Harness {
   final _SequentialIdFactory _coordinatorIdFactory;
   late final KeptRepository repository;
   late final KeptSyncIntegrationCoordinator coordinator;
+}
+
+/// Build 26 Phase 4F fast-follow: an [InMemoryLocalSyncIntentStore] subclass
+/// that appends a marker to a shared, injected [order] log every time
+/// [advanceIntentStage] completes -- used only to prove the nudge callback
+/// fires strictly *after* the intent has already reached
+/// `localCommittedOutboxPending`, never before (see the "invoked only after
+/// the intent reaches the outbox-ready stage" test below).
+class _OrderTrackingIntentStore extends InMemoryLocalSyncIntentStore {
+  _OrderTrackingIntentStore(this.order);
+
+  final List<String> order;
+
+  @override
+  Future<void> advanceIntentStage({
+    required String intentId,
+    required LocalSyncIntentStage expectedStage,
+    required LocalSyncIntentStage nextStage,
+  }) async {
+    await super.advanceIntentStage(
+      intentId: intentId,
+      expectedStage: expectedStage,
+      nextStage: nextStage,
+    );
+    order.add('advanceIntentStage');
+  }
 }
 
 const _fingerprint = 'test-account-fingerprint';
@@ -838,6 +867,286 @@ void main() {
       // not a specific order between two unrelated transactions).
       expect(order, containsAll(['reconcile', 'mutation']));
       expect(harness.store.envelope!.activeRecords, hasLength(2));
+    });
+  });
+
+  group('Local-mutation nudge callback (Build 26 Phase 4F fast-follow)', () {
+    test('a successful Keep invokes the callback exactly once', () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+
+      await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(callCount, 1);
+    });
+
+    test('a successful Reflection save invokes the callback exactly once',
+        () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      // Only isolate the Reflection-save invocation below; the Keep above
+      // already correctly invoked the callback once of its own accord.
+      expect(callCount, 1);
+      callCount = 0;
+
+      await harness.coordinator.recordReflectionSave(
+        itemId: kept.items.single.id,
+        reflection: 'A quiet thought.',
+        isKeeper: false,
+      );
+
+      expect(callCount, 1);
+    });
+
+    test('a successful Reflection delete invokes the callback exactly once',
+        () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final itemId = kept.items.single.id;
+      await harness.coordinator.recordReflectionSave(
+        itemId: itemId,
+        reflection: 'A quiet thought.',
+        isKeeper: false,
+      );
+      callCount = 0;
+
+      await harness.coordinator.recordReflectionDelete(itemId: itemId);
+
+      expect(callCount, 1);
+    });
+
+    test('a successful Remove invokes the callback exactly once', () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      callCount = 0;
+
+      final removed =
+          await harness.coordinator.recordRemove(itemId: kept.items.single.id);
+
+      expect(removed, isNotNull);
+      expect(callCount, 1);
+    });
+
+    test('an already-Kept no-op never invokes the callback', () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+      const revealId = 'a5f3c111-1111-4111-8111-111111111111';
+      await harness.coordinator.recordKeep(
+        revealId: revealId,
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      callCount = 0;
+
+      await harness.coordinator.recordKeep(
+        revealId: revealId,
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(callCount, 0);
+    });
+
+    test('a free-Kept-limit rejection never invokes the callback', () async {
+      var callCount = 0;
+      final harness =
+          _Harness(freeKeptLimit: 1, onMutationCommitted: () => callCount++);
+      await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'First.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      callCount = 0;
+
+      final result = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-2222-4111-8111-222222222222',
+        wisdomText: 'Second.',
+        revealedAt: DateTime.utc(2026, 8, 2),
+        isKeeper: false,
+      );
+
+      expect(result.limitReached, isTrue);
+      expect(callCount, 0);
+    });
+
+    test('a free-Reflection-limit rejection never invokes the callback',
+        () async {
+      var callCount = 0;
+      final harness = _Harness(
+          freeReflectionLimit: 0, onMutationCommitted: () => callCount++);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      callCount = 0;
+
+      final result = await harness.coordinator.recordReflectionSave(
+        itemId: kept.items.single.id,
+        reflection: 'Blocked.',
+        isKeeper: false,
+      );
+
+      expect(result.reflectionLimitReached, isTrue);
+      expect(callCount, 0);
+    });
+
+    test('an unchanged Reflection never invokes the callback', () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      final itemId = kept.items.single.id;
+      await harness.coordinator.recordReflectionSave(
+        itemId: itemId,
+        reflection: 'Same.',
+        isKeeper: false,
+      );
+      callCount = 0;
+
+      await harness.coordinator.recordReflectionSave(
+        itemId: itemId,
+        reflection: 'Same.',
+        isKeeper: false,
+      );
+
+      expect(callCount, 0);
+    });
+
+    test('removing a missing item never invokes the callback', () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+
+      final removed =
+          await harness.coordinator.recordRemove(itemId: 'nonexistent');
+
+      expect(removed, isNull);
+      expect(callCount, 0);
+    });
+
+    test(
+        'a callback that throws synchronously never affects the local '
+        'mutation\'s own success or durability', () async {
+      final harness = _Harness(onMutationCommitted: () {
+        throw StateError('boom -- must be contained');
+      });
+
+      final result = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(result.limitReached, isFalse);
+      expect(harness.store.envelope!.activeRecords, hasLength(1));
+      final intents = await harness.intentStore.loadIntents();
+      expect(intents, hasLength(1));
+      expect(intents.single.stage,
+          LocalSyncIntentStage.localCommittedOutboxPending);
+    });
+
+    test(
+        'the callback is invoked only after the intent has already reached '
+        'localCommittedOutboxPending -- never before', () async {
+      final order = <String>[];
+      final harness = _Harness(
+        intentStore: _OrderTrackingIntentStore(order),
+        onMutationCommitted: () => order.add('callback'),
+      );
+
+      await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(order, ['advanceIntentStage', 'callback']);
+    });
+
+    test(
+        'reconciliation/replay of a still-pending intent never invokes the '
+        'user-mutation callback', () async {
+      var callCount = 0;
+      final harness = _Harness(onMutationCommitted: () => callCount++);
+
+      // Seed a still-pendingLocalApplication intent directly, bypassing the
+      // coordinator's own record* methods entirely (mirroring the existing
+      // "replaying a still-pendingLocalApplication intent" test above) --
+      // this is the only way to exercise `_replayPendingLocalApplication`
+      // without it ever passing through a `record*` call site.
+      const revealId = 'a5f3c111-1111-4111-8111-111111111111';
+      final intent = LocalSyncIntent(
+        intentId: '00000000-0000-4000-8000-000000000099',
+        kind: LocalSyncIntentKind.create,
+        payload: LocalSyncIntentPayload.active(
+          revealId: revealId,
+          operation: LocalSyncIntentOperation.keep,
+          wisdomText: 'Be still.',
+          revealedAtMs: DateTime.utc(2026, 8, 1).millisecondsSinceEpoch,
+          keptAtMs: DateTime.utc(2026, 8, 1, 12).millisecondsSinceEpoch,
+          updatedAtMs: DateTime.utc(2026, 8, 1, 12).millisecondsSinceEpoch,
+          mutationId: '00000000-0000-4000-8000-000000000098',
+          localId: '00000000-0000-4000-8000-000000000097',
+        ),
+        stage: LocalSyncIntentStage.pendingLocalApplication,
+        enqueuedAt: DateTime.utc(2026, 8, 1, 12),
+      );
+      await harness.intentStore.enqueueIntent(intent);
+      expect(callCount, 0);
+
+      harness.syncPersistenceStore.seedAccount(
+        _fingerprint,
+        AccountSyncState(
+          dataEpoch: _epoch,
+          bootstrapState: AccountBootstrapState.complete,
+        ),
+      );
+
+      await harness.coordinator.reconcileForAssociatedAccount(
+        const AssociatedSyncAccountContext(accountFingerprint: _fingerprint),
+      );
+
+      // The replay + outbox handoff above durably applied and retired the
+      // seeded intent -- proving reconciliation actually did real work --
+      // yet the user-mutation nudge callback must never have fired for it.
+      expect(await harness.intentStore.loadIntents(), isEmpty);
+      final bucket =
+          await harness.syncPersistenceStore.loadAccountState(_fingerprint);
+      expect(bucket!.outbox, hasLength(1));
+      expect(callCount, 0);
     });
   });
 }

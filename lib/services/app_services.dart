@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../models/kept_bootstrap_result.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/protected_file_kept_state_store.dart';
@@ -192,10 +194,18 @@ late final SyncOrchestrator syncOrchestrator;
 /// expose or consume it). `lib/main.dart` calls
 /// [CloudKitSyncRuntimeCoordinator.requestSync] on startup and on
 /// `AppLifecycleState.resumed`; the account-change subscription started in
-/// this coordinator's own constructor is the only other production trigger
-/// in this phase. No Keep/Reflection/Remove call site calls [CloudKitSyncRuntimeCoordinator
-/// .requestSync] in this phase -- see the coordinator's own "No
-/// local-mutation nudge in this phase" doc section.
+/// this coordinator's own constructor is another production trigger. Build
+/// 26 Phase 4F fast-follow: [keptSyncIntegrationCoordinator]'s
+/// `onMutationCommitted` callback (wired below, inside this same
+/// `buildService` closure) is the fourth production trigger -- it calls
+/// [CloudKitSyncRuntimeCoordinator.requestSync] with
+/// [SyncRuntimeTrigger.localMutation] exactly once per fresh,
+/// successfully-committed Keep/Reflection-save/Reflection-delete/Remove
+/// mutation, fire-and-forget, with any returned-future error contained.
+/// This is the only place `SyncRuntimeTrigger` is referenced outside
+/// `lib/sync_runtime/` itself -- [KeptSyncIntegrationCoordinator] never
+/// imports `lib/sync_runtime/` and never learns this enum exists; it only
+/// ever calls the plain, argument-free callback constructed here.
 late final CloudKitSyncRuntimeCoordinator cloudKitSyncRuntimeCoordinator;
 
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
@@ -218,6 +228,23 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       intentStore: localSyncIntentStore,
       syncPersistenceStore: syncPersistenceStore,
       integrationCoordinator: syncIntegrationOperationCoordinator,
+      // Build 26 Phase 4F fast-follow: fire-and-forget only. Safe to
+      // reference the `late final` `cloudKitSyncRuntimeCoordinator` here
+      // even though it is not assigned until later in this same closure --
+      // this callback is never invoked until a real user mutation commits,
+      // and `initializeKeptStorage()` (which runs this entire closure) is
+      // always awaited to completion in `main()` before `runApp()`, so
+      // `cloudKitSyncRuntimeCoordinator` is guaranteed already assigned by
+      // the time any mutation can occur. Never awaited, and any error the
+      // returned `Future` carries is swallowed here so it can never surface
+      // as an unhandled async error.
+      onMutationCommitted: () {
+        unawaited(
+          cloudKitSyncRuntimeCoordinator
+              .requestSync(SyncRuntimeTrigger.localMutation)
+              .catchError((_) {}),
+        );
+      },
     );
     incomingKeptSyncCoordinator = IncomingKeptSyncCoordinator(
       keptRepository: repository,

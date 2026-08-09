@@ -278,10 +278,13 @@ void main() {
 
   test(
       '6. lib/sync_runtime/ never references KeptRepository or '
-      'SavedReflectionsService directly -- this phase wires zero '
-      'Keep/Reflection/Remove local-mutation nudge; the runtime coordinator '
-      'only ever calls the four already-existing coordinator/orchestrator '
-      'APIs, never a repository directly', () {
+      'SavedReflectionsService directly -- the Build 26 Phase 4F fast-follow '
+      'local-mutation nudge is wired entirely through '
+      'KeptSyncIntegrationCoordinator\'s own payload-free '
+      'onMutationCommitted callback, composed only in app_services.dart; '
+      'the runtime coordinator itself still only ever calls the four '
+      'already-existing coordinator/orchestrator APIs, never a repository '
+      'or service directly', () {
     const forbiddenSubstrings = [
       'KeptRepository',
       'SavedReflectionsService',
@@ -299,16 +302,21 @@ void main() {
   });
 
   test(
-      '7. no local-mutation call site anywhere under lib/ requests a sync '
-      'pass -- CloudKitSyncRuntimeCoordinator.requestSync is called only '
-      'from lib/main.dart (startup + foreground triggers) and from within '
+      '7. CloudKitSyncRuntimeCoordinator.requestSync is called only from '
+      'lib/main.dart (startup + foreground triggers), from within '
       'lib/sync_runtime/ itself (the retry timer and the account-change '
-      'handler); no repository, service, screen, or widget file calls it '
-      '(Build 26 Phase 4F locked scope: the local-mutation nudge is an '
-      'explicitly deferred future fast-follow, not part of this phase)', () {
+      'handler), and from lib/services/app_services.dart (the Build 26 '
+      'Phase 4F fast-follow local-mutation nudge, wired as a fire-and-forget '
+      'closure passed to KeptSyncIntegrationCoordinator\'s '
+      'onMutationCommitted callback) -- no repository, screen, or widget '
+      'file calls it directly, and no Keep/Reflection/Remove call site '
+      'references SyncRuntimeTrigger or requestSync itself (see the '
+      'dedicated sync_integration_layering_test.dart guards for the '
+      'screen/widget and sync_integration import-direction proofs)', () {
     const allowedCallerSuffixes = {
       'lib/main.dart',
       'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart',
+      'lib/services/app_services.dart',
     };
     final violations = <String>[];
     for (final file in allLibFiles) {
@@ -418,5 +426,79 @@ void main() {
           'toLogSafeSummary body contains "$forbidden"',
     ];
     expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      '11. SyncRuntimeTrigger.localMutation (Build 26 Phase 4F fast-follow) '
+      'exists, and none of the four outcome-classification methods -- which '
+      'together define every retry/account/bootstrap/epoch-recovery '
+      'decision this coordinator ever makes -- reference the trigger '
+      'parameter at all, proving localMutation is classified through the '
+      'exact same pipeline as every other trigger with no special-cased '
+      'behavior of its own', () {
+    final coordinatorFile = File(
+      'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart',
+    );
+    expect(coordinatorFile.existsSync(), isTrue);
+    final source = coordinatorFile.readAsStringSync();
+    final codeOnly = _stripComments(source);
+
+    expect(
+        codeOnly.contains('localMutation,') ||
+            codeOnly.contains('localMutation;'),
+        isTrue,
+        reason: 'Expected SyncRuntimeTrigger to declare a localMutation '
+            'member.');
+
+    const classificationMethods = [
+      'SyncRuntimeOutcome _classifyBootstrapStopStatus(BootstrapRunStatus status)',
+      'SyncRuntimeOutcome _classifySyncPassStopStatus(SyncPassStatus status)',
+      'SyncRuntimeOutcome _classifyIncomingApplyStatus(IncomingApplyStatus status)',
+    ];
+    final violations = <String>[];
+    for (final signature in classificationMethods) {
+      final start = codeOnly.indexOf(signature);
+      expect(start, greaterThanOrEqualTo(0),
+          reason: 'Expected to find "$signature" in $coordinatorFile.');
+      final bodyStart = codeOnly.indexOf('{', start);
+      expect(bodyStart, greaterThanOrEqualTo(0),
+          reason: 'Expected to find the opening brace for "$signature".');
+      // Each of these methods is an ordinary `switch (status) { ... }`
+      // statement, not a `=>` expression -- brace-match to find the
+      // method's own real closing brace, never merely the first `;`
+      // (which would stop inside the very first `case` and silently miss
+      // a violation appearing later in the body).
+      var depth = 0;
+      var bodyEnd = -1;
+      for (var i = bodyStart; i < codeOnly.length; i++) {
+        if (codeOnly[i] == '{') depth++;
+        if (codeOnly[i] == '}') {
+          depth--;
+          if (depth == 0) {
+            bodyEnd = i;
+            break;
+          }
+        }
+      }
+      expect(bodyEnd, greaterThan(bodyStart),
+          reason: 'Expected to find the matching closing brace for '
+              '"$signature".');
+      final body = codeOnly.substring(bodyStart, bodyEnd + 1);
+      if (body.contains('trigger')) {
+        violations.add('$signature references "trigger" in its own body');
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+
+    // `_finishPass` itself (called with only an outcome, never a trigger)
+    // is the other place a special case could hide -- confirm its own
+    // signature never takes a trigger argument.
+    final finishPassSignatureMatch =
+        RegExp(r'void _finishPass\(([^)]*)\)').firstMatch(codeOnly);
+    expect(finishPassSignatureMatch, isNotNull,
+        reason: 'Expected to find _finishPass in $coordinatorFile.');
+    expect(finishPassSignatureMatch!.group(1), isNot(contains('trigger')),
+        reason: '_finishPass must not take a trigger parameter -- outcome '
+            'classification must never special-case by trigger.');
   });
 }

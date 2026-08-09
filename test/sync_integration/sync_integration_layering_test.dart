@@ -919,4 +919,125 @@ void main() {
 
     expect(exception.toString(), isNot(contains(secretCause)));
   });
+
+  // -------------------------------------------------------------------
+  // Build 26 Phase 4F fast-follow: local-mutation nudge dependency-direction
+  // and composition-root guards.
+  // -------------------------------------------------------------------
+
+  test(
+      'no file under lib/sync_integration/ imports anything from '
+      'lib/sync_runtime/ -- the local-mutation nudge callback added in the '
+      'Build 26 Phase 4F fast-follow is a plain, argument-free '
+      '`void Function()?` with no reference to SyncRuntimeTrigger or '
+      'CloudKitSyncRuntimeCoordinator, keeping the existing one-directional '
+      'sync_runtime -> sync_integration import edge intact and never '
+      'reversed', () {
+    final violations = <String>[];
+    for (final file in integrationFiles) {
+      for (final line in file.readAsLinesSync()) {
+        final trimmed = line.trimLeft();
+        if (!trimmed.startsWith('import ') && !trimmed.startsWith('export ')) {
+          continue;
+        }
+        if (trimmed.contains('sync_runtime')) {
+          violations.add('${file.path}: "$trimmed"');
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'no file under lib/sync_integration/ references SyncRuntimeTrigger or '
+      'CloudKitSyncRuntimeCoordinator by name in real code', () {
+    const forbiddenTypeNames = [
+      'SyncRuntimeTrigger',
+      'CloudKitSyncRuntimeCoordinator',
+    ];
+    final violations = <String>[];
+    for (final file in integrationFiles) {
+      final codeOnly = _stripComments(file.readAsStringSync());
+      for (final typeName in forbiddenTypeNames) {
+        if (codeOnly.contains(typeName)) {
+          violations.add('${file.path} references "$typeName"');
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'no screen or widget file references requestSync(, '
+      'SyncRuntimeTrigger, or cloudKitSyncRuntimeCoordinator directly -- the '
+      'Build 26 Phase 4F fast-follow nudge is wired exclusively through '
+      'KeptSyncIntegrationCoordinator\'s onMutationCommitted callback, '
+      'composed only in app_services.dart, never scattered across UI call '
+      'sites', () {
+    const forbiddenReferences = [
+      'requestSync(',
+      'SyncRuntimeTrigger',
+      'cloudKitSyncRuntimeCoordinator',
+    ];
+    final violations = <String>[];
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final isScreenOrWidget = normalizedPath.contains('/lib/screens/') ||
+          normalizedPath.startsWith('lib/screens/') ||
+          normalizedPath.contains('/lib/widgets/') ||
+          normalizedPath.startsWith('lib/widgets/');
+      if (!isScreenOrWidget) continue;
+      final codeOnly = _stripComments(file.readAsStringSync());
+      for (final forbidden in forbiddenReferences) {
+        if (codeOnly.contains(forbidden)) {
+          violations.add('$normalizedPath references "$forbidden"');
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+  });
+
+  test(
+      'app_services.dart is the sole production file that supplies '
+      'onMutationCommitted: to KeptSyncIntegrationCoordinator, and it does '
+      'so exactly once, referencing cloudKitSyncRuntimeCoordinator.'
+      'requestSync(SyncRuntimeTrigger.localMutation) fire-and-forget', () {
+    final violations = <String>[];
+    String? appServicesSource;
+    for (final file in allLibFiles) {
+      final normalizedPath = file.path.replaceAll('\\', '/');
+      final isAppServices = normalizedPath.endsWith(
+        'lib/services/app_services.dart',
+      );
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('onMutationCommitted:')) {
+        if (!isAppServices) {
+          violations.add(
+            '$normalizedPath supplies onMutationCommitted: -- only '
+            'app_services.dart may',
+          );
+        } else {
+          appServicesSource = codeOnly;
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: violations.join('\n'));
+    expect(appServicesSource, isNotNull,
+        reason: 'Expected app_services.dart to supply onMutationCommitted: '
+            'to KeptSyncIntegrationCoordinator.');
+    // Whitespace-insensitive: tolerates any dart-format-chosen line wrapping
+    // between the two tokens, never depends on an exact literal layout.
+    final requestSyncWithLocalMutation = RegExp(
+      r'requestSync\(\s*SyncRuntimeTrigger\.localMutation\s*,?\s*\)',
+    );
+    expect(
+      requestSyncWithLocalMutation.hasMatch(appServicesSource!),
+      isTrue,
+      reason: 'Expected app_services.dart to call requestSync with '
+          'SyncRuntimeTrigger.localMutation.',
+    );
+    expect(appServicesSource.contains('unawaited('), isTrue,
+        reason: 'Expected the nudge call in app_services.dart to be '
+            'fire-and-forget via unawaited(...).');
+  });
 }

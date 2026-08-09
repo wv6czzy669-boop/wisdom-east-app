@@ -74,12 +74,25 @@
 /// `recordName`, `revealId`, `localId`, `intentId`, `mutationId`, wisdom
 /// text, Reflection text, or a timestamp.
 ///
-/// **No local-mutation nudge in this phase.** [requestSync] is never called
-/// from `SavedReflectionsService`/`KeptRepository`/any Keep/Reflection/Remove
-/// call site in this phase -- see `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`
-/// Phase 4F's own scope note. A future fast-follow may wire one; this file's
-/// public API already supports it (a fire-and-forget [requestSync] call)
-/// without any redesign.
+/// **Local-mutation nudge (Phase 4F fast-follow).** [requestSync] is called
+/// with [SyncRuntimeTrigger.localMutation] exactly once per fresh,
+/// successfully-committed Keep/Reflection-save/Reflection-delete/Remove
+/// mutation -- see [KeptSyncIntegrationCoordinator]'s own
+/// `onMutationCommitted` callback (invoked internally, never by this file
+/// directly) and its wiring in `app_services.dart`. This coordinator is
+/// completely unaware of *why* [localMutation] fired -- no Kept/Reflection
+/// domain type, `revealId`, or content of any kind ever reaches this file;
+/// the trigger carries zero payload beyond its own enum identity, and it is
+/// classified through the exact same pipeline/single-flight/coalescing/
+/// retry/account rules as every other [SyncRuntimeTrigger] value -- no
+/// special-cased retry, account, bootstrap, epoch, or coalescing behavior
+/// exists for it anywhere in this file.
+///
+/// `KeptSyncIntegrationCoordinator` never imports this file (or any
+/// `lib/sync_runtime/` type) to make this call -- it only ever invokes a
+/// plain, argument-free `void Function()?` callback supplied from outside,
+/// keeping the existing one-directional `sync_runtime -> sync_integration`
+/// import edge intact and never reversed.
 ///
 /// **Daily access.** This file imports nothing from
 /// `lib/repositories/daily_access_repository.dart` or
@@ -113,6 +126,16 @@ enum SyncRuntimeTrigger {
 
   /// The bounded-backoff retry timer fired.
   retry,
+
+  /// Build 26 Phase 4F fast-follow: a fresh, successfully-committed local
+  /// Keep/Reflection-save/Reflection-delete/Remove mutation durably created
+  /// sync work and nudged the runtime for prompt propagation. Purely an
+  /// optimization -- never required for correctness, since startup/
+  /// foreground/retry triggers already recover any durable work this nudge
+  /// might miss (a killed app, a callback that never ran, and so on). Never
+  /// changes retry/account/bootstrap/epoch/coalescing behavior -- classified
+  /// through the exact same pipeline as every other trigger.
+  localMutation,
 
   /// A trigger arrived while a pass was already active and was coalesced
   /// into the single guaranteed follow-up pass -- see [requestSync].
