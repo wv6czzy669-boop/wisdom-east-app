@@ -17,6 +17,7 @@ import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_envelope.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
+import 'package:wisdom_app/utils/kept_timestamp_canonicalizer.dart';
 
 /// Fake [FileProtectionBridge] -- identical in shape and intent to the one
 /// already used throughout `test/protected_file_kept_state_store_test.dart`.
@@ -1683,6 +1684,94 @@ void main() {
       );
       await store.quarantineAccountState(fingerprintA);
       expect(await store.loadMeaningfulAccountFingerprints(), isEmpty);
+    });
+  });
+
+  group('Timestamp canonicalization (Phase 4G real-device fix)', () {
+    // The identical root cause proven for `LocalSyncIntent.enqueuedAt`
+    // (`local_sync_intent_store_test.dart`, tests 26/27) also applies here,
+    // transitively: `PersistedOutboxMutation.encode()` stores `SyncChange
+    // .enqueuedAt` via `toUtc().millisecondsSinceEpoch` and `tryDecode`
+    // reconstructs a zero-microsecond `DateTime`, while
+    // `PersistedOutboxMutation.operator==` compares it with
+    // `change.enqueuedAt.isAtSameMomentAs(change.enqueuedAt)` -- exact to
+    // the microsecond -- and that equality is reached transitively via
+    // `AccountSyncState.operator==`'s `outbox` list comparison and
+    // `SyncPersistenceEnvelope.operator==`'s `accounts` map comparison,
+    // which is exactly what `_replaceEnvelope`'s own mandatory
+    // `replace-verify-temp`/`replace-verify-final` read-back checks
+    // exercise on every `enqueueMutation` call. `KeptSyncIntegrationCoordinator
+    // ._toSyncChange` now wraps both its `enqueuedAt:` construction sites in
+    // `canonicalizeKeptTimestamp` before ever constructing a `SyncChange`.
+    final rawMicrosecondEnqueuedAt =
+        DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
+    final canonicalEnqueuedAt =
+        canonicalizeKeptTimestamp(rawMicrosecondEnqueuedAt);
+
+    test(
+        'an un-canonicalized SyncChange.enqueuedAt (a non-zero microsecond '
+        'remainder) is correctly rejected by this store\'s own strict '
+        'post-write verification -- the exact real-device failure a caller '
+        'that skips canonicalizeKeptTimestamp before constructing a '
+        'SyncChange would hit', () async {
+      final store = buildStore();
+      final change = createChangeFor(
+        revealId1,
+        enqueuedAt: rawMicrosecondEnqueuedAt,
+      );
+
+      Object? caught;
+      try {
+        await store.enqueueMutation(fingerprintA, change);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isA<SyncPersistenceStoreException>());
+      final typed = caught as SyncPersistenceStoreException;
+      expect(typed.stage, 'replace-verify-temp');
+    });
+
+    test(
+        'the identical source instant, canonicalized first exactly as '
+        '_toSyncChange now does at both its enqueuedAt: construction sites, '
+        'survives the real encode->write->protect->verify->rename->'
+        'protect->verify round trip and decodes back to the expected '
+        'millisecond-canonical instant, with zero microseconds', () async {
+      final store = buildStore();
+
+      // Canonicalization only ever discards the sub-millisecond remainder --
+      // it never changes which millisecond instant this is.
+      expect(canonicalEnqueuedAt, DateTime.utc(2026, 8, 9, 12, 0, 0, 123));
+      expect(canonicalEnqueuedAt.microsecond, 0);
+
+      final change = createChangeFor(
+        revealId1,
+        enqueuedAt: canonicalEnqueuedAt,
+      );
+
+      // Must not throw: this is the exact real store, with only the native
+      // file-protection bridge faked -- a genuine production-shaped write.
+      await store.enqueueMutation(fingerprintA, change);
+
+      final pending = await store.readPendingMutations(fingerprintA);
+      expect(pending, hasLength(1));
+      expect(pending.single.change.enqueuedAt, canonicalEnqueuedAt);
+      expect(pending.single.change.enqueuedAt.microsecond, 0);
+      expect(
+        pending.single.change.enqueuedAt
+            .isAtSameMomentAs(canonicalEnqueuedAt),
+        isTrue,
+      );
+
+      // A fresh read-back (a second full load of the already-committed
+      // final file) is exactly as canonical -- this is not a one-shot
+      // artifact of the write path.
+      final reloaded = await store.readPendingMutations(fingerprintA);
+      expect(
+        reloaded.single.change.enqueuedAt,
+        DateTime.utc(2026, 8, 9, 12, 0, 0, 123),
+      );
     });
   });
 }

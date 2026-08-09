@@ -15,6 +15,7 @@ import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
+import 'package:wisdom_app/utils/kept_timestamp_canonicalizer.dart';
 
 import '../persistence_test_helpers.dart';
 import 'in_memory_sync_test_doubles.dart';
@@ -1147,6 +1148,196 @@ void main() {
           await harness.syncPersistenceStore.loadAccountState(_fingerprint);
       expect(bucket!.outbox, hasLength(1));
       expect(callCount, 0);
+    });
+  });
+
+  group('Timestamp canonicalization (Phase 4G real-device fix)', () {
+    // Root cause: `LocalSyncIntent.enqueuedAt` (and, transitively,
+    // `SyncChange.enqueuedAt` once handed to `PersistedOutboxMutation`) is
+    // encoded via `toUtc().millisecondsSinceEpoch` and decoded back with
+    // zero microseconds, while both types' `operator==` compares with
+    // `DateTime.isAtSameMomentAs`, exact to the microsecond. A raw clock
+    // read on real iOS hardware routinely carries a non-zero microsecond
+    // remainder, which made the real `ProtectedLocalSyncIntentStore`'s (and
+    // `ProtectedSyncPersistenceStore`'s) own mandatory post-write read-back
+    // verification correctly -- but spuriously, from the user's perspective
+    // -- reject an otherwise valid write. Every `enqueuedAt:` construction
+    // site in `KeptSyncIntegrationCoordinator` now wraps its clock read in
+    // `canonicalizeKeptTimestamp` before constructing the persisted object.
+    // This harness's stores are pure in-memory fakes with no JSON round
+    // trip, so these tests assert directly on the constructed
+    // `LocalSyncIntent`/`SyncChange` objects' `enqueuedAt` fields -- the
+    // real-file round trip itself is covered separately, against the real
+    // `ProtectedLocalSyncIntentStore`, in
+    // `test/sync_integration/local_sync_intent_store_test.dart` (tests 26
+    // and 27).
+    final microsecondClock = DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
+    final expectedCanonicalEnqueuedAt =
+        canonicalizeKeptTimestamp(microsecondClock);
+
+    test(
+        'Keep: the constructed LocalSyncIntent.enqueuedAt is canonicalized '
+        'to millisecond precision from a microsecond-precision clock',
+        () async {
+      final harness = _Harness(clock: () => microsecondClock);
+
+      await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 9),
+        isKeeper: false,
+      );
+
+      final intent = (await harness.intentStore.loadIntents()).single;
+      expect(intent.enqueuedAt.microsecond, 0);
+      expect(intent.enqueuedAt, expectedCanonicalEnqueuedAt);
+      expect(
+        intent.enqueuedAt.isAtSameMomentAs(expectedCanonicalEnqueuedAt),
+        isTrue,
+      );
+    });
+
+    test(
+        'Reflection save: the constructed LocalSyncIntent.enqueuedAt is '
+        'canonicalized to millisecond precision from a microsecond-precision '
+        'clock', () async {
+      final harness = _Harness(clock: () => microsecondClock);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 9),
+        isKeeper: false,
+      );
+
+      await harness.coordinator.recordReflectionSave(
+        itemId: kept.items.single.id,
+        reflection: 'A quiet thought.',
+        isKeeper: false,
+      );
+
+      final intent = (await harness.intentStore.loadIntents())
+          .firstWhere((i) => i.payload.operation ==
+              LocalSyncIntentOperation.reflectionSave);
+      expect(intent.enqueuedAt.microsecond, 0);
+      expect(intent.enqueuedAt, expectedCanonicalEnqueuedAt);
+    });
+
+    test(
+        'Reflection delete: the constructed LocalSyncIntent.enqueuedAt is '
+        'canonicalized to millisecond precision from a microsecond-precision '
+        'clock', () async {
+      final harness = _Harness(clock: () => microsecondClock);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 9),
+        isKeeper: false,
+      );
+      final itemId = kept.items.single.id;
+      await harness.coordinator.recordReflectionSave(
+        itemId: itemId,
+        reflection: 'A quiet thought.',
+        isKeeper: false,
+      );
+
+      await harness.coordinator.recordReflectionDelete(itemId: itemId);
+
+      final intent = (await harness.intentStore.loadIntents())
+          .firstWhere((i) => i.payload.operation ==
+              LocalSyncIntentOperation.reflectionDelete);
+      expect(intent.enqueuedAt.microsecond, 0);
+      expect(intent.enqueuedAt, expectedCanonicalEnqueuedAt);
+    });
+
+    test(
+        'Remove: the constructed tombstone LocalSyncIntent.enqueuedAt is '
+        'canonicalized to millisecond precision from a microsecond-precision '
+        'clock, independent of the already-canonical deletedAt embedded in '
+        'the tombstone payload', () async {
+      final harness = _Harness(clock: () => microsecondClock);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 9),
+        isKeeper: false,
+      );
+
+      await harness.coordinator.recordRemove(itemId: kept.items.single.id);
+
+      final intent = (await harness.intentStore.loadIntents()).single;
+      expect(intent.payload.isTombstone, isTrue);
+      expect(intent.enqueuedAt.microsecond, 0);
+      expect(intent.enqueuedAt, expectedCanonicalEnqueuedAt);
+      // The tombstone payload's own deletedAtMs was already canonicalized
+      // (pre-existing behavior, unrelated to this fix) -- both timestamps
+      // agree on the same canonical millisecond instant here only because
+      // the harness's clock is fixed for the whole test; they remain two
+      // independently-computed values in production.
+      expect(
+        intent.payload.deletedAtMs,
+        expectedCanonicalEnqueuedAt.millisecondsSinceEpoch,
+      );
+    });
+
+    test(
+        'Reconciliation of an active (Keep) intent produces a SyncChange '
+        'whose enqueuedAt is canonicalized to millisecond precision -- the '
+        'active branch of _toSyncChange', () async {
+      final harness = _Harness(clock: () => microsecondClock);
+      await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 9),
+        isKeeper: false,
+      );
+      harness.syncPersistenceStore.seedAccount(
+        _fingerprint,
+        AccountSyncState(
+          dataEpoch: _epoch,
+          bootstrapState: AccountBootstrapState.complete,
+        ),
+      );
+
+      await harness.coordinator.reconcileForAssociatedAccount(
+        const AssociatedSyncAccountContext(accountFingerprint: _fingerprint),
+      );
+
+      final bucket =
+          await harness.syncPersistenceStore.loadAccountState(_fingerprint);
+      final enqueuedAt = bucket!.outbox.single.change.enqueuedAt;
+      expect(enqueuedAt.microsecond, 0);
+      expect(enqueuedAt, expectedCanonicalEnqueuedAt);
+    });
+
+    test(
+        'Reconciliation of a tombstone (Remove) intent produces a '
+        'SyncChange whose enqueuedAt is canonicalized to millisecond '
+        'precision -- the tombstone branch of _toSyncChange', () async {
+      final harness = _Harness(clock: () => microsecondClock);
+      final kept = await harness.coordinator.recordKeep(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        wisdomText: 'Be still.',
+        revealedAt: DateTime.utc(2026, 8, 9),
+        isKeeper: false,
+      );
+      await harness.coordinator.recordRemove(itemId: kept.items.single.id);
+      harness.syncPersistenceStore.seedAccount(
+        _fingerprint,
+        AccountSyncState(
+          dataEpoch: _epoch,
+          bootstrapState: AccountBootstrapState.complete,
+        ),
+      );
+
+      await harness.coordinator.reconcileForAssociatedAccount(
+        const AssociatedSyncAccountContext(accountFingerprint: _fingerprint),
+      );
+
+      final bucket =
+          await harness.syncPersistenceStore.loadAccountState(_fingerprint);
+      final enqueuedAt = bucket!.outbox.single.change.enqueuedAt;
+      expect(enqueuedAt.microsecond, 0);
+      expect(enqueuedAt, expectedCanonicalEnqueuedAt);
     });
   });
 }

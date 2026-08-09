@@ -159,7 +159,7 @@ final class KeptSyncIntegrationCoordinator {
                   operation: LocalSyncIntentOperation.keep,
                 ),
                 stage: LocalSyncIntentStage.pendingLocalApplication,
-                enqueuedAt: _clock(),
+                enqueuedAt: canonicalizeKeptTimestamp(_clock()),
               ),
             );
             writtenIntentId = intentId;
@@ -205,7 +205,7 @@ final class KeptSyncIntegrationCoordinator {
                   operation: LocalSyncIntentOperation.reflectionSave,
                 ),
                 stage: LocalSyncIntentStage.pendingLocalApplication,
-                enqueuedAt: _clock(),
+                enqueuedAt: canonicalizeKeptTimestamp(_clock()),
               ),
             );
             writtenIntentId = intentId;
@@ -244,7 +244,7 @@ final class KeptSyncIntegrationCoordinator {
                   operation: LocalSyncIntentOperation.reflectionDelete,
                 ),
                 stage: LocalSyncIntentStage.pendingLocalApplication,
-                enqueuedAt: _clock(),
+                enqueuedAt: canonicalizeKeptTimestamp(_clock()),
               ),
             );
             writtenIntentId = intentId;
@@ -288,7 +288,7 @@ final class KeptSyncIntegrationCoordinator {
                   localId: removedRecord.id,
                 ),
                 stage: LocalSyncIntentStage.pendingLocalApplication,
-                enqueuedAt: _clock(),
+                enqueuedAt: canonicalizeKeptTimestamp(_clock()),
               ),
             );
             writtenIntentId = intentId;
@@ -490,7 +490,7 @@ final class KeptSyncIntegrationCoordinator {
       return SyncChange(
         kind: SyncChangeKind.delete,
         projection: CloudKeptWisdomProjection.tombstone(tombstone),
-        enqueuedAt: _clock(),
+        enqueuedAt: canonicalizeKeptTimestamp(_clock()),
       );
     }
 
@@ -537,7 +537,7 @@ final class KeptSyncIntegrationCoordinator {
       kind: kind,
       projection:
           CloudKeptWisdomProjection.active(record, dataEpoch: dataEpoch),
-      enqueuedAt: _clock(),
+      enqueuedAt: canonicalizeKeptTimestamp(_clock()),
     );
   }
 

@@ -10,6 +10,7 @@ import 'package:wisdom_app/sync_integration/local_sync_intent.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent_envelope.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent_store.dart';
 import 'package:wisdom_app/sync_integration/protected_local_sync_intent_store.dart';
+import 'package:wisdom_app/utils/kept_timestamp_canonicalizer.dart';
 
 /// Fake [FileProtectionBridge] -- identical in shape and intent to the one
 /// already used throughout `test/sync_persistence/
@@ -771,5 +772,96 @@ void main() {
     expect(loaded.single.intentId, intentId1);
     expect(loaded.single.payload.revealId, revealIdA);
     expect(await File(finalPath()).exists(), isTrue);
+  });
+
+  // ---------------------------------------------------------------------
+  // 26/27. Real-device timestamp-canonicalization regression (the proven
+  // Phase 4G Keep-failure root cause). `LocalSyncIntent.enqueuedAt` is the
+  // one `DateTime`-typed field anywhere in this store's object graph;
+  // `encode()` truncates it to whole milliseconds
+  // (`toUtc().millisecondsSinceEpoch`) and `tryDecode` reconstructs a
+  // zero-microsecond `DateTime`, while `LocalSyncIntent.operator==` compares
+  // it with `DateTime.isAtSameMomentAs`, which is exact to the microsecond.
+  // A caller that hands this store a raw, uncanonicalized clock value
+  // (`DateTime.now()` on a real device routinely carries non-zero
+  // microseconds) makes the store's own mandatory `replace-verify-temp`
+  // read-back comparison genuinely, correctly fail. These two tests exercise
+  // the real `ProtectedLocalSyncIntentStore` -- only the native
+  // `FileProtectionBridge` is faked -- to prove both halves of this: an
+  // un-canonicalized microsecond timestamp is rejected (this is what a
+  // caller that skipped `canonicalizeKeptTimestamp` would have hit in
+  // production), and the same source instant, canonicalized first exactly as
+  // `KeptSyncIntegrationCoordinator` now does at every `enqueuedAt:`
+  // construction site, survives the full real
+  // encode->write->protect->verify->rename->protect->verify path and decodes
+  // back to the expected millisecond-precise instant.
+  // ---------------------------------------------------------------------
+  test(
+      '26. an intent whose enqueuedAt still carries a non-zero microsecond '
+      'remainder (an un-canonicalized real-device clock read) is correctly '
+      'rejected by the store\'s own strict post-write verification -- this '
+      'is the exact real-device failure a caller that skips '
+      'canonicalizeKeptTimestamp before constructing a LocalSyncIntent '
+      'would hit', () async {
+    final store = buildStore();
+    // A raw clock read with a non-zero microsecond remainder -- exactly the
+    // shape `DateTime.now()` routinely produces on real iOS hardware, never
+    // on the Dart VM's own coarser host-test clock. Deliberately NOT run
+    // through `canonicalizeKeptTimestamp` here, to reproduce the pre-fix
+    // caller shape against the store's real, unmodified verification logic.
+    final uncanonicalizedClockRead = DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
+
+    final intent = activeIntent(
+      intentId: intentId1,
+      enqueuedAt: uncanonicalizedClockRead,
+    );
+
+    Object? caught;
+    try {
+      await store.enqueueIntent(intent);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught, isA<LocalSyncIntentStoreException>());
+    final typed = caught as LocalSyncIntentStoreException;
+    expect(typed.stage, 'replace-verify-temp');
+  });
+
+  test(
+      '27. the identical source instant, canonicalized first exactly as '
+      'every KeptSyncIntegrationCoordinator enqueuedAt: construction site '
+      'now does, survives the real encode->write->protect->verify->'
+      'rename->protect->verify round trip and decodes back to the expected '
+      'millisecond-canonical instant, with zero microseconds', () async {
+    final store = buildStore();
+    final rawClockRead = DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
+    final canonicalized = canonicalizeKeptTimestamp(rawClockRead);
+
+    // Canonicalization only ever discards the sub-millisecond remainder --
+    // it never changes which millisecond instant this is.
+    expect(canonicalized, DateTime.utc(2026, 8, 9, 12, 0, 0, 123));
+    expect(canonicalized.microsecond, 0);
+
+    final intent = activeIntent(
+      intentId: intentId1,
+      enqueuedAt: canonicalized,
+    );
+
+    // Must not throw: this is the exact real store, with only the native
+    // file-protection bridge faked -- a genuine production-shaped write.
+    await store.enqueueIntent(intent);
+
+    final loaded = await store.loadIntents();
+    expect(loaded, hasLength(1));
+    expect(loaded.single.enqueuedAt, canonicalized);
+    expect(loaded.single.enqueuedAt.microsecond, 0);
+    expect(loaded.single.enqueuedAt.isAtSameMomentAs(canonicalized), isTrue);
+
+    // A fresh load (a second full read-back of the already-committed final
+    // file) is exactly as canonical -- this is not a one-shot artifact of
+    // the write path.
+    final reloaded = await store.loadIntents();
+    expect(reloaded.single.enqueuedAt, DateTime.utc(2026, 8, 9, 12, 0, 0, 123));
   });
 }
