@@ -114,17 +114,19 @@ void main() {
 
   testWidgets(
       'every Settings divider shares the muted color at ~30% opacity, and '
-      'the row order is exactly Keeper, Restore Purchases, '
+      'the row order is exactly Keeper, Restore Purchases, iCloud Sync, '
       'EAST. Productions, Privacy Policy, Reach Out — with no Daily '
       'Reminder row', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
 
-    // Exactly six dividers: beneath "Where silence speaks.", and beneath
-    // each of the five rows below.
+    // Exactly seven dividers: beneath "Where silence speaks.", and beneath
+    // each of the six rows below (Build 26 Phase 4G added the iCloud Sync
+    // row -- and its own trailing divider -- between Restore Purchases and
+    // EAST. Productions; this was previously six, for five rows).
     final dividers = tester.widgetList<Divider>(find.byType(Divider)).toList();
-    expect(dividers, hasLength(6));
+    expect(dividers, hasLength(7));
 
     final expectedDividerColor = eastMutedTextColor.withValues(alpha: 0.30);
     for (final divider in dividers) {
@@ -135,6 +137,7 @@ void main() {
     final rowOrder = [
       'Keeper',
       'Restore Purchases',
+      'iCloud Sync',
       'EAST. Productions',
       'Privacy Policy',
       'Reach Out',

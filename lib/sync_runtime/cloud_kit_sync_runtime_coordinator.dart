@@ -137,6 +137,21 @@ enum SyncRuntimeTrigger {
   /// through the exact same pipeline as every other trigger.
   localMutation,
 
+  /// Build 26 Phase 4G: the user just explicitly confirmed the one-time
+  /// "Enable iCloud Sync?" prompt (Settings) and
+  /// [KeptSyncBootstrapCoordinator.authorizeAssociation] succeeded. Fired
+  /// exactly once per successful explicit authorization, from the same
+  /// fire-and-forget, error-contained shape [localMutation] already uses --
+  /// never awaited to full pipeline completion by the caller, and never
+  /// special-cased by any retry/account/bootstrap/epoch/coalescing
+  /// decision, exactly like every other trigger (see
+  /// `test/sync_runtime/sync_runtime_layering_test.dart`'s structural proof
+  /// for [localMutation], which applies identically here). The Settings
+  /// screen never calls [requestSync] itself -- see
+  /// `lib/controllers/sync_association_controller.dart` and its
+  /// wiring in `app_services.dart`.
+  explicitAssociation,
+
   /// A trigger arrived while a pass was already active and was coalesced
   /// into the single guaranteed follow-up pass -- see [requestSync].
   coalescedFollowUp,

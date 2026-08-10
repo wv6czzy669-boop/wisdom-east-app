@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../controllers/latest_request_guard.dart';
 import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
@@ -35,6 +36,14 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   late final PurchaseService _purchaseService;
   bool _navigationInProgress = false;
 
+  /// Build 26 Phase 4H-6: guards the silent background reload triggered by
+  /// [app_services.keptStateRevisionNotifier] (an incoming CloudKit sync
+  /// applying new/changed Kept or Reflection data while this screen is
+  /// already mounted) -- a dedicated instance, never shared with any other
+  /// async operation on this screen, so a rapid second incoming
+  /// notification always wins over a still-in-flight earlier reload.
+  final _incomingKeptRefreshGuard = LatestRequestGuard();
+
   bool get _isKeeper => widget.isKeeper || _purchaseService.isKeeper;
 
   TextStyle _style(
@@ -66,6 +75,54 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     _service =
         widget.savedReflectionsService ?? app_services.savedReflectionsService;
     _purchaseService = widget.purchaseService ?? app_services.purchaseService;
+    // Build 26 Phase 4H-6: subscribe to the neutral incoming-Kept-state
+    // signal for as long as this screen stays mounted -- mirrors the
+    // existing `app_services.purchaseService.addListener(...)` pattern
+    // `home_screen.dart` already uses for its own cross-cutting listener.
+    app_services.keptStateRevisionNotifier.addListener(_onKeptStateChanged);
+  }
+
+  @override
+  void dispose() {
+    app_services.keptStateRevisionNotifier.removeListener(_onKeptStateChanged);
+    _incomingKeptRefreshGuard.invalidate();
+    super.dispose();
+  }
+
+  /// Build 26 Phase 4H-6: invoked synchronously by
+  /// [app_services.keptStateRevisionNotifier] only after an incoming
+  /// CloudKit sync has durably applied a Kept/Reflection content change
+  /// while this screen is mounted. Never shows a spinner, never shows a
+  /// snackbar, never resets scroll position or navigation -- this is a
+  /// silent background refresh, deliberately distinct from [_reload]'s own
+  /// user-initiated-navigation-return behaviour (which does surface a
+  /// failure message, since that reload follows a user action).
+  void _onKeptStateChanged() {
+    if (!mounted) return;
+    final generation = _incomingKeptRefreshGuard.begin();
+    unawaited(_reloadForIncomingStateChange(generation));
+  }
+
+  Future<void> _reloadForIncomingStateChange(int generation) async {
+    final List<FavoriteItem> loaded;
+    try {
+      loaded = await _service.load();
+    } catch (_) {
+      // A failed silent background refresh must never interrupt the user
+      // (no snackbar) -- leave `_items` exactly as it already was. A
+      // future incoming batch (or the user's own next explicit action)
+      // will retry.
+      return;
+    }
+    // Both checks matter: `mounted` guards against a dispose that happened
+    // while `_service.load()` was in flight; `isCurrent` guards against a
+    // newer incoming notification's own reload having already started (and
+    // possibly already finished) after this one began -- this call must
+    // never overwrite a fresher result with a stale one.
+    if (!mounted || !_incomingKeptRefreshGuard.isCurrent(generation)) return;
+    setState(() {
+      _items = loaded;
+    });
   }
 
   String _displayDate(String storedDate) => storedDate.toUpperCase();

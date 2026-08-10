@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../controllers/sync_association_controller.dart';
 import '../models/kept_bootstrap_result.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/protected_file_kept_state_store.dart';
@@ -20,6 +21,7 @@ import '../sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
 import 'daily_wisdom_access_service.dart';
 import 'kept_discovery_hint_service.dart';
 import 'kept_migration_coordinator.dart';
+import 'kept_state_revision_notifier.dart';
 import 'kept_storage_bootstrap.dart';
 import 'purchase_service.dart';
 import 'saved_reflections_service.dart';
@@ -34,6 +36,18 @@ final WisdomNotificationService wisdomNotificationService =
     WisdomNotificationService();
 final KeptDiscoveryHintService keptDiscoveryHintService =
     KeptDiscoveryHintService();
+
+/// Build 26 Phase 4H-6: the one production [KeptStateRevisionNotifier]
+/// instance. Constructed eagerly (mirrors [purchaseService]/
+/// [wisdomNotificationService] above -- no I/O, no dependency on Kept
+/// storage bootstrap), so a screen may safely add/remove a listener from
+/// its own `initState`/`dispose` even before [initializeKeptStorage]
+/// completes. Wired below, inside `buildService`, as
+/// [IncomingKeptSyncCoordinator]'s `onIncomingStateChanged` callback --
+/// never referenced by name from `lib/sync_integration/` itself (see that
+/// class's own field doc comment).
+final KeptStateRevisionNotifier keptStateRevisionNotifier =
+    KeptStateRevisionNotifier();
 
 final StoragePreferencesAdapter dailyAccessPreferencesAdapter =
     StoragePreferencesAdapter();
@@ -208,6 +222,35 @@ late final SyncOrchestrator syncOrchestrator;
 /// ever calls the plain, argument-free callback constructed here.
 late final CloudKitSyncRuntimeCoordinator cloudKitSyncRuntimeCoordinator;
 
+/// Build 26 Phase 4G: the Settings-facing explicit one-time iCloud
+/// association surface (see `lib/controllers/sync_association_controller
+/// .dart` for why it is named platform-neutrally rather than after
+/// CloudKit). Populated in the same single bootstrap attempt as every other
+/// sync coordinator above, alongside [cloudKitSyncRuntimeCoordinator] --
+/// composes [keptSyncBootstrapCoordinator] with a fire-and-forget closure
+/// over [cloudKitSyncRuntimeCoordinator] (the fourth `requestSync` call
+/// site, alongside `lib/main.dart`'s startup/foreground triggers and this
+/// coordinator's own retry/account-change triggers -- see
+/// `test/sync_runtime/sync_runtime_layering_test.dart`'s structural proof of
+/// exactly these call sites). `lib/screens/settings_screen.dart` is this
+/// controller's only production caller; it never touches
+/// `KeptSyncBootstrapCoordinator`, `CloudKitSyncRuntimeCoordinator`, or any
+/// CloudKit type directly.
+///
+/// Deliberately **nullable**, never `late final`: unlike every other
+/// sync-coordinator global above, this one is read directly from
+/// `SettingsScreen`'s widget tree (via [SettingsScreen
+/// .cloudKitAssociationController]'s fallback), and existing isolated
+/// HomeScreen/SettingsScreen widget tests construct that UI without ever
+/// calling [initializeKeptStorage] first. A `late final` field would throw
+/// `LateInitializationError` the instant such a test mounts Settings. `null`
+/// here means exactly "the composition root has not finished bootstrapping
+/// yet" -- `SettingsScreen` treats that the same as any other
+/// non-actionable state (row reads "Not enabled", never tappable), never as
+/// proof that sync is disabled, and never by silently constructing a second,
+/// disconnected controller or touching CloudKit/native infrastructure.
+SyncAssociationController? cloudKitAssociationController;
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -251,6 +294,13 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       intentStore: localSyncIntentStore,
       syncPersistenceStore: syncPersistenceStore,
       integrationCoordinator: syncIntegrationOperationCoordinator,
+      // Build 26 Phase 4H-6: the sole production bridge from a durable
+      // incoming-apply's material Kept-content change to any mounted
+      // Kept/Reflections UI. Synchronous, fire-and-forget from this
+      // coordinator's own perspective -- IncomingKeptSyncCoordinator only
+      // ever calls a plain `void Function()?`; this closure alone decides
+      // it means "notify keptStateRevisionNotifier's listeners".
+      onIncomingStateChanged: keptStateRevisionNotifier.notify,
     );
     keptSyncBootstrapCoordinator = KeptSyncBootstrapCoordinator(
       bridge: cloudKitPlatformBridge,
@@ -270,6 +320,21 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       orchestrator: syncOrchestrator,
       syncPersistenceStore: syncPersistenceStore,
       bridge: cloudKitPlatformBridge,
+    );
+    cloudKitAssociationController = SyncAssociationController(
+      bootstrapCoordinator: keptSyncBootstrapCoordinator,
+      // Fire-and-forget only, mirroring keptSyncIntegrationCoordinator's own
+      // onMutationCommitted callback above: never awaited by the caller,
+      // and any error the returned Future carries is swallowed here so it
+      // can never surface as an unhandled async error or block the
+      // Settings screen on a CloudKit round trip.
+      requestSyncAfterAssociation: () {
+        unawaited(
+          cloudKitSyncRuntimeCoordinator
+              .requestSync(SyncRuntimeTrigger.explicitAssociation)
+              .catchError((_) {}),
+        );
+      },
     );
     return SavedReflectionsService(
       keptRepository: repository,

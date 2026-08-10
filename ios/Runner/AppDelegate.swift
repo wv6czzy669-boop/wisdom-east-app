@@ -129,7 +129,16 @@ import UserNotifications
 /// and immediately reads the attribute back to confirm it actually took
 /// effect, only ever returning `true` after that read-back succeeds. This
 /// is deliberately not a general native filesystem bridge.
-private enum EastFileProtection {
+///
+/// Build 26 Phase 4H (post-Mac-validation): on physical iOS hardware this
+/// class's contract is unchanged and remains fail-closed. On the iOS
+/// Simulator, the final read-back comparison is relaxed -- see
+/// `handle(_:result:)`'s own doc comment for the full rationale. This type
+/// is intentionally `internal` (module-level, not `private`) rather than
+/// `private` to the file, solely so `RunnerTests.swift` can exercise
+/// `handle(_:result:)` directly via `@testable import Runner` -- this is a
+/// visibility widening only, with no change to runtime behavior.
+enum EastFileProtection {
   static let channelName = "com.dogukan.dailywisdom/file_protection"
   static let methodName = "protectAndVerifyComplete"
 
@@ -229,6 +238,11 @@ private enum EastFileProtection {
         appliedProtection = nil
       }
     } catch {
+      // This read-back failure is a genuine error condition on both
+      // physical hardware and Simulator (a thrown `attributesOfItem` is not
+      // the Simulator Data Protection gap this fix addresses -- that gap is
+      // a *reported value* mismatch below, never a thrown error here) --
+      // unchanged on both platforms.
       NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", verificationFailedCode)
       result(
         FlutterError(
@@ -240,19 +254,44 @@ private enum EastFileProtection {
       return
     }
 
-    guard appliedProtection == FileProtectionType.complete.rawValue else {
-      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", verificationFailedCode)
-      result(
-        FlutterError(
-          code: verificationFailedCode,
-          message: "File protection could not be verified after applying it.",
-          details: nil
-        )
+    #if targetEnvironment(simulator)
+      // Build 26 Phase 4H: the iOS Simulator has no Secure Enclave / real
+      // passcode-derived key hierarchy backing Data Protection classes --
+      // its host filesystem cannot actually enforce, and does not reliably
+      // report, `NSFileProtectionComplete` the way physical hardware does.
+      // `setAttributes` above already completed without throwing (the one
+      // operation that can genuinely fail before this point), path
+      // existence/type were already verified above, and the read-back
+      // itself succeeded without throwing -- on Simulator only, that is
+      // treated as sufficient rather than additionally requiring
+      // `appliedProtection` to exactly equal `.complete`, since the
+      // Simulator's answer to that specific question is not trustworthy.
+      // `#if targetEnvironment(simulator)` is a compile-time condition tied
+      // to the build destination, never a runtime heuristic, environment
+      // variable, or filesystem-path sniff -- this branch does not exist at
+      // all in a physical-device build, so it can never be reached there.
+      // A real device build takes the `#else` branch below, unchanged.
+      NSLog(
+        "EAST_KEPT_DIAGNOSTIC file-protection-handle-ok-simulator-compat "
+          + "reportedProtection=%@",
+        appliedProtection ?? "nil"
       )
-      return
-    }
+      result(true)
+    #else
+      guard appliedProtection == FileProtectionType.complete.rawValue else {
+        NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", verificationFailedCode)
+        result(
+          FlutterError(
+            code: verificationFailedCode,
+            message: "File protection could not be verified after applying it.",
+            details: nil
+          )
+        )
+        return
+      }
 
-    NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-ok")
-    result(true)
+      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-ok")
+      result(true)
+    #endif
   }
 }

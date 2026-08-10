@@ -494,6 +494,39 @@ class RunnerTests: XCTestCase {
     }
   }
 
+  // 7b. Build 26 Phase 4H-2: a fetched record carrying `reflectionText`
+  // without a matching `reflectedAtMs` (or vice versa) is rejected, never
+  // silently coerced into a one-sided Reflection. This is the exact shape
+  // this phase's own real-device investigation identified as the one
+  // structurally new condition a second device's Reflection edit could
+  // introduce that the original uploading device's own records never
+  // exercised before.
+  func testKeptWisdomCodecRejectsInconsistentReflectionFieldsOnDecode() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+    // Simulate a record that only ever set `reflectionText` -- bypassing
+    // `encodeActive`'s own paired-fields guard, exactly as a differently
+    // written (or partially failed) save from another device could
+    // theoretically produce on the server.
+    record[CloudKitRecordSchema.KeptWisdomField.reflectionText] = "A quiet thought." as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success:
+      XCTFail("Expected an inconsistent-reflection-fields rejection")
+    case .failure(let error):
+      XCTAssertEqual(error, .inconsistentReflectionFields)
+    }
+  }
+
   // 8. A record-name/revealId mismatch is rejected.
   func testKeptWisdomCodecRejectsRecordNameMismatch() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
@@ -548,7 +581,17 @@ class RunnerTests: XCTestCase {
     }
 
     // A tombstone-shaped record that also carries a forbidden content
-    // field indicates corruption or tampering -- never tolerated.
+    // field indicates corruption or tampering -- never tolerated. This
+    // deliberately only re-adds `wisdomText` (not the other three core
+    // legacy fields `legacyActivePayloadShape` also inspects), so the
+    // record is *also* a partial/incoherent legacy-shape subset -- by
+    // that function's own documented, deliberate check order (identity
+    // via `revealId` is validated before `wisdomText`), the specific
+    // field named in the resulting error is `revealId`, not `wisdomText`.
+    // This assertion intentionally only proves the fail-closed error
+    // *category*, not which of possibly several simultaneously-forbidden
+    // fields is named first -- that ordering is `legacyActivePayloadShape`'s
+    // own implementation detail, not part of this test's contract.
     tombstoneRecord[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "smuggled content" as CKRecordValue
     switch CloudKitKeptWisdomCodec.decode(
       tombstoneRecord, systemFields: sampleSystemFields(for: tombstoneRecord)
@@ -556,7 +599,441 @@ class RunnerTests: XCTestCase {
     case .success:
       XCTFail("Expected rejection of a tombstone carrying forbidden content")
     case .failure(let error):
+      guard case .forbiddenFieldOnTombstone = error else {
+        return XCTFail("Expected a forbiddenFieldOnTombstone rejection, got \(error)")
+      }
+    }
+  }
+
+  // MARK: - Build 26 Phase 4H-4: tombstone field-retention writer bug +
+  // legacy full-form tombstone compatibility tests.
+  //
+  // Supersedes the earlier, narrower Phase 4H-3 "redundant revealId only"
+  // rule (real CloudKit Dashboard evidence proved the already-stored
+  // Development tombstone retains its entire historical active payload --
+  // `revealId`, `wisdomText`, `revealedAtMs`, `keptAtMs` -- not merely
+  // `revealId`). Root cause, proven below: `CloudKitRecordTransportCoordinator
+  // .modifyRecords`'s baseline-merge step (used whenever a save carries a
+  // `previousSystemFields` value, i.e. updating an already-synced record)
+  // reconstructs `baseline` from system fields alone (no user field
+  // values), then previously copied only `input.record.allKeys()` onto
+  // it. Because `encodeTombstone` merely never *mentioned* the forbidden
+  // active fields (rather than explicitly clearing them), those fields
+  // never appeared in `allKeys()` either, so the removal was silently
+  // never sent to CloudKit at all, leaving the server's old values intact.
+  // Fixed by (1) `encodeTombstone` now explicitly assigning `nil` to every
+  // forbidden field, and (2) the merge loop now iterating
+  // `changedKeys()`, which -- unlike `allKeys()` -- includes explicitly
+  // cleared keys.
+
+  // 9b. Build 26 Phase 4H-5 Task 2.A: a freshly `encodeTombstone`d record
+  // contains only the allowed tombstone fields, and -- critically, this is
+  // what actually makes the writer fix effective -- every field that must
+  // be removed from an existing active server record (`revealId`,
+  // `wisdomText`, `revealedAtMs`, `keptAtMs`, `reflectionText`,
+  // `reflectedAtMs`) is registered in the record's own `changedKeys()` as
+  // an explicit removal. `allKeys()` correctly does NOT need to (and does
+  // not) contain a nil'd field at all -- `allKeys()` and `changedKeys()`
+  // are proven here to disagree on exactly these six keys, which is the
+  // whole reason the transport's baseline-merge loop had to switch from
+  // one to the other.
+  func testKeptWisdomCodecTombstoneEncodeExplicitlyClearsForbiddenFields() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    for field in CloudKitRecordSchema.KeptWisdomField.forbiddenOnTombstone {
+      XCTAssertNil(record[field], "Expected '\(field)' to be absent from a freshly encoded tombstone")
+      XCTAssertTrue(
+        record.changedKeys().contains(field),
+        "Expected '\(field)' to be an explicit removal (changedKeys), not merely untouched")
+      XCTAssertFalse(
+        record.allKeys().contains(field),
+        "Expected '\(field)' to be absent from allKeys() -- a nil'd field never needs to appear there")
+    }
+    XCTAssertEqual(record[CloudKitRecordSchema.KeptWisdomField.isTombstone] as? Bool, true)
+    XCTAssertNotNil(record[CloudKitRecordSchema.KeptWisdomField.deletedAtMs])
+    XCTAssertNotNil(record[CloudKitRecordSchema.KeptWisdomField.updatedAtMs])
+    XCTAssertNotNil(record[CloudKitRecordSchema.KeptWisdomField.mutationId])
+    XCTAssertNotNil(record[CloudKitRecordSchema.KeptWisdomField.dataEpoch])
+    XCTAssertNotNil(record[CloudKitRecordSchema.KeptWisdomField.schemaVersion])
+  }
+
+  // 9b-i. Build 26 Phase 4H-5 Task 2.B: active encode WITH a Reflection --
+  // the Reflection fields are present with their real values (the
+  // already-correct path, unaffected by this fix, kept as an explicit
+  // sibling assertion alongside 9b-ii below for direct comparison).
+  func testKeptWisdomCodecActiveEncodeWithReflectionSetsReflectionFields() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 2,
+      reflectionText: "A quiet thought.", reflectedAtMs: 3,
+      updatedAtMs: 3, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    XCTAssertEqual(record[CloudKitRecordSchema.KeptWisdomField.reflectionText] as? String, "A quiet thought.")
+    XCTAssertEqual(record[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs] as? Int64, 3)
+    XCTAssertTrue(record.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectionText))
+    XCTAssertTrue(record.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectedAtMs))
+  }
+
+  // 9b-ii. Build 26 Phase 4H-5 Task 2.C: active encode WITHOUT a
+  // Reflection -- `reflectionText`/`reflectedAtMs` are nil (unchanged
+  // observable behavior) AND now explicit removals in `changedKeys()`
+  // (the actual fix), never merely absent from `allKeys()`. This is the
+  // exact sibling of the tombstone writer fix, applied to the "Reflection
+  // removed from an active occurrence" case your own prior audit flagged
+  // as the same bug class.
+  func testKeptWisdomCodecActiveEncodeWithoutReflectionExplicitlyClearsReflectionFields() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 2,
+      reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 3, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    XCTAssertNil(record[CloudKitRecordSchema.KeptWisdomField.reflectionText])
+    XCTAssertNil(record[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs])
+    XCTAssertTrue(
+      record.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectionText),
+      "Expected reflectionText to be an explicit removal (changedKeys), not merely untouched")
+    XCTAssertTrue(
+      record.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectedAtMs),
+      "Expected reflectedAtMs to be an explicit removal (changedKeys), not merely untouched")
+    XCTAssertFalse(record.allKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectionText))
+    XCTAssertFalse(record.allKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectedAtMs))
+  }
+
+  // 9c. Tombstone identity remains tied to the correct occurrence -- two
+  // different revealIds never produce the same tombstone recordName.
+  func testKeptWisdomCodecDifferentRevealIdsProduceDifferentTombstoneRecordNames() throws {
+    let recordA = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let recordB = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdB, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    XCTAssertNotEqual(recordA.recordID.recordName, recordB.recordID.recordName)
+  }
+
+  // 9d. THE decisive live-writer-bug proof (Task 2): starts from an
+  // EXISTING, already-synced active `CKRecord` (with a Reflection, so
+  // every forbidden field has a real, non-nil historical value), archives
+  // its system fields exactly as a real prior save would have left them,
+  // then runs the exact production tombstone-conversion path --
+  // `CloudKitRecordTransportCoordinator.modifyRecords` with that archived
+  // value as `previousSystemFields`. Inspects the *actual* `CKRecord`
+  // hand ed to `CKModifyRecordsOperation` (via `FakeRecordTransportDatabase
+  // .addedOperations`) to prove every forbidden field is both nil AND
+  // registered in `changedKeys()` -- i.e. this fix's baseline-merge
+  // `changedKeys()` correctly propagates `encodeTombstone`'s explicit
+  // removals onto the record actually sent over the network. Before this
+  // turn's fix, none of these six keys would have appeared in the merged
+  // record's `changedKeys()` at all, which is precisely how the old
+  // active values survived on the real tombstone this phase investigated.
+  func testModifyRecordsBaselineMergePropagatesTombstoneFieldRemovalsOntoSavedRecord() throws {
+    let existingActiveRecord = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: "A quiet thought.", reflectedAtMs: 2,
+      updatedAtMs: 2, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let previousSystemFields = sampleSystemFields(for: existingActiveRecord)
+
+    let tombstoneRecord = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 3, updatedAtMs: 3,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [nil]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [
+        CloudKitRecordTransportCoordinator.ModifyInput(
+          record: tombstoneRecord, previousSystemFields: previousSystemFields)
+      ]
+    ) { _ in calledOnce.fulfill() }
+    waitForExpectations(timeout: 1)
+
+    guard let modifyOperation = fakeDatabase.addedOperations.first as? CKModifyRecordsOperation,
+      let savedRecord = modifyOperation.recordsToSave?.first
+    else {
+      return XCTFail("Expected a CKModifyRecordsOperation carrying the merged tombstone record")
+    }
+
+    for field in CloudKitRecordSchema.KeptWisdomField.forbiddenOnTombstone {
+      XCTAssertNil(savedRecord[field], "Expected '\(field)' to be nil on the record actually saved")
+      XCTAssertTrue(
+        savedRecord.changedKeys().contains(field),
+        "Expected '\(field)' to be an explicit removal on the record actually sent to CloudKit")
+    }
+    XCTAssertEqual(savedRecord[CloudKitRecordSchema.KeptWisdomField.isTombstone] as? Bool, true)
+    XCTAssertEqual(savedRecord.recordID.recordName, existingActiveRecord.recordID.recordName)
+  }
+
+  // 9d-i. Build 26 Phase 4H-5 Task 2.D (sibling case): the exact same
+  // baseline-merge proof as immediately above, but for "Reflection removed
+  // from an already-synced active occurrence" rather than "active
+  // deleted." Starts from an existing active record WITH a Reflection,
+  // archives its system fields, then saves a fresh active encode WITHOUT a
+  // Reflection over that baseline via the real `modifyRecords` path.
+  // Inspects the actual `CKRecord` hand ed to `CKModifyRecordsOperation` --
+  // not just the standalone `encodeActive` output -- to prove the
+  // Reflection removal survives the same baseline-merge step the
+  // tombstone fix already had to correct.
+  func testModifyRecordsBaselineMergePropagatesReflectionRemovalOntoSavedRecord() throws {
+    let existingActiveRecordWithReflection = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: "A quiet thought.", reflectedAtMs: 2,
+      updatedAtMs: 2, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let previousSystemFields = sampleSystemFields(for: existingActiveRecordWithReflection)
+
+    let updatedActiveRecordWithoutReflection = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 3, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.perRecordModifyErrors = [nil]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.modifyRecords(
+      [
+        CloudKitRecordTransportCoordinator.ModifyInput(
+          record: updatedActiveRecordWithoutReflection, previousSystemFields: previousSystemFields)
+      ]
+    ) { _ in calledOnce.fulfill() }
+    waitForExpectations(timeout: 1)
+
+    guard let modifyOperation = fakeDatabase.addedOperations.first as? CKModifyRecordsOperation,
+      let savedRecord = modifyOperation.recordsToSave?.first
+    else {
+      return XCTFail("Expected a CKModifyRecordsOperation carrying the merged active record")
+    }
+
+    XCTAssertNil(savedRecord[CloudKitRecordSchema.KeptWisdomField.reflectionText])
+    XCTAssertNil(savedRecord[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs])
+    XCTAssertTrue(
+      savedRecord.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectionText),
+      "Expected reflectionText to be an explicit removal on the record actually sent to CloudKit")
+    XCTAssertTrue(
+      savedRecord.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectedAtMs),
+      "Expected reflectedAtMs to be an explicit removal on the record actually sent to CloudKit")
+    // The rest of the active payload is untouched by this fix.
+    XCTAssertEqual(savedRecord[CloudKitRecordSchema.KeptWisdomField.wisdomText] as? String, "Be still and know.")
+    XCTAssertEqual(savedRecord[CloudKitRecordSchema.KeptWisdomField.isTombstone] as? Bool, false)
+  }
+
+  // 9e. Canonical tombstone (no retained legacy payload) still decodes
+  // successfully -- the expanded legacy rule below must not regress the
+  // ordinary, already-fixed case.
+  func testKeptWisdomCodecDecodesCanonicalTombstoneWithNoLegacyPayload() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success(let envelope):
+      XCTAssertTrue(envelope.isTombstone)
+      XCTAssertNil(envelope.revealId)
+      XCTAssertNil(envelope.wisdomText)
+    case .failure(let error):
+      XCTFail("Expected the canonical tombstone shape to decode successfully, got \(error)")
+    }
+  }
+
+  // 9f. The proven legacy full-form shape (no Reflection at deletion time,
+  // matching the actual CloudKit Dashboard evidence this phase
+  // investigated: revealId/wisdomText/revealedAtMs/keptAtMs all present
+  // and coherent, Reflection fields empty) decodes successfully, and
+  // none of the retained historical payload reaches the envelope: no
+  // resurrection risk.
+  func testKeptWisdomCodecAcceptsLegacyFullFormTombstoneWithoutReflection() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1_754_078_800_000, updatedAtMs: 1_754_078_800_000,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    // Simulate the already-stored legacy record: the writer bug retained
+    // the entire historical active payload this occurrence had, minus
+    // Reflection (this occurrence never had one before deletion).
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdA as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "Be still and know." as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = Int64(1) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = Int64(2) as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success(let envelope):
+      XCTAssertTrue(envelope.isTombstone)
+      XCTAssertEqual(envelope.recordName, "east-kept-\(phase4CRevealIdA)")
+      XCTAssertNotNil(envelope.deletedAtMs)
+      // No resurrection: none of the retained legacy payload reaches the
+      // decoded envelope.
+      XCTAssertNil(envelope.revealId)
+      XCTAssertNil(envelope.wisdomText)
+      XCTAssertNil(envelope.revealedAtMs)
+      XCTAssertNil(envelope.keptAtMs)
+      XCTAssertNil(envelope.reflectionText)
+      XCTAssertNil(envelope.reflectedAtMs)
+    case .failure(let error):
+      XCTFail("Expected the known legacy full-form tombstone shape to decode successfully, got \(error)")
+    }
+  }
+
+  // 9g. Task 4's explicit question: a Reflection-bearing historical
+  // snapshot is a legitimate consequence of the same writer bug (if a
+  // Reflection existed at deletion time), so it must also be accepted --
+  // as one coherent snapshot, both Reflection fields present and valid,
+  // never resurrected.
+  func testKeptWisdomCodecAcceptsLegacyFullFormTombstoneWithReflection() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdA as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "Be still and know." as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = Int64(1) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = Int64(2) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.reflectionText] = "A quiet thought." as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs] = Int64(3) as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success(let envelope):
+      XCTAssertTrue(envelope.isTombstone)
+      XCTAssertNil(envelope.reflectionText)
+      XCTAssertNil(envelope.reflectedAtMs)
+      XCTAssertNil(envelope.wisdomText)
+      XCTAssertNil(envelope.revealId)
+    case .failure(let error):
+      XCTFail(
+        "Expected the known legacy full-form-with-Reflection tombstone shape to decode "
+          + "successfully, got \(error)")
+    }
+  }
+
+  // 9h. Fail-closed against tampering/corruption: a mismatched revealId
+  // (not the one this record's own recordName derives from) is still
+  // rejected even when the rest of the legacy payload is otherwise
+  // internally coherent.
+  func testKeptWisdomCodecRejectsLegacyFullFormTombstoneWithMismatchedRevealId() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdB as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "Be still and know." as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = Int64(1) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = Int64(2) as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success:
+      XCTFail("Expected rejection of a tombstone whose revealId does not match its own recordName")
+    case .failure(let error):
+      XCTAssertEqual(error, .forbiddenFieldOnTombstone(CloudKitRecordSchema.KeptWisdomField.revealId))
+    }
+  }
+
+  // 9i. "Do not add one forbidden-field exception at a time": a *partial*
+  // legacy shape -- only some of the four core fields present -- is never
+  // a coherent historical snapshot (the writer bug always retains all
+  // four together, since `encodeActive` always sets them together), so it
+  // fails closed, never silently tolerated.
+  func testKeptWisdomCodecRejectsPartialLegacyTombstonePayload() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    // Only revealId and wisdomText retained -- never a shape the real
+    // writer bug (or a valid active record) could produce alone.
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdA as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "Be still and know." as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success:
+      XCTFail("Expected rejection of a partial legacy payload")
+    case .failure(let error):
+      XCTAssertEqual(error, .forbiddenFieldOnTombstone(CloudKitRecordSchema.KeptWisdomField.revealedAtMs))
+    }
+  }
+
+  // 9j. An unpaired Reflection field alongside an otherwise-coherent
+  // legacy snapshot still fails closed -- the same internal-consistency
+  // rule `decodeActive` already applies to `reflectionText`/`reflectedAtMs`
+  // is not relaxed for the legacy path.
+  func testKeptWisdomCodecRejectsLegacyTombstoneWithUnpairedReflectionField() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdA as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = "Be still and know." as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = Int64(1) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = Int64(2) as CKRecordValue
+    // reflectionText present without a matching reflectedAtMs.
+    record[CloudKitRecordSchema.KeptWisdomField.reflectionText] = "A quiet thought." as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success:
+      XCTFail("Expected rejection of an unpaired Reflection field on a legacy tombstone")
+    case .failure(let error):
+      XCTAssertEqual(error, .forbiddenFieldOnTombstone(CloudKitRecordSchema.KeptWisdomField.reflectionText))
+    }
+  }
+
+  // 9k. A coherent legacy core payload alongside a genuinely unrelated
+  // forbidden combination (a mismatched revealId, which independently
+  // fails the identity check) still fails closed -- accepting the known
+  // legacy shape never broadens into a generic "ignore forbidden fields"
+  // rule.
+  func testKeptWisdomCodecRejectsLegacyTombstoneWithUnrelatedForbiddenCombination() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    record[CloudKitRecordSchema.KeptWisdomField.revealId] = phase4CRevealIdA as CKRecordValue
+    // A malformed (non-String) wisdomText -- never tolerated regardless of
+    // the rest of the payload's coherence.
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = 12345 as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = Int64(1) as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = Int64(2) as CKRecordValue
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success:
+      XCTFail("Expected rejection of a malformed field within an otherwise legacy-shaped payload")
+    case .failure(let error):
       XCTAssertEqual(error, .forbiddenFieldOnTombstone(CloudKitRecordSchema.KeptWisdomField.wisdomText))
+    }
+  }
+
+  // 9l. Cross-device flow at the exact archive-then-decode sequence
+  // `CloudKitRecordTransportCoordinator.fetchZoneChanges`'s own
+  // `recordChangedBlock` runs for a `CKKeptWisdom` record (see this file's
+  // own disclosed `FakeRecordTransportDatabase` limitation earlier --
+  // `CKServerChangeToken` cannot be constructed offline, and neither a
+  // genuinely successful fetch nor this specific decode-success case can
+  // be asserted through that fake's result, because both a truly
+  // undecodable record and a missing final token collapse to the exact
+  // same `unrecognizedNativeError` string): "device A" deletes an
+  // occurrence (producing, via the now-fixed writer, a canonical
+  // tombstone with no retained payload); "device B"'s fetch-callback
+  // archive-then-decode sequence must not treat it as undecodable.
+  func testKeptWisdomCodecFetchDecodesTombstoneWithoutUnrecognizedNativeError() throws {
+    // "Device A": deletes revealId A via the fixed writer.
+    let record = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    // "Device B": exactly `recordChangedBlock`'s own sequence for a
+    // CKKeptWisdom record.
+    guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
+      return XCTFail("Expected archiveSystemFields to succeed for a well-formed tombstone record")
+    }
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: systemFields) {
+    case .success(let envelope):
+      XCTAssertTrue(envelope.isTombstone)
+    case .failure(let error):
+      XCTFail(
+        "Expected device B's fetch to decode device A's tombstone without "
+          + "collapsing to unrecognizedNativeError, got \(error)")
     }
   }
 
@@ -1094,6 +1571,98 @@ class RunnerTests: XCTestCase {
     waitForExpectations(timeout: 1)
   }
 
+  // 11b. Build 26 Phase 4H-2: a changed record legitimately carrying a
+  // Reflection added *after* this device's own last fetch (e.g. by another
+  // device) decodes successfully -- the mere presence of
+  // `reflectionText`/`reflectedAtMs` on an incremental fetch is not, by
+  // itself, a failure condition.
+  //
+  // Deliberately NOT routed through `FakeRecordTransportDatabase`/
+  // `CloudKitRecordTransportCoordinator.fetchZoneChanges` here: as this
+  // section's own top comment already discloses, that fake can never
+  // report a genuine `.success` outcome for `fetchZoneChanges` at all --
+  // `CKServerChangeToken` has no public initializer anywhere in the
+  // CloudKit SDK, so `FakeRecordTransportDatabase.add(_:)` always invokes
+  // `recordZoneFetchCompletionBlock` with a `nil` token
+  // (`fetchOperation.recordZoneFetchCompletionBlock?(CloudKitRecordIdentity.zoneID,
+  // nil, nil, false, zoneChangesFetchError)`), which fails the
+  // coordinator's own `guard let finalToken = finalToken, let archivedToken
+  // = ...` closed with `unrecognizedNativeError`, regardless of whether
+  // every changed record decoded perfectly. Asserting `.success` through
+  // that fake was this test's own defect (a real-device diagnostic run
+  // confirmed the root cause), not a production bug -- fixed here, not in
+  // `CloudKitRecordTransportCoordinator`.
+  //
+  // Proving this record's own decode succeeds is instead done exactly like
+  // every other decode assertion in this file (e.g.
+  // `testKeptWisdomCodecRoundTripsActiveForm`,
+  // `testKeptWisdomCodecDecodeAttachesGivenSystemFieldsOnBothForms` above):
+  // by calling `CloudKitOpaqueArchive.archiveSystemFields(of:)` followed by
+  // `CloudKitKeptWisdomCodec.decode(_:systemFields:)` directly -- exactly
+  // the same two calls, in the same order, that `fetchZoneChanges`'s own
+  // `recordChangedBlock` makes for a `CKKeptWisdom` record. Named
+  // `testKeptWisdomCodec...` (not `testFetchZoneChanges...`) to match: this
+  // test exercises the codec's archive-then-decode path directly, never
+  // `fetchZoneChanges` itself.
+  func testKeptWisdomCodecDecodesAChangedRecordCarryingANewlyAddedReflection() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: "A quiet thought added on another device.",
+      reflectedAtMs: 2,
+      updatedAtMs: 2,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+
+    guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
+      return XCTFail("Expected archiveSystemFields to succeed for a well-formed active record")
+    }
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: systemFields) {
+    case .success(let envelope):
+      XCTAssertFalse(envelope.isTombstone)
+      XCTAssertEqual(envelope.reflectionText, "A quiet thought added on another device.")
+      XCTAssertEqual(envelope.reflectedAtMs, 2)
+      XCTAssertEqual(envelope.systemFields, systemFields)
+    case .failure(let error):
+      XCTFail(
+        "Expected a well-formed, paired-Reflection changed record to decode successfully, "
+          + "got \(error)")
+    }
+  }
+
+  // 11c. Build 26 Phase 4H-2: the incremental-fetch counterpart to
+  // `testKeptWisdomCodecRejectsInconsistentReflectionFieldsOnDecode` above
+  // -- proves the *whole fetch* fails closed (never a partial/successful
+  // result silently omitting the bad record) when a changed record another
+  // device wrote carries a one-sided Reflection. This is the exact
+  // `errorCode=unrecognizedNativeError` shape this phase's physical-device
+  // log showed.
+  func testFetchZoneChangesFailsClosedWhenAChangedRecordHasInconsistentReflectionFields() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      revealedAtMs: 1, keptAtMs: 1,
+      reflectionText: nil, reflectedAtMs: nil,
+      updatedAtMs: 1,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    record[CloudKitRecordSchema.KeptWisdomField.reflectionText] = "A quiet thought." as CKRecordValue
+
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesRecordsToReport = [record]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      XCTAssertEqual(result.outcome, .failure)
+      XCTAssertEqual(result.errorCode, CloudKitErrorClassifier.unrecognizedNativeError)
+      XCTAssertTrue(result.changedKeptWisdomRecords.isEmpty)
+      XCTAssertTrue(result.changedSyncStateRecords.isEmpty)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
   // 12. Physical deletion handling per architecture: this transport never
   // issues one (recordIDsToDelete is always nil), but a deletion
   // notification CloudKit itself reports is still surfaced defensively,
@@ -1361,6 +1930,130 @@ class RunnerTests: XCTestCase {
       transportCalledOnce.fulfill()
     }
     waitForExpectations(timeout: 1)
+  }
+
+  // MARK: - Build 26 Phase 4H: EastFileProtection (native file-protection
+  // bridge) tests
+  //
+  // `EastFileProtection` was widened from `private` to `internal`
+  // (AppDelegate.swift) solely so this suite can exercise
+  // `handle(_:result:)` directly via `@testable import Runner` -- no other
+  // behavior change. These construct a real temporary file/directory under
+  // the test process's own tmp directory; no CloudKit, no network, no app
+  // data of any kind is touched or deleted.
+  //
+  // This suite deliberately contains no Simulator-vs-device branching of
+  // its own: XCTest always runs under whichever destination the test
+  // target is built for, so `handle(_:result:)`'s own
+  // `#if targetEnvironment(simulator)` branch resolves naturally to
+  // whichever destination is actually running these tests. Running this
+  // suite on the iOS Simulator is itself the regression proof for the
+  // Simulator compatibility fix: before that fix,
+  // `testFileProtectionHandleSucceedsForARegularFile` and
+  // `testFileProtectionHandleSucceedsForADirectory` would fail on Simulator
+  // with `protection_verification_failed`; after it, they pass there, while
+  // remaining exactly as strict on physical hardware as before (the
+  // `#else` branch is byte-for-byte unchanged from its pre-fix form).
+
+  private func makeFileProtectionTempFile() throws -> String {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("east-file-protection-tests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fileURL = directory.appendingPathComponent("sample.txt")
+    try "east-file-protection-test".write(to: fileURL, atomically: true, encoding: .utf8)
+    return fileURL.path
+  }
+
+  private func makeFileProtectionTempDirectory() throws -> String {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("east-file-protection-tests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory.path
+  }
+
+  private func invokeFileProtectionHandle(
+    method: String = "protectAndVerifyComplete",
+    arguments: Any?
+  ) -> Any? {
+    let call = FlutterMethodCall(methodName: method, arguments: arguments)
+    let calledOnce = expectation(description: "EastFileProtection.handle result called")
+    var capturedResult: Any?
+    EastFileProtection.handle(call) { value in
+      capturedResult = value
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 2)
+    return capturedResult
+  }
+
+  // 1. A regular file succeeds. On Simulator this exercises the new
+  // compatibility branch; on physical hardware it exercises the unchanged
+  // strict branch -- both are expected to report success.
+  func testFileProtectionHandleSucceedsForARegularFile() throws {
+    let path = try makeFileProtectionTempFile()
+    let capturedResult = invokeFileProtectionHandle(arguments: ["path": path])
+    XCTAssertEqual(capturedResult as? Bool, true)
+  }
+
+  // 2. A directory succeeds identically -- `setAttributes`/`attributesOfItem`
+  // are exercised exactly the same way for a directory as for a file under
+  // the existing contract; this is not redesigned by this fix.
+  func testFileProtectionHandleSucceedsForADirectory() throws {
+    let path = try makeFileProtectionTempDirectory()
+    let capturedResult = invokeFileProtectionHandle(arguments: ["path": path])
+    XCTAssertEqual(capturedResult as? Bool, true)
+  }
+
+  // 3. An unrelated/unsupported method name still surfaces its own
+  // unchanged error code on both platforms.
+  func testFileProtectionHandleRejectsUnsupportedMethod() {
+    let capturedResult = invokeFileProtectionHandle(
+      method: "someOtherMethod", arguments: ["path": "/tmp"])
+    guard let error = capturedResult as? FlutterError else {
+      return XCTFail("Expected a FlutterError for an unsupported method")
+    }
+    XCTAssertEqual(error.code, "unsupported_method")
+  }
+
+  // 4. Missing arguments still fail on both platforms.
+  func testFileProtectionHandleRejectsMissingArguments() {
+    let capturedResult = invokeFileProtectionHandle(arguments: nil)
+    guard let error = capturedResult as? FlutterError else {
+      return XCTFail("Expected a FlutterError for missing arguments")
+    }
+    XCTAssertEqual(error.code, "invalid_arguments")
+  }
+
+  // 5. A blank path still fails on both platforms.
+  func testFileProtectionHandleRejectsBlankPath() {
+    let capturedResult = invokeFileProtectionHandle(arguments: ["path": "   "])
+    guard let error = capturedResult as? FlutterError else {
+      return XCTFail("Expected a FlutterError for a blank path")
+    }
+    XCTAssertEqual(error.code, "invalid_arguments")
+  }
+
+  // 6. A relative path still fails on both platforms.
+  func testFileProtectionHandleRejectsRelativePath() {
+    let capturedResult = invokeFileProtectionHandle(arguments: ["path": "relative/path.txt"])
+    guard let error = capturedResult as? FlutterError else {
+      return XCTFail("Expected a FlutterError for a relative path")
+    }
+    XCTAssertEqual(error.code, "invalid_arguments")
+  }
+
+  // 7. A well-formed but nonexistent path still fails on both platforms --
+  // the Simulator compatibility branch only ever relaxes the *final*
+  // protection-class comparison; it never bypasses path existence.
+  func testFileProtectionHandleRejectsNonexistentPath() {
+    let missingPath = FileManager.default.temporaryDirectory
+      .appendingPathComponent("east-file-protection-missing-\(UUID().uuidString)")
+      .path
+    let capturedResult = invokeFileProtectionHandle(arguments: ["path": missingPath])
+    guard let error = capturedResult as? FlutterError else {
+      return XCTFail("Expected a FlutterError for a nonexistent path")
+    }
+    XCTAssertEqual(error.code, "path_not_found")
   }
 
 }

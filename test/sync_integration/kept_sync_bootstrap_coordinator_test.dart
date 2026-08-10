@@ -2,10 +2,12 @@
 // remote-first bootstrap, explicit account association, and legacy local
 // backfill. Synthetic content only.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/models/kept_bootstrap_result.dart';
 import 'package:wisdom_app/models/kept_record.dart';
+import 'package:wisdom_app/persistence/file_protection_bridge.dart';
 import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/sync/cloud_east_sync_state_projection.dart';
@@ -17,17 +19,22 @@ import 'package:wisdom_app/sync_integration/incoming_kept_sync_coordinator.dart'
 import 'package:wisdom_app/sync_integration/kept_sync_bootstrap_coordinator.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent.dart';
+import 'package:wisdom_app/sync_integration/local_sync_intent_store.dart';
+import 'package:wisdom_app/sync_integration/protected_local_sync_intent_store.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
+import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_platform/cloud_east_sync_state_wire_envelope.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_snapshot.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_bridge_info.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_change_event.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_platform_error.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
+import 'package:wisdom_app/utils/kept_timestamp_canonicalizer.dart';
 import 'package:wisdom_app/utils/remote_kept_identity.dart';
 
 import '../persistence_test_helpers.dart';
@@ -1561,6 +1568,86 @@ void main() {
     });
   });
 
+  group(
+      '55-57. Build 26 Phase 4H real-device regression: the resume-path '
+      'incremental fetch (_checkAlreadyCompleteForEpochChange) fails '
+      'closed to fetchFailed on a genuine transport failure -- never a '
+      'crash, never a local mutation, never a bucket/token change. This is '
+      'the exact call path a physical-device localMutation-triggered sync '
+      'pass takes once bootstrap has ever reached AccountBootstrapState'
+      '.complete: `resumeAssociation` -> this incremental check -> either '
+      '`alreadyComplete`/`remoteEpochChangedRecoveryRequired` (both already '
+      'covered above) or `fetchFailed` (previously uncovered by this suite '
+      'entirely).', () {
+    test(
+        '55. the bridge throwing CloudKitPlatformException during the '
+        'incremental fetch -> fetchFailed, zero mutation, bucket/token '
+        'unchanged', () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
+      syncStore.seedAssociatedAccountFingerprint(fingerprintA);
+      final before = await syncStore.loadAccountState(fingerprintA);
+      bridge.fetchProvider = (_) =>
+          throw const CloudKitPlatformException('networkFailure');
+
+      final result = await bootstrapCoordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.fetchFailed);
+      expect(bridge.modifyPrivateRecordsCallCount, 0);
+      final after = await syncStore.loadAccountState(fingerprintA);
+      expect(after, before);
+      expect(after!.bootstrapState, AccountBootstrapState.complete);
+      expect(after.serverChangeToken, 'dG9rZW4=');
+      expect(await keptRepository.loadAllRecords(), isEmpty);
+    });
+
+    test(
+        '56. the bridge returning a non-throwing '
+        'CloudKitZoneChangesOutcome.failure result during the incremental '
+        'fetch -> fetchFailed, zero mutation, bucket/token unchanged -- '
+        'proving this is not merely a thrown-exception-only path', () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
+      syncStore.seedAssociatedAccountFingerprint(fingerprintA);
+      final before = await syncStore.loadAccountState(fingerprintA);
+      bridge.fetchProvider = (_) =>
+          CloudKitZoneChangesResult.failure('zoneBusy');
+
+      final result = await bootstrapCoordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.fetchFailed);
+      expect(bridge.modifyPrivateRecordsCallCount, 0);
+      final after = await syncStore.loadAccountState(fingerprintA);
+      expect(after, before);
+      expect(after!.bootstrapState, AccountBootstrapState.complete);
+      expect(after.serverChangeToken, 'dG9rZW4=');
+      expect(await keptRepository.loadAllRecords(), isEmpty);
+    });
+
+    test(
+        '57. a retry after fetchFailed with a now-succeeding fetch resolves '
+        'normally (alreadyComplete) -- the earlier failure left no durable '
+        'state a subsequent success needs to work around', () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
+      syncStore.seedAssociatedAccountFingerprint(fingerprintA);
+      bridge.fetchProvider = (_) =>
+          throw const CloudKitPlatformException('networkFailure');
+      final firstAttempt = await bootstrapCoordinator.runBootstrap();
+      expect(firstAttempt.status, BootstrapRunStatus.fetchFailed);
+
+      bridge.fetchProvider = (_) => successResult(
+            syncState: [
+              CloudEastSyncStateProjection.current(
+                dataEpoch: epoch,
+                mutationId: mutationIdFor(revealIdA),
+              ),
+            ],
+          );
+      final retry = await bootstrapCoordinator.runBootstrap();
+
+      expect(retry.status, BootstrapRunStatus.alreadyComplete);
+      expect(bridge.modifyPrivateRecordsCallCount, 0);
+    });
+  });
+
   group('54. concurrency -- single-flight', () {
     test('two runBootstrap calls return the exact same in-flight Future',
         () async {
@@ -1604,6 +1691,452 @@ void main() {
       expect(repairResult.toString().contains(fingerprintB), isFalse);
     });
   });
+
+  // -------------------------------------------------------------------
+  // Phase 4G real-device timestamp-canonicalization regression: the
+  // independent mirror `_toSyncChangeIndependentMirror` (used only by
+  // `_promotePendingIntents`, itself only reachable from the real
+  // `runBootstrap()` pipeline) constructed every persisted `SyncChange`
+  // with a raw `enqueuedAt: _clock()` -- never canonicalized -- even
+  // though the sibling `KeptSyncIntegrationCoordinator._toSyncChange` was
+  // already fixed. On a real device, `_clock()` (`DateTime.now()`)
+  // routinely carries a non-zero microsecond remainder;
+  // `PersistedOutboxMutation.encode()`/`tryDecode` round-trip only
+  // millisecond precision, while `PersistedOutboxMutation.operator==`
+  // compares `enqueuedAt` with `DateTime.isAtSameMomentAs` (exact to the
+  // microsecond) -- exactly the bug class already proven and fixed for
+  // `LocalSyncIntent.enqueuedAt` and for the other `SyncChange`
+  // construction sites in `kept_sync_integration_coordinator.dart`. This
+  // silently starved every real-device bootstrap-time outbox promotion,
+  // which is why CloudKit never observed an uploaded `CKKeptWisdom`
+  // record despite a successful local Keep. These tests exercise the
+  // REAL `ProtectedSyncPersistenceStore` (only the native
+  // `FileProtectionBridge` is faked) through the real, unmodified
+  // `KeptSyncBootstrapCoordinator.runBootstrap()` call graph -- never a
+  // copied/reimplemented helper.
+  // -------------------------------------------------------------------
+  group('Phase 4G bootstrap timestamp canonicalization (real-device fix)',
+      () {
+    late Directory tempRoot;
+    late ProtectedSyncPersistenceStore realSyncStore;
+    late ProtectedLocalSyncIntentStore realIntentStore;
+
+    setUp(() {
+      tempRoot = Directory.systemTemp
+          .createTempSync('kept_sync_bootstrap_real_store_test_');
+      realSyncStore = ProtectedSyncPersistenceStore(
+        rootDirectoryProvider: () async => tempRoot,
+        fileProtectionBridge: const _AlwaysSucceedsFileProtectionBridge(),
+      );
+      realIntentStore = ProtectedLocalSyncIntentStore(
+        rootDirectoryProvider: () async => tempRoot,
+        fileProtectionBridge: const _AlwaysSucceedsFileProtectionBridge(),
+      );
+    });
+
+    tearDown(() {
+      if (tempRoot.existsSync()) {
+        tempRoot.deleteSync(recursive: true);
+      }
+    });
+
+    /// Builds a coordinator wired to the REAL [realSyncStore] (never the
+    /// outer `setUp`'s in-memory `syncStore`), the outer `keptRepository`/
+    /// `intentStore`/`bridge`, and [clock] as the coordinator's own
+    /// injected clock -- the exact value `_toSyncChangeIndependentMirror`'s
+    /// `enqueuedAt: canonicalizeKeptTimestamp(_clock())` now reads from.
+    KeptSyncBootstrapCoordinator buildRealStoreCoordinator({
+      required DateTime Function() clock,
+    }) {
+      return KeptSyncBootstrapCoordinator(
+        bridge: bridge,
+        keptRepository: keptRepository,
+        intentStore: intentStore,
+        syncPersistenceStore: realSyncStore,
+        integrationCoordinator: sharedCoordinator,
+        idFactory: _sequentialIdFactory(),
+        clock: clock,
+      );
+    }
+
+    /// Builds a coordinator wired to BOTH real stores -- [realSyncStore]
+    /// AND a real [ProtectedLocalSyncIntentStore] wrapped in
+    /// [_RecordingLocalSyncIntentStore] so the test can inspect exactly what
+    /// `_backfillLegacyLocalOnlyRecords` handed to `enqueueIntent` (a real
+    /// delegate call: if the real store's own strict post-write
+    /// verification ever threw, this call -- and therefore the whole
+    /// `runBootstrap()` pipeline -- would throw too).
+    KeptSyncBootstrapCoordinator buildFullyRealStoresCoordinator({
+      required DateTime Function() clock,
+      required _RecordingLocalSyncIntentStore recordingIntentStore,
+    }) {
+      return KeptSyncBootstrapCoordinator(
+        bridge: bridge,
+        keptRepository: keptRepository,
+        intentStore: recordingIntentStore,
+        syncPersistenceStore: realSyncStore,
+        integrationCoordinator: sharedCoordinator,
+        idFactory: _sequentialIdFactory(),
+        clock: clock,
+      );
+    }
+
+    /// Configures [bridge] for the exact "genuinely empty remote, first
+    /// association" branch: the initial baseline fetch reports zero
+    /// records of any kind, the one-time `CKEastSyncState` upload
+    /// succeeds, and the mandatory post-upload verification re-fetch
+    /// reports back exactly the uploaded control record -- mirroring
+    /// test 19's own established pattern above.
+    void configureEmptyRemoteFirstAssociation() {
+      var fetchCallCount = 0;
+      bridge.fetchProvider = (request) {
+        fetchCallCount += 1;
+        if (fetchCallCount == 1) return successResult();
+        final uploaded = CloudEastSyncStateWireEnvelope.tryDecode(
+          bridge.modifyRequests.single.records.single.fields,
+        )!;
+        return successResult(
+          syncState: [uploaded],
+          serverToken: 'cG9zdHVwbG9hZA==',
+        );
+      };
+    }
+
+    final microsecondClock = DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
+    final expectedCanonicalEnqueuedAt =
+        canonicalizeKeptTimestamp(microsecondClock);
+
+    test(
+        'A. a microsecond-precision injected clock is canonicalized before '
+        'the independent mirror constructs the persisted SyncChange during '
+        '_promotePendingIntents', () async {
+      configureEmptyRemoteFirstAssociation();
+      await seedLocalRecord(
+        KeptRecord(
+          id: 'local-only-1',
+          revealId: revealIdA,
+          wisdomText: 'Be still.',
+          revealedAt: t0,
+          keptAt: t0,
+          updatedAt: t0,
+          mutationId: mutationIdFor(revealIdA),
+        ),
+      );
+      final coordinator =
+          buildRealStoreCoordinator(clock: () => microsecondClock);
+
+      // Existing non-empty local Kept history means `evaluateAssociation()`
+      // returns `associationRequired`, never `autoAssociable` -- an explicit
+      // authorization is required before `runBootstrap()` will proceed at
+      // all, exactly like a real user-driven "associate my existing local
+      // history with this iCloud account" decision.
+      final authorization =
+          await coordinator.authorizeAssociation(fingerprint: fingerprintA);
+      expect(authorization.isAuthorized, isTrue);
+
+      final result = await coordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.completed);
+      expect(result.backfilledIntentCount, 1);
+      expect(result.promotedIntentCount, 1);
+      final bucket = await realSyncStore.loadAccountState(fingerprintA);
+      final enqueuedAt = bucket!.outbox.single.change.enqueuedAt;
+      expect(enqueuedAt.microsecond, 0);
+      expect(enqueuedAt, expectedCanonicalEnqueuedAt);
+    });
+
+    test(
+        'B. the promoted mutation survives the REAL '
+        'ProtectedSyncPersistenceStore encode -> write -> protect -> '
+        'verify -> rename -> protect -> verify round trip without a '
+        'replace-verify-temp/replace-verify-final mismatch, and a fresh '
+        'independent reload still reports the millisecond-canonical '
+        'instant', () async {
+      configureEmptyRemoteFirstAssociation();
+      await seedLocalRecord(
+        KeptRecord(
+          id: 'local-only-1',
+          revealId: revealIdA,
+          wisdomText: 'Be still.',
+          revealedAt: t0,
+          keptAt: t0,
+          updatedAt: t0,
+          mutationId: mutationIdFor(revealIdA),
+        ),
+      );
+      final coordinator =
+          buildRealStoreCoordinator(clock: () => microsecondClock);
+      final authorization =
+          await coordinator.authorizeAssociation(fingerprint: fingerprintA);
+      expect(authorization.isAuthorized, isTrue);
+
+      // Must not throw: before this fix, this call's real-device shape
+      // (`_promotePendingIntents` -> `enqueueMutation` -> `_replaceEnvelope`)
+      // threw `SyncPersistenceStoreException('replace-verify-temp', ...)`.
+      final result = await coordinator.runBootstrap();
+      expect(result.status, BootstrapRunStatus.completed);
+
+      // A second, fully independent load (a fresh read-back of the
+      // already-committed final file) reports the exact same
+      // millisecond-canonical instant -- not a one-shot artifact of the
+      // write path.
+      final reloaded = await realSyncStore.loadAccountState(fingerprintA);
+      expect(
+        reloaded!.outbox.single.change.enqueuedAt,
+        DateTime.utc(2026, 8, 9, 12, 0, 0, 123),
+      );
+      expect(reloaded.outbox.single.change.enqueuedAt.microsecond, 0);
+    });
+
+    test(
+        'C. existing non-empty local Kept + first CloudKit association + '
+        'empty remote baseline -> local Kept remains present, and the '
+        'record is successfully promoted into the outbox instead of being '
+        'silently parked forever', () async {
+      configureEmptyRemoteFirstAssociation();
+      final localRecord = KeptRecord(
+        id: 'local-only-1',
+        revealId: revealIdA,
+        wisdomText: 'Be still.',
+        revealedAt: t0,
+        keptAt: t0,
+        updatedAt: t0,
+        mutationId: mutationIdFor(revealIdA),
+      );
+      await seedLocalRecord(localRecord);
+      final coordinator =
+          buildRealStoreCoordinator(clock: () => microsecondClock);
+      final authorization =
+          await coordinator.authorizeAssociation(fingerprint: fingerprintA);
+      expect(authorization.isAuthorized, isTrue);
+
+      final result = await coordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.completed);
+
+      // Local Kept content remains present -- never erased by the empty
+      // remote baseline.
+      final localAfter = await keptRepository.loadAllRecords();
+      expect(localAfter, hasLength(1));
+      expect(localAfter.single.revealId, revealIdA);
+      expect(localAfter.single.wisdomText, 'Be still.');
+
+      // No LocalSyncIntent is left permanently parked -- the backfilled
+      // intent was successfully promoted and retired, not silently
+      // stranded at localCommittedOutboxPending forever (this is exactly
+      // the pre-fix real-device symptom: a swallowed
+      // SyncPersistenceStoreException left the intent parked every single
+      // bootstrap attempt, forever).
+      expect(await intentStore.loadIntents(), isEmpty);
+
+      // The record was genuinely promoted into the durable outbox --
+      // never silently dropped -- ready for a future SyncOrchestrator
+      // pass to actually upload it.
+      final bucket = await realSyncStore.loadAccountState(fingerprintA);
+      expect(bucket!.outbox, hasLength(1));
+      expect(bucket.outbox.single.change.projection.revealId, revealIdA);
+      expect(bucket.bootstrapState, AccountBootstrapState.complete);
+    });
+
+    // ---------------------------------------------------------------------
+    // Third confirmed defect: `_backfillLegacyLocalOnlyRecords` (the only
+    // other persisted-timestamp construction site in this file) also
+    // constructed its `LocalSyncIntent` with a raw, uncanonicalized
+    // `enqueuedAt: _clock()`. This is reachable in the exact same
+    // real-device bootstrap pipeline as A/B/C above, whenever a genuinely
+    // local-only Kept record needs backfilling into a fresh intent. These
+    // four tests exercise the REAL `ProtectedLocalSyncIntentStore` (only its
+    // native `FileProtectionBridge` is faked) through the unmodified
+    // `runBootstrap()` call graph -- never a copied/reimplemented helper.
+    // ---------------------------------------------------------------------
+    test(
+        '1-2. _backfillLegacyLocalOnlyRecords receives the microsecond-'
+        'bearing injected clock and the LocalSyncIntent it durably enqueues '
+        'is millisecond-canonical', () async {
+      configureEmptyRemoteFirstAssociation();
+      await seedLocalRecord(
+        KeptRecord(
+          id: 'local-only-1',
+          revealId: revealIdA,
+          wisdomText: 'Be still.',
+          revealedAt: t0,
+          keptAt: t0,
+          updatedAt: t0,
+          mutationId: mutationIdFor(revealIdA),
+        ),
+      );
+      final recordingIntentStore =
+          _RecordingLocalSyncIntentStore(realIntentStore);
+      final coordinator = buildFullyRealStoresCoordinator(
+        clock: () => microsecondClock,
+        recordingIntentStore: recordingIntentStore,
+      );
+      final authorization =
+          await coordinator.authorizeAssociation(fingerprint: fingerprintA);
+      expect(authorization.isAuthorized, isTrue);
+
+      final result = await coordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.completed);
+      expect(result.backfilledIntentCount, 1);
+      // Exactly one LocalSyncIntent was ever durably enqueued this run --
+      // the one backfilled from the local-only record. Its `enqueuedAt` is
+      // the real clock value the coordinator's own `_clock()` produced,
+      // canonicalized before construction.
+      expect(recordingIntentStore.enqueuedIntents, hasLength(1));
+      final backfilled = recordingIntentStore.enqueuedIntents.single;
+      expect(backfilled.payload.revealId, revealIdA);
+      expect(backfilled.enqueuedAt.microsecond, 0);
+      expect(backfilled.enqueuedAt, expectedCanonicalEnqueuedAt);
+    });
+
+    test(
+        '3. the backfilled LocalSyncIntent survives the REAL '
+        'ProtectedLocalSyncIntentStore encode -> write -> protect -> '
+        'verify -> rename -> protect -> verify round trip without a '
+        'replace-verify-temp/replace-verify-final mismatch', () async {
+      configureEmptyRemoteFirstAssociation();
+      await seedLocalRecord(
+        KeptRecord(
+          id: 'local-only-1',
+          revealId: revealIdA,
+          wisdomText: 'Be still.',
+          revealedAt: t0,
+          keptAt: t0,
+          updatedAt: t0,
+          mutationId: mutationIdFor(revealIdA),
+        ),
+      );
+      final recordingIntentStore =
+          _RecordingLocalSyncIntentStore(realIntentStore);
+      final coordinator = buildFullyRealStoresCoordinator(
+        clock: () => microsecondClock,
+        recordingIntentStore: recordingIntentStore,
+      );
+      final authorization =
+          await coordinator.authorizeAssociation(fingerprint: fingerprintA);
+      expect(authorization.isAuthorized, isTrue);
+
+      // Must not throw: before this fix, the real store's own
+      // `_promotePendingIntents`-preceding backfill write would have hit
+      // `LocalSyncIntentStoreException('replace-verify-temp', ...)` on a
+      // real device (microsecond-bearing `_clock()` value, millisecond-only
+      // wire format, exact-to-the-microsecond `operator==`).
+      final result = await coordinator.runBootstrap();
+      expect(result.status, BootstrapRunStatus.completed);
+
+      // A second, fully independent load directly against the real store
+      // (never through the recording wrapper) confirms the durable file
+      // itself, not merely an in-memory artifact of the write path, is
+      // consistent -- by this point the intent has already been promoted
+      // and retired, so the authoritative state is "no pending intents".
+      expect(await realIntentStore.loadIntents(), isEmpty);
+    });
+
+    test(
+        '4. existing local-only Kept + empty remote baseline: the Kept '
+        'record is preserved, the intent is backfilled and promoted into '
+        'the durable outbox, and it is never left permanently parked',
+        () async {
+      configureEmptyRemoteFirstAssociation();
+      final localRecord = KeptRecord(
+        id: 'local-only-1',
+        revealId: revealIdA,
+        wisdomText: 'Be still.',
+        revealedAt: t0,
+        keptAt: t0,
+        updatedAt: t0,
+        mutationId: mutationIdFor(revealIdA),
+      );
+      await seedLocalRecord(localRecord);
+      final recordingIntentStore =
+          _RecordingLocalSyncIntentStore(realIntentStore);
+      final coordinator = buildFullyRealStoresCoordinator(
+        clock: () => microsecondClock,
+        recordingIntentStore: recordingIntentStore,
+      );
+      final authorization =
+          await coordinator.authorizeAssociation(fingerprint: fingerprintA);
+      expect(authorization.isAuthorized, isTrue);
+
+      final result = await coordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.completed);
+      expect(result.backfilledIntentCount, 1);
+      expect(result.promotedIntentCount, 1);
+
+      // Preserves the Kept record.
+      final localAfter = await keptRepository.loadAllRecords();
+      expect(localAfter, hasLength(1));
+      expect(localAfter.single.revealId, revealIdA);
+
+      // Backfills the intent then promotes it -- never left permanently
+      // parked at localCommittedOutboxPending (the pre-fix real-device
+      // symptom: a swallowed exception during backfill's own enqueue left
+      // the record un-backfilled and un-promoted, silently, forever).
+      expect(await realIntentStore.loadIntents(), isEmpty);
+
+      // Promotes it to the durable outbox.
+      final bucket = await realSyncStore.loadAccountState(fingerprintA);
+      expect(bucket!.outbox, hasLength(1));
+      expect(bucket.outbox.single.change.projection.revealId, revealIdA);
+      expect(bucket.bootstrapState, AccountBootstrapState.complete);
+    });
+  });
+}
+
+/// Wraps a real [LocalSyncIntentStore] (in every test above,
+/// [ProtectedLocalSyncIntentStore]), delegating every call unchanged, while
+/// also recording every [LocalSyncIntent] ever passed to [enqueueIntent] --
+/// this is the only seam that lets a test observe the exact in-memory value
+/// `_backfillLegacyLocalOnlyRecords` constructed, since a successfully
+/// promoted intent is removed from the store before `runBootstrap()`
+/// returns. Because every call is a real delegate call to the real store,
+/// any real-store verification failure still throws exactly as it would
+/// without this wrapper -- this class adds observation only, never changes
+/// behavior.
+class _RecordingLocalSyncIntentStore implements LocalSyncIntentStore {
+  _RecordingLocalSyncIntentStore(this._delegate);
+
+  final LocalSyncIntentStore _delegate;
+  final List<LocalSyncIntent> enqueuedIntents = [];
+
+  @override
+  Future<List<LocalSyncIntent>> loadIntents() => _delegate.loadIntents();
+
+  @override
+  Future<void> enqueueIntent(LocalSyncIntent intent) async {
+    await _delegate.enqueueIntent(intent);
+    enqueuedIntents.add(intent);
+  }
+
+  @override
+  Future<void> advanceIntentStage({
+    required String intentId,
+    required LocalSyncIntentStage expectedStage,
+    required LocalSyncIntentStage nextStage,
+  }) =>
+      _delegate.advanceIntentStage(
+        intentId: intentId,
+        expectedStage: expectedStage,
+        nextStage: nextStage,
+      );
+
+  @override
+  Future<void> removeIntent(String intentId) =>
+      _delegate.removeIntent(intentId);
+}
+
+/// A [FileProtectionBridge] fake that always reports success -- used only by
+/// the real-[ProtectedSyncPersistenceStore] regression group above, which is
+/// not exercising file-protection failure/rollback behavior (already
+/// thoroughly covered by `protected_sync_persistence_store_test.dart`) and
+/// needs no failure-injection surface.
+class _AlwaysSucceedsFileProtectionBridge implements FileProtectionBridge {
+  const _AlwaysSucceedsFileProtectionBridge();
+
+  @override
+  Future<void> protectAndVerifyComplete(String path) async {}
 }
 
 /// Deterministic, collision-free id sequence for tests that need

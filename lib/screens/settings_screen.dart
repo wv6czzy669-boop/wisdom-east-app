@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../theme/muted_text_color.dart';
@@ -16,10 +19,20 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     this.urlLauncher,
     this.purchaseService,
+    this.cloudKitAssociationController,
   });
 
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
+
+  /// Build 26 Phase 4G: injectable only for tests -- production always uses
+  /// the single [app_services.cloudKitAssociationController] instance (see
+  /// [_cloudKitAssociationController]), never a second, disconnected
+  /// controller. Both this field and the production global it falls back to
+  /// are nullable: isolated widget tests may mount [SettingsScreen] before
+  /// any composition root has run, and this screen must still mount safely
+  /// in that case (see [_cloudKitAssociationController]).
+  final SyncAssociationController? cloudKitAssociationController;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -31,6 +44,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _reachOutLaunchInProgress = false;
   bool _restoreInProgress = false;
   bool _eastProductionsLaunchInProgress = false;
+
+  // Build 26 Phase 4G: the explicit one-time iCloud association row. `null`
+  // until the first [_refreshSyncAssociationStatus] call resolves --
+  // rendered as "Not enabled"/non-actionable in the meantime, the same safe
+  // fail-closed default [SyncAssociationController] itself returns for
+  // every non-`associationRequired` status.
+  SyncAssociationCheckResult? _cloudKitAssociationStatus;
+  bool _cloudKitAssociationActionInProgress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshSyncAssociationStatus());
+  }
+
+  /// `null` whenever neither an injected test controller nor the production
+  /// composition-root global (`app_services.cloudKitAssociationController`)
+  /// is available yet -- i.e. this screen was mounted before
+  /// `initializeKeptStorage()` ever ran (every existing isolated Home/
+  /// Settings navigation widget test does exactly this). This screen never
+  /// calls `initializeKeptStorage()` itself, never constructs a second,
+  /// disconnected controller, and never treats a missing controller as
+  /// anything other than "not enabled yet" -- see
+  /// [_refreshSyncAssociationStatus] and [_enableSyncAssociation].
+  SyncAssociationController? get _cloudKitAssociationController =>
+      widget.cloudKitAssociationController ??
+      app_services.cloudKitAssociationController;
 
   // Shared by every Settings divider (see requirement: "all Settings
   // dividers use one shared value"). Derived from the approved muted-text
@@ -374,6 +414,153 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Build 26 Phase 4G: explicit one-time iCloud association.
+  //
+  // This screen never constructs CloudKit transport, never knows a
+  // fingerprint or record name, never touches persistence files, and never
+  // implements any part of the bootstrap state machine itself -- every
+  // decision is made by [SyncAssociationController], which itself only
+  // ever calls the existing, already-audited
+  // `KeptSyncBootstrapCoordinator.evaluateAssociation`/`.authorizeAssociation`
+  // pair and, on success, the existing runtime policy owner
+  // (`CloudKitSyncRuntimeCoordinator.requestSync`, via a plain callback --
+  // see `app_services.dart`'s wiring). Disabling/deleting synced data is
+  // explicitly out of scope for this row (a later export/delete/recovery
+  // phase owns that).
+  //
+  // No controller available yet (see [_cloudKitAssociationController]) is
+  // treated exactly like [SyncAssociationDisplayStatus.notEnabled] with
+  // `requiresExplicitConsent: false` -- the same safe, non-actionable
+  // default the controller itself already returns for every other
+  // not-yet-resolved state. This never calls `initializeKeptStorage()`,
+  // never fabricates a controller, and never touches CloudKit/native code
+  // merely because Settings mounted.
+  // -----------------------------------------------------------------------
+
+  static const SyncAssociationCheckResult _cloudKitAssociationUnavailable =
+      SyncAssociationCheckResult(
+    displayStatus: SyncAssociationDisplayStatus.notEnabled,
+    requiresExplicitConsent: false,
+  );
+
+  Future<void> _refreshSyncAssociationStatus() async {
+    final controller = _cloudKitAssociationController;
+    final result = controller == null
+        ? _cloudKitAssociationUnavailable
+        : await controller.checkStatus();
+    if (!mounted) return;
+    setState(() {
+      _cloudKitAssociationStatus = result;
+    });
+  }
+
+  String get _cloudKitSyncSubtitle {
+    if (_cloudKitAssociationActionInProgress) return "Enabling…";
+    return _cloudKitAssociationStatus?.displayStatus ==
+            SyncAssociationDisplayStatus.enabled
+        ? "Enabled"
+        : "Not enabled";
+  }
+
+  String get _cloudKitSyncSemanticLabel {
+    if (_cloudKitAssociationActionInProgress) {
+      return 'iCloud Sync. Enabling.';
+    }
+    return 'iCloud Sync. $_cloudKitSyncSubtitle';
+  }
+
+  /// `null` (disabling the row, exactly like [restoreAction] et al. do)
+  /// whenever an action is already in flight, or whenever the most recent
+  /// status check did not report [SyncAssociationCheckResult
+  /// .requiresExplicitConsent] -- requirement 1: never show an unnecessary
+  /// authorization prompt.
+  VoidCallback? get cloudKitSyncAction {
+    if (_cloudKitAssociationActionInProgress) return null;
+    if (_cloudKitAssociationStatus?.requiresExplicitConsent != true) {
+      return null;
+    }
+    return _showEnableICloudSyncSheet;
+  }
+
+  Future<void> _showEnableICloudSyncSheet() async {
+    if (_cloudKitAssociationActionInProgress || !mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF111111),
+          title: Text(
+            "Enable iCloud Sync?",
+            style: eastStyle(21),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Your Kept wisdoms and Reflections will be stored in your "
+                "private iCloud database and kept in sync across your "
+                "devices.",
+                style: eastStyle(16, color: Colors.white70),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Your daily ritual timing stays on this device.",
+                style: eastStyle(14, color: const Color(0x91FFFFFF)),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text("Cancel", style: eastStyle(16)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text("Enable", style: eastStyle(16)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _enableSyncAssociation();
+    }
+  }
+
+  Future<void> _enableSyncAssociation() async {
+    if (_cloudKitAssociationActionInProgress || !mounted) return;
+
+    setState(() {
+      _cloudKitAssociationActionInProgress = true;
+    });
+
+    SyncAssociationEnableOutcome outcome;
+    try {
+      final controller = _cloudKitAssociationController;
+      outcome = controller == null
+          ? SyncAssociationEnableOutcome.failed
+          : await controller.enableSync();
+    } catch (_) {
+      outcome = SyncAssociationEnableOutcome.failed;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _cloudKitAssociationActionInProgress = false;
+    });
+
+    if (outcome == SyncAssociationEnableOutcome.failed) {
+      showSettingsSnack("iCloud Sync could not be enabled. Please try again.");
+    }
+
+    await _refreshSyncAssociationStatus();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -445,6 +632,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         subtitle: "Restore what belongs with you.",
                         semanticLabel: restoreSemanticLabel,
                         onTap: restoreAction,
+                      ),
+                      Divider(
+                        color: _settingsDividerColor,
+                        thickness: 0.5,
+                      ),
+                      settingsItem(
+                        rowKey: const ValueKey('settings-icloud-sync-row'),
+                        title: "iCloud Sync",
+                        subtitle: _cloudKitSyncSubtitle,
+                        semanticLabel: _cloudKitSyncSemanticLabel,
+                        onTap: cloudKitSyncAction,
                       ),
                       Divider(
                         color: _settingsDividerColor,

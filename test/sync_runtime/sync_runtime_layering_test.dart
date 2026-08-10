@@ -149,10 +149,11 @@ void main() {
   });
 
   test(
-      '2. lib/sync_runtime/ only imports dart:, itself, or the already-'
+      '2. lib/sync_runtime/ only imports dart:, itself, the already-'
       'approved sync_integration/sync_orchestration/sync_persistence/'
-      'sync_platform layers -- never lib/sync/ directly, never '
-      'repositories/services/screens/widgets', () {
+      'sync_platform layers, or (Build 26 Phase 4G, temporary diagnostics '
+      'only) lib/utils/kept_diagnostics.dart -- never lib/sync/ directly, '
+      'never repositories/services/screens/widgets', () {
     const allowedPrefixes = [
       'dart:',
       'package:wisdom_app/sync_runtime/',
@@ -160,6 +161,14 @@ void main() {
       'package:wisdom_app/sync_orchestration/',
       'package:wisdom_app/sync_persistence/',
       'package:wisdom_app/sync_platform/',
+      // Build 26 Phase 4G: a narrow, temporary allowance for
+      // keptDiagnostic(...) debug-only logging (see
+      // cloud_kit_sync_runtime_coordinator.dart's own inline comments) --
+      // never a broad `lib/utils/` exemption for anything else. Mirrors the
+      // identical `../utils/`/`package:wisdom_app/utils/` allowance
+      // test/sync_integration/sync_integration_layering_test.dart already
+      // grants that layer.
+      'package:wisdom_app/utils/kept_diagnostics.dart',
     ];
 
     final violations = <String>[];
@@ -176,6 +185,7 @@ void main() {
             target.startsWith('../sync_orchestration/') ||
             target.startsWith('../sync_persistence/') ||
             target.startsWith('../sync_platform/') ||
+            target == '../utils/kept_diagnostics.dart' ||
             !target.contains('/'); // same-directory sibling import
         final isApprovedPackage = allowedPrefixes.any(target.startsWith);
         if (!isApprovedRelative && !isApprovedPackage) {

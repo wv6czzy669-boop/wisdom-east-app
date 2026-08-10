@@ -242,11 +242,13 @@ final class IncomingKeptSyncCoordinator {
     required LocalSyncIntentStore intentStore,
     required SyncPersistenceStore syncPersistenceStore,
     PersistenceOperationCoordinator? integrationCoordinator,
+    void Function()? onIncomingStateChanged,
   })  : _keptRepository = keptRepository,
         _intentStore = intentStore,
         _syncPersistenceStore = syncPersistenceStore,
         _integrationCoordinator =
-            integrationCoordinator ?? PersistenceOperationCoordinator();
+            integrationCoordinator ?? PersistenceOperationCoordinator(),
+        _onIncomingStateChanged = onIncomingStateChanged;
 
   /// Must equal `KeptSyncIntegrationCoordinator.resourceKey` exactly.
   /// Restated as its own literal (never imported from that class) to keep
@@ -259,6 +261,30 @@ final class IncomingKeptSyncCoordinator {
   final LocalSyncIntentStore _intentStore;
   final SyncPersistenceStore _syncPersistenceStore;
   final PersistenceOperationCoordinator _integrationCoordinator;
+
+  /// Build 26 Phase 4H-6 (live incoming Kept UI refresh): an optional,
+  /// payload-free notification invoked at most once per [applyIncomingBatch]
+  /// call, and only when this call's own [KeptRepository.replaceAllRecords]
+  /// just durably persisted a Kept envelope whose *content* -- keyed by the
+  /// stable `revealId` occurrence identity, never by list order or object
+  /// identity -- actually differs from what was persisted immediately
+  /// before it (see [_keptRecordListsDiffer]). Never invoked for any
+  /// rejected/no-op batch (every early `return` above happens before
+  /// [KeptRepository.replaceAllRecords] is ever called), and never gated on
+  /// whether the checkpoint commit that follows later succeeds --
+  /// [KeptRepository.replaceAllRecords] has already durably committed by
+  /// the time this fires, so a later [IncomingApplyStatus.checkpointFailed]
+  /// does not make the just-applied Kept content any less real or any less
+  /// something a mounted UI needs to reflect.
+  ///
+  /// Deliberately a plain, argument-free `void Function()` -- mirrors
+  /// [KeptSyncIntegrationCoordinator]'s own `onMutationCommitted` callback
+  /// exactly, for the same reason: this file must learn nothing about
+  /// `Listenable`, `ChangeNotifier`, or any concrete notifier type (see
+  /// `test/sync_integration/sync_integration_layering_test.dart`'s narrow
+  /// import allowlist for `lib/sync_integration/`). `app_services.dart`
+  /// alone decides what calling this callback actually does.
+  final void Function()? _onIncomingStateChanged;
 
   /// Durably applies [batch], or rejects it fail-closed, inside exactly one
   /// [resourceKey] exclusive transaction covering validation, every local
@@ -383,6 +409,16 @@ final class IncomingKeptSyncCoordinator {
       return const IncomingApplyResult(
         status: IncomingApplyStatus.persistenceFailure,
       );
+    }
+
+    // Build 26 Phase 4H-6: the Kept envelope just durably changed. Notify
+    // only when the persisted content actually differs from what was there
+    // immediately before this replace -- never merely because
+    // `appliedProjectionCount > 0` (Section 10's "Identical convergence"
+    // can retire/replace bookkeeping for a content-identical projection,
+    // which must never trigger a UI refresh).
+    if (_keptRecordListsDiffer(physicalRecords, nextRecords)) {
+      _notifyIncomingStateChanged();
     }
 
     // Step 2: retire losing/superseded local intents.
@@ -793,6 +829,52 @@ final class IncomingKeptSyncCoordinator {
       records.add(record);
     } else {
       records[existingIndex] = record;
+    }
+  }
+
+  /// Build 26 Phase 4H-6: content-based, order-independent comparison keyed
+  /// by the stable `revealId` occurrence identity -- the same identity every
+  /// other resolution step in this class already keys on. Never compares by
+  /// list order or by array position: a fresh remote adoption is appended
+  /// to [after], and a local-wins re-fold can leave existing entries in a
+  /// different relative order than [before], neither of which alone is a
+  /// real content change. Two lists of equal length whose records are
+  /// otherwise `==`-equal (see [KeptRecord.operator ==]) are never reported
+  /// as differing.
+  bool _keptRecordListsDiffer(
+    List<KeptRecord> before,
+    List<KeptRecord> after,
+  ) {
+    if (before.length != after.length) return true;
+
+    final beforeByRevealId = <String, KeptRecord>{
+      for (final record in before) record.revealId: record,
+    };
+    if (beforeByRevealId.length != before.length) {
+      // Defensive only: a duplicate `revealId` inside `before` should never
+      // happen (KeptRepository's own invariants forbid it) -- if it ever
+      // did, silently trusting a collapsed map here could hide a real
+      // difference, so this fails open toward "differs" instead.
+      return true;
+    }
+
+    for (final record in after) {
+      final beforeRecord = beforeByRevealId[record.revealId];
+      if (beforeRecord == null || beforeRecord != record) return true;
+    }
+    return false;
+  }
+
+  /// Synchronous, defensive containment -- mirrors
+  /// `KeptSyncIntegrationCoordinator._notifyIfIntentWasWritten` exactly: a
+  /// failure inside [_onIncomingStateChanged] can never affect the batch
+  /// apply that already durably committed, and is never logged with any
+  /// identifier or content.
+  void _notifyIncomingStateChanged() {
+    try {
+      _onIncomingStateChanged?.call();
+    } catch (_) {
+      // Intentionally contained -- see the doc comment above.
     }
   }
 }

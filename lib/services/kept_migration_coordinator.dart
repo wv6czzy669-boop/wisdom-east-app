@@ -562,11 +562,13 @@ final class KeptMigrationCoordinator {
       );
     }
 
-    // 4-5. Re-run decoding/conversion from the frozen snapshot and
-    // reconstruct the exact expected envelope.
+    // 4-5. Re-run decoding/conversion from the frozen snapshot. This
+    // reconstructs exactly what the migration itself produced — it is
+    // historical/audit evidence about the migration transaction, never a
+    // description of what the current live Kept envelope must still look
+    // like (see the note above _verifyFieldByField for why the two are no
+    // longer compared here).
     final rebuilt = _rebuildFromSnapshot(snapshot);
-    final expectedEnvelope =
-        KeptStateEnvelope(activeRecords: rebuilt.usableRecords);
 
     if (journal.legacyEntryCount != snapshot.entries.length ||
         journal.usableEntryCount != rebuilt.usableRecords.length ||
@@ -578,7 +580,17 @@ final class KeptMigrationCoordinator {
       );
     }
 
-    // 6. Reload the protected authoritative envelope.
+    // 6. Reload the protected authoritative envelope. This is a fail-closed
+    // *readability* check only (corrupt/unreadable protected storage must
+    // still surface as a failure via _keptStateStore.load() throwing, or by
+    // the null check below) — its *content* is deliberately never compared
+    // against [rebuilt] here. See the note above _verifyFieldByField: once
+    // a migration has durably reached `complete`, the live envelope is
+    // expected, and required, to diverge from the frozen migration snapshot
+    // as the user Keeps, removes, edits Reflections, or receives
+    // CloudKit-applied changes. A completed migration must never re-impose
+    // its historical snapshot as an ongoing equality constraint on that
+    // legitimately evolving state.
     final protectedEnvelope = await _wrap(
       'complete-envelope-load',
       () => _keptStateStore.load(),
@@ -590,9 +602,24 @@ final class KeptMigrationCoordinator {
       );
     }
 
-    // 7. Verify exact record count, order, and every KeptRecord field —
-    // KeptRecord's own operator== already compares every named field.
-    _verifyFieldByField(protectedEnvelope, expectedEnvelope);
+    // 7. (Removed.) Prior versions of this method called
+    // `_verifyFieldByField(protectedEnvelope, expectedEnvelope)` here,
+    // requiring the live envelope to be an exact field-by-field match for
+    // the historical migration snapshot on every single launch. That is
+    // correct *during* the migration transaction itself (`_handleWriting`/
+    // `_handleVerified`, before `complete` is ever written — nothing has
+    // had a chance to legitimately mutate the envelope yet there), but it
+    // is wrong forever after: a completed migration is a one-time event,
+    // not a permanent immutability lock on Kept state. Real-device
+    // evidence: `rebuild-from-snapshot: legacyEntryCount=1 usableCount=1`
+    // followed by `field-verify-count` on every later launch, because the
+    // live envelope had legitimately grown (a new Keep) past the frozen
+    // 1-record snapshot. This method still fails closed on genuine
+    // corruption (via `_wrap`/the null check above and the count check in
+    // step 4-5, which only validates the frozen snapshot/journal/recovery
+    // artifact are mutually consistent with each other — never against the
+    // live envelope) and never merges, restores, or overwrites current
+    // state with the old snapshot.
 
     // 8-9. Recovery artifact presence must exactly correlate with corrupt
     // count, and its contents must match the reconstructed corruption

@@ -194,7 +194,27 @@ final class CloudKitRecordTransportCoordinator {
           ))
         continue
       }
-      for key in input.record.allKeys() {
+      // Build 26 Phase 4H-4 (real-device + CloudKit-dashboard
+      // investigation): this must iterate `changedKeys()`, never
+      // `allKeys()`. `allKeys()` returns only the keys `input.record`
+      // *currently holds a value for* -- a field `input.record` explicitly
+      // cleared via `= nil` (e.g. `CloudKitKeptWisdomCodec.encodeTombstone`
+      // removing every forbidden-on-tombstone field) is, by definition, no
+      // longer "currently set," so it would never appear in `allKeys()`
+      // and that removal would silently never reach `baseline` at all --
+      // `baseline` (reconstructed from system fields only, per
+      // `CloudKitOpaqueArchive.unarchiveSystemFields`'s own contract, "no
+      // user field values -- there were none to restore") would then still
+      // have no local knowledge of that field either way, so CloudKit's
+      // save would leave the server's existing value for it completely
+      // untouched. `changedKeys()` instead returns every key
+      // `input.record` has *touched* since its own creation, additions and
+      // explicit removals alike, which is exactly what must be copied onto
+      // `baseline` for a removal to actually propagate. This was proven,
+      // via real-device and CloudKit Dashboard evidence, to be why an
+      // already-synced active record's fields survived, unwanted, on its
+      // tombstone after this exact save path.
+      for key in input.record.changedKeys() {
         baseline[key] = input.record[key]
       }
       recordsToSave.append(baseline)
@@ -395,13 +415,14 @@ final class CloudKitRecordTransportCoordinator {
         return
       }
       if let effectiveError = effectiveError {
+        let symbolicErrorCode = CloudKitErrorClassifier.symbolicCode(for: effectiveError)
         completion(
           ZoneChangesResult(
             outcome: .failure,
             changedKeptWisdomRecords: [],
             changedSyncStateRecords: [],
             serverToken: nil,
-            errorCode: CloudKitErrorClassifier.symbolicCode(for: effectiveError)
+            errorCode: symbolicErrorCode
           ))
         return
       }

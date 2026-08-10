@@ -962,18 +962,36 @@ void main() {
       );
     });
 
-    test('complete state with a changed protected envelope blocks', () async {
+    // Phase 4G real-device fix: the three tests below previously asserted
+    // that _handleComplete blocked (threw `field-verify-count` /
+    // `field-verify-mismatch`) whenever the live protected envelope no
+    // longer matched the frozen historical migration snapshot exactly —
+    // field-by-field, in the same order, with the same record count. That
+    // was the proven real-device bug: a completed migration is a one-time
+    // event, not a permanent immutability lock on Kept state, and every
+    // legitimate post-migration mutation (a new Keep, a removal, a
+    // Reflection edit, a sync-applied change) necessarily makes the live
+    // envelope diverge from that snapshot. These three tests now assert
+    // the corrected behavior — see also the dedicated "Phase 4G
+    // completed-migration evolution" group below for the full regression
+    // suite (A-F).
+    test(
+        'complete state with a changed protected envelope (a legitimate '
+        'removal) no longer blocks', () async {
       await migrateOnceCleanly();
-      keptStateStore.envelope = KeptStateEnvelope();
+      await keptStateStore.replace(KeptStateEnvelope());
       final coordinator = buildCoordinator();
 
-      await expectLater(
-        coordinator.migrateIfNeeded(),
-        throwsA(isA<KeptMigrationException>()),
-      );
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      // The removal is never reverted — the empty envelope remains empty,
+      // never resurrected from the historical snapshot.
+      expect(keptStateStore.envelope!.activeRecords, isEmpty);
     });
 
-    test('complete state with changed record order blocks', () async {
+    test('complete state with changed record order no longer blocks',
+        () async {
       final itemA = FavoriteItem(
         id: 'order-a',
         date: '2026-01-01T09:00:00.000Z',
@@ -989,30 +1007,43 @@ void main() {
       final result = await coordinator.migrateIfNeeded();
       expect(result.status, KeptMigrationStatus.migrated);
 
-      keptStateStore.envelope = KeptStateEnvelope(
-        activeRecords: keptStateStore.envelope!.activeRecords.reversed.toList(),
-      );
+      final reordered =
+          keptStateStore.envelope!.activeRecords.reversed.toList();
+      await keptStateStore.replace(KeptStateEnvelope(activeRecords: reordered));
 
-      await expectLater(
-        coordinator.migrateIfNeeded(),
-        throwsA(isA<KeptMigrationException>()),
+      final second = await coordinator.migrateIfNeeded();
+
+      expect(second.status, KeptMigrationStatus.alreadyComplete);
+      // The reordered state is preserved exactly as-is, never silently
+      // restored to the snapshot's original order.
+      expect(
+        keptStateStore.envelope!.activeRecords.map((r) => r.id).toList(),
+        ['order-b', 'order-a'],
       );
     });
 
-    test('complete state with a changed individual KeptRecord field blocks',
-        () async {
+    test(
+        'complete state with a changed individual KeptRecord field (a '
+        'legitimate Reflection edit) no longer blocks', () async {
       await migrateOnceCleanly();
       final original = keptStateStore.envelope!.activeRecords.single;
-      keptStateStore.envelope = KeptStateEnvelope(
-        activeRecords: [
-          original.copyWith(reflectionText: 'Tampered after completion.'),
-        ],
+      final edited = original.copyWith(
+        reflectionText: 'A real Reflection written after completion.',
+        updatedAt: startedAt.add(const Duration(days: 1)),
+        mutationId: mutationIdFor('post-completion-edit'),
       );
+      await keptStateStore.replace(KeptStateEnvelope(activeRecords: [edited]));
       final coordinator = buildCoordinator();
 
-      await expectLater(
-        coordinator.migrateIfNeeded(),
-        throwsA(isA<KeptMigrationException>()),
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      // The Reflection edit is preserved exactly, never reverted to the
+      // historical migration snapshot's original (reflection-free) field
+      // values.
+      expect(
+        keptStateStore.envelope!.activeRecords.single.reflectionText,
+        'A real Reflection written after completion.',
       );
     });
 
@@ -1090,6 +1121,222 @@ void main() {
         ),
         throwsFormatException,
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Phase 4G real-device fix: `_handleComplete` used to call
+  // `_verifyFieldByField(protectedEnvelope, expectedEnvelope)`, requiring
+  // the live protected Kept envelope to be an exact field-by-field match
+  // for the frozen historical migration snapshot on every single launch
+  // after completion. Real-device evidence:
+  // `rebuild-from-snapshot: legacyEntryCount=1 usableCount=1 ...` followed
+  // by `bootstrap-result: isReady=false errorCode=field-verify-count`,
+  // because the live envelope had legitimately grown past the 1-record
+  // snapshot (a new Keep was added after migration completed). Every test
+  // here uses the real `KeptMigrationCoordinator.migrateIfNeeded()`
+  // production path — never a copied/reimplemented helper — and a fresh
+  // `buildCoordinator()` instance for the "relaunch" call, exactly like a
+  // real app launch would construct a fresh coordinator over the same
+  // persisted stores.
+  // ---------------------------------------------------------------------
+  group('Phase 4G completed-migration evolution (real-device fix)', () {
+    Future<KeptMigrationResult> migrateOneLegacyRecord() async {
+      final item = FavoriteItem(
+        id: 'legacy-evolve-1',
+        date: '2026-01-01T09:00:00.000Z',
+        text: 'Be still.',
+      );
+      legacy.entries = [item.encode()];
+      final coordinator = buildCoordinator();
+      final result = await coordinator.migrateIfNeeded();
+      expect(result.status, KeptMigrationStatus.migrated);
+      expect(journalStore.journal!.state, KeptMigrationState.complete);
+      expect(journalStore.journal!.legacyEntryCount, 1);
+      return result;
+    }
+
+    KeptRecord buildNewPostMigrationKeptRecord(String tag) {
+      final id = uuid.v4();
+      return KeptRecord(
+        id: id,
+        revealId: uuid.v4(),
+        wisdomText: 'A brand new wisdom, kept after migration ($tag).',
+        revealedAt: startedAt.add(const Duration(days: 1)),
+        keptAt: startedAt.add(const Duration(days: 1)),
+        updatedAt: startedAt.add(const Duration(days: 1)),
+        mutationId: uuid.v4(),
+      );
+    }
+
+    test(
+        'A. migrate 1 legacy Kept, complete, add a second new Kept, relaunch '
+        'with a fresh coordinator: bootstrap remains ready and both records '
+        'remain', () async {
+      await migrateOneLegacyRecord();
+      final migratedRecord = keptStateStore.envelope!.activeRecords.single;
+      final newRecord = buildNewPostMigrationKeptRecord('A');
+      await keptStateStore.replace(
+        KeptStateEnvelope(activeRecords: [migratedRecord, newRecord]),
+      );
+
+      // A full app relaunch: a fresh KeptMigrationCoordinator instance over
+      // the same (already-complete) journal/artifact/envelope stores —
+      // never the same in-memory coordinator object.
+      final relaunchedCoordinator = buildCoordinator();
+      final result = await relaunchedCoordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      expect(
+        keptStateStore.envelope!.activeRecords.map((r) => r.id).toSet(),
+        {migratedRecord.id, newRecord.id},
+      );
+    });
+
+    test(
+        'B. migrate 1 legacy Kept, complete, remove that migrated record, '
+        'relaunch with a fresh coordinator: bootstrap remains ready and the '
+        'deleted record is not resurrected', () async {
+      await migrateOneLegacyRecord();
+      // Removal through the store's normal replace path — exactly what a
+      // real KeptRepository deletion ultimately calls.
+      await keptStateStore.replace(KeptStateEnvelope());
+
+      final relaunchedCoordinator = buildCoordinator();
+      final result = await relaunchedCoordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      expect(keptStateStore.envelope!.activeRecords, isEmpty);
+    });
+
+    test(
+        'C1. migrate 1 legacy Kept without a Reflection, complete, add a '
+        'Reflection, relaunch: bootstrap remains ready and the new '
+        'Reflection remains', () async {
+      await migrateOneLegacyRecord();
+      final migrated = keptStateStore.envelope!.activeRecords.single;
+      expect(migrated.reflectionText, isNull);
+      final withReflection = migrated.copyWith(
+        reflectionText: 'Added after migration completed.',
+        reflectedAt: startedAt.add(const Duration(days: 1)),
+        updatedAt: startedAt.add(const Duration(days: 1)),
+        mutationId: uuid.v4(),
+      );
+      await keptStateStore.replace(
+        KeptStateEnvelope(activeRecords: [withReflection]),
+      );
+
+      final relaunchedCoordinator = buildCoordinator();
+      final result = await relaunchedCoordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      expect(
+        keptStateStore.envelope!.activeRecords.single.reflectionText,
+        'Added after migration completed.',
+      );
+    });
+
+    test(
+        'C2. migrate 1 legacy Kept, complete, edit then delete its '
+        'Reflection across two relaunches: bootstrap remains ready and the '
+        'latest legitimate state remains each time', () async {
+      await migrateOneLegacyRecord();
+      final migrated = keptStateStore.envelope!.activeRecords.single;
+      final edited = migrated.copyWith(
+        reflectionText: 'First reflection, after migration.',
+        reflectedAt: startedAt.add(const Duration(days: 1)),
+        updatedAt: startedAt.add(const Duration(days: 1)),
+        mutationId: uuid.v4(),
+      );
+      await keptStateStore.replace(KeptStateEnvelope(activeRecords: [edited]));
+
+      final firstRelaunch = buildCoordinator();
+      final firstResult = await firstRelaunch.migrateIfNeeded();
+      expect(firstResult.status, KeptMigrationStatus.alreadyComplete);
+      expect(
+        keptStateStore.envelope!.activeRecords.single.reflectionText,
+        'First reflection, after migration.',
+      );
+
+      final deleted = edited.copyWith(
+        clearReflection: true,
+        updatedAt: startedAt.add(const Duration(days: 2)),
+        mutationId: uuid.v4(),
+      );
+      await keptStateStore.replace(KeptStateEnvelope(activeRecords: [deleted]));
+
+      final secondRelaunch = buildCoordinator();
+      final secondResult = await secondRelaunch.migrateIfNeeded();
+      expect(secondResult.status, KeptMigrationStatus.alreadyComplete);
+      expect(
+        keptStateStore.envelope!.activeRecords.single.reflectionText,
+        isNull,
+      );
+    });
+
+    test(
+        'D. a completed migration with a genuinely unchanged envelope still '
+        'returns alreadyComplete', () async {
+      final result = await migrateOneLegacyRecord();
+      final relaunchedCoordinator = buildCoordinator();
+
+      final second = await relaunchedCoordinator.migrateIfNeeded();
+
+      expect(second.status, KeptMigrationStatus.alreadyComplete);
+      expect(second.migratedCount, result.migratedCount);
+      expect(keptStateStore.envelope!.activeRecords.length, 1);
+    });
+
+    test(
+        'E. a genuinely corrupt/unreadable protected envelope at a '
+        'completed-state relaunch still fails closed', () async {
+      await migrateOneLegacyRecord();
+      // Simulate storage-level corruption/unreadability — never converted
+      // into success by the Phase 4G fix. This is a fail-closed check on
+      // whether the envelope can be *read* at all, orthogonal to the
+      // (now-removed) content-equality check against the historical
+      // snapshot.
+      keptStateStore.loadOverride = (count, stored) =>
+          throw StateError('Simulated protected storage corruption.');
+      final relaunchedCoordinator = buildCoordinator();
+
+      await expectLater(
+        relaunchedCoordinator.migrateIfNeeded(),
+        throwsA(isA<KeptMigrationException>()),
+      );
+    });
+
+    test(
+        'F. exact physical-device reproduction: historical snapshot count=1, '
+        'current valid envelope count=2, journal=complete -> must not throw '
+        'field-verify-count', () async {
+      await migrateOneLegacyRecord();
+      expect(journalStore.journal!.legacyEntryCount, 1);
+      expect(journalStore.journal!.state, KeptMigrationState.complete);
+
+      final migratedRecord = keptStateStore.envelope!.activeRecords.single;
+      final secondNewRecord = buildNewPostMigrationKeptRecord('F');
+      await keptStateStore.replace(
+        KeptStateEnvelope(activeRecords: [migratedRecord, secondNewRecord]),
+      );
+      expect(keptStateStore.envelope!.activeRecords.length, 2);
+
+      final relaunchedCoordinator = buildCoordinator();
+
+      KeptMigrationException? caught;
+      KeptMigrationResult? result;
+      try {
+        result = await relaunchedCoordinator.migrateIfNeeded();
+      } on KeptMigrationException catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isNull,
+          reason: 'migrateIfNeeded() must not throw for a legitimately '
+              'evolved completed-migration envelope, but threw: $caught');
+      expect(result, isNotNull);
+      expect(result!.status, KeptMigrationStatus.alreadyComplete);
+      expect(keptStateStore.envelope!.activeRecords.length, 2);
     });
   });
 
@@ -1362,42 +1609,63 @@ void main() {
     });
 
     test(
-        '26. complete-state re-verification detects a changed parsed '
-        'timestamp', () async {
+        '26. a changed live-envelope timestamp after completion is '
+        'preserved, not reverted to what re-parsing the frozen snapshot '
+        'would reproduce (Phase 4G real-device fix)', () async {
+      // Phase 4G real-device fix: this test previously asserted that
+      // `_handleComplete` threw when the live envelope's parsed timestamp
+      // no longer matched what re-parsing the frozen historical snapshot
+      // ("June 6, 2026") would reproduce. It changes ONLY the live/current
+      // Kept envelope, strictly after `migrateIfNeeded()` has already
+      // durably reached `complete` — never the historical snapshot,
+      // journal, or recovery artifact. That is exactly the obsolete
+      // invariant this phase removed: a completed migration must not
+      // re-impose its historical snapshot as an ongoing equality
+      // constraint on legitimately evolving live state (a changed
+      // revealedAt/keptAt here stands in for any legitimate post-migration
+      // mutation, e.g. a sync-applied correction). See
+      // `kept_migration_coordinator.dart`'s `_handleComplete` doc comment
+      // (step 7) for the full rationale.
       final item = FavoriteItem(
-        id: 'tamper-1',
+        id: 'evolved-1',
         date: 'June 6, 2026',
-        text: 'Tamper me.',
+        text: 'Evolve me.',
       );
       legacy.entries = [item.encode()];
       final coordinator = buildCoordinator();
       await coordinator.migrateIfNeeded();
 
       final original = keptStateStore.envelope!.activeRecords.single;
-      keptStateStore.envelope = KeptStateEnvelope(
-        activeRecords: [
-          KeptRecord(
-            id: original.id,
-            revealId: original.revealId,
-            wisdomText: original.wisdomText,
-            // Tampered: a different revealedAt/keptAt than what re-parsing
-            // "June 6, 2026" via the frozen snapshot would reproduce.
-            // updatedAt is shifted by the same amount so it never falls
-            // before the tampered keptAt (KeptRecord's own invariant) —
-            // the point being verified is the mismatched revealedAt/keptAt,
-            // not an unrelated updatedAt-before-keptAt violation.
-            revealedAt: original.revealedAt.add(const Duration(days: 1)),
-            keptAt: original.revealedAt.add(const Duration(days: 1)),
-            updatedAt: original.updatedAt.add(const Duration(days: 1)),
-            mutationId: original.mutationId,
-          ),
-        ],
+      final evolved = KeptRecord(
+        id: original.id,
+        revealId: original.revealId,
+        wisdomText: original.wisdomText,
+        // Legitimately different from what re-parsing "June 6, 2026" via
+        // the frozen snapshot would reproduce — e.g. a later correction.
+        // updatedAt is shifted by the same amount so it never falls before
+        // the new keptAt (KeptRecord's own invariant); the point being
+        // proven is that the mismatched revealedAt/keptAt survives, not an
+        // unrelated updatedAt-before-keptAt violation.
+        revealedAt: original.revealedAt.add(const Duration(days: 1)),
+        keptAt: original.revealedAt.add(const Duration(days: 1)),
+        updatedAt: original.updatedAt.add(const Duration(days: 1)),
+        mutationId: original.mutationId,
+      );
+      await keptStateStore.replace(
+        KeptStateEnvelope(activeRecords: [evolved]),
       );
 
-      await expectLater(
-        coordinator.migrateIfNeeded(),
-        throwsA(isA<KeptMigrationException>()),
-      );
+      final result = await coordinator.migrateIfNeeded();
+
+      expect(result.status, KeptMigrationStatus.alreadyComplete);
+      // The evolved live value is preserved exactly...
+      final persisted = keptStateStore.envelope!.activeRecords.single;
+      expect(persisted.revealedAt, evolved.revealedAt);
+      expect(persisted.keptAt, evolved.keptAt);
+      // ...and the historical snapshot's re-parsed value is never copied
+      // back over it.
+      expect(persisted.revealedAt, isNot(original.revealedAt));
+      expect(persisted.keptAt, isNot(original.keptAt));
     });
   });
 

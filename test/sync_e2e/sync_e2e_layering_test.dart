@@ -307,12 +307,16 @@ void main() {
 
   test(
       'every production invocation of a sync/bootstrap trigger API anywhere '
-      'under lib/ is confined to that API\'s own definition file or the '
-      'single Build 26 Phase 4F runtime coordinator -- '
-      'evaluateAssociation/authorizeAssociation/repairLegacyAssociationMarker '
-      'remain callable but uncalled by any production code path outside '
-      'their own definition file (Phase 4F never calls them directly -- '
-      'runBootstrap() already owns that decision tree internally); '
+      'under lib/ is confined to that API\'s own definition file, the '
+      'single Build 26 Phase 4F runtime coordinator, or (Build 26 Phase 4G, '
+      'evaluateAssociation/authorizeAssociation only) the one approved '
+      'explicit-association controller -- '
+      'evaluateAssociation/authorizeAssociation remain callable by exactly '
+      'that one disclosed extra caller and no other; '
+      'repairLegacyAssociationMarker remains callable but uncalled by any '
+      'production code path outside its own definition file (Phase 4F never '
+      'calls it directly -- runBootstrap() already owns that decision tree '
+      'internally); '
       'runBootstrap/reconcileForAssociatedAccount/applyIncomingBatch/'
       'runSyncPass are each called by exactly one production file beyond '
       'their own definition -- '
@@ -322,9 +326,25 @@ void main() {
       'may call any of them freely; this test only ever scans lib/.', () {
     const runtimeCoordinatorFile =
         'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
+    // Build 26 Phase 4G correction (post-Mac-validation): this test predates
+    // the explicitly-approved one-time iCloud association UX, which
+    // introduced exactly one new, disclosed production caller of
+    // evaluateAssociation()/authorizeAssociation() outside
+    // kept_sync_bootstrap_coordinator.dart itself --
+    // lib/controllers/sync_association_controller.dart (Settings' only
+    // association surface; see its own doc comment, and
+    // test/sync_integration/sync_integration_layering_test.dart's matching
+    // exact-file allowance for this same pair of methods). This is an
+    // exact, single-file addition scoped to these two patterns only --
+    // never a directory-wide exemption for lib/controllers/, and it does
+    // not extend to repairLegacyAssociationMarker or to the runtime
+    // coordinator for any of the four association/bootstrap patterns below.
+    const syncAssociationControllerFile =
+        'lib/controllers/sync_association_controller.dart';
 
     // Pattern -> (own definition file, whether the Phase 4F runtime
-    // coordinator is also an allowed caller). `evaluateAssociation`/
+    // coordinator is also an allowed caller, and any further exact-file
+    // allowances beyond those two). `evaluateAssociation`/
     // `authorizeAssociation`/`repairLegacyAssociationMarker` are NOT
     // extended to the runtime coordinator: `CloudKitSyncRuntimeCoordinator`
     // only ever calls `runBootstrap()` itself, which already owns the full
@@ -334,30 +354,37 @@ void main() {
       '.runBootstrap(': (
         ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
         runtimeCoordinatorAllowed: true,
+        extraAllowedFiles: <String>{},
       ),
       '.evaluateAssociation(': (
         ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
         runtimeCoordinatorAllowed: false,
+        extraAllowedFiles: {syncAssociationControllerFile},
       ),
       '.authorizeAssociation(': (
         ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
         runtimeCoordinatorAllowed: false,
+        extraAllowedFiles: {syncAssociationControllerFile},
       ),
       '.repairLegacyAssociationMarker(': (
         ownFile: 'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
         runtimeCoordinatorAllowed: false,
+        extraAllowedFiles: <String>{},
       ),
       '.reconcileForAssociatedAccount(': (
         ownFile: 'lib/sync_integration/kept_sync_integration_coordinator.dart',
         runtimeCoordinatorAllowed: true,
+        extraAllowedFiles: <String>{},
       ),
       '.applyIncomingBatch(': (
         ownFile: 'lib/sync_integration/incoming_kept_sync_coordinator.dart',
         runtimeCoordinatorAllowed: true,
+        extraAllowedFiles: <String>{},
       ),
       '.runSyncPass(': (
         ownFile: 'lib/sync_orchestration/sync_orchestrator.dart',
         runtimeCoordinatorAllowed: true,
+        extraAllowedFiles: <String>{},
       ),
     };
 
@@ -369,6 +396,10 @@ void main() {
         if (normalizedPath.endsWith(spec.ownFile)) return;
         if (spec.runtimeCoordinatorAllowed &&
             normalizedPath.endsWith(runtimeCoordinatorFile)) {
+          return;
+        }
+        if (spec.extraAllowedFiles
+            .any((allowed) => normalizedPath.endsWith(allowed))) {
           return;
         }
         if (codeOnly.contains(pattern)) {

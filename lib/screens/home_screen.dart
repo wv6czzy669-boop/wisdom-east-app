@@ -185,6 +185,15 @@ class _HomeScreenState extends State<HomeScreen>
   final ritualFlowController = const RitualFlowController();
   final accessRefreshGuard = LatestRequestGuard();
 
+  /// Build 26 Phase 4H-6: guards the silent background `favorites` reload
+  /// triggered by [app_services.keptStateRevisionNotifier] (an incoming
+  /// CloudKit sync applying new/changed Kept or Reflection data while Home
+  /// is already mounted) -- a dedicated instance, never shared with
+  /// [accessRefreshGuard] (which guards an unrelated async operation,
+  /// [updateNextWisdomMessage]), so the two can never cross-invalidate each
+  /// other.
+  final keptStateRefreshGuard = LatestRequestGuard();
+
   int delayedCallbackSession = 0;
 
   void invalidateDelayedCallbacks() {
@@ -295,6 +304,9 @@ class _HomeScreenState extends State<HomeScreen>
 
     WidgetsBinding.instance.addObserver(this);
     app_services.purchaseService.addListener(_syncKeeperStatus);
+    // Build 26 Phase 4H-6: subscribe to the neutral incoming-Kept-state
+    // signal for as long as Home stays mounted.
+    app_services.keptStateRevisionNotifier.addListener(_onKeptStateChanged);
     storageService = widget.storageService ?? app_services.storageService;
     dailyWisdomAccessService = widget.dailyWisdomAccessService ??
         app_services.createDailyWisdomAccessService(
@@ -362,9 +374,11 @@ class _HomeScreenState extends State<HomeScreen>
     flowSessionId++;
     invalidateDelayedCallbacks();
     accessRefreshGuard.invalidate();
+    keptStateRefreshGuard.invalidate();
 
     WidgetsBinding.instance.removeObserver(this);
     app_services.purchaseService.removeListener(_syncKeeperStatus);
+    app_services.keptStateRevisionNotifier.removeListener(_onKeptStateChanged);
     stopCountdownTimer();
     _notificationPermissionOfferTimer?.cancel();
     _cancelAllDiscoveryTimers();
@@ -2025,6 +2039,39 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) return;
 
+    setState(() {
+      favorites = loadedFavorites;
+    });
+  }
+
+  /// Build 26 Phase 4H-6: invoked synchronously by
+  /// [app_services.keptStateRevisionNotifier] only after an incoming
+  /// CloudKit sync has durably applied a Kept/Reflection content change
+  /// while Home is mounted. Never shows a spinner or dialog, never resets
+  /// scroll/navigation/ritual state, and never touches
+  /// [loadKeeperStatus]/[updateNextWisdomMessage] or any Keeper-purchase
+  /// refresh path -- this signal is scoped to `favorites` alone.
+  void _onKeptStateChanged() {
+    if (!mounted) return;
+    final generation = keptStateRefreshGuard.begin();
+    unawaited(_reloadFavoritesForIncomingStateChange(generation));
+  }
+
+  Future<void> _reloadFavoritesForIncomingStateChange(int generation) async {
+    final List<FavoriteItem> loadedFavorites;
+    try {
+      loadedFavorites = await savedReflectionsService.load();
+    } catch (_) {
+      // A failed silent background refresh must never interrupt the
+      // ritual UI with a dialog/snackbar -- leave `favorites` exactly as
+      // it already was. A future incoming batch will retry.
+      return;
+    }
+    // Both checks matter: `mounted` guards against a dispose that happened
+    // while `load()` was in flight; `isCurrent` guards against a newer
+    // incoming notification's own reload having already started (and
+    // possibly already finished) after this one began.
+    if (!mounted || !keptStateRefreshGuard.isCurrent(generation)) return;
     setState(() {
       favorites = loadedFavorites;
     });

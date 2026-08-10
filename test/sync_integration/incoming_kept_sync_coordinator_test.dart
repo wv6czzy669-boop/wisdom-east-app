@@ -1922,4 +1922,188 @@ void main() {
       expect(second.status, RetireOutboxMutationStatus.recordNotFound);
     });
   });
+
+  // -------------------------------------------------------------------
+  // 12. Build 26 Phase 4H-6: onIncomingStateChanged notification -- the
+  // live-incoming-Kept-UI-refresh signal. A dedicated coordinator instance
+  // (never the shared `incomingCoordinator` above, which has no callback
+  // wired) sharing the same repository/intent/sync stores, so these tests
+  // observe exactly the same durable state every other group in this file
+  // already proves correct.
+  // -------------------------------------------------------------------
+  group('12. onIncomingStateChanged notification (Build 26 Phase 4H-6)', () {
+    late int notifyCount;
+    late IncomingKeptSyncCoordinator notifyingCoordinator;
+
+    setUp(() {
+      notifyCount = 0;
+      notifyingCoordinator = IncomingKeptSyncCoordinator(
+        keptRepository: keptRepository,
+        intentStore: intentStore,
+        syncPersistenceStore: syncStore,
+        integrationCoordinator: sharedCoordinator,
+        onIncomingStateChanged: () => notifyCount++,
+      );
+    });
+
+    test('fresh active adoption into empty local state notifies exactly once',
+        () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final batch = buildBatch(
+        previousServerChangeToken: null,
+        incomingKeptWisdomProjections: [activeProjection(revealId: revealIdA)],
+      );
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 1);
+    });
+
+    test(
+        'an incoming Reflection addition on an existing record notifies '
+        'exactly once', () async {
+      await keptRepository.replaceAllRecords([
+        buildRecord(id: 'local-1', revealId: revealIdA),
+      ]);
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final batch = buildBatch(
+        previousServerChangeToken: null,
+        incomingKeptWisdomProjections: [
+          activeProjection(
+            revealId: revealIdA,
+            reflectionText: 'A quiet thought.',
+            reflectedAt: t0.add(const Duration(minutes: 10)),
+            updatedAt: t0.add(const Duration(minutes: 10)),
+          ),
+        ],
+      );
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 1);
+    });
+
+    test('an incoming tombstone removing an existing record notifies exactly '
+        'once', () async {
+      await keptRepository.replaceAllRecords([
+        buildRecord(id: 'local-1', revealId: revealIdA),
+      ]);
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final batch = buildBatch(
+        previousServerChangeToken: null,
+        incomingKeptWisdomProjections: [
+          tombstoneProjection(
+            revealId: revealIdA,
+            updatedAt: t0.add(const Duration(minutes: 10)),
+            deletedAt: t0.add(const Duration(minutes: 10)),
+          ),
+        ],
+      );
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 1);
+      expect(await keptRepository.loadAllRecords(), isEmpty);
+    });
+
+    test(
+        'an empty-projection (token-only) batch never notifies, even though '
+        'it is applied', () async {
+      await keptRepository.replaceAllRecords([
+        buildRecord(id: 'local-1', revealId: revealIdA),
+      ]);
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final batch = buildBatch(previousServerChangeToken: null);
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 0);
+    });
+
+    test(
+        'an incoming projection whose content is byte-for-byte identical to '
+        'the existing local record never notifies (Section 10 "Identical '
+        'convergence")', () async {
+      final existing = buildRecord(id: 'local-1', revealId: revealIdA);
+      await keptRepository.replaceAllRecords([existing]);
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final identicalRemote = activeProjection(
+        revealId: revealIdA,
+        wisdomText: existing.wisdomText,
+        revealedAt: existing.revealedAt,
+        keptAt: existing.keptAt,
+        updatedAt: existing.updatedAt,
+        mutationId: existing.mutationId,
+      );
+      final batch = buildBatch(
+        previousServerChangeToken: null,
+        incomingKeptWisdomProjections: [identicalRemote],
+      );
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 0);
+    });
+
+    test('alreadyApplied (token-only replay) never notifies', () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'bmV3');
+      final batch = buildBatch(
+        previousServerChangeToken: 'b2xk',
+        pendingServerChangeToken: 'bmV3',
+        incomingKeptWisdomProjections: [activeProjection(revealId: revealIdA)],
+      );
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.alreadyApplied);
+      expect(notifyCount, 0);
+    });
+
+    test('a rejected batch (bucketMissing) never notifies', () async {
+      final batch = buildBatch(
+        incomingKeptWisdomProjections: [activeProjection(revealId: revealIdA)],
+      );
+      final result = await notifyingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.bucketMissing);
+      expect(notifyCount, 0);
+    });
+
+    test(
+        'two rapid, genuinely different consecutive applies notify exactly '
+        'twice -- once per real change, never merged or dropped', () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final firstBatch = buildBatch(
+        previousServerChangeToken: null,
+        pendingServerChangeToken: 'dG9rZW4x',
+        incomingKeptWisdomProjections: [activeProjection(revealId: revealIdA)],
+      );
+      final firstResult =
+          await notifyingCoordinator.applyIncomingBatch(firstBatch);
+      expect(firstResult.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 1);
+
+      final secondBatch = buildBatch(
+        previousServerChangeToken: 'dG9rZW4x',
+        pendingServerChangeToken: 'dG9rZW4y',
+        incomingKeptWisdomProjections: [activeProjection(revealId: revealIdB)],
+      );
+      final secondResult =
+          await notifyingCoordinator.applyIncomingBatch(secondBatch);
+      expect(secondResult.status, IncomingApplyStatus.applied);
+      expect(notifyCount, 2);
+    });
+
+    test(
+        'a listener exception raised inside onIncomingStateChanged never '
+        'affects the already-committed apply result', () async {
+      final throwingCoordinator = IncomingKeptSyncCoordinator(
+        keptRepository: keptRepository,
+        intentStore: intentStore,
+        syncPersistenceStore: syncStore,
+        integrationCoordinator: sharedCoordinator,
+        onIncomingStateChanged: () => throw StateError('listener boom'),
+      );
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
+      final batch = buildBatch(
+        previousServerChangeToken: null,
+        incomingKeptWisdomProjections: [activeProjection(revealId: revealIdA)],
+      );
+      final result = await throwingCoordinator.applyIncomingBatch(batch);
+      expect(result.status, IncomingApplyStatus.applied);
+      expect(await keptRepository.loadAllRecords(), hasLength(1));
+    });
+  });
 }

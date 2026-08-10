@@ -98,6 +98,7 @@ import '../sync_platform/cloud_kit_modify_records_contract.dart';
 import '../sync_platform/cloud_kit_platform_bridge.dart';
 import '../sync_platform/cloud_kit_platform_error.dart';
 import '../sync_platform/cloud_kit_zone_changes_contract.dart';
+import '../utils/kept_timestamp_canonicalizer.dart';
 import '../utils/remote_kept_identity.dart';
 import 'local_sync_intent.dart';
 import 'local_sync_intent_store.dart';
@@ -1466,7 +1467,7 @@ final class KeptSyncBootstrapCoordinator {
           localId: record.id,
         ),
         stage: LocalSyncIntentStage.localCommittedOutboxPending,
-        enqueuedAt: _clock(),
+        enqueuedAt: canonicalizeKeptTimestamp(_clock()),
       );
       try {
         await _intentStore.enqueueIntent(intent);
@@ -1888,7 +1889,7 @@ final class KeptSyncBootstrapCoordinator {
       return SyncChange(
         kind: SyncChangeKind.delete,
         projection: CloudKeptWisdomProjection.tombstone(tombstone),
-        enqueuedAt: _clock(),
+        enqueuedAt: canonicalizeKeptTimestamp(_clock()),
       );
     }
     final record = KeptRecord(
@@ -1925,7 +1926,7 @@ final class KeptSyncBootstrapCoordinator {
       kind: kind,
       projection:
           CloudKeptWisdomProjection.active(record, dataEpoch: dataEpoch),
-      enqueuedAt: _clock(),
+      enqueuedAt: canonicalizeKeptTimestamp(_clock()),
     );
   }
 }

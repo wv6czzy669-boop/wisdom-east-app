@@ -81,6 +81,23 @@ enum CloudKitKeptWisdomCodec {
   /// be either both `nil` or both non-`nil` -- an occurrence with a
   /// Reflection timestamp but no Reflection text (or vice versa) is a
   /// programmer error, never silently coerced into a valid shape.
+  ///
+  /// Build 26 Phase 4H-5 (sibling of the Phase 4H-4 tombstone
+  /// field-retention fix): when no Reflection exists, `reflectionText`/
+  /// `reflectedAtMs` are now explicitly assigned `nil` here, not merely
+  /// left unmentioned. This matters for exactly the same reason
+  /// `encodeTombstone` had to change: a save of this record that reuses an
+  /// already-synced record's system-fields-only baseline (see
+  /// `CloudKitRecordTransportCoordinator.modifyRecords`'s baseline-merge
+  /// step) only propagates a field removal onto the server for a key
+  /// present in *this* record's own `changedKeys()` -- a field this
+  /// function simply never touched would never appear there, so removing
+  /// an existing Reflection from an already-synced active occurrence
+  /// (Reflection present at last sync, absent now) would otherwise leave
+  /// the old `reflectionText`/`reflectedAtMs` stranded on the server. This
+  /// is a pure no-op for the already-correct paths: a brand-new record
+  /// that never had a Reflection has nothing to remove, and a record that
+  /// does have one is unaffected (this only fires in the `nil` branch).
   static func encodeActive(
     revealId: String,
     wisdomText: String,
@@ -109,9 +126,13 @@ enum CloudKitKeptWisdomCodec {
     record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = keptAtMs as CKRecordValue
     if let reflectionText = reflectionText {
       record[CloudKitRecordSchema.KeptWisdomField.reflectionText] = reflectionText as CKRecordValue
+    } else {
+      record[CloudKitRecordSchema.KeptWisdomField.reflectionText] = nil
     }
     if let reflectedAtMs = reflectedAtMs {
       record[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs] = reflectedAtMs as CKRecordValue
+    } else {
+      record[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs] = nil
     }
     record[CloudKitRecordSchema.KeptWisdomField.updatedAtMs] = updatedAtMs as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.mutationId] = mutationId as CKRecordValue
@@ -126,6 +147,30 @@ enum CloudKitKeptWisdomCodec {
   /// Carries no `revealId`, `wisdomText`, `reflectionText`, `revealedAtMs`,
   /// `keptAtMs`, or `reflectedAtMs` field at all -- cleared entirely, never
   /// merely blanked, matching ADR-007.
+  ///
+  /// Build 26 Phase 4H-4 (real-device + CloudKit-dashboard investigation):
+  /// every forbidden-on-tombstone field is now explicitly assigned `nil`
+  /// here, not merely left untouched. This matters because
+  /// `CloudKitRecordTransportCoordinator.modifyRecords` saves a tombstone
+  /// *update* to an already-synced occurrence by reconstructing a baseline
+  /// `CKRecord` from that occurrence's own previously-archived system
+  /// fields alone (`CloudKitOpaqueArchive.unarchiveSystemFields` -- "no
+  /// user field values -- there were none to restore") and then copying
+  /// this record's own *changed* keys onto it. A forbidden field this
+  /// function merely never mentioned would never become part of that
+  /// baseline's own changed-key set at all, so CloudKit's partial-update
+  /// save would leave whatever value the server already had for that field
+  /// completely untouched -- proven, via the real-device/dashboard
+  /// evidence this phase investigated, to be exactly how an already-synced
+  /// active record's `revealId`/`wisdomText`/`revealedAtMs`/`keptAtMs`
+  /// (and `reflectionText`/`reflectedAtMs`, if a Reflection existed at
+  /// deletion time) survived, unwanted, on its tombstone. Explicitly
+  /// assigning `nil` registers each of these keys in *this* record's own
+  /// `changedKeys()` (distinct from `allKeys()`, which excludes a nil'd
+  /// key) as a real removal, which
+  /// `CloudKitRecordTransportCoordinator.modifyRecords`'s baseline-merge
+  /// loop (fixed in the same change) now correctly copies onto the saved
+  /// baseline, so the removal is actually sent to and applied by CloudKit.
   static func encodeTombstone(
     revealId: String,
     deletedAtMs: Int64,
@@ -147,6 +192,13 @@ enum CloudKitKeptWisdomCodec {
     record[CloudKitRecordSchema.KeptWisdomField.mutationId] = mutationId as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.dataEpoch] = dataEpoch as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.schemaVersion] = schemaVersion as CKRecordValue
+
+    // Explicit removals -- see this function's own doc comment above for
+    // why "never set" is not equivalent to "explicitly cleared" once a
+    // save reuses a system-fields-only baseline.
+    for field in CloudKitRecordSchema.KeptWisdomField.forbiddenOnTombstone {
+      record[field] = nil
+    }
 
     return record
   }
@@ -256,10 +308,22 @@ enum CloudKitKeptWisdomCodec {
       return .failure(.unrecognizedSchemaVersion)
     }
 
-    for field in CloudKitRecordSchema.KeptWisdomField.forbiddenOnTombstone {
-      if record[field] != nil {
-        return .failure(.forbiddenFieldOnTombstone(field))
-      }
+    // Build 26 Phase 4H-4 real-device + CloudKit-dashboard investigation
+    // superseded the earlier, narrower Phase 4H-3 "redundant revealId only"
+    // compatibility rule: the actual already-stored Development tombstone
+    // retains its *entire* historical active-form payload (`revealId`,
+    // `wisdomText`, `revealedAtMs`, `keptAtMs`; `reflectionText`/
+    // `reflectedAtMs` too, if a Reflection existed at deletion time) --
+    // proven to be a live writer bug in
+    // `CloudKitRecordTransportCoordinator.modifyRecords`'s baseline-merge
+    // step (fixed below, in this same change, via `changedKeys()`), never
+    // an isolated single-field artifact. See `legacyActivePayloadShape`
+    // for the exact, narrow coherence rule this decoder now applies.
+    switch legacyActivePayloadShape(on: record, recordName: recordName) {
+    case .absent, .coherent:
+      break
+    case .incoherent(let field):
+      return .failure(.forbiddenFieldOnTombstone(field))
     }
 
     guard let deletedAtMs = record[CloudKitRecordSchema.KeptWisdomField.deletedAtMs] as? Int64 else {
@@ -286,6 +350,86 @@ enum CloudKitKeptWisdomCodec {
         schemaVersion: schemaVersion,
         systemFields: systemFields
       ))
+  }
+
+  /// Build 26 Phase 4H-4: classifies a tombstone-shaped `CKRecord`'s
+  /// `forbiddenOnTombstone` fields as either genuinely absent (the
+  /// canonical shape every current write path now produces), a single
+  /// known-coherent "legacy full-form tombstone" historical snapshot (the
+  /// shape the pre-fix writer bug could leave behind), or anything else
+  /// (`.incoherent` -- fails closed, naming the first offending field).
+  ///
+  /// The proven writer bug retains fields in exactly two possible groups,
+  /// never an arbitrary subset: the four fields `encodeActive`
+  /// unconditionally sets together (`revealId`, `wisdomText`,
+  /// `revealedAtMs`, `keptAtMs`), and, independently, the optional
+  /// Reflection pair (`reflectionText`, `reflectedAtMs`) if -- and only
+  /// if -- a Reflection existed on the occurrence at the moment it was
+  /// deleted. So a coherent legacy snapshot is: all four core fields
+  /// present and individually valid, *plus* the Reflection pair either
+  /// both absent or both present and valid. Any partial subset of the
+  /// four core fields, or an unpaired Reflection field, indicates
+  /// corruption or tampering, not this known bug, and is rejected.
+  ///
+  /// Every field this function accepts is validated with the exact same
+  /// per-field rule `decodeActive` below already applies to that field --
+  /// never a looser, bespoke legacy check -- and, regardless of outcome,
+  /// none of these values are ever returned to a caller: `decodeTombstone`
+  /// always constructs its `.success` envelope with every active-form
+  /// field hardcoded to `nil`, so a coherent legacy snapshot can never
+  /// reach Dart as active content, and can never resurrect the deleted
+  /// occurrence or its Reflection.
+  private enum LegacyActivePayloadShape {
+    case absent
+    case coherent
+    case incoherent(String)
+  }
+
+  private static func legacyActivePayloadShape(
+    on record: CKRecord, recordName: String
+  ) -> LegacyActivePayloadShape {
+    let revealIdValue = record[CloudKitRecordSchema.KeptWisdomField.revealId]
+    let wisdomTextValue = record[CloudKitRecordSchema.KeptWisdomField.wisdomText]
+    let revealedAtMsValue = record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs]
+    let keptAtMsValue = record[CloudKitRecordSchema.KeptWisdomField.keptAtMs]
+    let reflectionTextValue = record[CloudKitRecordSchema.KeptWisdomField.reflectionText]
+    let reflectedAtMsValue = record[CloudKitRecordSchema.KeptWisdomField.reflectedAtMs]
+
+    if revealIdValue == nil, wisdomTextValue == nil, revealedAtMsValue == nil, keptAtMsValue == nil,
+      reflectionTextValue == nil, reflectedAtMsValue == nil
+    {
+      return .absent
+    }
+
+    guard let revealId = revealIdValue as? String,
+      CloudKitRecordIdentity.recordName(recordName, matchesRevealId: revealId)
+    else {
+      return .incoherent(CloudKitRecordSchema.KeptWisdomField.revealId)
+    }
+    guard wisdomTextValue as? String != nil else {
+      return .incoherent(CloudKitRecordSchema.KeptWisdomField.wisdomText)
+    }
+    guard revealedAtMsValue as? Int64 != nil else {
+      return .incoherent(CloudKitRecordSchema.KeptWisdomField.revealedAtMs)
+    }
+    guard keptAtMsValue as? Int64 != nil else {
+      return .incoherent(CloudKitRecordSchema.KeptWisdomField.keptAtMs)
+    }
+
+    switch (reflectionTextValue, reflectedAtMsValue) {
+    case (nil, nil):
+      return .coherent
+    case (.some, .some):
+      guard reflectionTextValue as? String != nil, reflectedAtMsValue as? Int64 != nil else {
+        return .incoherent(CloudKitRecordSchema.KeptWisdomField.reflectionText)
+      }
+      return .coherent
+    default:
+      // Exactly one of the paired Reflection fields is present -- never a
+      // shape the proven writer bug (or a valid active record) could
+      // produce.
+      return .incoherent(CloudKitRecordSchema.KeptWisdomField.reflectionText)
+    }
   }
 
   private static func decodeActive(

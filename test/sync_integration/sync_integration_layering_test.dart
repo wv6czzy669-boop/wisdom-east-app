@@ -395,42 +395,75 @@ void main() {
   });
 
   test(
-      'Build 26 Phase 4F: no startup, foreground, lifecycle, screen, '
+      'Build 26 Phase 4F/4G: no startup, foreground, lifecycle, screen, '
       'widget, or network trigger anywhere under lib/ (outside '
-      'kept_sync_bootstrap_coordinator.dart\'s own definition file -- '
-      'app_services.dart only ever constructs the coordinator, it never '
-      'calls any of these methods) calls evaluateAssociation/'
-      'authorizeAssociation/repairLegacyAssociationMarker -- every one '
-      'remains callable but uncalled by any production code path outside '
-      'its own definition file; runBootstrap is additionally, and solely, '
-      'called by the single Build 26 Phase 4F runtime coordinator '
+      'kept_sync_bootstrap_coordinator.dart\'s own definition file, and -- '
+      'Build 26 Phase 4G -- the one approved explicit-association '
+      'controller, lib/controllers/sync_association_controller.dart) calls '
+      'evaluateAssociation/authorizeAssociation; repairLegacyAssociationMarker '
+      'remains restricted to kept_sync_bootstrap_coordinator.dart alone, '
+      'never additionally exposed through the Phase 4G controller -- every '
+      'one remains callable but uncalled by any other production code path; '
+      'runBootstrap is additionally, and solely, called by the single Build '
+      '26 Phase 4F runtime coordinator '
       '(lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart), which '
       'never calls the other three directly (runBootstrap already owns '
       'that decision tree internally)', () {
-    const neverCalledOutsideOwnFile = [
+    // Build 26 Phase 4G correction (post-Mac-validation): this test
+    // predates the explicitly-approved one-time iCloud association UX,
+    // which requires exactly one new, disclosed production caller of
+    // evaluateAssociation()/authorizeAssociation() outside
+    // kept_sync_bootstrap_coordinator.dart itself --
+    // lib/controllers/sync_association_controller.dart (Settings' only
+    // association surface; see its own doc comment). This is an exact,
+    // single-file addition to the allowlist for exactly these two call
+    // patterns -- never a directory-wide exemption for lib/controllers/,
+    // and repairLegacyAssociationMarker/runBootstrap remain exactly as
+    // narrowly restricted as before. A future accidental third caller of
+    // any of these four patterns still fails this test.
+    const bootstrapCoordinatorFile =
+        'lib/sync_integration/kept_sync_bootstrap_coordinator.dart';
+    const syncAssociationControllerFile =
+        'lib/controllers/sync_association_controller.dart';
+    const evaluateAndAuthorizePatterns = [
       '.evaluateAssociation(',
       '.authorizeAssociation(',
-      '.repairLegacyAssociationMarker(',
     ];
+    const evaluateAndAuthorizeAllowedFiles = {
+      bootstrapCoordinatorFile,
+      syncAssociationControllerFile,
+    };
+    const repairMarkerAllowedFiles = {
+      bootstrapCoordinatorFile,
+    };
     const runtimeCoordinatorFile =
         'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
     final violations = <String>[];
     for (final file in allLibFiles) {
       final normalizedPath = file.path.replaceAll('\\', '/');
-      final isOwnDefinitionFile = normalizedPath.endsWith(
-        'lib/sync_integration/kept_sync_bootstrap_coordinator.dart',
-      );
+      final isBootstrapCoordinatorFile =
+          normalizedPath.endsWith(bootstrapCoordinatorFile);
+      final isEvaluateAndAuthorizeAllowed = evaluateAndAuthorizeAllowedFiles
+          .any((allowed) => normalizedPath.endsWith(allowed));
+      final isRepairMarkerAllowed = repairMarkerAllowedFiles
+          .any((allowed) => normalizedPath.endsWith(allowed));
       final isRuntimeCoordinatorFile =
           normalizedPath.endsWith(runtimeCoordinatorFile);
       final codeOnly = _stripComments(file.readAsStringSync());
-      if (!isOwnDefinitionFile) {
-        for (final pattern in neverCalledOutsideOwnFile) {
+      if (!isEvaluateAndAuthorizeAllowed) {
+        for (final pattern in evaluateAndAuthorizePatterns) {
           if (codeOnly.contains(pattern)) {
             violations.add('${file.path} contains "$pattern"');
           }
         }
       }
-      if (!isOwnDefinitionFile &&
+      if (!isRepairMarkerAllowed &&
+          codeOnly.contains('.repairLegacyAssociationMarker(')) {
+        violations.add(
+          '${file.path} contains ".repairLegacyAssociationMarker("',
+        );
+      }
+      if (!isBootstrapCoordinatorFile &&
           !isRuntimeCoordinatorFile &&
           codeOnly.contains('.runBootstrap(')) {
         violations.add('${file.path} contains ".runBootstrap("');
