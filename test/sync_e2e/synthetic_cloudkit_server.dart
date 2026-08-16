@@ -60,7 +60,10 @@ import 'package:wisdom_app/sync/cloud_kept_wisdom_projection.dart';
 import 'package:wisdom_app/sync/sync_error_classification.dart';
 import 'package:wisdom_app/sync_platform/cloud_east_sync_state_wire_envelope.dart';
 import 'package:wisdom_app/sync_platform/cloud_kept_wisdom_wire_envelope.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_delete_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 
 /// One record as the synthetic server itself stores it -- deliberately not
@@ -292,6 +295,80 @@ class SyntheticCloudKitServer {
   /// regardless of type -- for assertions that want to prove "nothing was
   /// written" without depending on a specific record name.
   int get storedRecordCount => _records.length;
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 5 (slice 3): the three deletion-transport methods
+  // `CloudKitRemoteDeletionRunner` calls (`fetchSyncStateEpoch`/
+  // `listKeptWisdomRecordNames`/`deleteKeptWisdomRecords`) -- added here,
+  // on the one already-shared, already-reviewed in-memory record store,
+  // rather than as a second, competing fake state model. Each reuses the
+  // exact same [_records] map [modify]/[fetch] already maintain, and the
+  // exact same real wire codec ([CloudEastSyncStateWireEnvelope.tryDecode])
+  // `fetch` already uses -- never a second, hand-rolled decode. No fault
+  // injection hook exists for these three (unlike [modify]/[fetch]) because
+  // no test in this Slice needs one; `CloudKitPlatformException`-based
+  // transport-failure classification is already independently covered by
+  // `test/sync_deletion/cloud_kit_remote_deletion_runner_test.dart`'s own
+  // small, self-contained fake bridge.
+  // ---------------------------------------------------------------------
+
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() async {
+    final stored = _records[CloudEastSyncStateProjection.recordName];
+    if (stored == null) return CloudKitSyncStateEpochResult.notFound();
+    final decoded = CloudEastSyncStateWireEnvelope.tryDecode(stored.fields);
+    if (decoded == null) {
+      throw StateError(
+        'SyntheticCloudKitServer stored a CKEastSyncState record that the '
+        'real CloudEastSyncStateWireEnvelope could not decode back -- this '
+        'indicates a test-harness bug.',
+      );
+    }
+    return CloudKitSyncStateEpochResult.found(
+      dataEpoch: decoded.dataEpoch,
+      systemFields: stored.systemFields,
+    );
+  }
+
+  Future<CloudKitKeptWisdomRecordNamesResult>
+      listKeptWisdomRecordNames() async {
+    final names = _records.entries
+        .where(
+          (entry) =>
+              entry.value.recordType == CloudKeptWisdomProjection.recordType,
+        )
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    return CloudKitKeptWisdomRecordNamesResult.success(names);
+  }
+
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) async {
+    final outcomes = <CloudKitRecordDeleteOutcome>[];
+    for (final recordName in request.recordNames) {
+      final stored = _records[recordName];
+      if (stored != null &&
+          stored.recordType == CloudKeptWisdomProjection.recordType) {
+        _records.remove(recordName);
+        outcomes.add(CloudKitRecordDeleteOutcome.success(
+          recordName: recordName,
+        ));
+      } else {
+        // Already absent (or never a CKKeptWisdom record) -- reported as a
+        // per-record `unknownItem` failure, exactly as the real transport
+        // would; the deletion runner itself is the one place that treats
+        // this idempotently, never this fake.
+        outcomes.add(CloudKitRecordDeleteOutcome.failure(
+          recordName: recordName,
+          errorCode: syncErrorCodeUnknownItem,
+        ));
+      }
+    }
+    final anyFailure = outcomes.any((outcome) => !outcome.success);
+    return anyFailure
+        ? CloudKitDeleteKeptWisdomRecordsResult.partialFailure(outcomes)
+        : CloudKitDeleteKeptWisdomRecordsResult.allSucceeded(outcomes);
+  }
 
   // ---------------------------------------------------------------------
   // Opaque token/system-fields minting. Both use real `base64Encode` over a

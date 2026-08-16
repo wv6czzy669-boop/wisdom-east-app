@@ -151,9 +151,11 @@ void main() {
   test(
       '2. lib/sync_runtime/ only imports dart:, itself, the already-'
       'approved sync_integration/sync_orchestration/sync_persistence/'
-      'sync_platform layers, or (Build 26 Phase 4G, temporary diagnostics '
-      'only) lib/utils/kept_diagnostics.dart -- never lib/sync/ directly, '
-      'never repositories/services/screens/widgets', () {
+      'sync_platform layers, (Build 26 Phase 4G, temporary diagnostics '
+      'only) lib/utils/kept_diagnostics.dart, or (Build 26 Phase 5, the '
+      'deletion-transaction recovery pipeline CloudKitSyncRuntimeCoordinator '
+      'drives at the start of every pass) lib/sync_deletion/ -- never '
+      'lib/sync/ directly, never repositories/services/screens/widgets', () {
     const allowedPrefixes = [
       'dart:',
       'package:wisdom_app/sync_runtime/',
@@ -169,6 +171,13 @@ void main() {
       // test/sync_integration/sync_integration_layering_test.dart already
       // grants that layer.
       'package:wisdom_app/utils/kept_diagnostics.dart',
+      // Build 26 Phase 5: sync_deletion is now an intentional sibling layer
+      // -- CloudKitRemoteDeletionRunner and LocalDeletionFinalizer, which
+      // CloudKitSyncRuntimeCoordinator constructs and drives for "Remove
+      // from iCloud" transaction recovery. Not a broad exemption: only the
+      // sync_deletion/ directory itself, same discipline as every other
+      // approved sibling layer in this same list.
+      'package:wisdom_app/sync_deletion/',
     ];
 
     final violations = <String>[];
@@ -185,6 +194,7 @@ void main() {
             target.startsWith('../sync_orchestration/') ||
             target.startsWith('../sync_persistence/') ||
             target.startsWith('../sync_platform/') ||
+            target.startsWith('../sync_deletion/') ||
             target == '../utils/kept_diagnostics.dart' ||
             !target.contains('/'); // same-directory sibling import
         final isApprovedPackage = allowedPrefixes.any(target.startsWith);

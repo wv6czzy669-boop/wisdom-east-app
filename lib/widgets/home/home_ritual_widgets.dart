@@ -260,13 +260,13 @@ class _HomeRitualContent extends StatelessWidget {
     final textSize = screenStep == 0
         ? 42.0
         : wisdomRevealed
-            ? 32.0
+            ? 38.0
             : onLockedCountdown
                 ? 22.0
                 : onPauseScreen
-                    ? 33.0
+                    ? 46.0
                     : onHeartScreen
-                        ? 29.0
+                        ? 46.0
                         : 34.0;
 
     final finalColor = const Color(0xFFF4F0E8);
@@ -344,7 +344,43 @@ class _HomeRitualContent extends StatelessWidget {
                               'ask-fade',
                             ),
                             opacity: askFadeAnimation,
-                            child: currentRitualText,
+                            // Approved Ritual direction: the ask breaks on
+                            // meaning into two lines ("Ask from" / "your
+                            // heart.") rather than wrapping mid-phrase — the
+                            // crescendo across the ritual is one line, then
+                            // two, then three. `BoxFit.scaleDown` only ever
+                            // shrinks the pair to fit the bounded ritual
+                            // content area (e.g. at very large accessibility
+                            // text scales) — it never animates a scale-in,
+                            // so the ask still fades in flat, matching every
+                            // other ritual beat.
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Column(
+                                key: const ValueKey('ritual-ask-text'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Ask from',
+                                    textAlign: TextAlign.center,
+                                    style: _homeWisdomStyle(
+                                      textSize,
+                                      color: finalColor,
+                                      glow: true,
+                                    ),
+                                  ),
+                                  Text(
+                                    'your heart.',
+                                    textAlign: TextAlign.center,
+                                    style: _homeWisdomStyle(
+                                      textSize,
+                                      color: finalColor,
+                                      glow: true,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         )
                       : FittedBox(
@@ -452,35 +488,46 @@ class _HomePauseFeelText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Approved Ritual direction: "Pause." holds its own axis and does not
+    // move — it recedes toward ~26% value as "Feel." arrives beneath it, at
+    // full value, 34pt below. No slot is reserved for "Feel." before it
+    // appears — the beat is added by descent, not by revealing a hidden
+    // second half of a pre-laid-out line.
     return FittedBox(
       fit: BoxFit.scaleDown,
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            "Pause.",
-            textAlign: TextAlign.center,
-            style: _homeWisdomStyle(
-              textSize,
-              color: color,
-              glow: true,
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 1250),
+            curve: Curves.easeOutCubic,
+            opacity: 1.0 - (pauseFeelOpacity * 0.74),
+            child: Text(
+              "Pause.",
+              textAlign: TextAlign.center,
+              style: _homeWisdomStyle(
+                textSize,
+                color: color,
+                glow: true,
+              ),
             ),
           ),
-          const SizedBox(width: 28),
           AnimatedOpacity(
             duration: const Duration(
               milliseconds: 1250,
             ),
             curve: Curves.easeOutCubic,
             opacity: pauseFeelOpacity,
-            child: Text(
-              "Feel.",
-              textAlign: TextAlign.center,
-              style: _homeWisdomStyle(
-                textSize,
-                color: color,
-                glow: true,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 34),
+              child: Text(
+                "Feel.",
+                textAlign: TextAlign.center,
+                style: _homeWisdomStyle(
+                  textSize,
+                  color: color,
+                  glow: true,
+                ),
               ),
             ),
           ),

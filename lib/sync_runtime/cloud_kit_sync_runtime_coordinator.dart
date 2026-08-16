@@ -103,9 +103,13 @@ library;
 
 import 'dart:async';
 
+import '../sync_deletion/cloud_kit_remote_deletion_runner.dart';
+import '../sync_deletion/local_deletion_finalizer.dart';
+import '../sync_deletion/remote_deletion_run_result.dart';
 import '../sync_integration/incoming_kept_sync_coordinator.dart';
 import '../sync_integration/kept_sync_bootstrap_coordinator.dart';
 import '../sync_integration/kept_sync_integration_coordinator.dart';
+import '../sync_integration/local_sync_intent_store.dart';
 import '../sync_orchestration/sync_orchestrator.dart';
 import '../sync_orchestration/sync_pass_result.dart';
 import '../sync_persistence/sync_persistence_store.dart';
@@ -152,6 +156,28 @@ enum SyncRuntimeTrigger {
   /// wiring in `app_services.dart`.
   explicitAssociation,
 
+  /// Build 26 Phase 5 (final slice): the user just explicitly confirmed the
+  /// "Remove from iCloud?" prompt (Settings) and
+  /// [SyncPersistenceStore.beginDeletionTransaction] durably started or
+  /// resumed a deletion transaction for the currently associated account.
+  /// Fired exactly once per confirmed tap, from the same fire-and-forget,
+  /// error-contained shape [explicitAssociation] already uses -- never
+  /// awaited to full pipeline completion by the caller, and never
+  /// special-cased by any retry/account/bootstrap/epoch/coalescing decision,
+  /// exactly like every other trigger (see
+  /// `test/sync_runtime/sync_runtime_layering_test.dart`'s structural proof
+  /// for [localMutation]/[explicitAssociation], which applies identically
+  /// here). This trigger changes nothing about how a pending deletion
+  /// transaction is actually driven forward -- `CloudKitRemoteDeletionRunner
+  /// .run` already runs unconditionally as this coordinator's own first step
+  /// for every trigger (see the library doc comment's pipeline description);
+  /// this value exists only so the nudge that follows a fresh "Remove from
+  /// iCloud" confirmation is named for what it is, rather than reusing an
+  /// unrelated trigger's name. The Settings screen never calls [requestSync]
+  /// itself -- see `lib/controllers/icloud_removal_controller.dart` and its
+  /// wiring in `app_services.dart`.
+  explicitDeletion,
+
   /// A trigger arrived while a pass was already active and was coalesced
   /// into the single guaranteed follow-up pass -- see [requestSync].
   coalescedFollowUp,
@@ -179,6 +205,83 @@ enum SyncRuntimeOutcome {
   /// restricted, or otherwise unavailable) -- not a bug to retry away on a
   /// timer; wait for a foreground/startup/account-change trigger instead.
   waitingForAccountAvailability,
+
+  /// Build 26 Phase 5 (slice 1): a durable "Remove from iCloud" deletion
+  /// transaction is currently in progress on this device -- see
+  /// `SyncPersistenceStore.loadPendingDeletionTransaction`. Neither
+  /// [KeptSyncBootstrapCoordinator.runBootstrap] nor
+  /// [SyncOrchestrator.runSyncPass] is called at all this pass, for any
+  /// trigger, so stale local data can never be silently bootstrapped or
+  /// uploaded back into CloudKit while a deletion is pending. Never
+  /// automatically retried by a timer -- resolving this requires a future
+  /// Phase 5 slice's own deletion runner, not a blind retry of normal sync.
+  ///
+  /// Build 26 Phase 5 (slice 3): this value is no longer ever produced by
+  /// [_runOnce] itself -- [CloudKitRemoteDeletionRunner.run] is now called
+  /// unconditionally as this pass's own first step (see the library doc
+  /// comment's updated pipeline description) and always returns a more
+  /// specific [RemoteDeletionRunOutcome], which this coordinator maps to
+  /// one of [deletionRecoveryProgressed], [deletionCompleted],
+  /// [terminalFailure], [retryableFailure],
+  /// [waitingForAccountAvailability], or [deletionStateCorrupted] instead.
+  /// Retained, unreachable from this file's own logic, only for
+  /// source-compatibility with any other reader of this enum.
+  deletionPending,
+
+  /// Build 26 Phase 5 (slice 1, safety correction): the durable deletion-
+  /// transaction record could not be safely read/decoded/validated (see
+  /// `PendingDeletionTransaction.tryDecode` and
+  /// `SyncPersistenceEnvelope.decode`'s fail-closed contracts -- both throw
+  /// rather than silently returning "no transaction" for a malformed-but-
+  /// present record). Deliberately distinct from [retryableFailure]: a blind
+  /// timer retry can never repair a corrupted persisted record, so -- exactly
+  /// as [BootstrapRunStatus.corruptedBucketState] is already classified as
+  /// [terminalFailure] rather than [retryableFailure] for the sibling
+  /// account-bucket case -- this is never automatically retried by a timer
+  /// either. Neither [KeptSyncBootstrapCoordinator.runBootstrap] nor
+  /// [SyncOrchestrator.runSyncPass] is called at all this pass: the read is
+  /// attempted strictly before Step 1, so a malformed deletion record can
+  /// never be misread as "no deletion pending; normal sync may continue."
+  ///
+  /// Build 26 Phase 5 (slice 3): this outcome remains reachable -- it is
+  /// still returned whenever [CloudKitRemoteDeletionRunner.run] itself
+  /// reports [RemoteDeletionRunOutcome.deletionStateCorrupted] (that
+  /// runner's own internal read of the exact same durable record, wrapped
+  /// in the exact same fail-closed try/catch discipline this coordinator
+  /// used to perform directly -- see the library doc comment's updated
+  /// pipeline description).
+  deletionStateCorrupted,
+
+  /// Build 26 Phase 5 (slice 3): [CloudKitRemoteDeletionRunner.run] made
+  /// forward progress on a pending deletion transaction (advanced a durable
+  /// stage, or completed a purge/verification pass that still needs
+  /// another) but has not yet reached
+  /// [DeletionTransactionStage.localFinalizePending] -- mirrors
+  /// [RemoteDeletionRunOutcome.progressed]. Neither
+  /// [KeptSyncBootstrapCoordinator.runBootstrap] nor
+  /// [SyncOrchestrator.runSyncPass] is called at all this pass. Scheduled
+  /// for exactly one bounded-backoff automatic retry, the same as
+  /// [retryableFailure] -- [CloudKitRemoteDeletionRunner.run]'s own doc
+  /// comment documents this outcome as "safe, and expected, to call run()
+  /// again," which is precisely the automatic-retry contract this
+  /// coordinator already provides for genuinely transient failures.
+  deletionRecoveryProgressed,
+
+  /// Build 26 Phase 5 (slice 3): [LocalDeletionFinalizer.finalize] durably
+  /// completed this device's local detach for a deletion transaction that
+  /// had reached [DeletionTransactionStage.localFinalizePending] -- the
+  /// pending deletion transaction, the target account's [AccountSyncState]
+  /// bucket, and (if it still named the target) the associated-account
+  /// marker are all now gone; local Kept/Reflection content is completely
+  /// untouched. Deliberately does **not** fall through to Step 1 in the
+  /// same pass -- see [LocalDeletionFinalizer]'s own doc comment's "No
+  /// silent reassociation" guarantee. A later, independent runtime trigger
+  /// evaluates normal association state on its own, through the existing,
+  /// unmodified [KeptSyncBootstrapCoordinator.runBootstrap] association
+  /// rules -- exactly like a brand-new device would. Resets retry state,
+  /// the same as [completed]: this is a successful, non-erroring pass
+  /// outcome.
+  deletionCompleted,
 }
 
 /// A privacy-safe, immutable snapshot of this coordinator's current state.
@@ -256,16 +359,37 @@ final class CloudKitSyncRuntimeCoordinator {
     required IncomingKeptSyncCoordinator incomingCoordinator,
     required SyncOrchestrator orchestrator,
     required SyncPersistenceStore syncPersistenceStore,
+    required LocalSyncIntentStore localSyncIntentStore,
     required CloudKitPlatformBridge bridge,
     SyncRetryScheduler? scheduler,
     Duration Function(int attempt)? backoffForAttempt,
+    CloudKitRemoteDeletionRunner? deletionRunner,
+    LocalDeletionFinalizer? deletionFinalizer,
   })  : _bootstrapCoordinator = bootstrapCoordinator,
         _integrationCoordinator = integrationCoordinator,
         _incomingCoordinator = incomingCoordinator,
         _orchestrator = orchestrator,
         _syncPersistenceStore = syncPersistenceStore,
         _scheduler = scheduler ?? const TimerSyncRetryScheduler(),
-        _backoffForAttempt = backoffForAttempt ?? defaultBackoffForAttempt {
+        _backoffForAttempt = backoffForAttempt ?? defaultBackoffForAttempt,
+        // Build 26 Phase 5 (slice 3): defaulted here, not left to a bare
+        // no-arg constructor call inside `_runOnce`, so a test (or a future
+        // caller) can always inject a fully-controlled fake instead --
+        // mirrors `_scheduler`'s own `?? const TimerSyncRetryScheduler()`
+        // precedent exactly. Both defaults are built from this same
+        // constructor's own `bridge`/`syncPersistenceStore`/
+        // `localSyncIntentStore` params -- never a second, uncoordinated
+        // instance of either dependency.
+        _deletionRunner = deletionRunner ??
+            CloudKitRemoteDeletionRunner(
+              bridge: bridge,
+              persistenceStore: syncPersistenceStore,
+            ),
+        _deletionFinalizer = deletionFinalizer ??
+            LocalDeletionFinalizer(
+              syncPersistenceStore: syncPersistenceStore,
+              localSyncIntentStore: localSyncIntentStore,
+            ) {
     _accountChangeSubscription =
         bridge.accountChangeEvents.listen(_onAccountChanged);
   }
@@ -294,6 +418,8 @@ final class CloudKitSyncRuntimeCoordinator {
   final SyncPersistenceStore _syncPersistenceStore;
   final SyncRetryScheduler _scheduler;
   final Duration Function(int attempt) _backoffForAttempt;
+  final CloudKitRemoteDeletionRunner _deletionRunner;
+  final LocalDeletionFinalizer _deletionFinalizer;
 
   late final StreamSubscription<CloudKitAccountChangeEvent>
       _accountChangeSubscription;
@@ -368,6 +494,86 @@ final class CloudKitSyncRuntimeCoordinator {
   /// other transient failure, rather than escaping uncontained.
   Future<void> _runOnce(SyncRuntimeTrigger trigger) async {
     try {
+      // Build 26 Phase 5 (slice 3): the one, centralized guard for every
+      // trigger this coordinator ever handles. `CloudKitRemoteDeletionRunner
+      // .run` is called unconditionally, strictly before Step 1, for every
+      // trigger -- it never throws (see its own doc comment) and already
+      // internally performs its own fail-closed read of the exact same
+      // durable deletion-transaction record this coordinator used to read
+      // directly in Slice 1/2, reporting a corrupted record as
+      // [RemoteDeletionRunOutcome.deletionStateCorrupted] rather than
+      // throwing. Neither [KeptSyncBootstrapCoordinator.runBootstrap] nor
+      // [SyncOrchestrator.runSyncPass] is ever called in the same pass as
+      // any outcome below other than [RemoteDeletionRunOutcome
+      // .noPendingTransaction] -- see each case's own comment.
+      final deletionRunResult = await _deletionRunner.run();
+      switch (deletionRunResult.outcome) {
+        case RemoteDeletionRunOutcome.noPendingTransaction:
+          // Nothing pending -- fall through to the normal Step 1+ pipeline
+          // below, unchanged from every prior phase.
+          break;
+        case RemoteDeletionRunOutcome.deletionStateCorrupted:
+          _finishPass(SyncRuntimeOutcome.deletionStateCorrupted);
+          return;
+        case RemoteDeletionRunOutcome.waitingForAccount:
+          _finishPass(SyncRuntimeOutcome.waitingForAccountAvailability);
+          return;
+        case RemoteDeletionRunOutcome.accountMismatch:
+        case RemoteDeletionRunOutcome.terminalFailure:
+        case RemoteDeletionRunOutcome.epochConflict:
+          _finishPass(SyncRuntimeOutcome.terminalFailure);
+          return;
+        case RemoteDeletionRunOutcome.retryableFailure:
+          _finishPass(SyncRuntimeOutcome.retryableFailure);
+          return;
+        case RemoteDeletionRunOutcome.progressed:
+          _finishPass(SyncRuntimeOutcome.deletionRecoveryProgressed);
+          return;
+        case RemoteDeletionRunOutcome.reachedLocalFinalizePending:
+        case RemoteDeletionRunOutcome.alreadyAtLocalFinalizePending:
+          // Build 26 Phase 5 (slice 3): the transaction is durably at
+          // `localFinalizePending` -- local finalize is this same pass's
+          // job now, never a separate trigger's. Whatever the finalizer
+          // reports, this pass returns immediately afterward: it never
+          // falls through to Step 1 in the same invocation, even on
+          // success -- see `LocalDeletionFinalizer`'s own "No silent
+          // reassociation" doc-comment section and
+          // `SyncRuntimeOutcome.deletionCompleted`'s own doc comment.
+          final finalizeResult = await _deletionFinalizer.finalize();
+          switch (finalizeResult.outcome) {
+            case LocalDeletionFinalizeOutcome.finalized:
+              _finishPass(SyncRuntimeOutcome.deletionCompleted);
+            case LocalDeletionFinalizeOutcome.noPendingTransaction:
+            case LocalDeletionFinalizeOutcome.notYetAtLocalFinalizeStage:
+              // Should not happen -- the outer switch already confirmed the
+              // transaction is durably at `localFinalizePending` moments
+              // ago. If durable state genuinely shifted out from under this
+              // pass between that read and this call, fail safely as a
+              // retryable failure (a future trigger re-reads fresh state)
+              // rather than guessing or falling through to normal sync.
+              _finishPass(SyncRuntimeOutcome.retryableFailure);
+            case LocalDeletionFinalizeOutcome.accountMismatch:
+              // Build 26 Phase 5 (slice 3, safety repair): the durable
+              // associated-account marker names a different account than
+              // this transaction's own target -- classified exactly like
+              // `RemoteDeletionRunOutcome.accountMismatch` above (line 499):
+              // a real state change (the signed-in iCloud account) is
+              // required before this can resolve, so this is never
+              // automatically retried by a timer.
+              _finishPass(SyncRuntimeOutcome.terminalFailure);
+            case LocalDeletionFinalizeOutcome.verificationFailed:
+              // Build 26 Phase 5 (slice 3, safety repair): the hard runtime
+              // verification gate found residual state (or a verification
+              // read itself threw) after cleanup -- the deletion
+              // transaction was left durable and untouched. Every cleanup
+              // step the finalizer performs is independently idempotent, so
+              // a blind retry from a future trigger is the correct, safe
+              // recovery here.
+              _finishPass(SyncRuntimeOutcome.retryableFailure);
+          }
+          return;
+      }
+
       // Step 1 -- bootstrap. Never reimplements evaluateAssociation/
       // authorizeAssociation/repairLegacyAssociationMarker -- runBootstrap
       // already performs that complete, already-audited decision.
@@ -522,17 +728,36 @@ final class CloudKitSyncRuntimeCoordinator {
     _lastOutcome = outcome;
     switch (outcome) {
       case SyncRuntimeOutcome.completed:
+      case SyncRuntimeOutcome.deletionCompleted:
+        // Build 26 Phase 5 (slice 3): `deletionCompleted` is a successful,
+        // non-erroring pass outcome exactly like `completed` -- resets
+        // retry state the same way. See its own doc comment.
         _resetRetry();
       case SyncRuntimeOutcome.retryableFailure:
+      case SyncRuntimeOutcome.deletionRecoveryProgressed:
+        // Build 26 Phase 5 (slice 3): `deletionRecoveryProgressed` schedules
+        // the same bounded-backoff automatic retry as `retryableFailure` --
+        // `CloudKitRemoteDeletionRunner.run`'s own doc comment documents
+        // this outcome as "safe, and expected, to call run() again." See
+        // its own doc comment.
         _scheduleRetry();
       case SyncRuntimeOutcome.terminalFailure:
       case SyncRuntimeOutcome.waitingForAccountAvailability:
+      case SyncRuntimeOutcome.deletionPending:
+      case SyncRuntimeOutcome.deletionStateCorrupted:
         // No automatic timer. Any stale pending retry from a prior pass no
         // longer applies -- this pass's own outcome is now authoritative.
         // The retry *attempt count* is deliberately left untouched here
-        // (only a fully `completed` pass resets it, and only a
-        // `retryableFailure` pass advances it) so an unrelated terminal/
-        // waiting outcome can never silently reset backoff progress.
+        // (only a fully `completed`/`deletionCompleted` pass resets it, and
+        // only a `retryableFailure`/`deletionRecoveryProgressed` pass
+        // advances it) so an unrelated terminal/waiting/deletion-pending/
+        // deletion-corrupted outcome can never silently reset backoff
+        // progress. `deletionStateCorrupted` in particular must behave
+        // exactly like the other fail-closed, never-auto-retried outcomes
+        // here -- a blind timer retry can never repair a corrupted
+        // persisted record (see its own doc comment). `deletionPending`
+        // itself is never actually produced by [_runOnce] anymore (see its
+        // own doc comment) but remains grouped here for exhaustiveness.
         _cancelPendingRetry();
     }
   }

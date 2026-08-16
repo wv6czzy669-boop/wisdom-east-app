@@ -20,8 +20,10 @@ import '../sync/sync_change.dart';
 
 import 'account_sync_state.dart';
 import 'associated_account_fingerprint_commit.dart';
+import 'deletion_transaction_result.dart';
 import 'incoming_batch_checkpoint.dart';
 import 'outbox_mutation_retirement.dart';
+import 'pending_deletion_transaction.dart';
 import 'persisted_outbox_mutation.dart';
 
 /// Thrown by [SyncPersistenceStore] implementations on any failure to load,
@@ -305,6 +307,22 @@ abstract interface class SyncPersistenceStore {
     required String? expectedCurrent,
   });
 
+  /// Build 26 Phase 5 (slice 3): atomically compare-and-swap *clears* the
+  /// device's durably associated account fingerprint marker to `null`, but
+  /// only if the marker's current value exactly equals [expectedCurrent].
+  /// Never clears, overwrites, or retargets a marker that currently names a
+  /// *different*, non-null fingerprint than [expectedCurrent] -- fail-closed,
+  /// mirroring [commitAssociatedAccountFingerprint]'s own compare-and-swap
+  /// discipline exactly, just for the clearing direction. A marker already
+  /// `null` is an idempotent no-op repeat -- no envelope write occurs. Never
+  /// touches any [AccountSyncState] bucket. See
+  /// `associated_account_fingerprint_commit.dart` for the full typed result
+  /// contract.
+  Future<ClearAssociatedAccountFingerprintResult>
+      clearAssociatedAccountFingerprintIfCurrent({
+    required String expectedCurrent,
+  });
+
   /// Build 26 Phase 4E-4: returns every active (never quarantined) account
   /// fingerprint whose [AccountSyncState.bootstrapState] is not
   /// [AccountBootstrapState.notStarted] -- every "meaningful" legacy
@@ -315,4 +333,71 @@ abstract interface class SyncPersistenceStore {
   /// are opaque values only -- nothing about this method's return value is
   /// ever logged.
   Future<List<String>> loadMeaningfulAccountFingerprints();
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 5 (slice 1): the durable "Remove from iCloud" deletion
+  // transaction. See `pending_deletion_transaction.dart`'s own library doc
+  // comment for the full stage/identity/epoch contract. None of these three
+  // methods performs any CloudKit operation, Kept/Reflection mutation, or
+  // account-sync-state (`AccountSyncState`) mutation of any kind -- they
+  // only read or atomically replace this one, separate, narrow piece of
+  // durable state. A future Phase 5 slice implements the actual runner that
+  // drives a transaction through its stages and eventually calls
+  // [clearDeletionTransaction].
+  // ---------------------------------------------------------------------
+
+  /// Returns the durable deletion transaction currently in progress, or
+  /// `null` if none is. A pure read -- never creates, infers, or repairs a
+  /// value.
+  Future<PendingDeletionTransaction?> loadPendingDeletionTransaction();
+
+  /// Begins (or idempotently resumes) a deletion transaction for
+  /// [accountFingerprint].
+  ///
+  /// - If no transaction currently exists, one is freshly created at
+  ///   [DeletionTransactionStage.prepared], capturing
+  ///   [PendingDeletionTransaction.originalDataEpoch] from whatever
+  ///   [AccountSyncState] bucket currently exists for [accountFingerprint]
+  ///   (`null` if none does) and generating
+  ///   [PendingDeletionTransaction.replacementDataEpoch] fresh, exactly
+  ///   once -- [BeginDeletionTransactionStatus.started].
+  /// - If a transaction already exists for exactly [accountFingerprint], it
+  ///   is returned completely unchanged -- never re-created, never given a
+  ///   new epoch, never reset to [DeletionTransactionStage.prepared] --
+  ///   [BeginDeletionTransactionStatus.resumedExisting].
+  /// - If a transaction already exists for a *different* fingerprint, this
+  ///   call is refused with zero mutation --
+  ///   [BeginDeletionTransactionStatus.accountMismatch]. A deletion
+  ///   transaction is never silently retargeted to a different account.
+  /// - If [accountFingerprint] does not look like an opaque account
+  ///   fingerprint, this call is refused with zero mutation --
+  ///   [BeginDeletionTransactionStatus.invalidFingerprint].
+  Future<BeginDeletionTransactionResult> beginDeletionTransaction({
+    required String accountFingerprint,
+  });
+
+  /// Atomically compare-and-swap advances the current deletion
+  /// transaction's stage from [expectedCurrentStage] to [nextStage], but
+  /// only if a transaction currently exists, it targets exactly
+  /// [accountFingerprint], its current stage matches [expectedCurrentStage]
+  /// exactly (or already equals [nextStage] -- an idempotent no-op repeat),
+  /// and `expectedCurrentStage -> nextStage` is itself a valid transition
+  /// (see `isValidDeletionTransactionTransition`). Every failure mode is a
+  /// typed, non-thrown [AdvanceDeletionTransactionStatus] -- never a thrown
+  /// exception, and never a mutation on any failure path.
+  Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
+    required String accountFingerprint,
+    required DeletionTransactionStage expectedCurrentStage,
+    required DeletionTransactionStage nextStage,
+  });
+
+  /// Atomically and permanently removes the current deletion transaction,
+  /// but only if one currently exists and targets exactly
+  /// [accountFingerprint] -- a safe no-op otherwise (no transaction, or a
+  /// transaction for a different account). Never called by this slice's own
+  /// code; exists for a future runner to call only after every stage has
+  /// been durably driven to completion.
+  Future<void> clearDeletionTransaction({
+    required String accountFingerprint,
+  });
 }

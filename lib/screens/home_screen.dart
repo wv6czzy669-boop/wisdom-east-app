@@ -8,12 +8,15 @@ import '../controllers/latest_request_guard.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
+import '../services/analytics_service.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
 import '../services/kept_discovery_hint_service.dart';
+import '../services/rating_request_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/storage_service.dart';
+import '../services/widget_snapshot_service.dart';
 import '../services/wisdom_notification_service.dart';
 import '../services/wisdom_selector.dart';
 import '../services/wisdom_share_service.dart';
@@ -39,6 +42,9 @@ class HomeScreen extends StatefulWidget {
     this.wisdomShareService,
     this.wisdomNotificationService,
     this.keptDiscoveryHintService,
+    this.ratingRequestService,
+    this.analyticsService,
+    this.widgetSnapshotService,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
     this.dailyWisdomStatusTimeout =
         DailyWisdomAccessService.defaultStatusTimeout,
@@ -51,6 +57,9 @@ class HomeScreen extends StatefulWidget {
   final WisdomShareHandler? wisdomShareService;
   final WisdomNotificationService? wisdomNotificationService;
   final KeptDiscoveryHintService? keptDiscoveryHintService;
+  final RatingRequestService? ratingRequestService;
+  final AnalyticsService? analyticsService;
+  final WidgetSnapshotService? widgetSnapshotService;
   final Duration dailyWisdomOperationTimeout;
   final Duration dailyWisdomStatusTimeout;
 
@@ -273,6 +282,9 @@ class _HomeScreenState extends State<HomeScreen>
   late final WisdomShareHandler wisdomShareService;
   late final WisdomNotificationService wisdomNotificationService;
   late final KeptDiscoveryHintService keptDiscoveryHintService;
+  late final RatingRequestService ratingRequestService;
+  late final AnalyticsService analyticsService;
+  late final WidgetSnapshotService widgetSnapshotService;
   final GlobalKey _wisdomShareOriginKey = GlobalKey();
   Timer? _notificationPermissionOfferTimer;
 
@@ -321,6 +333,11 @@ class _HomeScreenState extends State<HomeScreen>
         app_services.wisdomNotificationService;
     keptDiscoveryHintService = widget.keptDiscoveryHintService ??
         app_services.keptDiscoveryHintService;
+    ratingRequestService =
+        widget.ratingRequestService ?? app_services.ratingRequestService;
+    analyticsService = widget.analyticsService ?? app_services.analyticsService;
+    widgetSnapshotService =
+        widget.widgetSnapshotService ?? app_services.widgetSnapshotService;
 
     pulseController = AnimationController(
       vsync: this,
@@ -434,6 +451,13 @@ class _HomeScreenState extends State<HomeScreen>
   bool get onHeartScreen => ritualFlowController.isHeartScreen(screenStep);
   bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
   bool get onLockedCountdown => screenStep == 5;
+
+  // Approved Ritual direction: the hamburger + two-circle chrome is absent
+  // for every ritual beat (entrance through the ask) and returns only once
+  // the wisdom is revealed (or the locked countdown, which is the same
+  // settled, already-resolved state as the wisdom having been revealed
+  // earlier today) — never before.
+  bool get _chromeVisible => wisdomRevealed || onLockedCountdown;
   bool get mainRitualActionSemanticsEnabled {
     if (navigationInProgress || transitionInProgress || _transitionLock) {
       return false;
@@ -486,6 +510,31 @@ class _HomeScreenState extends State<HomeScreen>
     await loadKeeperStatus();
     await updateNextWisdomMessage();
     await synchronizeUnlockNotification();
+    _maybeRequestAppRating();
+  }
+
+  // EAST. Phase 6 — App Store rating request.
+  //
+  // Deliberately gated on the idle `screenStep == 0` state alone (never on
+  // `wisdomRevealed`/screen 4, the reveal itself): screen 0 is the one state
+  // that is never mid-ritual, mid-reveal, mid-Keep, or mid-Reflection --
+  // both the pre-ritual idle screen and the post-ritual locked-countdown
+  // screen sit here (see `updateNextWisdomMessage`'s own reset-to-0 logic).
+  // `screenStep` is in-memory-only and always starts at `0`, so this fires
+  // at the two natural, always-settled entry points -- cold start
+  // (`loadInitialState`) and foreground resume (`_resumeAccessState`) --
+  // and is a safe no-op if the app happens to resume mid-ritual.
+  // `RatingRequestService.maybeRequestReview` itself is the sole source of
+  // truth for eligibility (4th completed ritual) and the "already
+  // attempted" guard, so repeated calls here across rebuilds/resumes never
+  // repeat the native request.
+  void _maybeRequestAppRating() {
+    if (!mounted) return;
+    if (screenStep != 0) return;
+    if (transitionInProgress || _transitionLock || navigationInProgress) {
+      return;
+    }
+    unawaited(ratingRequestService.maybeRequestReview());
   }
 
   Future<void> _reconcileDailyWisdomIdentity() async {
@@ -546,6 +595,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (unlockAt != null) {
       _queueNotificationPermissionOffer(unlockAt);
     }
+    _maybeRequestAppRating();
   }
 
   void showEastSnack(String message) {
@@ -940,6 +990,36 @@ class _HomeScreenState extends State<HomeScreen>
           // Archiving is best-effort and must never hide a persisted wisdom.
         }),
       );
+
+      // EAST. Phase 6: a durably committed, genuinely new reveal is the one
+      // authoritative "ritual successfully completed" moment -- never an
+      // interrupted or still-retrying reveal (those never reach here).
+      // Recording is fire-and-forget local bookkeeping only; the actual
+      // native rating request happens later, at a safe idle moment (see
+      // `_maybeRequestAppRating`), never here mid-reveal.
+      unawaited(ratingRequestService.recordCompletedRitual());
+
+      // EAST. Phase 7: the same authoritative "ritual successfully
+      // completed" moment as the rating-eligibility bookkeeping directly
+      // above. No parameter: `access.text`/`revealId`/`revealedAt` never
+      // travel through this call.
+      analyticsService.ritualCompleted();
+
+      // EAST. Phase 11: the one authoritative "durably committed, genuinely
+      // new reveal" moment the Medium Widget is allowed to mirror -- never
+      // an interrupted or still-retrying reveal (those never reach here,
+      // exactly like the rating/analytics calls directly above). The widget
+      // never selects or reveals wisdom itself; this is the only place that
+      // publishes a fresh occurrence to it.
+      final freshUnlockAt = access.unlockAt;
+      if (freshUnlockAt != null) {
+        unawaited(
+          widgetSnapshotService.publishRevealed(
+            text: access.text,
+            unlockAt: freshUnlockAt,
+          ),
+        );
+      }
     }
 
     unawaited(
@@ -963,8 +1043,36 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final status = await dailyWisdomAccessService.status();
       await wisdomNotificationService.synchronizeWithStatus(status);
+      // EAST. Phase 11: fire-and-forget, like every other widget-snapshot
+      // publish call site -- this must never delay or gate the notification
+      // synchronization (or anything awaiting this method, e.g. the rating
+      // request that follows it at the idle entry points) on a platform
+      // channel round trip. `_synchronizeWidgetSnapshot` never throws (both
+      // `WidgetSnapshotService` methods already fail closed internally).
+      unawaited(_synchronizeWidgetSnapshot(status));
     } catch (_) {
       // Notification synchronization must not affect daily access.
+    }
+  }
+
+  /// EAST. Phase 11: reconciles the Medium Widget's snapshot against the
+  /// current authoritative status -- called only from cold start and
+  /// foreground resume (via [synchronizeUnlockNotification]'s own call
+  /// sites), never from the 60-second countdown timer tick or any other
+  /// per-frame/per-rebuild path. `publishRevealed`/`publishSilence` are
+  /// themselves idempotent (`EastWidgetSnapshotStore` only asks WidgetKit to
+  /// reload when the persisted snapshot actually changes), so a repeated
+  /// reconciliation that finds nothing new is always a safe no-op.
+  Future<void> _synchronizeWidgetSnapshot(DailyWisdomStatus status) async {
+    final unlockAt = status.unlockAt;
+    final lockedText = status.lockedText;
+    if (!status.isReady && lockedText != null && unlockAt != null) {
+      await widgetSnapshotService.publishRevealed(
+        text: lockedText,
+        unlockAt: unlockAt,
+      );
+    } else {
+      await widgetSnapshotService.publishSilence();
     }
   }
 
@@ -2220,7 +2328,7 @@ class _HomeScreenState extends State<HomeScreen>
                   color: Colors.black,
                 ),
               ),
-            if (screenStep != 0) ...[
+            if (_chromeVisible) ...[
               _HomeSettingsMenuControl(onPressed: openSettings),
               _HomeTopNavigation(
                 onObjectsPressed: openObjects,

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../controllers/icloud_removal_controller.dart';
 import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
+import '../services/data_export_service.dart';
 import '../services/purchase_service.dart';
 import '../theme/muted_text_color.dart';
 import 'keeper_screen.dart';
@@ -20,10 +22,13 @@ class SettingsScreen extends StatefulWidget {
     this.urlLauncher,
     this.purchaseService,
     this.cloudKitAssociationController,
+    this.icloudRemovalController,
+    this.dataExportService,
   });
 
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
+  final DataExportService? dataExportService;
 
   /// Build 26 Phase 4G: injectable only for tests -- production always uses
   /// the single [app_services.cloudKitAssociationController] instance (see
@@ -33,6 +38,14 @@ class SettingsScreen extends StatefulWidget {
   /// any composition root has run, and this screen must still mount safely
   /// in that case (see [_cloudKitAssociationController]).
   final SyncAssociationController? cloudKitAssociationController;
+
+  /// Build 26 Phase 5 (final slice): injectable only for tests -- production
+  /// always uses the single [app_services.icloudRemovalController] instance
+  /// (see [_icloudRemovalController]), never a second, disconnected
+  /// controller. Both this field and the production global it falls back to
+  /// are nullable, for the exact same reason
+  /// [cloudKitAssociationController] already is.
+  final ICloudRemovalController? icloudRemovalController;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -44,6 +57,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _reachOutLaunchInProgress = false;
   bool _restoreInProgress = false;
   bool _eastProductionsLaunchInProgress = false;
+  bool _dataExportInProgress = false;
 
   // Build 26 Phase 4G: the explicit one-time iCloud association row. `null`
   // until the first [_refreshSyncAssociationStatus] call resolves --
@@ -53,10 +67,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   SyncAssociationCheckResult? _cloudKitAssociationStatus;
   bool _cloudKitAssociationActionInProgress = false;
 
+  // Build 26 Phase 5 (final slice): the explicit "Remove from iCloud" row.
+  // `null` until the first [_refreshICloudRemovalStatus] call resolves --
+  // rendered as "Nothing to remove."/non-actionable in the meantime, the
+  // same safe fail-closed default [ICloudRemovalController] itself returns
+  // for every unexpected-failure case.
+  ICloudRemovalDisplayStatus? _icloudRemovalStatus;
+  bool _icloudRemovalActionInProgress = false;
+
+  /// `true` only once this screen instance has itself observed the removal
+  /// transition from [ICloudRemovalDisplayStatus.pending] to anything else
+  /// -- never fabricated from a persisted flag, never true merely because no
+  /// transaction happens to be pending. See [_refreshICloudRemovalStatus].
+  bool _icloudRemovalJustCompleted = false;
+
   @override
   void initState() {
     super.initState();
     unawaited(_refreshSyncAssociationStatus());
+    unawaited(_refreshICloudRemovalStatus());
   }
 
   /// `null` whenever neither an injected test controller nor the production
@@ -72,6 +101,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       widget.cloudKitAssociationController ??
       app_services.cloudKitAssociationController;
 
+  /// `null` whenever neither an injected test controller nor the production
+  /// composition-root global (`app_services.icloudRemovalController`) is
+  /// available yet -- mirrors [_cloudKitAssociationController]'s own
+  /// identical reasoning exactly. This screen never touches
+  /// `SyncPersistenceStore`/`CloudKitSyncRuntimeCoordinator` directly, never
+  /// constructs a second, disconnected controller, and never treats a
+  /// missing controller as anything other than "nothing to remove yet" --
+  /// see [_refreshICloudRemovalStatus] and [_beginICloudRemoval].
+  ICloudRemovalController? get _icloudRemovalController =>
+      widget.icloudRemovalController ?? app_services.icloudRemovalController;
+
   // Shared by every Settings divider (see requirement: "all Settings
   // dividers use one shared value"). Derived from the approved muted-text
   // token rather than a duplicated raw RGB literal.
@@ -81,6 +121,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   PurchaseService get _purchaseService =>
       widget.purchaseService ?? app_services.purchaseService;
+
+  /// Export My Data is free for everyone -- this getter never consults
+  /// [_purchaseService]/entitlement state at all, exactly like
+  /// [DataExportService] itself never does.
+  DataExportService get _dataExportService =>
+      widget.dataExportService ?? app_services.dataExportService;
 
   TextStyle eastStyle(
     double size, {
@@ -110,6 +156,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? semanticLabel,
     Key? rowKey,
     Widget? trailing,
+    // Build 26 Phase 6 (approved EAST Settings direction): Restore
+    // Purchases sits as a subordinate row directly under Keeper -- title
+    // only, one tier smaller -- rather than a full-weight row of its own.
+    // Content/semantics/behavior are entirely unchanged; only the title's
+    // own size differs from the standard 21pt.
+    double titleSize = 21,
+    // Approved direction: iCloud Sync's state reads as a ledger entry on
+    // the trailing margin, not a second subtitle line -- every other row
+    // keeps its explanatory subtitle.
+    bool showSubtitle = true,
   }) {
     return Semantics(
       button: true,
@@ -140,16 +196,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Text(
                           title,
-                          style: eastStyle(21),
+                          style: eastStyle(titleSize),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: eastStyle(
-                            15,
-                            color: const Color(0x91FFFFFF),
+                        if (showSubtitle) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: eastStyle(
+                              15,
+                              color: const Color(0x91FFFFFF),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -163,6 +221,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Approved EAST Settings direction: a state marker on the trailing
+  // margin (e.g. iCloud Sync's ENABLED / NOT ENABLED), read like a ledger
+  // entry -- the tracked label tier the rest of the app already uses.
+  Widget _settingsTrailingState(String value) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 96),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerRight,
+        child: Text(
+          value,
+          style: const TextStyle(
+            color: eastMutedTextColor,
+            fontSize: 11,
+            fontWeight: FontWeight.w300,
+            fontFamily: 'CormorantGaramond',
+            letterSpacing: 2.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsGroupDivider() {
+    return Divider(
+      color: _settingsDividerColor,
+      thickness: 0.5,
     );
   }
 
@@ -271,6 +359,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return 'Restore Purchases. Restore what belongs with you.';
+  }
+
+  /// Free for everyone -- no Keeper check of any kind. Generates both
+  /// export files entirely on-device and presents the native Share Sheet;
+  /// a failure here (generation or presentation) shows one quiet, generic
+  /// message and never mutates Kept/Reflection/sync state, which this path
+  /// never writes to in the first place.
+  Future<void> exportDataFromSettings() async {
+    if (_dataExportInProgress || !mounted) return;
+
+    setState(() {
+      _dataExportInProgress = true;
+    });
+
+    bool succeeded;
+    try {
+      succeeded = await _dataExportService.exportAndShare();
+    } catch (_) {
+      succeeded = false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _dataExportInProgress = false;
+        });
+      }
+    }
+
+    if (!mounted || succeeded) return;
+    showSettingsSnack('Your data could not be exported. Please try again.');
+  }
+
+  VoidCallback? get dataExportAction {
+    if (_dataExportInProgress) return null;
+
+    return exportDataFromSettings;
+  }
+
+  String get dataExportSemanticLabel {
+    if (_dataExportInProgress) {
+      return 'Export My Data. Preparing.';
+    }
+
+    return 'Export My Data. Take your Kept wisdoms and Reflections with '
+        'you.';
   }
 
   VoidCallback? get privacyPolicyAction {
@@ -561,6 +693,224 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _refreshSyncAssociationStatus();
   }
 
+  // -----------------------------------------------------------------------
+  // Build 26 Phase 5 (final slice): the explicit "Remove from iCloud" row.
+  //
+  // This screen never constructs CloudKit transport, never knows a
+  // fingerprint, epoch, or record name, never touches persistence files
+  // directly, and never implements any part of the deletion state machine
+  // itself -- every decision is made by [ICloudRemovalController], which
+  // itself only ever calls the existing, already-audited
+  // `SyncPersistenceStore.beginDeletionTransaction` entry point and, on
+  // success, the existing runtime policy owner
+  // (`CloudKitSyncRuntimeCoordinator.requestSync`, via a plain callback --
+  // see `app_services.dart`'s wiring). Every further step -- the epoch
+  // barrier, the remote purge, the remote-empty verification, and the local
+  // finalize/detach -- is driven entirely by the already-implemented and
+  // already-tested Phase 5 slice 2/3 pipeline; nothing here duplicates any
+  // part of it.
+  //
+  // No controller available yet (see [_icloudRemovalController]) is treated
+  // exactly like [ICloudRemovalDisplayStatus.notApplicable] -- the same
+  // safe, non-actionable default the controller itself already returns for
+  // every other unexpected-failure state. This never fabricates a
+  // controller and never touches CloudKit/native code merely because
+  // Settings mounted.
+  //
+  // While a removal is [ICloudRemovalDisplayStatus.pending], tapping the row
+  // never starts a second deletion transaction and never re-shows the
+  // confirmation prompt -- it only re-reads already-durable state (the real
+  // Phase 5 runtime pipeline keeps driving the transaction forward entirely
+  // on its own, independent of whether this screen is even open). This is a
+  // deliberate, calm, explicit "check again," never a silent background
+  // poll -- consistent with this screen's existing discipline of only ever
+  // refreshing state in direct response to something the user did.
+  // -----------------------------------------------------------------------
+
+  String get _icloudRemovalSubtitle {
+    if (_icloudRemovalActionInProgress) return "Starting…";
+    if (_icloudRemovalJustCompleted) return "Removed from iCloud.";
+    switch (_icloudRemovalStatus) {
+      case ICloudRemovalDisplayStatus.pending:
+        return "Removal pending. EAST. will finish when iCloud is available.";
+      case ICloudRemovalDisplayStatus.idle:
+        return "Remove your iCloud copies.";
+      case ICloudRemovalDisplayStatus.notApplicable:
+      case null:
+        return "Nothing to remove.";
+    }
+  }
+
+  String get _icloudRemovalSemanticLabel {
+    if (_icloudRemovalActionInProgress) {
+      return 'Remove from iCloud. Starting.';
+    }
+    return 'Remove from iCloud. $_icloudRemovalSubtitle';
+  }
+
+  /// `null` (disabling the row) whenever an action is already in flight, or
+  /// whenever no controller is available yet or the status is
+  /// [ICloudRemovalDisplayStatus.notApplicable] (nothing to remove and
+  /// nothing pending to check on). Actionable for both
+  /// [ICloudRemovalDisplayStatus.idle] (shows the confirmation prompt) and
+  /// [ICloudRemovalDisplayStatus.pending] (re-reads state only -- see this
+  /// section's own doc comment).
+  VoidCallback? get icloudRemovalAction {
+    if (_icloudRemovalActionInProgress) return null;
+    switch (_icloudRemovalStatus) {
+      case ICloudRemovalDisplayStatus.idle:
+        return _showRemoveFromICloudSheet;
+      case ICloudRemovalDisplayStatus.pending:
+        return () => unawaited(_refreshICloudRemovalStatus());
+      case ICloudRemovalDisplayStatus.notApplicable:
+      case null:
+        return null;
+    }
+  }
+
+  Future<void> _refreshICloudRemovalStatus() async {
+    final controller = _icloudRemovalController;
+    final result = controller == null
+        ? const ICloudRemovalCheckResult(
+            displayStatus: ICloudRemovalDisplayStatus.notApplicable,
+          )
+        : await controller.checkStatus();
+    if (!mounted) return;
+
+    final wasPending =
+        _icloudRemovalStatus == ICloudRemovalDisplayStatus.pending;
+    final isPending =
+        result.displayStatus == ICloudRemovalDisplayStatus.pending;
+
+    setState(() {
+      _icloudRemovalStatus = result.displayStatus;
+      if (wasPending && !isPending) {
+        // This screen instance itself watched the durable transaction go
+        // from pending to gone -- the one, and only, condition under which
+        // the "Removed from iCloud." confirmation is ever shown.
+        _icloudRemovalJustCompleted = true;
+      } else if (isPending) {
+        // Still (or newly) pending -- any previously-shown confirmation is
+        // stale.
+        _icloudRemovalJustCompleted = false;
+      }
+    });
+  }
+
+  Future<void> _showRemoveFromICloudSheet() async {
+    if (_icloudRemovalActionInProgress || !mounted) return;
+
+    // Final UI repair: the duplicate-action guard is set HERE -- before the
+    // confirmation dialog is even shown -- not merely once the user
+    // confirms. `icloudRemovalAction` reads this exact flag, so a second
+    // tap arriving at any point from here through `_beginICloudRemoval`'s
+    // own resolution can never open a second confirmation dialog and can
+    // never start a second attempt of any kind.
+    setState(() {
+      _icloudRemovalActionInProgress = true;
+    });
+
+    // Final UI repair: built via `showGeneralDialog` with a zero
+    // `transitionDuration` rather than the default `showDialog` (which
+    // fades the route out over ~150ms after `Navigator.pop`). Same dialog,
+    // same copy, same Cancel/Remove buttons, same barrier-dismiss behavior
+    // -- the only change is that dismissal is instantaneous, so the prompt
+    // is never still present in the tree while `beginRemoval` is already
+    // running.
+    final confirmed = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black54,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return SafeArea(
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF111111),
+            title: Text(
+              "Remove from iCloud?",
+              style: eastStyle(21),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Your Kept wisdoms and Reflections will remain on this "
+                  "iPhone.",
+                  style: eastStyle(16, color: Colors.white70),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Their iCloud copies will be removed, and iCloud Sync "
+                  "will turn off.",
+                  style: eastStyle(14, color: const Color(0x91FFFFFF)),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text("Cancel", style: eastStyle(16)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text("Remove", style: eastStyle(16)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _beginICloudRemoval();
+      return;
+    }
+
+    // Cancel (or the dialog was dismissed without an explicit choice) --
+    // nothing was started, so a later, genuinely new attempt must remain
+    // possible.
+    if (mounted) {
+      setState(() {
+        _icloudRemovalActionInProgress = false;
+      });
+    }
+  }
+
+  Future<void> _beginICloudRemoval() async {
+    if (!mounted) return;
+
+    // `_icloudRemovalActionInProgress` is already `true` here -- set by
+    // `_showRemoveFromICloudSheet` before the confirmation dialog was ever
+    // shown (see its own comment). This method's only remaining
+    // responsibility for that flag is resetting it once the begin attempt
+    // itself has fully resolved, below.
+    ICloudRemovalBeginOutcome outcome;
+    try {
+      final controller = _icloudRemovalController;
+      outcome = controller == null
+          ? ICloudRemovalBeginOutcome.failed
+          : await controller.beginRemoval();
+    } catch (_) {
+      outcome = ICloudRemovalBeginOutcome.failed;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _icloudRemovalActionInProgress = false;
+    });
+
+    if (outcome == ICloudRemovalBeginOutcome.failed) {
+      showSettingsSnack(
+        "Remove from iCloud could not be started. Please try again.",
+      );
+    }
+
+    await _refreshICloudRemovalStatus();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -610,21 +960,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           color: eastMutedTextColor,
                         ),
                       ),
-                      const SizedBox(height: 28),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
-                      ),
+                      const SizedBox(height: 40),
+
+                      // Group 1 — what you can own: Keeper, with Restore
+                      // Purchases sitting directly beneath it as a
+                      // subordinate, findable row (never a full-weight row
+                      // of its own).
                       settingsItem(
                         rowKey: const ValueKey('settings-keeper-row'),
                         title: "Keeper",
                         subtitle: "Support the circle, keep what stays.",
                         onTap: _openKeeper,
                       ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
-                      ),
+                      const SizedBox(height: 6),
                       settingsItem(
                         rowKey:
                             const ValueKey('settings-restore-purchases-row'),
@@ -632,54 +980,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         subtitle: "Restore what belongs with you.",
                         semanticLabel: restoreSemanticLabel,
                         onTap: restoreAction,
+                        titleSize: 15,
                       ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
-                      ),
+
+                      _settingsGroupDivider(),
+
+                      // Group 2 — what holds your data: iCloud Sync's own
+                      // state reads as a trailing ledger entry rather than a
+                      // second subtitle line.
                       settingsItem(
                         rowKey: const ValueKey('settings-icloud-sync-row'),
                         title: "iCloud Sync",
                         subtitle: _cloudKitSyncSubtitle,
+                        showSubtitle: false,
                         semanticLabel: _cloudKitSyncSemanticLabel,
                         onTap: cloudKitSyncAction,
+                        trailing: _settingsTrailingState(_cloudKitSyncSubtitle),
                       ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
+                      const SizedBox(height: 24),
+                      settingsItem(
+                        rowKey:
+                            const ValueKey('settings-remove-from-icloud-row'),
+                        title: "Remove from iCloud",
+                        subtitle: _icloudRemovalSubtitle,
+                        semanticLabel: _icloudRemovalSemanticLabel,
+                        onTap: icloudRemovalAction,
                       ),
+                      const SizedBox(height: 24),
+                      settingsItem(
+                        rowKey: const ValueKey('settings-export-data-row'),
+                        title: "Export My Data",
+                        subtitle: _dataExportInProgress
+                            ? "Preparing…"
+                            : "Take your Kept wisdoms and Reflections with "
+                                "you.",
+                        semanticLabel: dataExportSemanticLabel,
+                        onTap: dataExportAction,
+                      ),
+
+                      _settingsGroupDivider(),
+
+                      // Group 3 — the world outside: a tight cluster, one
+                      // tier quieter, of everything that leaves EAST.
                       settingsItem(
                         rowKey: const ValueKey('settings-east-productions-row'),
                         title: "EAST. Productions",
                         subtitle: "The world beyond the ritual.",
                         semanticLabel: eastProductionsSemanticLabel,
                         onTap: eastProductionsAction,
+                        titleSize: 17,
                       ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
-                      ),
+                      const SizedBox(height: 10),
                       settingsItem(
                         rowKey: const ValueKey('settings-privacy-policy-row'),
                         title: "Privacy Policy",
                         subtitle: "What stays private.",
                         semanticLabel: privacyPolicySemanticLabel,
                         onTap: privacyPolicyAction,
+                        titleSize: 17,
                       ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
-                      ),
+                      const SizedBox(height: 10),
                       settingsItem(
                         rowKey: const ValueKey('settings-reach-out-row'),
                         title: "Reach Out",
                         subtitle: "For thoughts and questions.",
                         semanticLabel: reachOutSemanticLabel,
                         onTap: reachOutAction,
-                      ),
-                      Divider(
-                        color: _settingsDividerColor,
-                        thickness: 0.5,
+                        titleSize: 17,
                       ),
                     ],
                   ),

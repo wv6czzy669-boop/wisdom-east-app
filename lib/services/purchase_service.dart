@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'analytics_service.dart';
+
 enum PurchaseServiceStatus {
   initial,
   loadingProduct,
@@ -25,6 +27,7 @@ class _OperationWaitTimedOut implements Exception {
 class PurchaseService extends ChangeNotifier {
   PurchaseService({
     Future<bool> Function()? entitlementWriter,
+    AnalyticsService? analyticsService,
     this.purchaseInitiationTimeout = const Duration(seconds: 12),
     this.purchaseResponseTimeout = const Duration(seconds: 45),
     this.restoreInitiationTimeout = const Duration(seconds: 12),
@@ -34,7 +37,8 @@ class PurchaseService extends ChangeNotifier {
     this.productDetailsTimeout = const Duration(seconds: 10),
     this.purchaseOperationRecoveryTimeout = const Duration(seconds: 60),
     this.restoreOperationRecoveryTimeout = const Duration(seconds: 60),
-  }) : _entitlementWriter = entitlementWriter;
+  })  : _entitlementWriter = entitlementWriter,
+        _analyticsService = analyticsService ?? AnalyticsService();
 
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
   // Keep the existing persisted key so current Keeper purchases remain active.
@@ -42,6 +46,7 @@ class PurchaseService extends ChangeNotifier {
 
   final InAppPurchase _iap = InAppPurchase.instance;
   final Future<bool> Function()? _entitlementWriter;
+  final AnalyticsService _analyticsService;
   final Duration purchaseInitiationTimeout;
   final Duration purchaseResponseTimeout;
   final Duration restoreInitiationTimeout;
@@ -327,6 +332,9 @@ class PurchaseService extends ChangeNotifier {
     final currentBuySessionId = ++_buySessionId;
     _purchaseStreamEventSessionId = null;
     _setStatus(PurchaseServiceStatus.purchasing);
+    // EAST. Phase 7: every guard above has passed -- this is the one point
+    // a Keeper purchase attempt genuinely begins.
+    _analyticsService.keeperPurchaseStarted();
 
     final purchaseParam = PurchaseParam(productDetails: _keeperProduct!);
 
@@ -607,6 +615,14 @@ class PurchaseService extends ChangeNotifier {
     if (identical(_restoreStreamSignal, streamSignal)) {
       _restoreStreamSignal = null;
     }
+    // EAST. Phase 7: the one authoritative "this restore attempt finished
+    // and confirmed Keeper" point -- `_startRestoreWindowIfNeeded`'s own
+    // per-session guard ensures this method (and so this call) runs at
+    // most once per restore session. No parameter: no purchase/transaction
+    // identifier travels through this call.
+    if (_currentRestoreMatchedKeeper) {
+      _analyticsService.keeperRestoreCompleted();
+    }
     _setStatus(_currentRestoreMatchedKeeper
         ? PurchaseServiceStatus.restored
         : _keeperProduct == null
@@ -648,12 +664,23 @@ class PurchaseService extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
         final transactionKey = _transactionKey(purchase);
-        var persisted = _persistedTransactions.contains(transactionKey);
+        final alreadyPersisted = _persistedTransactions.contains(transactionKey);
+        var persisted = alreadyPersisted;
         if (!persisted) {
           persisted = await _persistKeeperEntitlement();
           if (persisted) {
             _persistedTransactions.add(transactionKey);
           }
+        }
+        // EAST. Phase 7: fires only the first time this exact transaction
+        // is freshly persisted -- a redelivered/duplicate stream event for
+        // the same transaction (`alreadyPersisted`) never re-fires it. No
+        // parameter: purchase/transaction identifiers never travel through
+        // this call.
+        if (persisted &&
+            !alreadyPersisted &&
+            purchase.status == PurchaseStatus.purchased) {
+          _analyticsService.keeperPurchaseCompleted();
         }
         shouldComplete = persisted;
         _entitlementPersistenceFailed = !persisted;

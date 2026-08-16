@@ -87,6 +87,12 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
       handleModifyPrivateRecords(call: call, result: result)
     case CloudKitSyncBridgeConstants.methodFetchPrivateZoneChanges:
       handleFetchPrivateZoneChanges(call: call, result: result)
+    case CloudKitSyncBridgeConstants.methodFetchSyncStateEpoch:
+      handleFetchSyncStateEpoch(result: result)
+    case CloudKitSyncBridgeConstants.methodListKeptWisdomRecordNames:
+      handleListKeptWisdomRecordNames(result: result)
+    case CloudKitSyncBridgeConstants.methodDeleteKeptWisdomRecords:
+      handleDeleteKeptWisdomRecords(call: call, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -269,6 +275,94 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
       "resetAtMs": envelope.resetAtMs,
       "mutationId": envelope.mutationId,
       "schemaVersion": envelope.schemaVersion,
+    ]
+  }
+
+  // MARK: - Build 26 Phase 5 (slice 2): remote deletion runner transport
+
+  /// Reused across all three Phase 5 handlers below -- the exact same
+  /// explicitly-identified transport container `modifyPrivateRecords`/
+  /// `fetchPrivateZoneChanges` already use, never `container`'s
+  /// `CKContainer.default()`.
+  private func handleFetchSyncStateEpoch(result: @escaping FlutterResult) {
+    let coordinator = CloudKitDeletionTransportCoordinator(
+      database: transportContainer.privateCloudDatabase)
+    coordinator.fetchSyncStateEpoch { transportResult in
+      DispatchQueue.main.async {
+        result(self.syncStateEpochPayload(transportResult))
+      }
+    }
+  }
+
+  private func handleListKeptWisdomRecordNames(result: @escaping FlutterResult) {
+    let coordinator = CloudKitDeletionTransportCoordinator(
+      database: transportContainer.privateCloudDatabase)
+    coordinator.listKeptWisdomRecordNames { transportResult in
+      DispatchQueue.main.async {
+        result(self.recordNamesPayload(transportResult))
+      }
+    }
+  }
+
+  private func handleDeleteKeptWisdomRecords(call: FlutterMethodCall, result: @escaping FlutterResult)
+  {
+    guard let arguments = call.arguments as? [String: Any] else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+    let allowedKeys: Set<String> = ["recordNames"]
+    guard Set(arguments.keys).isSubset(of: allowedKeys) else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+    guard let recordNames = arguments["recordNames"] as? [String] else {
+      result(FlutterError(code: CloudKitErrorClassifier.invalidArguments, message: nil, details: nil))
+      return
+    }
+
+    let coordinator = CloudKitDeletionTransportCoordinator(
+      database: transportContainer.privateCloudDatabase)
+    coordinator.deleteKeptWisdomRecords(recordNames: recordNames) { transportResult in
+      DispatchQueue.main.async {
+        result(self.deleteRecordsPayload(transportResult))
+      }
+    }
+  }
+
+  private func syncStateEpochPayload(
+    _ transportResult: CloudKitDeletionTransportCoordinator.SyncStateEpochResult
+  ) -> [String: Any?] {
+    [
+      "outcome": transportResult.outcome.rawValue,
+      "dataEpoch": transportResult.dataEpoch,
+      "systemFields": transportResult.systemFields,
+      "errorCode": transportResult.errorCode,
+    ]
+  }
+
+  private func recordNamesPayload(
+    _ transportResult: CloudKitDeletionTransportCoordinator.RecordNamesResult
+  ) -> [String: Any?] {
+    [
+      "outcome": transportResult.outcome.rawValue,
+      "recordNames": transportResult.recordNames,
+      "errorCode": transportResult.errorCode,
+    ]
+  }
+
+  private func deleteRecordsPayload(
+    _ transportResult: CloudKitDeletionTransportCoordinator.DeleteResult
+  ) -> [String: Any?] {
+    [
+      "overallStatus": transportResult.overallStatus.rawValue,
+      "outcomes": transportResult.outcomes.map { outcome -> [String: Any?] in
+        [
+          "recordName": outcome.recordName,
+          "success": outcome.success,
+          "errorCode": outcome.errorCode,
+        ]
+      },
+      "errorCode": transportResult.errorCode,
     ]
   }
 

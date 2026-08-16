@@ -11,10 +11,14 @@ import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
 import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
+import 'package:wisdom_app/services/analytics_event.dart';
+import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/kept_discovery_hint_service.dart';
+import 'package:wisdom_app/services/rating_request_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
+import 'package:wisdom_app/services/widget_snapshot_service.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
@@ -168,7 +172,9 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1));
     await tester.pump();
-    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ritual-ask-text')), findsOneWidget);
+    expect(find.text('Ask from'), findsOneWidget);
+    expect(find.text('your heart.'), findsOneWidget);
     expect(_ritualOpacity(tester), 0.0);
     expect(_renderedRitualOpacity(tester), 0.0);
 
@@ -233,29 +239,12 @@ void main() {
 
       expect(find.semantics.byLabel('EAST.'), findsNothing);
 
-      expect(
-          find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-      final settingsNode = tester
-          .getSemantics(find.byKey(const ValueKey('home-settings-control')));
-      expect(
-        settingsNode.getSemanticsData().hasAction(SemanticsAction.tap),
-        isTrue,
-      );
-      expect(
-          find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
-      final objectsNode = tester
-          .getSemantics(find.byKey(const ValueKey('home-objects-control')));
-      expect(
-        objectsNode.getSemanticsData().hasAction(SemanticsAction.tap),
-        isTrue,
-      );
-      expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
-      final keptNode =
-          tester.getSemantics(find.byKey(const ValueKey('home-kept-control')));
-      expect(
-        keptNode.getSemanticsData().hasAction(SemanticsAction.tap),
-        isTrue,
-      );
+      // Approved Ritual direction: the hamburger + two-circle chrome is
+      // absent for every ritual beat (entrance through the ask) — still
+      // true here, mid-Pause.
+      expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
+      expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
+      expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
 
       await _tapCenter(tester);
       await tester.pump(const Duration(milliseconds: 1300));
@@ -292,6 +281,33 @@ void main() {
         isEnabled: Tristate.none,
         hasTap: false,
       );
+
+      // The chrome returns once the wisdom is revealed, each control
+      // exposing a real tap action.
+      expect(
+          find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
+      final settingsNode = tester
+          .getSemantics(find.byKey(const ValueKey('home-settings-control')));
+      expect(
+        settingsNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      expect(
+          find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
+      final objectsNode = tester
+          .getSemantics(find.byKey(const ValueKey('home-objects-control')));
+      expect(
+        objectsNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
+      final keptNode =
+          tester.getSemantics(find.byKey(const ValueKey('home-kept-control')));
+      expect(
+        keptNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+
       await tester.pump(const Duration(milliseconds: 600));
     } finally {
       semantics.dispose();
@@ -551,7 +567,7 @@ void main() {
     await _finishOpeningIntro(tester);
     await _advanceToQuestion(tester);
 
-    final askTextFinder = find.text('Ask from your heart.');
+    final askTextFinder = find.byKey(const ValueKey('ritual-ask-text'));
     expect(askTextFinder, findsOneWidget);
 
     await _tapCenter(tester);
@@ -617,7 +633,7 @@ void main() {
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 101));
 
-    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ritual-ask-text')), findsOneWidget);
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
     final prefsAfterPrepareTimeout = await SharedPreferences.getInstance();
     expect(
@@ -1722,35 +1738,15 @@ void main() {
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 850));
 
-    expect(
-      tester
-          .widget<Positioned>(
-            find.byKey(const ValueKey('top-navigation')),
-          )
-          .top,
-      0,
-    );
-    expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
-    // The ring icons are drawn geometrically (CustomPaint), not from text
-    // glyphs, so a 3x text scale cannot distort or overflow them.
-    final objectsPainterAt3x =
-        _topNavRingPainterByKey(tester, 'objects-top-nav-ring');
-    expect(objectsPainterAt3x.ringCount, 1);
-    expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
-    final keptPainterAt3x =
-        _topNavRingPainterByKey(tester, 'kept-top-nav-ring');
-    expect(keptPainterAt3x.ringCount, 2);
-    // All three top-navigation controls share the same tap-target size so
-    // the restrained hamburger control balances visually with the circles.
-    expect(
-      tester.getSize(find.byKey(const ValueKey('home-objects-control'))),
-      tester.getSize(find.byKey(const ValueKey('home-kept-control'))),
-    );
-    expect(
-      tester.getSize(find.byKey(const ValueKey('home-settings-control'))),
-      tester.getSize(find.byKey(const ValueKey('home-kept-control'))),
-    );
+    // Approved Ritual direction: the hamburger + two-circle chrome is
+    // absent for every ritual beat (entrance through the ask) — still true
+    // here, mid-Pause. The ring-count/tap-size geometry of these controls
+    // is proved once chrome is actually mounted, in "top navigation uses
+    // deliberate ring/bar geometry" above.
+    expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
+    expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 850));
 
@@ -1758,24 +1754,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
     expect(find.text('Pause.'), findsOneWidget);
     expect(find.text('Feel.'), findsOneWidget);
-    expect(tester.widget<Text>(find.text('Pause.')).style?.fontSize, 33);
-    expect(tester.widget<Text>(find.text('Feel.')).style?.fontSize, 33);
+    expect(tester.widget<Text>(find.text('Pause.')).style?.fontSize, 46);
+    expect(tester.widget<Text>(find.text('Feel.')).style?.fontSize, 46);
 
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
     await tester.pump(const Duration(milliseconds: 220));
     await tester.pump(const Duration(milliseconds: 560));
-    expect(find.text('Ask from your heart.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ritual-ask-text')), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
-    final askTextFinder = find.text('Ask from your heart.');
+    final askTextFinder = find.byKey(const ValueKey('ritual-ask-text'));
     final askSizeBeforeFade = tester.getSize(askTextFinder);
-    final askStyleBeforeFade = tester.widget<Text>(askTextFinder).style;
+    final askStyleBeforeFade = tester.widget<Text>(find.text('Ask from')).style;
 
     await _tapCenter(tester);
     await tester.pump();
-    expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(askTextFinder, findsOneWidget);
     expect(
@@ -1785,12 +1781,17 @@ void main() {
       ),
       findsNothing,
     );
+    // Approved Ritual direction: the ask breaks into two lines, which (at
+    // extreme accessibility text scales) needs a static `BoxFit.scaleDown`
+    // to stay overflow-safe — this is never an *animated* scale-in (proved
+    // above by the absence of `AnimatedScale`), so the ask still fades in
+    // flat like every other ritual beat.
     expect(
       find.ancestor(
         of: askTextFinder,
         matching: find.byType(FittedBox),
       ),
-      findsNothing,
+      findsOneWidget,
     );
     expect(_ritualOpacity(tester), 1.0);
     final askFade = tester.widget<FadeTransition>(
@@ -1805,24 +1806,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(askTextFinder, findsOneWidget);
     expect(tester.getSize(askTextFinder), askSizeBeforeFade);
-    final askStyleDuringFade = tester.widget<Text>(askTextFinder).style;
+    final askStyleDuringFade = tester.widget<Text>(find.text('Ask from')).style;
     expect(askStyleDuringFade?.fontSize, askStyleBeforeFade?.fontSize);
     expect(askStyleDuringFade?.height, askStyleBeforeFade?.height);
     expect(askFade.opacity.value, greaterThan(0.0));
     expect(askFade.opacity.value, lessThan(1.0));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
 
+    // Still pre-reveal (fading toward black silence) — chrome stays absent.
     await tester.pump(const Duration(milliseconds: 949));
     expect(find.byKey(const ValueKey('black-silence')), findsNothing);
-    expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
+    expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(
       tester
@@ -1855,7 +1857,7 @@ void main() {
         matching: find.byType(Text),
       ),
     );
-    expect(wisdomText.style?.fontSize, 32);
+    expect(wisdomText.style?.fontSize, 38);
     expect(wisdomText.style?.height, 1.48);
     expect(
       tester
@@ -4728,6 +4730,538 @@ void main() {
 
     await tester.pump(const Duration(seconds: 6));
   });
+
+  // EAST. Phase 6 — App Store rating request wiring.
+  testWidgets(
+      'a genuinely completed ritual is recorded, but the 3rd completion is '
+      'not yet eligible and the daily lock is unaffected', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final platform = _FakeRatingPlatform();
+    final ratingService = RatingRequestService(platform: platform);
+    SharedPreferences.setMockInitialValues({
+      RatingRequestService.completedRitualCountKey: 2,
+    });
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        ratingRequestService: ratingService,
+        // Fresh, per-test instance -- never the shared
+        // `app_services.wisdomNotificationService` singleton (see the
+        // "Fresh, per-test notification service" comment elsewhere in this
+        // file for why that singleton must stay test-local here).
+        wisdomNotificationService: WisdomNotificationService(
+          platform: _HomeNotificationPlatform(enabled: true),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump();
+    await tester.pump();
+
+    expect(platform.requestCount, 0);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt(RatingRequestService.completedRitualCountKey), 3);
+
+    // Daily lock semantics are exactly as before: the same occurrence is
+    // now locked for the rolling 24h window, unaffected by rating bookkeeping.
+    final status = await dailyGraph.service.status();
+    expect(status.isReady, isFalse);
+    expect(
+      status.unlockAt!.millisecondsSinceEpoch,
+      now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+    );
+
+    await _pumpUntilWisdomFullyAppeared(tester);
+    await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets(
+      'an interrupted ritual that never reaches reveal is never recorded',
+      (tester) async {
+    final platform = _FakeRatingPlatform();
+    final ratingService = RatingRequestService(platform: platform);
+    SharedPreferences.setMockInitialValues({
+      RatingRequestService.completedRitualCountKey: 3,
+    });
+
+    await tester.pumpWidget(
+      _homeApp(
+        ratingRequestService: ratingService,
+        wisdomNotificationService: WisdomNotificationService(
+          platform: _HomeNotificationPlatform(enabled: true),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+
+    // Advance only to Pause -- never Ask, never reveal -- then background
+    // and foreground the app, exactly as a user abandoning the ritual mid-
+    // flow would.
+    await _advanceFromLaunchToPause(tester);
+    expect(find.text('Pause.'), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt(RatingRequestService.completedRitualCountKey), 3);
+    expect(platform.requestCount, 0);
+  });
+
+  testWidgets(
+      'the native rating request never fires mid-ritual or during reveal, '
+      'only once settled back at idle -- identically for Keeper and Free, '
+      'and never repeats on later resumes', (tester) async {
+    for (final isKeeper in [false, true]) {
+      // Force disposal of whatever `HomeScreen` State the previous
+      // iteration (or the mid-iteration relaunch below) left mounted. An
+      // unkeyed `pumpWidget` of the same widget type would otherwise just
+      // update that existing State in place -- `initState()` (and every
+      // `late final` service field it assigns) would never re-run, so this
+      // iteration would silently keep operating on the *previous*
+      // iteration's `RatingRequestService`/`DailyAccessTestGraph` instead
+      // of its own fresh ones.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final platform = _FakeRatingPlatform();
+      final ratingService = RatingRequestService(platform: platform);
+      SharedPreferences.setMockInitialValues({
+        RatingRequestService.completedRitualCountKey: 3,
+        if (isKeeper) 'is_premium': true,
+      });
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: dailyGraph,
+          clock: () => now,
+          ratingRequestService: ratingService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+      // Idle at launch, below eligibility (3 completions) -- no request.
+      expect(platform.requestCount, 0);
+
+      await _advanceToQuestion(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      // Mid-ritual (Ask screen) resume: still no request, even though the
+      // upcoming reveal will be the 4th completion.
+      expect(platform.requestCount, 0);
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pump(const Duration(milliseconds: 550));
+      await _pumpUntilWisdomFullyAppeared(tester);
+
+      // The 4th completion is now durably recorded, but the reveal itself
+      // is on screen (never during reveal) -- still no native request.
+      expect(platform.requestCount, 0);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(RatingRequestService.completedRitualCountKey), 4);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      // Resuming while still on the fully-revealed screen: still no
+      // request -- screen 4 is never treated as the settled idle state.
+      expect(platform.requestCount, 0);
+
+      await _pumpUntilWisdomFullyAppeared(tester);
+      await tester.pump(const Duration(seconds: 6));
+
+      // A fresh launch (new HomeScreen instance, same persisted state --
+      // exactly a real app relaunch) starts back at the idle screen. Force
+      // the prior `HomeScreen` State to actually dispose first -- an
+      // unkeyed `pumpWidget` of the same widget type would otherwise just
+      // update the existing State in place, leaving `screenStep` at 4 and
+      // `loadInitialState()` never re-run, which is not what a real
+      // relaunch does. This is the first genuinely settled moment since
+      // eligibility was reached, and both Free and Keeper request
+      // identically here.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      final relaunchService = RatingRequestService(platform: platform);
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: DailyAccessTestGraph(clock: () => now),
+          clock: () => now,
+          ratingRequestService: relaunchService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+      expect(platform.requestCount, 1, reason: 'isKeeper=$isKeeper');
+
+      // Repeated resumes at idle after the request must never repeat it.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(platform.requestCount, 1, reason: 'isKeeper=$isKeeper');
+    }
+
+    // Dispose cleanly so no pending Timer/State leaks into a later test.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets(
+      'a failing native rating request never affects the ritual or app '
+      'usability', (tester) async {
+    final platform = _FakeRatingPlatform()..shouldThrow = true;
+    final ratingService = RatingRequestService(platform: platform);
+    SharedPreferences.setMockInitialValues({
+      RatingRequestService.completedRitualCountKey: 4,
+    });
+
+    await tester.pumpWidget(
+      _homeApp(
+        ratingRequestService: ratingService,
+        wisdomNotificationService: WisdomNotificationService(
+          platform: _HomeNotificationPlatform(enabled: true),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+
+    expect(platform.requestCount, 1);
+    expect(find.text('EAST.'), findsOneWidget);
+
+    // The ritual remains fully usable after the native failure.
+    await _advanceFromLaunchToPause(tester);
+    expect(find.text('Pause.'), findsOneWidget);
+  });
+
+  // EAST. Phase 7 — privacy-safe analytics wiring.
+  testWidgets(
+      'ritual_completed fires exactly once, only after a genuinely '
+      'completed ritual (never for an interrupted one)', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final transport = _FakeAnalyticsTransport();
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        analyticsService: AnalyticsService(transport: transport),
+        wisdomNotificationService: WisdomNotificationService(
+          platform: _HomeNotificationPlatform(enabled: true),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+
+    // Advance only to Pause -- an abandoned ritual -- and confirm nothing
+    // fires.
+    await _advanceFromLaunchToPause(tester);
+    expect(find.text('Pause.'), findsOneWidget);
+    expect(transport.tracked, isEmpty);
+
+    // Now genuinely complete the ritual.
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1300));
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 560));
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 550));
+    await _pumpUntilWisdomFullyAppeared(tester);
+
+    expect(transport.tracked, [AnalyticsEvent.ritualCompleted]);
+
+    await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets(
+      'ritual_completed never fires for an already-locked reveal reopened '
+      'without completing a new ritual', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final transport = _FakeAnalyticsTransport();
+    final prefs = <String, Object>{
+      'daily_wisdom_access': DailyWisdomRecord(
+        text: 'Already revealed wisdom',
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      ).encode(),
+    };
+    SharedPreferences.setMockInitialValues(prefs);
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        analyticsService: AnalyticsService(transport: transport),
+        wisdomNotificationService: WisdomNotificationService(
+          platform: _HomeNotificationPlatform(enabled: true),
+        ),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    expect(find.text('Already revealed wisdom'), findsOneWidget);
+    expect(transport.tracked, isEmpty);
+  });
+
+  // EAST. Phase 11 -- Medium Widget snapshot wiring.
+  group('widget snapshot publication', () {
+    testWidgets(
+        'a genuinely completed ritual publishes the exact revealed text and '
+        'authoritative unlockAt to the widget', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      final widgetService = _RecordingWidgetSnapshotService();
+
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: dailyGraph,
+          clock: () => now,
+          widgetSnapshotService: widgetService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+
+      // Cold-start reconciliation (nothing locked yet) published silence
+      // once already -- reset the log so only the reveal call is asserted
+      // below.
+      widgetService.calls.clear();
+
+      await _advanceFromLaunchToPause(tester);
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1300));
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 560));
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pump(const Duration(milliseconds: 550));
+      await _pumpUntilWisdomFullyAppeared(tester);
+
+      final revealedCalls =
+          widgetService.calls.whereType<_RecordedPublishRevealed>().toList();
+      expect(revealedCalls, hasLength(1));
+
+      final persistedDailyRecord =
+          await dailyGraph.repository.loadDailyWisdomRecord();
+      expect(revealedCalls.single.text, persistedDailyRecord!.text);
+      expect(
+        revealedCalls.single.unlockAt.millisecondsSinceEpoch,
+        now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+      );
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets(
+        'an interrupted ritual that never reaches reveal never publishes to '
+        'the widget', (tester) async {
+      final widgetService = _RecordingWidgetSnapshotService();
+
+      await tester.pumpWidget(
+        _homeApp(
+          widgetSnapshotService: widgetService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+      widgetService.calls.clear();
+
+      await _advanceFromLaunchToPause(tester);
+      expect(find.text('Pause.'), findsOneWidget);
+
+      expect(
+        widgetService.calls.whereType<_RecordedPublishRevealed>(),
+        isEmpty,
+      );
+    });
+
+    testWidgets(
+        'cold start with an already-locked reveal reconciles the widget to '
+        'that exact occurrence, without treating it as a fresh reveal',
+        (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final unlockAt = now.add(const Duration(hours: 24));
+      final prefs = <String, Object>{
+        'daily_wisdom_access': DailyWisdomRecord(
+          text: 'Already revealed wisdom',
+          revealedAt: now,
+          unlockAt: unlockAt,
+        ).encode(),
+      };
+      SharedPreferences.setMockInitialValues(prefs);
+      final widgetService = _RecordingWidgetSnapshotService();
+
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: DailyAccessTestGraph(clock: () => now),
+          clock: () => now,
+          widgetSnapshotService: widgetService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+
+      final revealedCalls =
+          widgetService.calls.whereType<_RecordedPublishRevealed>().toList();
+      expect(revealedCalls, isNotEmpty);
+      expect(revealedCalls.last.text, 'Already revealed wisdom');
+      expect(
+        revealedCalls.last.unlockAt.millisecondsSinceEpoch,
+        unlockAt.millisecondsSinceEpoch,
+      );
+      expect(widgetService.calls.whereType<_RecordedPublishSilence>(), isEmpty);
+    });
+
+    testWidgets(
+        'cold start with nothing locked (ready to reveal) reconciles the '
+        'widget to silence', (tester) async {
+      final widgetService = _RecordingWidgetSnapshotService();
+
+      await tester.pumpWidget(
+        _homeApp(
+          widgetSnapshotService: widgetService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+
+      expect(widgetService.calls, [isA<_RecordedPublishSilence>()]);
+    });
+
+    testWidgets(
+        'a foreground resume re-reconciles the widget against the current '
+        'authoritative status', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      final widgetService = _RecordingWidgetSnapshotService();
+
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: dailyGraph,
+          clock: () => now,
+          widgetSnapshotService: widgetService,
+          wisdomNotificationService: WisdomNotificationService(
+            platform: _HomeNotificationPlatform(enabled: true),
+          ),
+        ),
+      );
+      await _finishOpeningIntro(tester);
+      widgetService.calls.clear();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Still nothing locked -- resume reconciliation republishes silence,
+      // never a fabricated reveal.
+      expect(widgetService.calls, [isA<_RecordedPublishSilence>()]);
+    });
+  });
+}
+
+class _RecordedPublishRevealed {
+  _RecordedPublishRevealed(this.text, this.unlockAt);
+  final String text;
+  final DateTime unlockAt;
+}
+
+class _RecordedPublishSilence {
+  const _RecordedPublishSilence();
+}
+
+/// Records every call instead of crossing a platform channel -- used by
+/// HomeScreen-level tests above to assert exactly when/what Home publishes,
+/// mirroring `_FakeAnalyticsTransport`/`_FakeRatingPlatform`'s role for their
+/// own services. `WidgetSnapshotService`'s own channel contract (argument
+/// shape, UTC conversion, failure containment) is covered directly in
+/// `test/services/widget_snapshot_service_test.dart`.
+class _RecordingWidgetSnapshotService implements WidgetSnapshotService {
+  final List<Object> calls = [];
+
+  @override
+  Future<void> publishRevealed({
+    required String text,
+    required DateTime unlockAt,
+  }) async {
+    calls.add(_RecordedPublishRevealed(text, unlockAt));
+  }
+
+  @override
+  Future<void> publishSilence() async {
+    calls.add(const _RecordedPublishSilence());
+  }
+}
+
+class _FakeAnalyticsTransport implements AnalyticsTransport {
+  final List<AnalyticsEvent> tracked = [];
+
+  @override
+  void track(AnalyticsEvent event) {
+    tracked.add(event);
+  }
+}
+
+class _FakeRatingPlatform implements RatingRequestPlatform {
+  int requestCount = 0;
+  bool shouldThrow = false;
+
+  @override
+  Future<void> requestReview() async {
+    requestCount += 1;
+    if (shouldThrow) {
+      throw StateError('native rating prompt unavailable');
+    }
+  }
 }
 
 void _expectSemanticNode({
@@ -4808,6 +5342,9 @@ Widget _homeApp({
   WisdomShareHandler? wisdomShareService,
   WisdomNotificationService? wisdomNotificationService,
   KeptDiscoveryHintService? keptDiscoveryHintService,
+  RatingRequestService? ratingRequestService,
+  AnalyticsService? analyticsService,
+  WidgetSnapshotService? widgetSnapshotService,
   WisdomClock? clock,
   Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
   Duration dailyWisdomStatusTimeout =
@@ -4845,6 +5382,14 @@ Widget _homeApp({
       // regression test proving this.
       keptDiscoveryHintService:
           keptDiscoveryHintService ?? KeptDiscoveryHintService(),
+      // A fresh instance per call by default, mirroring
+      // `keptDiscoveryHintService` immediately above: `RatingRequestService`
+      // holds the same kind of in-memory "already attempted" guard that
+      // service's own doc comment warns leaks across tests when the
+      // process-wide `app_services` singleton is used instead.
+      ratingRequestService: ratingRequestService ?? RatingRequestService(),
+      analyticsService: analyticsService,
+      widgetSnapshotService: widgetSnapshotService,
       clock: clock,
       dailyWisdomOperationTimeout: dailyWisdomOperationTimeout,
       dailyWisdomStatusTimeout: dailyWisdomStatusTimeout,

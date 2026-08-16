@@ -2,6 +2,7 @@ import '../models/favorite_item.dart';
 import '../models/kept_record.dart';
 import '../repositories/kept_repository.dart';
 import '../sync_integration/kept_sync_integration_coordinator.dart';
+import 'analytics_service.dart';
 
 class SavedReflectionsResult {
   const SavedReflectionsResult({
@@ -61,14 +62,17 @@ class SavedReflectionsService {
   SavedReflectionsService({
     required KeptRepository keptRepository,
     required KeptSyncIntegrationCoordinator syncCoordinator,
+    AnalyticsService? analyticsService,
   })  : _keptRepository = keptRepository,
-        _syncCoordinator = syncCoordinator;
+        _syncCoordinator = syncCoordinator,
+        _analyticsService = analyticsService ?? AnalyticsService();
 
   static const int maximumReflectionLength = KeptRecord.maximumReflectionLength;
   static const int freeReflectionLimit = 3;
 
   final KeptRepository _keptRepository;
   final KeptSyncIntegrationCoordinator _syncCoordinator;
+  final AnalyticsService _analyticsService;
 
   Future<List<FavoriteItem>> load() => _keptRepository.load();
 
@@ -111,6 +115,13 @@ class SavedReflectionsService {
       revealedAt: revealedAt,
       isKeeper: isKeeper,
     );
+    // EAST. Phase 7: a genuinely successful Keep -- never a free-limit
+    // rejection -- and never for the Remove branch above. No parameter:
+    // see AnalyticsService's own doc comment for why none of this method's
+    // arguments (revealId, wisdomText, revealedAt) is ever passed through.
+    if (!result.limitReached) {
+      _analyticsService.keptSaved();
+    }
     return SavedReflectionsResult(
       items: result.items,
       limitReached: result.limitReached,
@@ -129,6 +140,12 @@ class SavedReflectionsService {
       isKeeper: isKeeper,
       reflectedAt: reflectedAt,
     );
+    // EAST. Phase 7: a genuinely successful Reflection save -- never a
+    // free-limit rejection. No parameter: reflection text never travels
+    // through this call.
+    if (!result.limitReached && !result.reflectionLimitReached) {
+      _analyticsService.reflectionSaved();
+    }
     return SavedReflectionsResult(
       items: result.items,
       limitReached: result.limitReached,

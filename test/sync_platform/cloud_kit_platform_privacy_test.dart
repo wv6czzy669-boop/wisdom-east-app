@@ -301,6 +301,15 @@ void main() {
     // file-path exception, never a directory-wide one.
     const runtimeCoordinatorPath =
         'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
+    // Build 26 Phase 5 (slice 2) Exception 4: the remote deletion runner.
+    // Like kept_sync_bootstrap_coordinator.dart (Exception 1) and
+    // cloud_kit_sync_runtime_coordinator.dart (Exception 3), it depends on
+    // abstract sync_platform CONTRACTS only -- never the concrete
+    // method_channel_cloud_kit_platform_bridge.dart adapter, and never
+    // MethodChannelCloudKitPlatformBridge in code. This is an exact
+    // file-path exception, never a directory-wide one.
+    const deletionRunnerPath =
+        'lib/sync_deletion/cloud_kit_remote_deletion_runner.dart';
 
     List<File> dartFilesIn(Directory dir) {
       if (!dir.existsSync()) return const [];
@@ -384,12 +393,14 @@ void main() {
             normalizedPath.endsWith(bootstrapCoordinatorPath);
         final isRuntimeCoordinator =
             normalizedPath.endsWith(runtimeCoordinatorPath);
+        final isDeletionRunner = normalizedPath.endsWith(deletionRunnerPath);
         final isAppServices = normalizedPath.endsWith(appServicesPath);
 
         if (!isPlatformFile &&
             !isOrchestrationFile &&
             !isBootstrapCoordinator &&
             !isRuntimeCoordinator &&
+            !isDeletionRunner &&
             !isAppServices) {
           for (final line in importExportLines(file)) {
             if (line.contains('sync_platform/')) {
@@ -494,6 +505,35 @@ void main() {
       if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
         violations.add(
           '$runtimeCoordinatorPath references '
+          'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
+          'mention would already have been stripped above)',
+        );
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'cloud_kit_remote_deletion_runner.dart never imports the concrete '
+        'method_channel_cloud_kit_platform_bridge.dart adapter and never '
+        'references MethodChannelCloudKitPlatformBridge in code -- it '
+        'depends on abstract sync_platform CONTRACTS only (Build 26 Phase 5 '
+        'slice 2 Exception 4, mirroring kept_sync_bootstrap_coordinator.dart\'s '
+        'own Exception 1)', () {
+      final file = File(deletionRunnerPath);
+      expect(file.existsSync(), isTrue,
+          reason: '$deletionRunnerPath must exist.');
+
+      final violations = <String>[];
+      for (final line in importExportLines(file)) {
+        if (line.contains('sync_platform/') &&
+            line.contains('method_channel_cloud_kit_platform_bridge.dart')) {
+          violations.add('$deletionRunnerPath: "$line"');
+        }
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+        violations.add(
+          '$deletionRunnerPath references '
           'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
           'mention would already have been stripped above)',
         );

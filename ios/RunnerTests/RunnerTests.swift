@@ -2056,4 +2056,478 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(error.code, "path_not_found")
   }
 
+  // MARK: - Build 26 Phase 5 (slice 2): CloudKitDeletionTransportCoordinator
+  // native validation hardening.
+  //
+  // `FakeDeletionTransportDatabase` implements `CloudKitDeletionTransportDatabase`
+  // entirely in-memory and synchronously -- no real CloudKit network call, no
+  // real iCloud account, no real zone -- mirroring `FakeZoneOperationDatabase`/
+  // `FakeRecordTransportDatabase`'s own established convention above.
+  //
+  // One deliberate, disclosed limitation: `CKQueryOperation.Cursor` has no
+  // public initializer anywhere in the CloudKit SDK, so this fake (like every
+  // other CloudKit unit-test fake in this codebase, and in the wider
+  // ecosystem) cannot synthesize a real multi-page cursor continuation. True
+  // multi-page pagination is therefore proven only structurally below
+  // (`testListKeptWisdomRecordNamesRecursesOnNonNilCursor`), not dynamically
+  // -- this is an Apple SDK constraint, not a gap in this fake or in
+  // `CloudKitDeletionTransportCoordinator` itself.
+
+  private final class FakeDeletionTransportDatabase: CloudKitDeletionTransportDatabase {
+    // fetch(withRecordID:) -- fetchSyncStateEpoch
+    var fetchRecordResult: (CKRecord?, Error?) = (nil, CKError(.unknownItem))
+    private(set) var fetchedRecordIDs: [CKRecord.ID] = []
+
+    // CKQueryOperation -- listKeptWisdomRecordNames. A single configured
+    // page: the record names reported via `recordFetchedBlock` before
+    // `queryCompletionBlock` fires with a `nil` cursor (i.e. "last page").
+    var queryPageRecordNames: [String] = []
+    var queryError: Error?
+    private(set) var queryOperationsAdded: [CKQueryOperation] = []
+
+    // CKModifyRecordsOperation(recordIDsToDelete:) -- deleteKeptWisdomRecords
+    var deletedRecordIDsToReport: [CKRecord.ID] = []
+    var deleteCompletionError: Error?
+    private(set) var modifyOperationsAdded: [CKModifyRecordsOperation] = []
+
+    func fetch(
+      withRecordID recordID: CKRecord.ID,
+      completionHandler: @escaping (CKRecord?, Error?) -> Void
+    ) {
+      fetchedRecordIDs.append(recordID)
+      completionHandler(fetchRecordResult.0, fetchRecordResult.1)
+    }
+
+    func add(_ operation: CKDatabaseOperation) {
+      if let queryOperation = operation as? CKQueryOperation {
+        queryOperationsAdded.append(queryOperation)
+        for name in queryPageRecordNames {
+          let recordID = CKRecord.ID(recordName: name, zoneID: CloudKitRecordIdentity.zoneID)
+          let record = CKRecord(recordType: CloudKitRecordSchema.keptWisdomRecordType, recordID: recordID)
+          queryOperation.recordFetchedBlock?(record)
+        }
+        queryOperation.queryCompletionBlock?(nil, queryError)
+        return
+      }
+      if let modifyOperation = operation as? CKModifyRecordsOperation {
+        modifyOperationsAdded.append(modifyOperation)
+        modifyOperation.modifyRecordsCompletionBlock?(nil, deletedRecordIDsToReport, deleteCompletionError)
+        return
+      }
+    }
+  }
+
+  private let phase5DeletionEpoch = "33333333-3333-4333-8333-333333333333"
+  private let phase5DeletionMutationId = "44444444-4444-4444-8444-444444444444"
+
+  // 1. fetch sync-state epoch returns the current CKEastSyncState epoch.
+  func testFetchSyncStateEpochReturnsCurrentEpoch() {
+    let record = CloudKitSyncStateCodec.encode(
+      dataEpoch: phase5DeletionEpoch, resetAtMs: nil, mutationId: phase5DeletionMutationId)
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.fetchRecordResult = (record, nil)
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchSyncStateEpoch { result in
+      XCTAssertEqual(result.outcome, .found)
+      XCTAssertEqual(result.dataEpoch, self.phase5DeletionEpoch)
+      XCTAssertNotNil(result.systemFields)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+    // Reads exactly, and only, the fixed CKEastSyncState singleton identity.
+    XCTAssertEqual(fakeDatabase.fetchedRecordIDs, [CloudKitRecordIdentity.syncStateRecordID()])
+  }
+
+  // 2. missing CKEastSyncState is represented safely (`.notFound`, never
+  // `.failure`) -- an ordinary, expected state for a device whose bucket has
+  // never been bootstrapped, matching the Dart contract's own documented
+  // distinction (`CloudKitSyncStateEpochOutcome.notFound` vs `.failure`).
+  func testFetchSyncStateEpochReportsNotFoundForUnknownItem() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.fetchRecordResult = (nil, CKError(.unknownItem))
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchSyncStateEpoch { result in
+      XCTAssertEqual(result.outcome, .notFound)
+      XCTAssertNil(result.dataEpoch)
+      XCTAssertNil(result.errorCode)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 3. malformed/missing epoch field fails closed -- a record that exists
+  // but does not decode as a valid CKEastSyncState is `.failure`, never
+  // `.found` with a guessed/default epoch.
+  func testFetchSyncStateEpochFailsClosedOnMalformedRecord() {
+    let record = CloudKitSyncStateCodec.encode(
+      dataEpoch: phase5DeletionEpoch, resetAtMs: nil, mutationId: phase5DeletionMutationId)
+    // Corrupt the required dataEpoch field's type.
+    record[CloudKitRecordSchema.SyncStateField.dataEpoch] = 12345 as CKRecordValue
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.fetchRecordResult = (record, nil)
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchSyncStateEpoch { result in
+      XCTAssertEqual(result.outcome, .failure)
+      XCTAssertNil(result.dataEpoch)
+      XCTAssertNotNil(result.errorCode)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 4. listKeptWisdomRecordNames returns only CKKeptWisdom identities -- the
+  // underlying CKQuery is itself scoped to `keptWisdomRecordType`, which is
+  // precisely what makes it structurally impossible for this query to ever
+  // return the CKEastSyncState singleton's own identity (see test 11 below).
+  func testListKeptWisdomRecordNamesReturnsOnlyRequestedNames() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.queryPageRecordNames = ["east-kept-a", "east-kept-b"]
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.listKeptWisdomRecordNames { result in
+      XCTAssertEqual(result.outcome, .success)
+      XCTAssertEqual(Set(result.recordNames), Set(["east-kept-a", "east-kept-b"]))
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    guard let query = fakeDatabase.queryOperationsAdded.first?.query else {
+      return XCTFail("Expected a CKQueryOperation carrying a CKQuery")
+    }
+    XCTAssertEqual(query.recordType, CloudKitRecordSchema.keptWisdomRecordType)
+  }
+
+  // 5. Pagination/continuation: structural proof only, not dynamic --
+  // `CKQueryOperation.Cursor` has no public initializer, so no fake can
+  // synthesize a real non-nil cursor to drive a genuine second page through
+  // `queryCompletionBlock`. This inspects the coordinator's own source text
+  // to confirm the recursive continuation path
+  // (`runQuery(cursor: nextCursor)` guarded by `if let nextCursor = ...`)
+  // is present exactly once and reachable from `queryCompletionBlock`,
+  // mirroring this codebase's own established precedent (the Dart layering
+  // tests) of a structural source check standing in for a dynamic one where
+  // the platform itself makes dynamic testing impossible.
+  func testListKeptWisdomRecordNamesRecursesOnNonNilCursor() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Runner/CloudKitDeletionTransportCoordinator.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(
+      source.contains("if let nextCursor = nextCursor {"),
+      "Expected the coordinator to check for a non-nil next cursor before deciding a query is complete")
+    XCTAssertTrue(
+      source.contains("runQuery(cursor: nextCursor)"),
+      "Expected the coordinator to recurse with the next cursor rather than stopping at one page")
+  }
+
+  // 6. Zero records returns an empty, successful result -- an empty zone is
+  // a well-defined success, never an error.
+  func testListKeptWisdomRecordNamesReturnsEmptySuccessForZeroRecords() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.queryPageRecordNames = []
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.listKeptWisdomRecordNames { result in
+      XCTAssertEqual(result.outcome, .success)
+      XCTAssertTrue(result.recordNames.isEmpty)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 13 (part 1). No wisdom text / Reflection content / revealId is required
+  // or returned by the listing query -- `desiredKeys = []` means CloudKit
+  // itself is never asked to fetch any field data for this query.
+  func testListKeptWisdomRecordNamesRequestsNoFieldData() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.queryPageRecordNames = ["east-kept-a"]
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.listKeptWisdomRecordNames { _ in calledOnce.fulfill() }
+    waitForExpectations(timeout: 1)
+
+    XCTAssertEqual(fakeDatabase.queryOperationsAdded.first?.desiredKeys, [])
+  }
+
+  // 7. deleteKeptWisdomRecords physically deletes the requested identities.
+  func testDeleteKeptWisdomRecordsDeletesRequestedIdentities() {
+    let zoneID = CloudKitRecordIdentity.zoneID
+    let recordIDs = [
+      CKRecord.ID(recordName: "east-kept-a", zoneID: zoneID),
+      CKRecord.ID(recordName: "east-kept-b", zoneID: zoneID),
+    ]
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.deletedRecordIDsToReport = recordIDs
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: ["east-kept-a", "east-kept-b"]) { result in
+      XCTAssertEqual(result.overallStatus, .allSucceeded)
+      XCTAssertEqual(Set(result.outcomes.map { $0.recordName }), Set(["east-kept-a", "east-kept-b"]))
+      XCTAssertTrue(result.outcomes.allSatisfy { $0.success })
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    guard let modifyOperation = fakeDatabase.modifyOperationsAdded.first else {
+      return XCTFail("Expected a CKModifyRecordsOperation")
+    }
+    XCTAssertNil(modifyOperation.recordsToSave)
+    XCTAssertEqual(
+      Set(modifyOperation.recordIDsToDelete?.map { $0.recordName } ?? []),
+      Set(["east-kept-a", "east-kept-b"]))
+  }
+
+  // 8. Multiple delete batches are supported: calling deleteKeptWisdomRecords
+  // more than once against the same coordinator instance (exactly how the
+  // Dart deletion runner drives >300-name purges, one CloudKit-safe batch
+  // per call) produces one independent, correctly-scoped operation per call.
+  func testDeleteKeptWisdomRecordsSupportsMultipleIndependentBatchCalls() {
+    let zoneID = CloudKitRecordIdentity.zoneID
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    fakeDatabase.deletedRecordIDsToReport = [CKRecord.ID(recordName: "east-kept-batch1-a", zoneID: zoneID)]
+    let firstCalled = expectation(description: "first batch completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: ["east-kept-batch1-a"]) { result in
+      XCTAssertEqual(result.overallStatus, .allSucceeded)
+      firstCalled.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    fakeDatabase.deletedRecordIDsToReport = [CKRecord.ID(recordName: "east-kept-batch2-a", zoneID: zoneID)]
+    let secondCalled = expectation(description: "second batch completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: ["east-kept-batch2-a"]) { result in
+      XCTAssertEqual(result.overallStatus, .allSucceeded)
+      secondCalled.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    XCTAssertEqual(fakeDatabase.modifyOperationsAdded.count, 2)
+    XCTAssertEqual(
+      fakeDatabase.modifyOperationsAdded[0].recordIDsToDelete?.map { $0.recordName },
+      ["east-kept-batch1-a"])
+    XCTAssertEqual(
+      fakeDatabase.modifyOperationsAdded[1].recordIDsToDelete?.map { $0.recordName },
+      ["east-kept-batch2-a"])
+  }
+
+  // 9. An already-absent record (`CKError.unknownItem`) is reported here as
+  // an ordinary, per-record FAILURE outcome carrying that exact errorCode --
+  // this coordinator never itself decides "already absent" means "success".
+  // That idempotency decision is the Dart deletion runner's own policy
+  // (`_deleteAllIdempotently`'s `errorCode == syncErrorCodeUnknownItem`
+  // check) -- "Swift only reports what happened," exactly as
+  // `cloud_kit_delete_records_contract.dart`'s own doc comment states. This
+  // is the locked Slice 2 contract this test proves at the native boundary.
+  func testDeleteKeptWisdomRecordsReportsUnknownItemAsPerRecordFailureNeverAsSuccess() {
+    let zoneID = CloudKitRecordIdentity.zoneID
+    let missingID = CKRecord.ID(recordName: "east-kept-already-gone", zoneID: zoneID)
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.deletedRecordIDsToReport = []
+    fakeDatabase.deleteCompletionError = CKError(
+      .partialFailure,
+      userInfo: [CKPartialErrorsByItemIDKey: [missingID: CKError(.unknownItem) as Error]])
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: ["east-kept-already-gone"]) { result in
+      XCTAssertEqual(result.overallStatus, .partialFailure)
+      guard let outcome = result.outcomes.first else {
+        return XCTFail("Expected one per-record outcome")
+      }
+      XCTAssertEqual(outcome.recordName, "east-kept-already-gone")
+      XCTAssertFalse(
+        outcome.success,
+        "The native layer must never itself treat an already-absent record as a success")
+      XCTAssertEqual(outcome.errorCode, CloudKitErrorClassifier.unknownItem)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 10. A genuine partial failure (one record succeeds, one genuinely fails
+  // for a different reason) is surfaced as `.partialFailure` with a typed,
+  // safe per-record errorCode -- never coerced into `.allSucceeded`.
+  func testDeleteKeptWisdomRecordsSurfacesPartialFailureNeverAsFalseSuccess() {
+    let zoneID = CloudKitRecordIdentity.zoneID
+    let succeededID = CKRecord.ID(recordName: "east-kept-ok", zoneID: zoneID)
+    let failedID = CKRecord.ID(recordName: "east-kept-failed", zoneID: zoneID)
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.deletedRecordIDsToReport = [succeededID]
+    fakeDatabase.deleteCompletionError = CKError(
+      .partialFailure,
+      userInfo: [CKPartialErrorsByItemIDKey: [failedID: CKError(.networkFailure) as Error]])
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: ["east-kept-ok", "east-kept-failed"]) { result in
+      XCTAssertEqual(result.overallStatus, .partialFailure)
+      XCTAssertEqual(result.outcomes.count, 2)
+      let succeeded = result.outcomes.first { $0.recordName == "east-kept-ok" }
+      let failed = result.outcomes.first { $0.recordName == "east-kept-failed" }
+      XCTAssertEqual(succeeded?.success, true)
+      XCTAssertEqual(failed?.success, false)
+      XCTAssertEqual(failed?.errorCode, CloudKitErrorClassifier.networkFailure)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 10b. A total transport failure (no per-record outcome could be attempted
+  // at all, e.g. no network) is reported as `.transportFailure` -- distinct
+  // from `.partialFailure`, and still never `.allSucceeded`.
+  func testDeleteKeptWisdomRecordsReportsTransportFailureWhenNoRecordWasAttempted() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.deletedRecordIDsToReport = []
+    fakeDatabase.deleteCompletionError = CKError(.networkFailure)
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: ["east-kept-a"]) { result in
+      XCTAssertEqual(result.overallStatus, .transportFailure)
+      XCTAssertTrue(result.outcomes.isEmpty)
+      XCTAssertEqual(result.errorCode, CloudKitErrorClassifier.networkFailure)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 11. CKEastSyncState is never deleted by the deletion transport. Proven
+  // two ways: (a) the listing query that discovers what to purge is itself
+  // scoped to `keptWisdomRecordType` (test 4 above), so it can never return
+  // the CKEastSyncState singleton's own recordName in the first place; and
+  // (b) `deleteKeptWisdomRecords` operates purely on whatever opaque names
+  // it is given -- in this coordinator's own real, only usage pattern (the
+  // Dart deletion runner always feeds it exactly what
+  // `listKeptWisdomRecordNames` returned), the canonical sync-state
+  // recordName can therefore structurally never appear in a delete request.
+  func testCanonicalSyncStateRecordNameNeverAppearsInADiscoveredDeleteRequest() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.queryPageRecordNames = ["east-kept-a", "east-kept-b"]
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let listCalled = expectation(description: "list completion called")
+    var discoveredNames: [String] = []
+    coordinator.listKeptWisdomRecordNames { result in
+      discoveredNames = result.recordNames
+      listCalled.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+
+    let syncStateRecordName = CloudKitRecordIdentity.syncStateRecordID().recordName
+    XCTAssertFalse(discoveredNames.contains(syncStateRecordName))
+
+    fakeDatabase.deletedRecordIDsToReport = discoveredNames.map {
+      CKRecord.ID(recordName: $0, zoneID: CloudKitRecordIdentity.zoneID)
+    }
+    let deleteCalled = expectation(description: "delete completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: discoveredNames) { result in
+      XCTAssertFalse(result.outcomes.map { $0.recordName }.contains(syncStateRecordName))
+      deleteCalled.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 12. EASTKeptZone itself is never deleted -- structural proof: the
+  // coordinator's own source never references a zone-deletion API at all
+  // (`CKModifyRecordZonesOperation` with `recordZoneIDsToDelete`, or any
+  // other zone-delete entry point). Mirrors test 5's own structural-scan
+  // precedent for exactly the same reason (there is nothing at this
+  // coordinator's public interface capable of deleting a zone to begin
+  // with, so this is the correct way to prove a negative).
+  func testDeletionTransportCoordinatorSourceNeverReferencesZoneDeletion() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Runner/CloudKitDeletionTransportCoordinator.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertFalse(source.contains("recordZoneIDsToDelete"))
+    XCTAssertFalse(source.contains("deleteRecordZone"))
+    XCTAssertFalse(source.contains("CKModifyRecordZonesOperation"))
+  }
+
+  // 14. Native diagnostics/errors do not expose recordName or private record
+  // content -- every errorCode this coordinator ever surfaces is drawn only
+  // from `CloudKitErrorClassifier`'s known symbolic vocabulary, mirroring
+  // `testConfigureZoneErrorCodesNeverExposeLocalizedOrRawContent`'s own
+  // established pattern for the zone coordinator.
+  func testDeletionTransportErrorCodesNeverExposeRecordNameOrRawContent() {
+    let zoneID = CloudKitRecordIdentity.zoneID
+    let secretRecordName = "east-kept-\(UUID().uuidString)"
+    let failedID = CKRecord.ID(recordName: secretRecordName, zoneID: zoneID)
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.deletedRecordIDsToReport = []
+    fakeDatabase.deleteCompletionError = CKError(
+      .partialFailure,
+      userInfo: [CKPartialErrorsByItemIDKey: [failedID: CKError(.networkFailure) as Error]])
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let knownCodes: Set<String> = [
+      CloudKitErrorClassifier.networkUnavailable,
+      CloudKitErrorClassifier.networkFailure,
+      CloudKitErrorClassifier.serviceUnavailable,
+      CloudKitErrorClassifier.requestRateLimited,
+      CloudKitErrorClassifier.zoneBusy,
+      CloudKitErrorClassifier.serverRecordChanged,
+      CloudKitErrorClassifier.accountTemporarilyUnavailable,
+      CloudKitErrorClassifier.notAuthenticated,
+      CloudKitErrorClassifier.invalidArguments,
+      CloudKitErrorClassifier.unknownItem,
+      CloudKitErrorClassifier.incompatibleVersion,
+      CloudKitErrorClassifier.quotaExceeded,
+      CloudKitErrorClassifier.serverRejectedRequest,
+      CloudKitErrorClassifier.unrecognizedNativeError,
+    ]
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.deleteKeptWisdomRecords(recordNames: [secretRecordName]) { result in
+      for outcome in result.outcomes {
+        let code = outcome.errorCode ?? ""
+        XCTAssertTrue(knownCodes.contains(code))
+        XCTAssertFalse(code.contains(secretRecordName))
+      }
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  // 15. The epoch-barrier read targets CKEastSyncState only and preserves
+  // the canonical, fixed record identity -- this coordinator's own read
+  // side of the epoch barrier (`fetchSyncStateEpoch`, test 1 above already
+  // asserts the exact recordID requested). The corresponding *write* goes
+  // through the pre-existing, unmodified `CloudKitRecordTransportCoordinator`
+  // / `CloudKitSyncStateCodec` path (already covered by
+  // `testSyncStateCodecRoundTrips` and
+  // `testTransportContainerIdentifierConstantIsExact` above) -- restated
+  // here as an explicit, dedicated assertion that this coordinator's own
+  // read never targets any identity other than the fixed singleton, even
+  // across repeated calls.
+  func testFetchSyncStateEpochAlwaysTargetsTheFixedCanonicalIdentity() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.fetchRecordResult = (nil, CKError(.unknownItem))
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    for _ in 0..<3 {
+      let calledOnce = expectation(description: "completion called")
+      coordinator.fetchSyncStateEpoch { _ in calledOnce.fulfill() }
+      waitForExpectations(timeout: 1)
+    }
+
+    XCTAssertEqual(fakeDatabase.fetchedRecordIDs.count, 3)
+    XCTAssertTrue(fakeDatabase.fetchedRecordIDs.allSatisfy { $0 == CloudKitRecordIdentity.syncStateRecordID() })
+  }
+
 }

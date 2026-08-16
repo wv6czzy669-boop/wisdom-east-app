@@ -29,7 +29,30 @@ import UserNotifications
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     registerFileProtectionChannel(with: engineBridge.pluginRegistry)
     registerCloudKitSyncChannel(with: engineBridge.pluginRegistry)
+    registerWidgetSnapshotChannel(with: engineBridge.pluginRegistry)
     NSLog("EAST_KEPT_DIAGNOSTIC didInitializeImplicitFlutterEngine-end")
+  }
+
+  /// EAST. Phase 11: registers the Home Screen widget's snapshot bridge
+  /// (`EastWidgetSnapshotBridge.swift`). Stateless -- unlike
+  /// `cloudKitSyncBridge` above, nothing here needs to be retained for the
+  /// app's lifetime. Follows the same non-aborting nil-registrar guard as
+  /// `registerCloudKitSyncChannel`: a missing registrar leaves the channel
+  /// unregistered rather than crashing the process, since this is a real,
+  /// reachable condition under a native-test-host launch.
+  private func registerWidgetSnapshotChannel(with registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "EastWidgetSnapshotChannel") else {
+      NSLog("EAST_WIDGET_DIAGNOSTIC widget-snapshot-registrar-nil -- channel left unregistered")
+      return
+    }
+
+    let methodChannel = FlutterMethodChannel(
+      name: EastWidgetSnapshotBridgeConstants.methodChannelName,
+      binaryMessenger: registrar.messenger()
+    )
+    methodChannel.setMethodCallHandler { call, result in
+      EastWidgetSnapshotBridge.handle(call, result: result)
+    }
   }
 
   /// Build 26 Phase 4B-1: registers the native CloudKit bridge foundation

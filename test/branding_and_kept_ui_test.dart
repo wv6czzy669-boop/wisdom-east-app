@@ -113,20 +113,21 @@ void main() {
   });
 
   testWidgets(
-      'every Settings divider shares the muted color at ~30% opacity, and '
-      'the row order is exactly Keeper, Restore Purchases, iCloud Sync, '
-      'EAST. Productions, Privacy Policy, Reach Out — with no Daily '
-      'Reminder row', (tester) async {
+      'Approved EAST Settings direction: exactly two hairlines mark three '
+      'groups, and the row order is exactly Keeper, Restore Purchases, '
+      'iCloud Sync, Remove from iCloud, EAST. Productions, Privacy Policy, '
+      'Reach Out — with no Daily Reminder row', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
 
-    // Exactly seven dividers: beneath "Where silence speaks.", and beneath
-    // each of the six rows below (Build 26 Phase 4G added the iCloud Sync
-    // row -- and its own trailing divider -- between Restore Purchases and
-    // EAST. Productions; this was previously six, for five rows).
+    // Approved direction: "Settings — complete, one screen" replaces the
+    // old seven-row/eight-divider menu with three groups (what you can
+    // own, what holds your data, the world outside) separated by exactly
+    // two hairlines -- air groups siblings within a group, never a rule
+    // between them.
     final dividers = tester.widgetList<Divider>(find.byType(Divider)).toList();
-    expect(dividers, hasLength(7));
+    expect(dividers, hasLength(2));
 
     final expectedDividerColor = eastMutedTextColor.withValues(alpha: 0.30);
     for (final divider in dividers) {
@@ -138,6 +139,7 @@ void main() {
       'Keeper',
       'Restore Purchases',
       'iCloud Sync',
+      'Remove from iCloud',
       'EAST. Productions',
       'Privacy Policy',
       'Reach Out',

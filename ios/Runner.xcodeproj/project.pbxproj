@@ -8,27 +8,46 @@
 
 /* Begin PBXBuildFile section */
 		000D64F1780418629EF46358 /* CloudKitSyncBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */; };
+		01A2CA4789F7A3A14443A0F6 /* EastWidgetSnapshotBridgeConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374719CD7165B890BDE2462E /* EastWidgetSnapshotBridgeConstants.swift */; };
+		025EE279426DE25D0B3FD92C /* BeginEastIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 084A5DCD05ADBCDA5C0217FB /* BeginEastIntent.swift */; };
+		03F5CC19EBB74C9A9E3FA3CB /* CloudKitOpaqueArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */; };
+		090478D0F6C231A32358E085 /* CloudKitRecordIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */; };
+		0AC53A0E341736D9E8B70A7D /* EastWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = FBB175380C71A3A50A004337 /* EastWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		12EC13957B35BA0E817D19DA /* CloudKitPrivateZoneCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EA6EF4FDC3F1BAA720EF7C2 /* CloudKitPrivateZoneCoordinator.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		2855DA0C8F8DF50EE22DC0FF /* EastWidgetSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E42507676D77993FFEA785C1 /* EastWidgetSnapshotStore.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		4BD89155BF8BAC2512A037FC /* CloudKitErrorClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */; };
+		55322E41BE226D5D965724CA /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 663D6D7E0223485C623E8112 /* WidgetKit.framework */; };
+		62559DC5512826E1E91F7ABF /* EastWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3E742A7CAF62C027533330 /* EastWidgetBundle.swift */; };
+		659C38914AB45975157ACF51 /* BeginEastIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BC1EBC3A342CDF3A0041574 /* BeginEastIntentTests.swift */; };
 		665F3ADD240938B15D08348A /* CloudKitAccountFingerprintUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F46F09478559DBF3E9AF9CD /* CloudKitAccountFingerprintUtility.swift */; };
+		6719C0F1D7146390B19CBFC3 /* EastWidgetKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78B931A7039DA17FCCC9F448 /* EastWidgetKind.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		7F70E27D67B31EFD250BCF7D /* EastWidgetKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78B931A7039DA17FCCC9F448 /* EastWidgetKind.swift */; };
+		8E7A5E0FB65BF3C0F996571F /* EastWidgetSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E42507676D77993FFEA785C1 /* EastWidgetSnapshotStore.swift */; };
+		93E9922A61D4B85059A08908 /* EastAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34859B5697036B199545513D /* EastAppShortcuts.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A0680A4D783405001CC1F209 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 48A93588752C61AF32885287 /* Foundation.framework */; };
+		A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */; };
+		A838A35ABCC39F704D97B27A /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72636AAD43F7F893BA1784F9 /* SwiftUI.framework */; };
+		AD8F2033D1700D7B68B86C53 /* EastWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F797B2A71669FE212FA34967 /* EastWidgetView.swift */; };
+		B3AF9535677296CA8B1C3DB2 /* EastWidgetSnapshotBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53387D4F6F7A8145AFE9517B /* EastWidgetSnapshotBridge.swift */; };
+		BDDB3A061C642279B33DE487 /* CormorantGaramond-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E4ABE639ECDE417CEA594DD7 /* CormorantGaramond-Light.ttf */; };
+		C6F5577FED4C904D1EE4E4D2 /* EastWidgetProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BF67CF557A5590CD292366 /* EastWidgetProvider.swift */; };
+		CEA701F0EAA34864B5E0CD02 /* CloudKitRecordEnvelopeArgumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */; };
+		D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */; };
+		E2AF050201224B138D66BEF5 /* CloudKitDeletionTransportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 075D57BA81E64C8380738EAC /* CloudKitDeletionTransportCoordinator.swift */; };
+		E42766DA3C9E488A8F14014C /* CloudKitRecordTransportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */; };
+		E5251DCFDA688EED75A1FCDC /* EastWidgetSnapshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3D8A02989FC913E87F3FDA /* EastWidgetSnapshotStoreTests.swift */; };
+		E749858BF163D25704FC6203 /* CloudKitRecordSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */; };
 		EF3EFA03BF40F2A6384D13E7 /* CloudKitSyncBridgeConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06EBDCBC9B147636B57BA3AC /* CloudKitSyncBridgeConstants.swift */; };
 		F88720FF7409A5547D72F49E /* CloudKitAccountStatusMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */; };
-		E749858BF163D25704FC6203 /* CloudKitRecordSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */; };
-		090478D0F6C231A32358E085 /* CloudKitRecordIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */; };
-		03F5CC19EBB74C9A9E3FA3CB /* CloudKitOpaqueArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */; };
-		CEA701F0EAA34864B5E0CD02 /* CloudKitRecordEnvelopeArgumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */; };
-		E42766DA3C9E488A8F14014C /* CloudKitRecordTransportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */; };
-		D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */; };
-		A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,9 +58,27 @@
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
 		};
+		9DCAECC7CB7C2735068A982F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F77D412714DF5657BEEE0274;
+			remoteInfo = EastWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		5D6A3C6CA675327387171610 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0AC53A0E341736D9E8B70A7D /* EastWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -56,16 +93,31 @@
 
 /* Begin PBXFileReference section */
 		06EBDCBC9B147636B57BA3AC /* CloudKitSyncBridgeConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncBridgeConstants.swift; sourceTree = "<group>"; };
+		07298F92AC7B05EB15472BF1 /* Profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Profile.xcconfig; sourceTree = "<group>"; };
+		075D57BA81E64C8380738EAC /* CloudKitDeletionTransportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitDeletionTransportCoordinator.swift; sourceTree = "<group>"; };
+		084A5DCD05ADBCDA5C0217FB /* BeginEastIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BeginEastIntent.swift; sourceTree = "<group>"; };
+		0BC1EBC3A342CDF3A0041574 /* BeginEastIntentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BeginEastIntentTests.swift; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		34859B5697036B199545513D /* EastAppShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastAppShortcuts.swift; sourceTree = "<group>"; };
+		374719CD7165B890BDE2462E /* EastWidgetSnapshotBridgeConstants.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetSnapshotBridgeConstants.swift; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
+		3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordEnvelopeArgumentParser.swift; sourceTree = "<group>"; };
 		3F46F09478559DBF3E9AF9CD /* CloudKitAccountFingerprintUtility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountFingerprintUtility.swift; sourceTree = "<group>"; };
+		40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncStateCodec.swift; sourceTree = "<group>"; };
+		48A93588752C61AF32885287 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		48D63BBB301FB28E00FC9B15 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		53387D4F6F7A8145AFE9517B /* EastWidgetSnapshotBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetSnapshotBridge.swift; sourceTree = "<group>"; };
+		663D6D7E0223485C623E8112 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordIdentity.swift; sourceTree = "<group>"; };
+		72636AAD43F7F893BA1784F9 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		77BF67CF557A5590CD292366 /* EastWidgetProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetProvider.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		78B931A7039DA17FCCC9F448 /* EastWidgetKind.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetKind.swift; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7EA6EF4FDC3F1BAA720EF7C2 /* CloudKitPrivateZoneCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPrivateZoneCoordinator.swift; sourceTree = "<group>"; };
@@ -76,16 +128,23 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountStatusMapper.swift; sourceTree = "<group>"; };
-		D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncBridge.swift; sourceTree = "<group>"; };
-		FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitErrorClassifier.swift; sourceTree = "<group>"; };
-		B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordSchema.swift; sourceTree = "<group>"; };
-		6B2557BF9F1F4A78D045D070 /* CloudKitRecordIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordIdentity.swift; sourceTree = "<group>"; };
-		FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitOpaqueArchive.swift; sourceTree = "<group>"; };
-		3E1A2702C82843CC8A984E04 /* CloudKitRecordEnvelopeArgumentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordEnvelopeArgumentParser.swift; sourceTree = "<group>"; };
 		A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordTransportCoordinator.swift; sourceTree = "<group>"; };
 		B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitKeptWisdomCodec.swift; sourceTree = "<group>"; };
-		40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncStateCodec.swift; sourceTree = "<group>"; };
+		B790B639107BF92DD369A449 /* CloudKitRecordSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRecordSchema.swift; sourceTree = "<group>"; };
+		C0FA9159F6CC70EC4967A022 /* CloudKitAccountStatusMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountStatusMapper.swift; sourceTree = "<group>"; };
+		D39C89E82B01268E49A191DE /* CloudKitSyncBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncBridge.swift; sourceTree = "<group>"; };
+		DC4F8E71A39A185E95B35745 /* EastWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = EastWidget.entitlements; sourceTree = "<group>"; };
+		E42507676D77993FFEA785C1 /* EastWidgetSnapshotStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetSnapshotStore.swift; sourceTree = "<group>"; };
+		E4ABE639ECDE417CEA594DD7 /* CormorantGaramond-Light.ttf */ = {isa = PBXFileReference; includeInIndex = 1; path = "CormorantGaramond-Light.ttf"; sourceTree = "<group>"; };
+		E8E0626C41475724AC78341B /* Release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		ED3E742A7CAF62C027533330 /* EastWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetBundle.swift; sourceTree = "<group>"; };
+		EF3D8A02989FC913E87F3FDA /* EastWidgetSnapshotStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetSnapshotStoreTests.swift; sourceTree = "<group>"; };
+		EF5D205C874F325796703B9D /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F42212EE1C2EA4CF7D8F4422 /* Debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		F797B2A71669FE212FA34967 /* EastWidgetView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EastWidgetView.swift; sourceTree = "<group>"; };
+		FADE0BB1EA16464F88667B5E /* CloudKitOpaqueArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitOpaqueArchive.swift; sourceTree = "<group>"; };
+		FBB175380C71A3A50A004337 /* EastWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EastWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		FF255E8BBC4342F273BD028A /* CloudKitErrorClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitErrorClassifier.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,13 +163,35 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC09ACBED14BEF46EA188863 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0680A4D783405001CC1F209 /* Foundation.framework in Frameworks */,
+				55322E41BE226D5D965724CA /* WidgetKit.framework in Frameworks */,
+				A838A35ABCC39F704D97B27A /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0C74B3DA39A43F64B62FCA83 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E593D73031F47814EBE3A460 /* iOS */,
+				663D6D7E0223485C623E8112 /* WidgetKit.framework */,
+				72636AAD43F7F893BA1784F9 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		331C8082294A63A400263BE5 /* RunnerTests */ = {
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				0BC1EBC3A342CDF3A0041574 /* BeginEastIntentTests.swift */,
+				EF3D8A02989FC913E87F3FDA /* EastWidgetSnapshotStoreTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -135,6 +216,9 @@
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				F892FA475356C9142432FD48 /* Pods */,
+				0C74B3DA39A43F64B62FCA83 /* Frameworks */,
+				FEEAF96CD852F97DBECA0413 /* EastWidget */,
+				F9AD55BEBC96A6B1F47DE787 /* EastShared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -143,6 +227,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				FBB175380C71A3A50A004337 /* EastWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -173,8 +258,21 @@
 				A12AA9B19BA34E329F151A49 /* CloudKitRecordTransportCoordinator.swift */,
 				B608D9CCA8B08A0CA3EDC02B /* CloudKitKeptWisdomCodec.swift */,
 				40AFE6781FC6D53A9AC3CBCD /* CloudKitSyncStateCodec.swift */,
+				075D57BA81E64C8380738EAC /* CloudKitDeletionTransportCoordinator.swift */,
+				374719CD7165B890BDE2462E /* EastWidgetSnapshotBridgeConstants.swift */,
+				53387D4F6F7A8145AFE9517B /* EastWidgetSnapshotBridge.swift */,
+				084A5DCD05ADBCDA5C0217FB /* BeginEastIntent.swift */,
+				34859B5697036B199545513D /* EastAppShortcuts.swift */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		E593D73031F47814EBE3A460 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				48A93588752C61AF32885287 /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		F892FA475356C9142432FD48 /* Pods */ = {
@@ -182,6 +280,33 @@
 			children = (
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		F9AD55BEBC96A6B1F47DE787 /* EastShared */ = {
+			isa = PBXGroup;
+			children = (
+				78B931A7039DA17FCCC9F448 /* EastWidgetKind.swift */,
+				E42507676D77993FFEA785C1 /* EastWidgetSnapshotStore.swift */,
+			);
+			name = EastShared;
+			path = EastShared;
+			sourceTree = "<group>";
+		};
+		FEEAF96CD852F97DBECA0413 /* EastWidget */ = {
+			isa = PBXGroup;
+			children = (
+				F42212EE1C2EA4CF7D8F4422 /* Debug.xcconfig */,
+				E8E0626C41475724AC78341B /* Release.xcconfig */,
+				07298F92AC7B05EB15472BF1 /* Profile.xcconfig */,
+				77BF67CF557A5590CD292366 /* EastWidgetProvider.swift */,
+				F797B2A71669FE212FA34967 /* EastWidgetView.swift */,
+				ED3E742A7CAF62C027533330 /* EastWidgetBundle.swift */,
+				EF5D205C874F325796703B9D /* Info.plist */,
+				DC4F8E71A39A185E95B35745 /* EastWidget.entitlements */,
+				E4ABE639ECDE417CEA594DD7 /* CormorantGaramond-Light.ttf */,
+			);
+			name = EastWidget;
+			path = EastWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -214,11 +339,13 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				5D6A3C6CA675327387171610 /* Embed App Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F247E258233410DE59ACCD0A /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -227,6 +354,23 @@
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F77D412714DF5657BEEE0274 /* EastWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B754D2D435096633B184D8CB /* Build configuration list for PBXNativeTarget "EastWidgetExtension" */;
+			buildPhases = (
+				1269F593FBF2AB7092FF9ECF /* Sources */,
+				BC09ACBED14BEF46EA188863 /* Frameworks */,
+				408A7E46D527813DF540ACE0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EastWidgetExtension;
+			productName = EastWidgetExtension;
+			productReference = FBB175380C71A3A50A004337 /* EastWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -258,7 +402,7 @@
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
-				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */,
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
 			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
@@ -266,6 +410,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				F77D412714DF5657BEEE0274 /* EastWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -275,6 +420,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		408A7E46D527813DF540ACE0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BDDB3A061C642279B33DE487 /* CormorantGaramond-Light.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -326,11 +479,25 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1269F593FBF2AB7092FF9ECF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6719C0F1D7146390B19CBFC3 /* EastWidgetKind.swift in Sources */,
+				2855DA0C8F8DF50EE22DC0FF /* EastWidgetSnapshotStore.swift in Sources */,
+				C6F5577FED4C904D1EE4E4D2 /* EastWidgetProvider.swift in Sources */,
+				AD8F2033D1700D7B68B86C53 /* EastWidgetView.swift in Sources */,
+				62559DC5512826E1E91F7ABF /* EastWidgetBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		331C807D294A63A400263BE5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				659C38914AB45975157ACF51 /* BeginEastIntentTests.swift in Sources */,
+				E5251DCFDA688EED75A1FCDC /* EastWidgetSnapshotStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,6 +521,13 @@
 				E42766DA3C9E488A8F14014C /* CloudKitRecordTransportCoordinator.swift in Sources */,
 				D8883590BCCC005D6F7CC0F2 /* CloudKitKeptWisdomCodec.swift in Sources */,
 				A2932B4143FBF6ED11432008 /* CloudKitSyncStateCodec.swift in Sources */,
+				E2AF050201224B138D66BEF5 /* CloudKitDeletionTransportCoordinator.swift in Sources */,
+				7F70E27D67B31EFD250BCF7D /* EastWidgetKind.swift in Sources */,
+				8E7A5E0FB65BF3C0F996571F /* EastWidgetSnapshotStore.swift in Sources */,
+				01A2CA4789F7A3A14443A0F6 /* EastWidgetSnapshotBridgeConstants.swift in Sources */,
+				B3AF9535677296CA8B1C3DB2 /* EastWidgetSnapshotBridge.swift in Sources */,
+				025EE279426DE25D0B3FD92C /* BeginEastIntent.swift in Sources */,
+				93E9922A61D4B85059A08908 /* EastAppShortcuts.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -364,6 +538,12 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		F247E258233410DE59ACCD0A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = EastWidgetExtension;
+			target = F77D412714DF5657BEEE0274 /* EastWidgetExtension */;
+			targetProxy = 9DCAECC7CB7C2735068A982F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -511,6 +691,68 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
 			name = Profile;
+		};
+		5C71E60B61C955675417DEF5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E8E0626C41475724AC78341B /* Release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = EastWidget/EastWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = ZPLCBF8X99;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EastWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.dogukan.dailywisdom.EastWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		76CDBA3155CD25350528D7BD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F42212EE1C2EA4CF7D8F4422 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = EastWidget/EastWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = ZPLCBF8X99;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EastWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.dogukan.dailywisdom.EastWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
 		};
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -676,6 +918,37 @@
 			};
 			name = Release;
 		};
+		B8E78C19113082D112B8BAA7 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 07298F92AC7B05EB15472BF1 /* Profile.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = EastWidget/EastWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = ZPLCBF8X99;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EastWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.dogukan.dailywisdom.EastWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -709,10 +982,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		B754D2D435096633B184D8CB /* Build configuration list for PBXNativeTarget "EastWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C71E60B61C955675417DEF5 /* Release */,
+				76CDBA3155CD25350528D7BD /* Debug */,
+				B8E78C19113082D112B8BAA7 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */ = {
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
 		};

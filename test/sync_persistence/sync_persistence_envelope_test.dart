@@ -4,6 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
+import 'package:wisdom_app/sync_persistence/pending_deletion_transaction.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_envelope.dart';
 
 void main() {
@@ -248,6 +249,132 @@ void main() {
       final withDifferentMarker = SyncPersistenceEnvelope.empty()
           .withAssociatedAccountFingerprint(fingerprintB);
       expect(withMarker, isNot(withDifferentMarker));
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 5 (slice 1): pendingDeletionTransaction -- the durable,
+  // top-level "Remove from iCloud" deletion-transaction slot.
+  // ---------------------------------------------------------------------
+
+  group('pendingDeletionTransaction', () {
+    final replacementEpoch =
+        DataEpoch.parse('cccccccc-3333-4333-8333-333333333333');
+
+    PendingDeletionTransaction transaction() => PendingDeletionTransaction(
+          accountFingerprint: fingerprintA,
+          originalDataEpoch: epoch,
+          replacementDataEpoch: replacementEpoch,
+          stage: DeletionTransactionStage.prepared,
+        );
+
+    test('absent on a freshly-empty envelope decodes to null', () {
+      final envelope = SyncPersistenceEnvelope.empty();
+      expect(envelope.pendingDeletionTransaction, isNull);
+    });
+
+    test(
+        'a legacy-shaped payload with no pendingDeletionTransaction key '
+        'decodes to null -- backward compatible, never self-healed', () {
+      final decoded = SyncPersistenceEnvelope.decode({
+        'schemaVersion': 1,
+        'accounts': <String, dynamic>{},
+      });
+      expect(decoded.pendingDeletionTransaction, isNull);
+    });
+
+    test('a valid transaction round-trips through encode/decode', () {
+      final envelope = SyncPersistenceEnvelope.empty()
+          .withPendingDeletionTransaction(transaction());
+      final decoded = SyncPersistenceEnvelope.decode(envelope.encode());
+      expect(decoded.pendingDeletionTransaction, transaction());
+      expect(decoded, envelope);
+    });
+
+    test('a valid transaction round-trips through real JSON text', () {
+      final envelope = SyncPersistenceEnvelope.empty()
+          .withPendingDeletionTransaction(transaction());
+      final decoded =
+          SyncPersistenceEnvelope.decodeString(envelope.encodeString());
+      expect(decoded.pendingDeletionTransaction, transaction());
+    });
+
+    test('decode rejects a malformed pendingDeletionTransaction value', () {
+      expect(
+        () => SyncPersistenceEnvelope.decode({
+          'schemaVersion': 1,
+          'accounts': <String, dynamic>{},
+          'pendingDeletionTransaction': {'accountFingerprint': 'bad'},
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test(
+        'decode rejects a pendingDeletionTransaction key present with an '
+        'explicit JSON null -- encode() never produces this shape (it only '
+        'ever writes the key when the value is non-null), so its presence '
+        'can only be external corruption; it must fail closed rather than '
+        'being silently treated the same as genuine key absence', () {
+      expect(
+        () => SyncPersistenceEnvelope.decode({
+          'schemaVersion': 1,
+          'accounts': <String, dynamic>{},
+          'pendingDeletionTransaction': null,
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test(
+        'a malformed-present pendingDeletionTransaction can never be '
+        'observed as "no deletion pending" -- decode always throws, never '
+        'returns an envelope with a null field for a present-but-invalid '
+        'value', () {
+      final malformedPayloads = <Object?>[
+        {'accountFingerprint': 'bad'}, // fails PendingDeletionTransaction shape
+        'not-a-map',
+        42,
+        true,
+        <Object?>[],
+        null, // explicit JSON null -- see the dedicated test above
+      ];
+      for (final payload in malformedPayloads) {
+        expect(
+          () => SyncPersistenceEnvelope.decode({
+            'schemaVersion': 1,
+            'accounts': <String, dynamic>{},
+            'pendingDeletionTransaction': payload,
+          }),
+          throwsFormatException,
+          reason: 'payload: $payload',
+        );
+      }
+    });
+
+    test(
+        'withPendingDeletionTransactionCleared removes it, leaving every '
+        'other field untouched', () {
+      final withTransaction = SyncPersistenceEnvelope.empty()
+          .withAccount(
+            fingerprintB,
+            AccountSyncState(dataEpoch: epoch, serverChangeToken: 'QQQQ'),
+          )
+          .withAssociatedAccountFingerprint(fingerprintA)
+          .withPendingDeletionTransaction(transaction());
+      final cleared = withTransaction.withPendingDeletionTransactionCleared();
+
+      expect(cleared.pendingDeletionTransaction, isNull);
+      expect(cleared.associatedAccountFingerprint, fingerprintA);
+      expect(cleared.accounts[fingerprintB]!.serverChangeToken, 'QQQQ');
+    });
+
+    test('equality and hashCode include the transaction', () {
+      final withTransaction = SyncPersistenceEnvelope.empty()
+          .withPendingDeletionTransaction(transaction());
+      final withoutTransaction = SyncPersistenceEnvelope.empty();
+      expect(withTransaction, isNot(withoutTransaction));
+      expect(withTransaction.hashCode, isNot(withoutTransaction.hashCode));
     });
   });
 }

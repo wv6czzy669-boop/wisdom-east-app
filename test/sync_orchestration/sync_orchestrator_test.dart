@@ -24,8 +24,10 @@ import 'package:wisdom_app/sync_orchestration/sync_orchestrator.dart';
 import 'package:wisdom_app/sync_orchestration/sync_pass_result.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
+import 'package:wisdom_app/sync_persistence/deletion_transaction_result.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
 import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
+import 'package:wisdom_app/sync_persistence/pending_deletion_transaction.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
@@ -33,8 +35,11 @@ import 'package:wisdom_app/sync_platform/cloud_kept_wisdom_wire_envelope.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_snapshot.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_bridge_info.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_change_event.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_delete_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
 
@@ -142,6 +147,23 @@ class _FakeCloudKitPlatformBridge implements CloudKitPlatformBridge {
     _activeTransportCalls -= 1;
     return fetchProvider!.call(request);
   }
+
+  // Build 26 Phase 5 (slice 2): the three deletion-runner-only bridge
+  // methods -- never used by SyncOrchestrator (only
+  // CloudKitRemoteDeletionRunner calls them).
+  @override
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() =>
+      throw UnimplementedError('Not used by SyncOrchestrator.');
+
+  @override
+  Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() =>
+      throw UnimplementedError('Not used by SyncOrchestrator.');
+
+  @override
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) =>
+      throw UnimplementedError('Not used by SyncOrchestrator.');
 }
 
 /// Wraps a real [SyncPersistenceStore] (typically a real
@@ -367,6 +389,82 @@ class _RecordingSyncPersistenceStore implements SyncPersistenceStore {
     throw StateError(
       'Meaningful-legacy-fingerprint enumeration must not be called by '
       'SyncOrchestrator.',
+    );
+  }
+
+  /// Build 26 Phase 5 (slice 3): the associated-account-marker *clear* path
+  /// is owned by the Phase 5 local finalizer alone -- `SyncOrchestrator`
+  /// (Phase 4D-2) never calls it and never legitimately could. Mirrors
+  /// [commitAssociatedAccountFingerprint]'s own fail-loud precedent above
+  /// exactly.
+  int clearAssociatedAccountFingerprintIfCurrentCallCount = 0;
+
+  @override
+  Future<ClearAssociatedAccountFingerprintResult>
+      clearAssociatedAccountFingerprintIfCurrent({
+    required String expectedCurrent,
+  }) async {
+    clearAssociatedAccountFingerprintIfCurrentCallCount += 1;
+    callOrder.add('clearAssociatedAccountFingerprintIfCurrent');
+    throw StateError(
+      'Associated-account-fingerprint clear must not be called by '
+      'SyncOrchestrator.',
+    );
+  }
+
+  /// Build 26 Phase 5 (slice 1): the deletion-transaction surface is owned
+  /// by the Phase 5 runtime gate (`CloudKitSyncRuntimeCoordinator`) alone --
+  /// `SyncOrchestrator` (Phase 4D-2) never calls it and never legitimately
+  /// could. Mirrors the existing associated-account-marker/checkpoint
+  /// fail-loud precedent above.
+  int loadPendingDeletionTransactionCallCount = 0;
+  int beginDeletionTransactionCallCount = 0;
+  int advanceDeletionTransactionStageCallCount = 0;
+  int clearDeletionTransactionCallCount = 0;
+
+  @override
+  Future<PendingDeletionTransaction?> loadPendingDeletionTransaction() async {
+    loadPendingDeletionTransactionCallCount += 1;
+    callOrder.add('loadPendingDeletionTransaction');
+    throw StateError(
+      'Pending-deletion-transaction read must not be called by '
+      'SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<BeginDeletionTransactionResult> beginDeletionTransaction({
+    required String accountFingerprint,
+  }) async {
+    beginDeletionTransactionCallCount += 1;
+    callOrder.add('beginDeletionTransaction');
+    throw StateError(
+      'Deletion-transaction creation must not be called by SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
+    required String accountFingerprint,
+    required DeletionTransactionStage expectedCurrentStage,
+    required DeletionTransactionStage nextStage,
+  }) async {
+    advanceDeletionTransactionStageCallCount += 1;
+    callOrder.add('advanceDeletionTransactionStage');
+    throw StateError(
+      'Deletion-transaction stage advance must not be called by '
+      'SyncOrchestrator.',
+    );
+  }
+
+  @override
+  Future<void> clearDeletionTransaction({
+    required String accountFingerprint,
+  }) async {
+    clearDeletionTransactionCallCount += 1;
+    callOrder.add('clearDeletionTransaction');
+    throw StateError(
+      'Deletion-transaction clear must not be called by SyncOrchestrator.',
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../controllers/icloud_removal_controller.dart';
 import '../controllers/sync_association_controller.dart';
 import '../models/kept_bootstrap_result.dart';
 import '../persistence/persistence_operation_coordinator.dart';
@@ -18,22 +19,48 @@ import '../sync_orchestration/sync_orchestrator.dart';
 import '../sync_persistence/protected_sync_persistence_store.dart';
 import '../sync_platform/method_channel_cloud_kit_platform_bridge.dart';
 import '../sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
+import 'analytics_service.dart';
 import 'daily_wisdom_access_service.dart';
+import 'data_export_service.dart';
+import 'journal_owner_service.dart';
 import 'kept_discovery_hint_service.dart';
 import 'kept_migration_coordinator.dart';
 import 'kept_state_revision_notifier.dart';
 import 'kept_storage_bootstrap.dart';
 import 'purchase_service.dart';
+import 'rating_request_service.dart';
+import 'return_service.dart';
 import 'saved_reflections_service.dart';
 import 'storage_service.dart';
+import 'widget_snapshot_service.dart';
 import 'wisdom_notification_service.dart';
 import 'wisdom_share_service.dart';
 
-final PurchaseService purchaseService = PurchaseService();
+final AnalyticsService analyticsService = AnalyticsService();
+final PurchaseService purchaseService = PurchaseService(
+  analyticsService: analyticsService,
+);
 final StorageService storageService = StorageService();
 final WisdomShareHandler wisdomShareService = WisdomShareService();
 final WisdomNotificationService wisdomNotificationService =
     WisdomNotificationService();
+final RatingRequestService ratingRequestService = RatingRequestService();
+final WidgetSnapshotService widgetSnapshotService = WidgetSnapshotService();
+final ReturnService returnService = ReturnService();
+final JournalOwnerService journalOwnerService = JournalOwnerService();
+
+/// Free-for-everyone user data export. `savedReflectionsServiceProvider` is
+/// a closure over the `late final savedReflectionsService` global declared
+/// further below -- this line runs before that field is ever assigned
+/// (bootstrap happens later, in `initializeKeptStorage()`), so the closure
+/// must not be *invoked* here, only captured. By the time
+/// `dataExportService.exportAndShare()` actually calls it, bootstrap has
+/// long since completed -- exactly the same pattern already used for this
+/// file's own `onMutationCommitted` callbacks below.
+final DataExportService dataExportService = DataExportService(
+  savedReflectionsServiceProvider: () => savedReflectionsService,
+  journalOwnerService: journalOwnerService,
+);
 final KeptDiscoveryHintService keptDiscoveryHintService =
     KeptDiscoveryHintService();
 
@@ -251,6 +278,30 @@ late final CloudKitSyncRuntimeCoordinator cloudKitSyncRuntimeCoordinator;
 /// disconnected controller or touching CloudKit/native infrastructure.
 SyncAssociationController? cloudKitAssociationController;
 
+/// Build 26 Phase 5 (final slice): the Settings-facing "Remove from iCloud"
+/// surface (see `lib/controllers/icloud_removal_controller.dart` for why it
+/// is named platform-neutrally rather than after CloudKit). Populated in the
+/// same single bootstrap attempt as every other sync coordinator above,
+/// alongside [cloudKitAssociationController] -- composes
+/// [syncPersistenceStore] with a fire-and-forget closure over
+/// [cloudKitSyncRuntimeCoordinator] (another `requestSync` call site,
+/// alongside the ones `test/sync_runtime/sync_runtime_layering_test.dart`
+/// already discloses). `lib/screens/settings_screen.dart` is this
+/// controller's only production caller; it never touches
+/// `CloudKitSyncRuntimeCoordinator`, `SyncPersistenceStore` directly, or any
+/// CloudKit type.
+///
+/// Deliberately **nullable**, never `late final` -- mirrors
+/// [cloudKitAssociationController]'s own identical reasoning exactly: it is
+/// read directly from `SettingsScreen`'s widget tree, and existing isolated
+/// Settings widget tests construct that UI without ever calling
+/// [initializeKeptStorage] first. `null` here means exactly "the composition
+/// root has not finished bootstrapping yet" -- `SettingsScreen` treats that
+/// the same as any other non-actionable state (row reads "Nothing to
+/// remove.", never tappable), never as proof there is nothing to remove, and
+/// never by silently constructing a second, disconnected controller.
+ICloudRemovalController? icloudRemovalController;
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -319,6 +370,13 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       incomingCoordinator: incomingKeptSyncCoordinator,
       orchestrator: syncOrchestrator,
       syncPersistenceStore: syncPersistenceStore,
+      // Build 26 Phase 5 (slice 3): the exact same production
+      // `localSyncIntentStore` global every other sync coordinator above
+      // already shares -- never a second, uncoordinated
+      // `ProtectedLocalSyncIntentStore()` instance. Used internally only to
+      // construct this coordinator's default `LocalDeletionFinalizer` (see
+      // that class's own constructor).
+      localSyncIntentStore: localSyncIntentStore,
       bridge: cloudKitPlatformBridge,
     );
     cloudKitAssociationController = SyncAssociationController(
@@ -336,9 +394,25 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
         );
       },
     );
+    icloudRemovalController = ICloudRemovalController(
+      syncPersistenceStore: syncPersistenceStore,
+      // Fire-and-forget only, mirroring cloudKitAssociationController's own
+      // requestSyncAfterAssociation callback above: never awaited by the
+      // caller, and any error the returned Future carries is swallowed here
+      // so it can never surface as an unhandled async error or block the
+      // Settings screen on a CloudKit round trip.
+      requestSyncAfterRemoval: () {
+        unawaited(
+          cloudKitSyncRuntimeCoordinator
+              .requestSync(SyncRuntimeTrigger.explicitDeletion)
+              .catchError((_) {}),
+        );
+      },
+    );
     return SavedReflectionsService(
       keptRepository: repository,
       syncCoordinator: keptSyncIntegrationCoordinator,
+      analyticsService: analyticsService,
     );
   },
 );

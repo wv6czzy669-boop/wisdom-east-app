@@ -28,8 +28,11 @@ import 'package:wisdom_app/sync_integration/kept_sync_bootstrap_coordinator.dart
 import 'package:wisdom_app/sync_platform/cloud_kit_account_change_event.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_snapshot.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_bridge_info.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_delete_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
 
@@ -84,6 +87,29 @@ class _FixedCloudKitPlatformBridge implements CloudKitPlatformBridge {
       throw UnimplementedError(
         'Not used by evaluateAssociation()/authorizeAssociation().',
       );
+
+  // Build 26 Phase 5 (slice 2): the three deletion-runner-only bridge
+  // methods -- never used by evaluateAssociation()/authorizeAssociation()
+  // or by SyncAssociationController's own flow.
+  @override
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() =>
+      throw UnimplementedError(
+        'Not used by evaluateAssociation()/authorizeAssociation().',
+      );
+
+  @override
+  Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() =>
+      throw UnimplementedError(
+        'Not used by evaluateAssociation()/authorizeAssociation().',
+      );
+
+  @override
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) =>
+      throw UnimplementedError(
+        'Not used by evaluateAssociation()/authorizeAssociation().',
+      );
 }
 
 void main() {
@@ -92,7 +118,8 @@ void main() {
   const fingerprintB =
       'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
-  CloudKitAccountSnapshot availableSnapshot({String fingerprint = fingerprintA}) =>
+  CloudKitAccountSnapshot availableSnapshot(
+          {String fingerprint = fingerprintA}) =>
       CloudKitAccountSnapshot(
         availability: CloudKitAccountAvailability.available,
         isPrivateDatabaseUsable: true,
@@ -166,8 +193,8 @@ void main() {
     await controller.checkStatus();
     await controller.checkStatus();
 
-    expect(await syncPersistenceStore.loadAssociatedAccountFingerprint(),
-        isNull);
+    expect(
+        await syncPersistenceStore.loadAssociatedAccountFingerprint(), isNull);
     expect(requestSyncCallCount, 0);
   });
 

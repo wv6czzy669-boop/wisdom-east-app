@@ -40,15 +40,20 @@ import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.da
 import 'package:wisdom_app/sync_orchestration/sync_orchestrator.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
+import 'package:wisdom_app/sync_persistence/deletion_transaction_result.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
 import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
+import 'package:wisdom_app/sync_persistence/pending_deletion_transaction.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_change_event.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_snapshot.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_bridge_info.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_delete_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
 import 'package:wisdom_app/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
@@ -158,6 +163,460 @@ void main() {
       final records = await harness.keptRepository.loadAllRecords();
       expect(records, hasLength(1));
       expect(records.single.wisdomText, 'Wisdom from device B.');
+    });
+  });
+
+  group('Build 26 Phase 5 (slice 1): pending deletion transaction gate', () {
+    test(
+        '9. a pending deletion transaction is driven through the deletion '
+        'runner immediately -- for an already-empty remote it resolves '
+        'fully within this same pass to deletionCompleted, and '
+        'runBootstrap/runSyncPass\'s own higher-level effects never occur '
+        'even though the deletion runner legitimately shares this '
+        'coordinator\'s own CloudKit bridge', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+        await harness.syncPersistenceStore.loadPendingDeletionTransaction(),
+        isNull,
+      );
+      // runBootstrap never ran this pass -- proven indirectly: only
+      // runBootstrap could ever populate local Kept content or the
+      // association marker, and neither happened.
+      expect(await harness.keptRepository.loadAllRecords(), isEmpty);
+      expect(
+        await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
+        isNull,
+      );
+    });
+
+    test(
+        '10. a pending deletion transaction also blocks bootstrap behavior '
+        'that could repopulate the cloud, even for a fresh, never-'
+        'associated device -- true throughout the pass, and still true '
+        'once the transaction has resolved to deletionCompleted', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      // No prior association/bootstrap progress exists at all -- exactly
+      // the shape that would otherwise trigger an autoAssociable first
+      // bootstrap.
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+        await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
+        isNull,
+        reason: 'No association marker may ever be created as a side '
+            'effect of driving or finalizing a deletion transaction -- '
+            'only an explicit future bootstrap/authorization creates one.',
+      );
+    });
+
+    test(
+        '11. no pending deletion transaction preserves existing Phase 4 sync '
+        'behavior exactly (a plain absent-transaction pass still reaches '
+        'completed)', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      expect(
+          await harness.syncPersistenceStore.loadPendingDeletionTransaction(),
+          isNull);
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.lastOutcome, SyncRuntimeOutcome.completed);
+      expect(harness.bridge.getAccountSnapshotCallCount, greaterThan(0));
+    });
+
+    test(
+        'a deletion transaction that resolves fully to deletionCompleted in '
+        'one pass does not schedule an automatic retry timer -- a '
+        'successful, non-erroring outcome resets retry state exactly like '
+        '`completed`', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.retryScheduled, isFalse);
+      expect(harness.retryScheduler.scheduled, isEmpty);
+    });
+
+    test(
+        'the deletion runner is invoked unconditionally first, for every '
+        'trigger, with no special-cased bypass -- proven by every trigger '
+        'resolving the same pending, already-empty-remote transaction to '
+        'deletionCompleted', () async {
+      for (final trigger in [
+        SyncRuntimeTrigger.startup,
+        SyncRuntimeTrigger.foreground,
+        SyncRuntimeTrigger.retry,
+        SyncRuntimeTrigger.localMutation,
+        SyncRuntimeTrigger.explicitAssociation,
+      ]) {
+        final harness = _RuntimeHarness();
+        harness.bridge.currentFingerprint = _fingerprint(1);
+        await harness.syncPersistenceStore.beginDeletionTransaction(
+          accountFingerprint: _fingerprint(1),
+        );
+        final coordinator = harness.buildCoordinator();
+        addTearDown(coordinator.dispose);
+
+        await coordinator.requestSync(trigger);
+
+        expect(
+          coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted,
+          reason: 'Trigger $trigger must also drive the pending deletion.',
+        );
+        expect(await harness.keptRepository.loadAllRecords(), isEmpty,
+            reason: 'Trigger $trigger must never fall through to normal '
+                'sync in the same pass.');
+      }
+    });
+
+    test(
+        'Phase 5 safety correction: a deletion-transaction record that '
+        'cannot be safely decoded/validated is classified as '
+        'deletionStateCorrupted -- never treated as "no deletion pending" '
+        '-- and blocks bootstrap/outbound sync exactly like a genuine '
+        'pending deletion', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      final coordinator = CloudKitSyncRuntimeCoordinator(
+        bootstrapCoordinator: harness.bootstrapCoordinator,
+        integrationCoordinator: harness.integrationCoordinator,
+        incomingCoordinator: harness.incomingCoordinator,
+        orchestrator: harness.orchestrator,
+        syncPersistenceStore: _DeletionStateCorruptedSyncPersistenceStore(
+          harness.syncPersistenceStore,
+        ),
+        localSyncIntentStore: harness.intentStore,
+        bridge: harness.bridge,
+        scheduler: harness.retryScheduler,
+      );
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionStateCorrupted);
+      expect(harness.bridge.getAccountSnapshotCallCount, 0,
+          reason: 'Bootstrap/orchestrator must never run when the '
+              'deletion-transaction record cannot be validated.');
+      expect(await harness.keptRepository.loadAllRecords(), isEmpty);
+    });
+
+    test(
+        'Phase 5 safety correction: deletionStateCorrupted is never '
+        'automatically retried by a timer -- a blind retry can never repair '
+        'a corrupted persisted record', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      final coordinator = CloudKitSyncRuntimeCoordinator(
+        bootstrapCoordinator: harness.bootstrapCoordinator,
+        integrationCoordinator: harness.integrationCoordinator,
+        incomingCoordinator: harness.incomingCoordinator,
+        orchestrator: harness.orchestrator,
+        syncPersistenceStore: _DeletionStateCorruptedSyncPersistenceStore(
+          harness.syncPersistenceStore,
+        ),
+        localSyncIntentStore: harness.intentStore,
+        bridge: harness.bridge,
+        scheduler: harness.retryScheduler,
+      );
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.retryScheduled, isFalse);
+      expect(harness.retryScheduler.scheduled, isEmpty);
+    });
+
+    test(
+        'Phase 5 safety correction: deletionStateCorrupted is deliberately '
+        'distinct from retryableFailure -- a corrupted deletion record must '
+        'never be indistinguishable from an everyday transient sync '
+        'failure', () {
+      expect(
+        SyncRuntimeOutcome.deletionStateCorrupted,
+        isNot(SyncRuntimeOutcome.retryableFailure),
+      );
+    });
+  });
+
+  group(
+      'Build 26 Phase 5 (slice 3): deletion runtime/relaunch wiring '
+      '(points 26-33)', () {
+    test(
+        '26. a pending deletion transaction causes the runtime trigger to '
+        'genuinely invoke the deletion workflow (CloudKitRemoteDeletionRunner), '
+        'never a silent no-op', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(harness.bridge.getAccountSnapshotCallCount, greaterThan(0),
+          reason: 'The deletion runner resolves its own fresh account '
+              'snapshot as its very first step -- this call proves the '
+              'workflow genuinely ran, not merely that a typed outcome '
+              'happened to be returned from an unreached code path.');
+      expect(coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+    });
+
+    test(
+        '27. even when the deletion transaction cannot make full progress '
+        'this pass (a transient transport failure), normal sync is still '
+        'never invoked -- the gate applies to every intermediate outcome, '
+        'not only a fully-resolved one', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      harness.server.forceTransportFailureOnNextModify();
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(
+          coordinator.status.lastOutcome, SyncRuntimeOutcome.retryableFailure);
+      expect(
+        await harness.syncPersistenceStore.loadPendingDeletionTransaction(),
+        isNotNull,
+        reason: 'The transaction is still in progress -- not yet resolved.',
+      );
+      expect(await harness.keptRepository.loadAllRecords(), isEmpty,
+          reason: 'Normal sync must never run in the same pass, regardless '
+              'of whether the deletion runner itself fully succeeded.');
+      expect(
+        await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
+        isNull,
+      );
+      expect(coordinator.status.retryScheduled, isTrue,
+          reason: 'A transient deletion-runner failure schedules the same '
+              'bounded-backoff retry as any other retryableFailure -- the '
+              'same code path deletionRecoveryProgressed also uses.');
+    });
+
+    test(
+        '28. relaunch -- a fresh CloudKitSyncRuntimeCoordinator instance '
+        'over the same durable store -- can resume a pending remote '
+        'deletion a prior instance only partially progressed', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      harness.server.forceTransportFailureOnNextModify();
+      final firstInstance = harness.buildCoordinator();
+      await firstInstance.requestSync(SyncRuntimeTrigger.startup);
+      expect(firstInstance.status.lastOutcome,
+          SyncRuntimeOutcome.retryableFailure);
+      await firstInstance.dispose();
+
+      // "Relaunch": a brand-new coordinator instance -- never the same
+      // object -- constructed fresh over the exact same durable
+      // syncPersistenceStore/localSyncIntentStore/bridge, exactly what a
+      // real app relaunch reconstructs from `app_services.dart`'s own
+      // globals.
+      final relaunchedInstance = harness.buildCoordinator();
+      addTearDown(relaunchedInstance.dispose);
+
+      await relaunchedInstance.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(relaunchedInstance.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+        await harness.syncPersistenceStore.loadPendingDeletionTransaction(),
+        isNull,
+      );
+    });
+
+    test(
+        '29. relaunch can resume a transaction already durably at '
+        'localFinalizePending -- zero CloudKit calls, straight to local '
+        'finalize', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      final began =
+          await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      // Directly drive the durable transaction to localFinalizePending
+      // using the store's own real CAS API -- never a hand-constructed
+      // PendingDeletionTransaction -- exactly what Slice 2's own runner
+      // would already have done by the time this slice's finalizer ever
+      // runs.
+      var stage = began.transaction!.stage;
+      for (final next in [
+        DeletionTransactionStage.epochBarrierPending,
+        DeletionTransactionStage.cloudPurgePending,
+        DeletionTransactionStage.verificationPending,
+        DeletionTransactionStage.localFinalizePending,
+      ]) {
+        final advanced = await harness.syncPersistenceStore
+            .advanceDeletionTransactionStage(
+          accountFingerprint: _fingerprint(1),
+          expectedCurrentStage: stage,
+          nextStage: next,
+        );
+        stage = advanced.transaction!.stage;
+      }
+
+      final relaunchedInstance = harness.buildCoordinator();
+      addTearDown(relaunchedInstance.dispose);
+
+      await relaunchedInstance.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(relaunchedInstance.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+      expect(harness.bridge.getAccountSnapshotCallCount, 0,
+          reason: 'alreadyAtLocalFinalizePending makes zero CloudKit '
+              'calls -- not even an account-snapshot read.');
+      expect(
+        await harness.syncPersistenceStore.loadPendingDeletionTransaction(),
+        isNull,
+      );
+    });
+
+    test(
+        '30. a successful finalize does NOT fall through to normal sync in '
+        'the same pass -- Kept content and the association marker remain '
+        'exactly as they were throughout the very pass that reached '
+        'deletionCompleted', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      expect(coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+      expect(await harness.keptRepository.loadAllRecords(), isEmpty,
+          reason: 'If this pass had fallen through to Step 1 after '
+              'finalize, a fresh, never-associated device would have '
+              'auto-bootstrapped and this would no longer be empty.');
+      expect(
+        await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
+        isNull,
+      );
+    });
+
+    test(
+        '31-32. after a successful deletionCompleted pass, a LATER, '
+        'independent runtime trigger does not silently re-upload preserved '
+        'local content -- explicit future association remains required '
+        '(the single most important Slice 3 regression)', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+      expect(coordinator.status.lastOutcome,
+          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+        await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
+        isNull,
+      );
+
+      // Local content the user creates AFTER the deletion transaction has
+      // fully resolved -- exactly the shape point 31 requires stay
+      // un-uploaded until the user explicitly re-associates.
+      await harness.integrationCoordinator.recordKeep(
+        revealId: const Uuid().v4(),
+        wisdomText: 'Local content created after Remove from iCloud.',
+        revealedAt: DateTime.utc(2026, 1, 1),
+        isKeeper: false,
+      );
+
+      // A later, independent runtime trigger -- foreground, not a
+      // coalesced follow-up of the same pass.
+      await coordinator.requestSync(SyncRuntimeTrigger.foreground);
+
+      expect(
+        coordinator.status.lastOutcome,
+        SyncRuntimeOutcome.terminalFailure,
+        reason: 'point 32: existing local Kept history with no association '
+            'marker is exactly evaluateAssociation\'s already-tested '
+            'associationRequired rule -- an explicit future authorization '
+            'is still required, never silently auto-resolved.',
+      );
+      expect(
+        await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
+        isNull,
+        reason: 'No silent reassociation.',
+      );
+      expect(
+        await harness.syncPersistenceStore.loadAccountState(_fingerprint(1)),
+        isNull,
+        reason: 'point 31: zero upload -- no AccountSyncState bucket, and '
+            'therefore no outbox, was ever created for this fingerprint by '
+            'the later trigger.',
+      );
+    });
+
+    test(
+        '33. privacy-safe summaries: CloudKitSyncRuntimeStatus never '
+        'exposes an account fingerprint or any other private identifier '
+        'for either new Slice 3 outcome', () async {
+      final harness = _RuntimeHarness();
+      harness.bridge.currentFingerprint = _fingerprint(1);
+      await harness.syncPersistenceStore.beginDeletionTransaction(
+        accountFingerprint: _fingerprint(1),
+      );
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+
+      final summary = coordinator.status.toLogSafeSummary();
+      expect(summary['lastOutcome'], 'deletionCompleted');
+      for (final entry in summary.values) {
+        if (entry is String) {
+          expect(entry.contains(_fingerprint(1)), isFalse);
+        }
+      }
     });
   });
 
@@ -609,6 +1068,7 @@ void main() {
         orchestrator: harness.orchestrator,
         syncPersistenceStore:
             _MarkerHidingSyncPersistenceStore(harness.syncPersistenceStore),
+        localSyncIntentStore: harness.intentStore,
         bridge: harness.bridge,
         scheduler: harness.retryScheduler,
       );
@@ -857,6 +1317,36 @@ class _FakeRuntimeCloudKitBridge implements CloudKitPlatformBridge {
     }
     return server.fetch(request);
   }
+
+  // Build 26 Phase 5 (slice 2/3): the three deletion-runner-only bridge
+  // methods -- never called by CloudKitSyncRuntimeCoordinator itself, only
+  // by the CloudKitRemoteDeletionRunner it now owns internally (Slice 3).
+  // Delegate to the exact same shared `server` every other bridge method in
+  // this class already uses (see `SyntheticCloudKitServer`'s own Slice 3
+  // extension) -- never a second, competing in-memory model.
+  int fetchSyncStateEpochCallCount = 0;
+  int listKeptWisdomRecordNamesCallCount = 0;
+  int deleteKeptWisdomRecordsCallCount = 0;
+
+  @override
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() {
+    fetchSyncStateEpochCallCount += 1;
+    return server.fetchSyncStateEpoch();
+  }
+
+  @override
+  Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() {
+    listKeptWisdomRecordNamesCallCount += 1;
+    return server.listKeptWisdomRecordNames();
+  }
+
+  @override
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) {
+    deleteKeptWisdomRecordsCallCount += 1;
+    return server.deleteKeptWisdomRecords(request);
+  }
 }
 
 /// One independent simulated device's full real-coordinator composition,
@@ -925,6 +1415,7 @@ class _RuntimeHarness {
       incomingCoordinator: incomingCoordinator,
       orchestrator: orchestrator,
       syncPersistenceStore: syncPersistenceStore,
+      localSyncIntentStore: intentStore,
       bridge: bridge,
       scheduler: retryScheduler,
     );
@@ -1043,6 +1534,208 @@ class _MarkerHidingSyncPersistenceStore implements SyncPersistenceStore {
           );
 
   @override
+  Future<ClearAssociatedAccountFingerprintResult>
+      clearAssociatedAccountFingerprintIfCurrent({
+    required String expectedCurrent,
+  }) =>
+          _delegate.clearAssociatedAccountFingerprintIfCurrent(
+            expectedCurrent: expectedCurrent,
+          );
+
+  @override
   Future<List<String>> loadMeaningfulAccountFingerprints() =>
       _delegate.loadMeaningfulAccountFingerprints();
+
+  @override
+  Future<PendingDeletionTransaction?> loadPendingDeletionTransaction() =>
+      _delegate.loadPendingDeletionTransaction();
+
+  @override
+  Future<BeginDeletionTransactionResult> beginDeletionTransaction({
+    required String accountFingerprint,
+  }) =>
+      _delegate.beginDeletionTransaction(
+        accountFingerprint: accountFingerprint,
+      );
+
+  @override
+  Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
+    required String accountFingerprint,
+    required DeletionTransactionStage expectedCurrentStage,
+    required DeletionTransactionStage nextStage,
+  }) =>
+      _delegate.advanceDeletionTransactionStage(
+        accountFingerprint: accountFingerprint,
+        expectedCurrentStage: expectedCurrentStage,
+        nextStage: nextStage,
+      );
+
+  @override
+  Future<void> clearDeletionTransaction({
+    required String accountFingerprint,
+  }) =>
+      _delegate.clearDeletionTransaction(
+        accountFingerprint: accountFingerprint,
+      );
+}
+
+/// Build 26 Phase 5 (slice 1, safety correction): a thin, test-only
+/// forwarding decorator -- identical in spirit to
+/// [_MarkerHidingSyncPersistenceStore] above -- that lets *only* this
+/// coordinator's own [loadPendingDeletionTransaction] read diverge from the
+/// real, shared store every other coordinator in the harness continues to
+/// read/write normally. Used to reproduce, deterministically, exactly what
+/// `ProtectedSyncPersistenceStore.loadPendingDeletionTransaction` does for
+/// real when the durable deletion-transaction record exists but cannot be
+/// safely decoded/validated (see `sync_persistence_envelope.dart`'s and
+/// `pending_deletion_transaction.dart`'s own fail-closed `decode`/`tryDecode`
+/// contracts, and `protected_sync_persistence_store.dart`'s
+/// `SyncPersistenceStoreException` propagation) -- it throws, it never
+/// returns `null`.
+class _DeletionStateCorruptedSyncPersistenceStore
+    implements SyncPersistenceStore {
+  _DeletionStateCorruptedSyncPersistenceStore(this._delegate);
+
+  final SyncPersistenceStore _delegate;
+
+  @override
+  Future<PendingDeletionTransaction?> loadPendingDeletionTransaction() async {
+    throw const SyncPersistenceStoreException(
+      'load-decode',
+      'Simulated: the authoritative sync-state file is corrupt.',
+    );
+  }
+
+  @override
+  Future<String?> loadAssociatedAccountFingerprint() =>
+      _delegate.loadAssociatedAccountFingerprint();
+
+  @override
+  Future<AccountSyncState?> loadAccountState(String accountFingerprint) =>
+      _delegate.loadAccountState(accountFingerprint);
+
+  @override
+  Future<void> replaceAccountState(
+    String accountFingerprint,
+    AccountSyncState state,
+  ) =>
+      _delegate.replaceAccountState(accountFingerprint, state);
+
+  @override
+  Future<void> enqueueMutation(String accountFingerprint, SyncChange change) =>
+      _delegate.enqueueMutation(accountFingerprint, change);
+
+  @override
+  Future<void> applyMutationOutcomes(
+    String accountFingerprint, {
+    Set<String> acknowledgedMutationIds = const {},
+    Map<String, PersistedOutboxMutationStatus> updatedStatusByMutationId =
+        const {},
+  }) =>
+      _delegate.applyMutationOutcomes(
+        accountFingerprint,
+        acknowledgedMutationIds: acknowledgedMutationIds,
+        updatedStatusByMutationId: updatedStatusByMutationId,
+      );
+
+  @override
+  Future<List<PersistedOutboxMutation>> readPendingMutations(
+    String accountFingerprint,
+  ) =>
+      _delegate.readPendingMutations(accountFingerprint);
+
+  @override
+  Future<void> replaceRecordSystemFields(
+    String accountFingerprint,
+    String recordName,
+    String systemFields,
+  ) =>
+      _delegate.replaceRecordSystemFields(
+        accountFingerprint,
+        recordName,
+        systemFields,
+      );
+
+  @override
+  Future<void> storeServerChangeToken(
+    String accountFingerprint,
+    String serverToken,
+  ) =>
+      _delegate.storeServerChangeToken(accountFingerprint, serverToken);
+
+  @override
+  Future<void> clearServerChangeToken(String accountFingerprint) =>
+      _delegate.clearServerChangeToken(accountFingerprint);
+
+  @override
+  Future<void> clearAccountState(String accountFingerprint) =>
+      _delegate.clearAccountState(accountFingerprint);
+
+  @override
+  Future<void> quarantineAccountState(String accountFingerprint) =>
+      _delegate.quarantineAccountState(accountFingerprint);
+
+  @override
+  Future<CommitIncomingBatchCheckpointResult> commitIncomingBatchCheckpoint(
+    CommitIncomingBatchCheckpointRequest request,
+  ) =>
+      _delegate.commitIncomingBatchCheckpoint(request);
+
+  @override
+  Future<RetireOutboxMutationResult> retireOutboxMutationIfCurrent(
+    RetireOutboxMutationRequest request,
+  ) =>
+      _delegate.retireOutboxMutationIfCurrent(request);
+
+  @override
+  Future<CommitAssociatedAccountFingerprintResult>
+      commitAssociatedAccountFingerprint({
+    required String fingerprint,
+    required String? expectedCurrent,
+  }) =>
+          _delegate.commitAssociatedAccountFingerprint(
+            fingerprint: fingerprint,
+            expectedCurrent: expectedCurrent,
+          );
+
+  @override
+  Future<ClearAssociatedAccountFingerprintResult>
+      clearAssociatedAccountFingerprintIfCurrent({
+    required String expectedCurrent,
+  }) =>
+          _delegate.clearAssociatedAccountFingerprintIfCurrent(
+            expectedCurrent: expectedCurrent,
+          );
+
+  @override
+  Future<List<String>> loadMeaningfulAccountFingerprints() =>
+      _delegate.loadMeaningfulAccountFingerprints();
+
+  @override
+  Future<BeginDeletionTransactionResult> beginDeletionTransaction({
+    required String accountFingerprint,
+  }) =>
+      _delegate.beginDeletionTransaction(
+        accountFingerprint: accountFingerprint,
+      );
+
+  @override
+  Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
+    required String accountFingerprint,
+    required DeletionTransactionStage expectedCurrentStage,
+    required DeletionTransactionStage nextStage,
+  }) =>
+      _delegate.advanceDeletionTransactionStage(
+        accountFingerprint: accountFingerprint,
+        expectedCurrentStage: expectedCurrentStage,
+        nextStage: nextStage,
+      );
+
+  @override
+  Future<void> clearDeletionTransaction({
+    required String accountFingerprint,
+  }) =>
+      _delegate.clearDeletionTransaction(
+        accountFingerprint: accountFingerprint,
+      );
 }

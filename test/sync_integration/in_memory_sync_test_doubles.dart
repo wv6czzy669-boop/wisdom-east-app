@@ -13,14 +13,19 @@
 /// any real file I/O.
 library;
 
+import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync/sync_change.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent.dart';
 import 'package:wisdom_app/sync_integration/local_sync_intent_store.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
+import 'package:wisdom_app/sync_persistence/deletion_transaction_result.dart';
 import 'package:wisdom_app/sync_persistence/incoming_batch_checkpoint.dart';
 import 'package:wisdom_app/sync_persistence/outbox_mutation_retirement.dart';
+import 'package:wisdom_app/sync_persistence/pending_deletion_transaction.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
+import 'package:wisdom_app/sync_persistence/sync_persistence_envelope.dart'
+    show looksLikeAccountFingerprint;
 import 'package:wisdom_app/sync_persistence/sync_persistence_store.dart';
 
 /// In-memory [LocalSyncIntentStore] reproducing [LocalSyncIntentStore
@@ -105,8 +110,118 @@ class InMemoryLocalSyncIntentStore implements LocalSyncIntentStore {
 /// [commitIncomingBatchCheckpoint] is intentionally unimplemented -- no
 /// Phase 4E-2 test exercises incoming-batch application.
 class InMemorySyncPersistenceStore implements SyncPersistenceStore {
+  InMemorySyncPersistenceStore({DataEpoch Function()? epochFactory})
+      : _epochFactory = epochFactory ?? DataEpoch.generate;
+
   final Map<String, AccountSyncState> _accounts = {};
   final Set<String> _quarantined = {};
+  final DataEpoch Function() _epochFactory;
+
+  /// Build 26 Phase 5 (slice 1): the durable deletion-transaction slot,
+  /// mirroring `SyncPersistenceEnvelope.pendingDeletionTransaction`'s own
+  /// top-level, bucket-independent placement exactly.
+  PendingDeletionTransaction? _pendingDeletionTransaction;
+
+  @override
+  Future<PendingDeletionTransaction?> loadPendingDeletionTransaction() async {
+    return _pendingDeletionTransaction;
+  }
+
+  @override
+  Future<BeginDeletionTransactionResult> beginDeletionTransaction({
+    required String accountFingerprint,
+  }) async {
+    if (!looksLikeAccountFingerprint(accountFingerprint)) {
+      return const BeginDeletionTransactionResult(
+        status: BeginDeletionTransactionStatus.invalidFingerprint,
+      );
+    }
+    final current = _pendingDeletionTransaction;
+    if (current != null) {
+      if (current.accountFingerprint == accountFingerprint) {
+        return BeginDeletionTransactionResult(
+          status: BeginDeletionTransactionStatus.resumedExisting,
+          transaction: current,
+        );
+      }
+      return const BeginDeletionTransactionResult(
+        status: BeginDeletionTransactionStatus.accountMismatch,
+      );
+    }
+
+    final bucket = _accounts[accountFingerprint];
+    final transaction = PendingDeletionTransaction(
+      accountFingerprint: accountFingerprint,
+      originalDataEpoch: bucket?.dataEpoch,
+      replacementDataEpoch: _epochFactory(),
+      stage: DeletionTransactionStage.prepared,
+    );
+    _pendingDeletionTransaction = transaction;
+    return BeginDeletionTransactionResult(
+      status: BeginDeletionTransactionStatus.started,
+      transaction: transaction,
+    );
+  }
+
+  @override
+  Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
+    required String accountFingerprint,
+    required DeletionTransactionStage expectedCurrentStage,
+    required DeletionTransactionStage nextStage,
+  }) async {
+    final current = _pendingDeletionTransaction;
+    if (current == null) {
+      return const AdvanceDeletionTransactionResult(
+        status: AdvanceDeletionTransactionStatus.noTransaction,
+      );
+    }
+    if (current.accountFingerprint != accountFingerprint) {
+      return const AdvanceDeletionTransactionResult(
+        status: AdvanceDeletionTransactionStatus.accountMismatch,
+      );
+    }
+    if (current.stage == nextStage) {
+      return AdvanceDeletionTransactionResult(
+        status: AdvanceDeletionTransactionStatus.advanced,
+        transaction: current,
+      );
+    }
+    if (current.stage != expectedCurrentStage) {
+      return const AdvanceDeletionTransactionResult(
+        status: AdvanceDeletionTransactionStatus.stageMismatch,
+      );
+    }
+    if (!isValidDeletionTransactionTransition(current.stage, nextStage)) {
+      return const AdvanceDeletionTransactionResult(
+        status: AdvanceDeletionTransactionStatus.invalidTransition,
+      );
+    }
+    final updated = current.copyWithStage(nextStage);
+    _pendingDeletionTransaction = updated;
+    return AdvanceDeletionTransactionResult(
+      status: AdvanceDeletionTransactionStatus.advanced,
+      transaction: updated,
+    );
+  }
+
+  @override
+  Future<void> clearDeletionTransaction({
+    required String accountFingerprint,
+  }) async {
+    final current = _pendingDeletionTransaction;
+    if (current == null || current.accountFingerprint != accountFingerprint) {
+      return;
+    }
+    _pendingDeletionTransaction = null;
+  }
+
+  /// Test-only convenience: directly seeds the deletion-transaction slot
+  /// without going through [beginDeletionTransaction]'s own CAS semantics,
+  /// mirroring [seedAccount]/[seedAssociatedAccountFingerprint]'s own
+  /// precedent.
+  void seedPendingDeletionTransaction(PendingDeletionTransaction? transaction) {
+    _pendingDeletionTransaction = transaction;
+  }
 
   /// Build 26 Phase 4E-4: the durable top-level associated-account marker --
   /// deliberately a plain field here (never a per-account bucket value),
@@ -138,6 +253,31 @@ class InMemorySyncPersistenceStore implements SyncPersistenceStore {
     _associatedAccountFingerprint = fingerprint;
     return const CommitAssociatedAccountFingerprintResult(
       AssociatedAccountFingerprintCommitStatus.committed,
+    );
+  }
+
+  /// Build 26 Phase 5 (slice 3): in-memory reproduction of
+  /// [ProtectedSyncPersistenceStore.clearAssociatedAccountFingerprintIfCurrent]'s
+  /// exact fail-closed compare-and-swap contract.
+  @override
+  Future<ClearAssociatedAccountFingerprintResult>
+      clearAssociatedAccountFingerprintIfCurrent({
+    required String expectedCurrent,
+  }) async {
+    final current = _associatedAccountFingerprint;
+    if (current == null) {
+      return const ClearAssociatedAccountFingerprintResult(
+        AssociatedAccountFingerprintClearStatus.alreadyClear,
+      );
+    }
+    if (current != expectedCurrent) {
+      return const ClearAssociatedAccountFingerprintResult(
+        AssociatedAccountFingerprintClearStatus.expectedCurrentMismatch,
+      );
+    }
+    _associatedAccountFingerprint = null;
+    return const ClearAssociatedAccountFingerprintResult(
+      AssociatedAccountFingerprintClearStatus.cleared,
     );
   }
 

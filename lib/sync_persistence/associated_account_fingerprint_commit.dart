@@ -63,3 +63,63 @@ final class CommitAssociatedAccountFingerprintResult {
   @override
   int get hashCode => status.hashCode;
 }
+
+/// Build 26 Phase 5 (slice 3): the categorical, content-safe outcome of one
+/// [SyncPersistenceStore.clearAssociatedAccountFingerprintIfCurrent] call --
+/// the durable marker's *only* clearing path (there was previously no way to
+/// null it out at all; [SyncPersistenceEnvelope.withAssociatedAccountFingerprintCleared]
+/// is the corresponding narrow, unconditional envelope-level primitive this
+/// method's own compare-and-swap guard sits in front of).
+///
+/// This is deliberately a fail-closed compare-and-swap, mirroring
+/// [AssociatedAccountFingerprintCommitStatus]'s own shape exactly: a marker
+/// that currently names a *different* fingerprint than the caller's
+/// `expectedCurrent` is never cleared, never overwritten, and never silently
+/// retargeted -- see the local-finalize "ACCOUNT SAFETY" contract this exists
+/// to support (a device that associated a genuinely new account after a
+/// "Remove from iCloud" transaction began must never have that new
+/// association silently torn down by a finalizer still cleaning up the old
+/// one).
+enum AssociatedAccountFingerprintClearStatus {
+  /// The marker held exactly [expectedCurrent] and is now durably cleared to
+  /// `null`.
+  cleared,
+
+  /// The marker was already `null` before this call -- an idempotent no-op
+  /// repeat. No envelope write occurred.
+  alreadyClear,
+
+  /// The marker's actual current value is a *different*, non-null
+  /// fingerprint than the caller's `expectedCurrent` -- fail-closed. Never
+  /// cleared, never overwritten.
+  expectedCurrentMismatch,
+}
+
+/// The full, content-safe result of one
+/// [SyncPersistenceStore.clearAssociatedAccountFingerprintIfCurrent] call.
+final class ClearAssociatedAccountFingerprintResult {
+  const ClearAssociatedAccountFingerprintResult(this.status);
+
+  final AssociatedAccountFingerprintClearStatus status;
+
+  bool get isClear =>
+      status == AssociatedAccountFingerprintClearStatus.cleared ||
+      status == AssociatedAccountFingerprintClearStatus.alreadyClear;
+
+  /// A privacy-safe summary: status only -- never a fingerprint value.
+  Map<String, Object?> toLogSafeSummary() => {'status': status.name};
+
+  @override
+  String toString() =>
+      'ClearAssociatedAccountFingerprintResult(${toLogSafeSummary()})';
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ClearAssociatedAccountFingerprintResult &&
+        other.status == status;
+  }
+
+  @override
+  int get hashCode => status.hashCode;
+}

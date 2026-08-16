@@ -13,6 +13,8 @@ import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync/sync_change.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
+import 'package:wisdom_app/sync_persistence/deletion_transaction_result.dart';
+import 'package:wisdom_app/sync_persistence/pending_deletion_transaction.dart';
 import 'package:wisdom_app/sync_persistence/persisted_outbox_mutation.dart';
 import 'package:wisdom_app/sync_persistence/protected_sync_persistence_store.dart';
 import 'package:wisdom_app/sync_persistence/sync_persistence_envelope.dart';
@@ -89,6 +91,7 @@ void main() {
     FileProtectionBridge? bridge,
     String Function()? tokenFactory,
     DateTime Function()? clock,
+    DataEpoch Function()? epochFactory,
   }) {
     var counter = 0;
     return ProtectedSyncPersistenceStore(
@@ -96,6 +99,7 @@ void main() {
       fileProtectionBridge: bridge ?? _FakeFileProtectionBridge(),
       tokenFactory: tokenFactory ?? (() => 'token-${counter++}'),
       clock: clock ?? (() => DateTime.utc(2026, 8, 1, 12, 0)),
+      epochFactory: epochFactory,
     );
   }
 
@@ -1406,6 +1410,82 @@ void main() {
   });
 
   test(
+      '38i. Phase 5 safety correction: a missing final file with zero '
+      'backups ever having existed safely yields "no deletion pending" '
+      '(the legitimate fresh-device case, unchanged by the correction '
+      'below)', () async {
+    final store = buildStore();
+
+    // No final file, no backup files at all -- this is what a genuinely
+    // fresh device (or a device that has never engaged sync) looks like on
+    // disk. Must remain indistinguishable from "no deletion transaction",
+    // exactly as it always has.
+    final pendingDeletion = await store.loadPendingDeletionTransaction();
+    expect(pendingDeletion, isNull);
+  });
+
+  test(
+      '38j. Phase 5 safety correction: a missing final file where every '
+      'candidate backup fails to decode now fails the whole load closed, '
+      'rather than silently yielding "no deletion pending"', () async {
+    final store = buildStore();
+
+    // Simulate total loss of the authoritative final (e.g. lost mid-crash)
+    // combined with every remaining backup copy also being corrupt. Prior
+    // to the Phase 5 safety correction, `_recoverFromBackupIfFinalAbsent`
+    // could not distinguish this from "no backups ever existed" and would
+    // fall through to `SyncPersistenceEnvelope.empty()` -- silently
+    // discarding any previously-durable `pendingDeletionTransaction` and
+    // making it indistinguishable from a deletion having never started.
+    await Directory(dirPath()).create(recursive: true);
+    await File(backupPathFor('corrupt-1'))
+        .writeAsString('{not even valid json');
+    await File(backupPathFor('corrupt-2')).writeAsString(
+      jsonEncode({'schemaVersion': 1, 'accounts': <String, dynamic>{}}
+        ..['pendingDeletionTransaction'] = {'accountFingerprint': 'bad'}),
+    );
+
+    Object? caught;
+    try {
+      await store.loadPendingDeletionTransaction();
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught, isA<SyncPersistenceStoreException>());
+    final typed = caught as SyncPersistenceStoreException;
+    expect(typed.stage, 'load-recover-exhausted');
+
+    // Privacy: the rendered exception never leaks the directory path or any
+    // backup content.
+    final rendered = typed.toString();
+    expect(rendered, isNot(contains(dirPath())));
+  });
+
+  test(
+      '38k. Phase 5 safety correction: the same backup-exhaustion fail-'
+      'closed behavior blocks CloudKitSyncRuntimeCoordinator-relevant '
+      'account-state reads too, not only the deletion-transaction read -- '
+      'proving the fix is a single shared correction, not a duplicated '
+      'deletion-only special case', () async {
+    final store = buildStore();
+    await Directory(dirPath()).create(recursive: true);
+    await File(backupPathFor('corrupt-only'))
+        .writeAsString('{not even valid json');
+
+    Object? caught;
+    try {
+      await store.loadAccountState(fingerprintA);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught, isA<SyncPersistenceStoreException>());
+    expect((caught as SyncPersistenceStoreException).stage,
+        'load-recover-exhausted');
+  });
+
+  test(
       '39. a first-write failure (no prior final) leaves no authoritative '
       'file behind', () async {
     final bridge = _FakeFileProtectionBridge();
@@ -1684,6 +1764,333 @@ void main() {
       );
       await store.quarantineAccountState(fingerprintA);
       expect(await store.loadMeaningfulAccountFingerprints(), isEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Build 26 Phase 5 (slice 1): the durable "Remove from iCloud" deletion
+  // transaction. See `pending_deletion_transaction.dart`'s own doc comment
+  // for the full contract this group exercises against the real,
+  // file-backed store.
+  // ---------------------------------------------------------------------
+  group('deletion transaction (loadPendingDeletionTransaction / '
+      'beginDeletionTransaction / advanceDeletionTransactionStage / '
+      'clearDeletionTransaction)', () {
+    test('1. absent transaction loads as null', () async {
+      final store = buildStore();
+      expect(await store.loadPendingDeletionTransaction(), isNull);
+    });
+
+    test(
+        '2. beginDeletionTransaction on a clean device creates a durable '
+        'transaction at DeletionTransactionStage.prepared, with no bucket '
+        'so originalDataEpoch is null', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      final result = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      expect(result.status, BeginDeletionTransactionStatus.started);
+      expect(result.transaction!.accountFingerprint, fingerprintA);
+      expect(result.transaction!.originalDataEpoch, isNull);
+      expect(result.transaction!.replacementDataEpoch, otherEpoch);
+      expect(result.transaction!.stage, DeletionTransactionStage.prepared);
+
+      final loaded = await store.loadPendingDeletionTransaction();
+      expect(loaded, result.transaction);
+    });
+
+    test(
+        '3. beginDeletionTransaction captures the existing bucket\'s '
+        'dataEpoch as originalDataEpoch exactly once', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.replaceAccountState(
+        fingerprintA,
+        AccountSyncState(dataEpoch: epoch),
+      );
+      final result = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      expect(result.status, BeginDeletionTransactionStatus.started);
+      expect(result.transaction!.originalDataEpoch, epoch);
+      expect(result.transaction!.replacementDataEpoch, otherEpoch);
+    });
+
+    test(
+        '4. each required stage persists correctly, in the locked forward '
+        'order, and each write survives a fresh store instance pointed at '
+        'the same directory (durable across process death)', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+
+      const stages = [
+        DeletionTransactionStage.epochBarrierPending,
+        DeletionTransactionStage.cloudPurgePending,
+        DeletionTransactionStage.verificationPending,
+        DeletionTransactionStage.localFinalizePending,
+      ];
+      var previous = DeletionTransactionStage.prepared;
+      for (final next in stages) {
+        final result = await store.advanceDeletionTransactionStage(
+          accountFingerprint: fingerprintA,
+          expectedCurrentStage: previous,
+          nextStage: next,
+        );
+        expect(result.status, AdvanceDeletionTransactionStatus.advanced,
+            reason: 'Failed advancing $previous -> $next');
+        expect(result.transaction!.stage, next);
+
+        // Durability: a brand-new store instance, same directory, observes
+        // the identical durable stage.
+        final freshStore = buildStore(epochFactory: () => otherEpoch);
+        final reloaded = await freshStore.loadPendingDeletionTransaction();
+        expect(reloaded!.stage, next);
+        expect(reloaded.replacementDataEpoch, otherEpoch);
+
+        previous = next;
+      }
+    });
+
+    test(
+        '5. replacementDataEpoch survives reload unchanged across every '
+        'stage advance', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      final begin = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      final originalReplacementEpoch = begin.transaction!.replacementDataEpoch;
+
+      await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.epochBarrierPending,
+      );
+      final afterAdvance = await store.loadPendingDeletionTransaction();
+      expect(afterAdvance!.replacementDataEpoch, originalReplacementEpoch);
+    });
+
+    test(
+        '6. retry/resume (calling beginDeletionTransaction again for the '
+        'same account) does NOT generate a second epoch -- returns the '
+        'existing transaction completely unchanged', () async {
+      var callCount = 0;
+      final store = buildStore(epochFactory: () {
+        callCount += 1;
+        return callCount == 1 ? epoch : otherEpoch;
+      });
+
+      final first = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      expect(first.status, BeginDeletionTransactionStatus.started);
+      expect(first.transaction!.replacementDataEpoch, epoch);
+
+      final second = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      expect(second.status, BeginDeletionTransactionStatus.resumedExisting);
+      expect(second.transaction, first.transaction);
+      expect(second.transaction!.replacementDataEpoch, epoch,
+          reason: 'The epoch factory must not have been called a second '
+              'time for the same account.');
+      expect(callCount, 1);
+    });
+
+    test(
+        '6b. retry/resume after the transaction has already advanced past '
+        'prepared returns the current stage unchanged, never resetting it',
+        () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+      await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.epochBarrierPending,
+      );
+
+      final resumed = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      expect(resumed.status, BeginDeletionTransactionStatus.resumedExisting);
+      expect(resumed.transaction!.stage,
+          DeletionTransactionStage.epochBarrierPending);
+    });
+
+    test(
+        '7. the transaction remains bound to the original account '
+        'association -- beginDeletionTransaction for a different '
+        'fingerprint while one already exists fails closed with zero '
+        'mutation', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      final first = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+
+      final mismatch = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintB,
+      );
+      expect(mismatch.status, BeginDeletionTransactionStatus.accountMismatch);
+      expect(mismatch.transaction, isNull);
+
+      // Zero mutation: the original transaction is completely untouched.
+      final stillOriginal = await store.loadPendingDeletionTransaction();
+      expect(stillOriginal, first.transaction);
+    });
+
+    test(
+        '8. advanceDeletionTransactionStage for a mismatched account fails '
+        'closed with zero mutation', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      final begin = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+
+      final result = await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintB,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.epochBarrierPending,
+      );
+      expect(result.status, AdvanceDeletionTransactionStatus.accountMismatch);
+
+      final stillOriginal = await store.loadPendingDeletionTransaction();
+      expect(stillOriginal, begin.transaction);
+    });
+
+    test(
+        '9. advanceDeletionTransactionStage refuses a stage-skipping '
+        'transition even when the account matches', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+
+      final result = await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.cloudPurgePending,
+      );
+      expect(result.status, AdvanceDeletionTransactionStatus.invalidTransition);
+
+      final unchanged = await store.loadPendingDeletionTransaction();
+      expect(unchanged!.stage, DeletionTransactionStage.prepared);
+    });
+
+    test(
+        '10. advanceDeletionTransactionStage refuses when expectedCurrentStage '
+        'does not match the durable current stage', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+
+      final result = await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.epochBarrierPending,
+        nextStage: DeletionTransactionStage.cloudPurgePending,
+      );
+      expect(result.status, AdvanceDeletionTransactionStatus.stageMismatch);
+    });
+
+    test(
+        '11. advanceDeletionTransactionStage with no transaction at all '
+        'reports noTransaction, never throws', () async {
+      final store = buildStore();
+      final result = await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.epochBarrierPending,
+      );
+      expect(result.status, AdvanceDeletionTransactionStatus.noTransaction);
+    });
+
+    test(
+        '12. advanceDeletionTransactionStage re-asking for the already-'
+        'current stage is an idempotent no-op (never regresses, never '
+        'errors)', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+
+      final result = await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.prepared,
+      );
+      expect(result.status, AdvanceDeletionTransactionStatus.advanced);
+      expect(result.transaction!.stage, DeletionTransactionStage.prepared);
+    });
+
+    test(
+        '13. clearDeletionTransaction removes the transaction only when the '
+        'fingerprint matches; a mismatched fingerprint is a safe no-op',
+        () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+
+      await store.clearDeletionTransaction(accountFingerprint: fingerprintB);
+      expect(await store.loadPendingDeletionTransaction(), isNotNull,
+          reason: 'A mismatched fingerprint must never clear an unrelated '
+              "account's transaction.");
+
+      await store.clearDeletionTransaction(accountFingerprint: fingerprintA);
+      expect(await store.loadPendingDeletionTransaction(), isNull);
+    });
+
+    test('14. clearDeletionTransaction with no transaction at all is a safe '
+        'no-op', () async {
+      final store = buildStore();
+      await store.clearDeletionTransaction(accountFingerprint: fingerprintA);
+      expect(await store.loadPendingDeletionTransaction(), isNull);
+    });
+
+    test(
+        '15. beginDeletionTransaction with a malformed fingerprint refuses '
+        'with zero mutation, never throws', () async {
+      final store = buildStore();
+      final result = await store.beginDeletionTransaction(
+        accountFingerprint: 'not-a-real-fingerprint',
+      );
+      expect(result.status, BeginDeletionTransactionStatus.invalidFingerprint);
+      expect(await store.loadPendingDeletionTransaction(), isNull);
+    });
+
+    test(
+        '16. beginning/advancing/clearing a deletion transaction never '
+        'creates, modifies, or removes any AccountSyncState bucket -- local '
+        'Kept/Reflection outbox content and dataEpoch are completely '
+        'untouched by this slice', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      await store.enqueueMutation(fingerprintA, createChangeFor(revealId1));
+      final beforeBucket = await store.loadAccountState(fingerprintA);
+
+      await store.beginDeletionTransaction(accountFingerprint: fingerprintA);
+      await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.epochBarrierPending,
+      );
+      await store.clearDeletionTransaction(accountFingerprint: fingerprintA);
+
+      final afterBucket = await store.loadAccountState(fingerprintA);
+      expect(afterBucket, beforeBucket,
+          reason: 'The account\'s outbox/dataEpoch bucket must be byte-for-'
+              'byte unaffected by the deletion-transaction lifecycle.');
+    });
+
+    test(
+        '17. toLogSafeSummary() on both result types never renders the '
+        'account fingerprint or an epoch value', () async {
+      final store = buildStore(epochFactory: () => otherEpoch);
+      final begin = await store.beginDeletionTransaction(
+        accountFingerprint: fingerprintA,
+      );
+      expect(begin.toString().contains(fingerprintA), isFalse);
+      expect(begin.toLogSafeSummary().toString().contains(fingerprintA),
+          isFalse);
+      expect(begin.toString().contains(otherEpoch.value), isFalse);
+
+      final advance = await store.advanceDeletionTransactionStage(
+        accountFingerprint: fingerprintA,
+        expectedCurrentStage: DeletionTransactionStage.prepared,
+        nextStage: DeletionTransactionStage.epochBarrierPending,
+      );
+      expect(advance.toString().contains(fingerprintA), isFalse);
+      expect(advance.toLogSafeSummary().toString().contains(fingerprintA),
+          isFalse);
     });
   });
 

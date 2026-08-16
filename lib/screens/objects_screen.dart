@@ -193,9 +193,9 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
                           'DISCOVER THE OBJECTS',
                           textAlign: TextAlign.center,
                           style: _style(
-                            15,
+                            11,
                             color: eastMutedTextColor,
-                            letterSpacing: 1.3,
+                            letterSpacing: 2.2,
                           ),
                         ),
                       ),

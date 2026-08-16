@@ -11,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/models/kept_bootstrap_result.dart';
 import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/repositories/kept_repository.dart';
+import 'package:wisdom_app/services/analytics_event.dart';
+import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 
@@ -603,4 +605,206 @@ void main() {
       );
     });
   });
+
+  // EAST. Phase 7 — privacy-safe analytics wiring.
+  group('analytics', () {
+    late _FakeAnalyticsTransport transport;
+    late SavedReflectionsService analyticsService;
+
+    setUp(() {
+      transport = _FakeAnalyticsTransport();
+      analyticsService = SavedReflectionsService(
+        keptRepository: graph.repository,
+        syncCoordinator: graph.syncCoordinator,
+        analyticsService: AnalyticsService(transport: transport),
+      );
+    });
+
+    test('kept_saved fires only after a successful Keep', () async {
+      final result = await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(result.limitReached, isFalse);
+      expect(transport.tracked, [AnalyticsEvent.keptSaved]);
+    });
+
+    test('kept_saved never fires when the free Kept limit blocks the save',
+        () async {
+      for (var i = 0; i < 3; i += 1) {
+        await analyticsService.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-11111111111$i',
+          text: 'Wisdom $i',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: false,
+        );
+      }
+      transport.tracked.clear();
+
+      final blocked = await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111999',
+        text: 'Wisdom 4',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+
+      expect(blocked.limitReached, isTrue);
+      expect(transport.tracked, isEmpty);
+    });
+
+    test('kept_saved never fires for the Remove branch of toggle', () async {
+      final kept = await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      transport.tracked.clear();
+
+      await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+        existingId: kept.items.single.id,
+      );
+
+      expect(transport.tracked, isEmpty);
+    });
+
+    test('reflection_saved fires only after a successful Reflection save',
+        () async {
+      final kept = await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      transport.tracked.clear();
+
+      final saved = await analyticsService.saveReflection(
+        itemId: kept.items.single.id,
+        reflection: 'A quiet morning.',
+        isKeeper: false,
+        reflectedAt: DateTime.utc(2026, 8, 1, 15),
+      );
+
+      expect(saved.reflectionLimitReached, isFalse);
+      expect(transport.tracked, [AnalyticsEvent.reflectionSaved]);
+    });
+
+    test(
+        'reflection_saved never fires when the free reflection limit blocks '
+        'the save', () async {
+      final ids = <String>[];
+      for (var i = 0; i < 4; i += 1) {
+        final kept = await analyticsService.toggle(
+          revealId: 'a5f3c111-1111-4111-8111-11111111111$i',
+          text: 'Wisdom $i',
+          date: 'August 1, 2026',
+          revealedAt: DateTime.utc(2026, 8, 1),
+          isKeeper: true,
+        );
+        ids.add(
+          kept.items.singleWhere((item) => item.text == 'Wisdom $i').id,
+        );
+      }
+      for (var i = 0; i < 3; i += 1) {
+        await analyticsService.saveReflection(
+          itemId: ids[i],
+          reflection: 'Reflection $i',
+          isKeeper: false,
+        );
+      }
+      transport.tracked.clear();
+
+      final blocked = await analyticsService.saveReflection(
+        itemId: ids[3],
+        reflection: 'Fourth reflection',
+        isKeeper: false,
+      );
+
+      expect(blocked.reflectionLimitReached, isTrue);
+      expect(transport.tracked, isEmpty);
+    });
+
+    test(
+        'reflection_saved never fires when saveReflection throws (invalid '
+        'reflection or missing item)', () async {
+      final kept = await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'Be still.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      transport.tracked.clear();
+
+      await expectLater(
+        analyticsService.saveReflection(
+          itemId: kept.items.single.id,
+          reflection: '   ',
+          isKeeper: false,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+      await expectLater(
+        analyticsService.saveReflection(
+          itemId: 'does-not-exist',
+          reflection: 'A reflection for a record that is gone',
+          isKeeper: false,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
+
+      expect(transport.tracked, isEmpty);
+    });
+
+    test('no event ever carries wisdom or reflection text, revealId, or '
+        'itemId -- the transport receives only a closed AnalyticsEvent enum '
+        'value', () async {
+      final kept = await analyticsService.toggle(
+        revealId: 'a5f3c111-1111-4111-8111-111111111111',
+        text: 'A private wisdom that must never leave this device.',
+        date: 'August 1, 2026',
+        revealedAt: DateTime.utc(2026, 8, 1),
+        isKeeper: false,
+      );
+      await analyticsService.saveReflection(
+        itemId: kept.items.single.id,
+        reflection: 'A private reflection that must never leave this device.',
+        isKeeper: false,
+        reflectedAt: DateTime.utc(2026, 8, 1, 15),
+      );
+
+      expect(transport.tracked, [
+        AnalyticsEvent.keptSaved,
+        AnalyticsEvent.reflectionSaved,
+      ]);
+      // AnalyticsEvent carries only its fixed `eventName`; there is no
+      // second field any private value could have been attached to.
+      for (final event in transport.tracked) {
+        expect(event.eventName, isNot(contains('private')));
+        expect(event.eventName, isNot(contains(kept.items.single.id)));
+      }
+    });
+  });
+}
+
+class _FakeAnalyticsTransport implements AnalyticsTransport {
+  final List<AnalyticsEvent> tracked = [];
+
+  @override
+  void track(AnalyticsEvent event) {
+    tracked.add(event);
+  }
 }

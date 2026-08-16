@@ -23,6 +23,16 @@ class FavoriteItem {
   /// requires a non-null `revealId`).
   final String? revealId;
 
+  /// When this occurrence was added to Kept, as an ISO-8601 string —
+  /// mirrors [KeptRecord.keptAt] verbatim, never derived from the
+  /// human-formatted [date] string (which is display-only and already
+  /// lossy: local timezone, no time-of-day). Powers Return's (Phase 9)
+  /// 14-day eligibility age; never used for Kept/Reflection identity, which
+  /// remains [revealId] alone. Always `null` for data that predates this
+  /// field, exactly like [revealId] above — never backfilled or fabricated
+  /// here.
+  final String? keptAt;
+
   const FavoriteItem({
     required this.id,
     required this.text,
@@ -30,6 +40,7 @@ class FavoriteItem {
     this.reflection,
     this.reflectedAt,
     this.revealId,
+    this.keptAt,
   });
 
   static const int currentSchemaVersion = 2;
@@ -43,6 +54,7 @@ class FavoriteItem {
     String? reflection,
     String? reflectedAt,
     String? revealId,
+    String? keptAt,
     bool clearReflection = false,
   }) {
     return FavoriteItem(
@@ -56,6 +68,7 @@ class FavoriteItem {
       // delete reflection, which never passes `revealId`) leaves this
       // identity untouched.
       revealId: revealId ?? this.revealId,
+      keptAt: keptAt ?? this.keptAt,
     );
   }
 

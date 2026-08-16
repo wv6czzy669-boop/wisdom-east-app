@@ -29,9 +29,12 @@ import 'package:wisdom_app/sync_platform/cloud_east_sync_state_wire_envelope.dar
 import 'package:wisdom_app/sync_platform/cloud_kit_account_snapshot.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_bridge_info.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_change_event.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_delete_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_error.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
 import 'package:wisdom_app/utils/kept_timestamp_canonicalizer.dart';
@@ -124,6 +127,23 @@ class _FakeCloudKitPlatformBridge implements CloudKitPlatformBridge {
     }
     return fetchProvider!.call(request);
   }
+
+  // Build 26 Phase 5 (slice 2): the three deletion-runner-only bridge
+  // methods -- never used by KeptSyncBootstrapCoordinator (only
+  // CloudKitRemoteDeletionRunner calls them).
+  @override
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() =>
+      throw UnimplementedError('Not used by KeptSyncBootstrapCoordinator.');
+
+  @override
+  Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() =>
+      throw UnimplementedError('Not used by KeptSyncBootstrapCoordinator.');
+
+  @override
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) =>
+      throw UnimplementedError('Not used by KeptSyncBootstrapCoordinator.');
 }
 
 void main() {
@@ -1569,6 +1589,72 @@ void main() {
   });
 
   group(
+      '32. Build 26 Phase 5 (slice 2) compatibility: a stale device that '
+      'already completed bootstrap under the old epoch continues to hit '
+      'this existing remote-epoch-change fail-closed barrier once a Phase '
+      '5 remote deletion runner has rotated CKEastSyncState.dataEpoch, '
+      'rather than ever uploading its own stale local content. The Phase 5 '
+      'deletion runner (lib/sync_deletion/cloud_kit_remote_deletion_runner'
+      '.dart) establishes its replacement epoch via a plain '
+      'modifyPrivateRecords save of CKEastSyncState -- wire-identical to '
+      'any other sync-state save this coordinator already handles -- so '
+      'this test asserts the existing check requires zero modification for '
+      'Phase 5 to be safe: it is a pure `remoteEpoch != '
+      'completeBucket.dataEpoch` comparison '
+      '(_checkAlreadyCompleteForEpochChange), unrelated to how or why the '
+      'remote epoch changed.', () {
+    test(
+        '32. remote epoch rotated by a Phase 5 deletion runner -> '
+        'remoteEpochChangedRecoveryRequired, zero mutation, no local Kept '
+        'upload -- this device never silently repopulates iCloud', () async {
+      // This device (a stale "Device B") completed bootstrap under `epoch`
+      // and has its own local Kept content. Its own AccountSyncState bucket
+      // still records `epoch` as the last epoch it observed.
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
+      syncStore.seedAssociatedAccountFingerprint(fingerprintA);
+      await seedLocalRecord(buildRecord(id: 'k1', revealId: revealIdA));
+
+      // Simulates "Device A" having already driven a Phase 5 remote
+      // deletion transaction through CloudKitRemoteDeletionRunner's
+      // epochBarrierPending stage: a fresh replacement epoch is now the
+      // authoritative CKEastSyncState.dataEpoch remotely, generated exactly
+      // once via the same DataEpoch.generate() factory the runner itself
+      // uses -- this device (Device B) has not observed that rotation yet.
+      final replacementEpochFromDeletionRunner = DataEpoch.generate();
+      bridge.fetchProvider = (_) => successResult(
+            syncState: [
+              CloudEastSyncStateProjection.current(
+                dataEpoch: replacementEpochFromDeletionRunner,
+                mutationId: mutationIdFor(revealIdA),
+              ),
+            ],
+          );
+
+      final before = await syncStore.loadAccountState(fingerprintA);
+      final result = await bootstrapCoordinator.runBootstrap();
+
+      expect(
+        result.status,
+        BootstrapRunStatus.remoteEpochChangedRecoveryRequired,
+        reason: 'the rotated epoch a Phase 5 deletion runner establishes is '
+            'indistinguishable, to this existing check, from any other '
+            'remote epoch change -- it must fail closed exactly the same '
+            'way, never proceed as if nothing happened.',
+      );
+      final after = await syncStore.loadAccountState(fingerprintA);
+      expect(after, before,
+          reason: 'this device\'s own bucket/epoch/token must be completely '
+              'untouched by discovering the rotation.');
+      expect(after!.bootstrapState, AccountBootstrapState.complete);
+      expect(bridge.modifyPrivateRecordsCallCount, 0,
+          reason: 'zero mutation -- in particular, this stale device must '
+              'never upload its own local Kept content under the old '
+              'epoch, which is exactly what would silently repopulate the '
+              'CKKeptWisdom records Phase 5 is in the middle of purging.');
+    });
+  });
+
+  group(
       '55-57. Build 26 Phase 4H real-device regression: the resume-path '
       'incremental fetch (_checkAlreadyCompleteForEpochChange) fails '
       'closed to fetchFailed on a genuine transport failure -- never a '
@@ -1586,8 +1672,8 @@ void main() {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
       final before = await syncStore.loadAccountState(fingerprintA);
-      bridge.fetchProvider = (_) =>
-          throw const CloudKitPlatformException('networkFailure');
+      bridge.fetchProvider =
+          (_) => throw const CloudKitPlatformException('networkFailure');
 
       final result = await bootstrapCoordinator.runBootstrap();
 
@@ -1608,8 +1694,8 @@ void main() {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
       final before = await syncStore.loadAccountState(fingerprintA);
-      bridge.fetchProvider = (_) =>
-          CloudKitZoneChangesResult.failure('zoneBusy');
+      bridge.fetchProvider =
+          (_) => CloudKitZoneChangesResult.failure('zoneBusy');
 
       final result = await bootstrapCoordinator.runBootstrap();
 
@@ -1628,8 +1714,8 @@ void main() {
         'state a subsequent success needs to work around', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
-      bridge.fetchProvider = (_) =>
-          throw const CloudKitPlatformException('networkFailure');
+      bridge.fetchProvider =
+          (_) => throw const CloudKitPlatformException('networkFailure');
       final firstAttempt = await bootstrapCoordinator.runBootstrap();
       expect(firstAttempt.status, BootstrapRunStatus.fetchFailed);
 
@@ -1715,8 +1801,7 @@ void main() {
   // `KeptSyncBootstrapCoordinator.runBootstrap()` call graph -- never a
   // copied/reimplemented helper.
   // -------------------------------------------------------------------
-  group('Phase 4G bootstrap timestamp canonicalization (real-device fix)',
-      () {
+  group('Phase 4G bootstrap timestamp canonicalization (real-device fix)', () {
     late Directory tempRoot;
     late ProtectedSyncPersistenceStore realSyncStore;
     late ProtectedLocalSyncIntentStore realIntentStore;

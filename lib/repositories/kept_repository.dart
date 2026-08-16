@@ -772,6 +772,7 @@ final class KeptRepository {
       date: formatFavoriteDisplayDate(record.keptAt.toLocal()),
       reflection: record.reflectionText,
       reflectedAt: record.reflectedAt?.toIso8601String(),
+      keptAt: record.keptAt.toIso8601String(),
     );
   }
 }

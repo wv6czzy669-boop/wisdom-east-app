@@ -47,8 +47,11 @@ import 'package:wisdom_app/sync_orchestration/sync_orchestrator.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_change_event.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_account_snapshot.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_bridge_info.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_delete_records_contract.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_modify_records_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
+import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
 
@@ -142,6 +145,24 @@ class E2ECloudKitPlatformBridge implements CloudKitPlatformBridge {
     if (hold != null) await hold.future;
     return server.fetch(request);
   }
+
+  // Build 26 Phase 5 (slice 2): the three deletion-runner-only bridge
+  // methods -- never used by the Phase 4E-5 E2E harness's own
+  // outgoing/incoming sync-pass scenarios (SyncOrchestrator/
+  // IncomingKeptSyncCoordinator never call them).
+  @override
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() =>
+      throw UnimplementedError('Not used by the Phase 4E-5 E2E harness.');
+
+  @override
+  Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() =>
+      throw UnimplementedError('Not used by the Phase 4E-5 E2E harness.');
+
+  @override
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) =>
+      throw UnimplementedError('Not used by the Phase 4E-5 E2E harness.');
 }
 
 /// The combined, content-safe result of [SyncDeviceHarness

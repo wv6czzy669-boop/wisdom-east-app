@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'cloud_kit_account_change_event.dart';
 import 'cloud_kit_account_snapshot.dart';
 import 'cloud_kit_bridge_info.dart';
+import 'cloud_kit_delete_records_contract.dart';
+import 'cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'cloud_kit_modify_records_contract.dart';
 import 'cloud_kit_platform_bridge.dart';
 import 'cloud_kit_platform_error.dart';
+import 'cloud_kit_sync_state_epoch_contract.dart';
 import 'cloud_kit_zone_changes_contract.dart';
 import 'cloud_kit_zone_configuration_result.dart';
 
@@ -43,6 +46,14 @@ final class MethodChannelCloudKitPlatformBridge
   /// channel that do.
   static const String methodModifyPrivateRecords = 'modifyPrivateRecords';
   static const String methodFetchPrivateZoneChanges = 'fetchPrivateZoneChanges';
+
+  /// Build 26 Phase 5 (slice 2). Used only by the remote deletion runner
+  /// (`lib/sync_deletion/`) -- never by `SyncOrchestrator` or
+  /// `KeptSyncBootstrapCoordinator`.
+  static const String methodFetchSyncStateEpoch = 'fetchSyncStateEpoch';
+  static const String methodListKeptWisdomRecordNames =
+      'listKeptWisdomRecordNames';
+  static const String methodDeleteKeptWisdomRecords = 'deleteKeptWisdomRecords';
 
   static const MethodChannel _methodChannel = MethodChannel(methodChannelName);
   static const EventChannel _eventChannel = EventChannel(eventChannelName);
@@ -134,6 +145,48 @@ final class MethodChannelCloudKitPlatformBridge
       );
     }
     return CloudKitZoneChangesResult.tryParse(map);
+  }
+
+  @override
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() async {
+    final raw = await _invoke(methodFetchSyncStateEpoch);
+    final map = _asMap(raw);
+    if (map == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return CloudKitSyncStateEpochResult.tryParse(map);
+  }
+
+  @override
+  Future<CloudKitKeptWisdomRecordNamesResult>
+      listKeptWisdomRecordNames() async {
+    final raw = await _invoke(methodListKeptWisdomRecordNames);
+    final map = _asMap(raw);
+    if (map == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return CloudKitKeptWisdomRecordNamesResult.tryParse(map);
+  }
+
+  @override
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
+  ) async {
+    final raw = await _invokeWithArguments(
+      methodDeleteKeptWisdomRecords,
+      request.toChannelArguments(),
+    );
+    final map = _asMap(raw);
+    if (map == null) {
+      throw const CloudKitPlatformException(
+        CloudKitPlatformException.malformedResultCode,
+      );
+    }
+    return CloudKitDeleteKeptWisdomRecordsResult.tryParse(map);
   }
 
   Map<Object?, Object?>? _asMap(Object? raw) {

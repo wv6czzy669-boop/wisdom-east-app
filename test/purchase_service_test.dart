@@ -6,6 +6,8 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
+import 'package:wisdom_app/services/analytics_event.dart';
+import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 
@@ -1182,6 +1184,173 @@ void main() {
     expect(result.text, 'Restored while locked wisdom');
     expect(result.isNew, isFalse);
   });
+
+  // EAST. Phase 7 — privacy-safe analytics wiring.
+  test(
+      'keeper_purchase_started fires once an attempt genuinely begins, and '
+      'keeper_purchase_completed fires only once the purchase is persisted',
+      () async {
+    service.dispose();
+    final transport = _FakeAnalyticsTransport();
+    service = PurchaseService(
+      analyticsService: AnalyticsService(transport: transport),
+    );
+    await service.init();
+
+    expect(transport.tracked, isEmpty);
+
+    expect(await service.buyKeeper(), isTrue);
+    expect(transport.tracked, [AnalyticsEvent.keeperPurchaseStarted]);
+
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(service.isKeeper, isTrue);
+    expect(transport.tracked, [
+      AnalyticsEvent.keeperPurchaseStarted,
+      AnalyticsEvent.keeperPurchaseCompleted,
+    ]);
+  });
+
+  test('keeper_purchase_started never fires when a purchase attempt is '
+      'blocked before it genuinely begins (already Keeper)', () async {
+    service.dispose();
+    final transport = _FakeAnalyticsTransport();
+    service = PurchaseService(
+      entitlementWriter: () async => true,
+      analyticsService: AnalyticsService(transport: transport),
+    );
+    await service.init();
+    expect(await service.buyKeeper(), isTrue);
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+    transport.tracked.clear();
+
+    // Already Keeper: buyKeeper's own guard returns false before ever
+    // reaching the "purchasing" state.
+    expect(await service.buyKeeper(), isFalse);
+    expect(transport.tracked, isEmpty);
+  });
+
+  test('keeper_purchase_completed never fires for a canceled or failed '
+      'purchase', () async {
+    service.dispose();
+    final transport = _FakeAnalyticsTransport();
+    service = PurchaseService(
+      analyticsService: AnalyticsService(transport: transport),
+    );
+    await service.init();
+
+    expect(await service.buyKeeper(), isTrue);
+    platform.emitPurchase(PurchaseStatus.canceled);
+    await _flushEvents();
+
+    expect(service.isKeeper, isFalse);
+    expect(transport.tracked, [AnalyticsEvent.keeperPurchaseStarted]);
+  });
+
+  test('keeper_purchase_completed never fires twice for a redelivered '
+      'duplicate transaction', () async {
+    service.dispose();
+    final transport = _FakeAnalyticsTransport();
+    service = PurchaseService(
+      analyticsService: AnalyticsService(transport: transport),
+    );
+    await service.init();
+
+    expect(await service.buyKeeper(), isTrue);
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+    expect(
+      transport.tracked.where((e) => e == AnalyticsEvent.keeperPurchaseCompleted),
+      hasLength(1),
+    );
+
+    // StoreKit may redeliver the same transaction; the stream may emit it
+    // again with the same purchaseID.
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(
+      transport.tracked.where((e) => e == AnalyticsEvent.keeperPurchaseCompleted),
+      hasLength(1),
+    );
+  });
+
+  test(
+      'keeper_restore_completed fires only once restore actually confirms '
+      'Keeper, never when nothing to restore is found', () async {
+    service.dispose();
+    final transport = _FakeAnalyticsTransport();
+    service = PurchaseService(
+      restoreResponseWindow: Duration.zero,
+      analyticsService: AnalyticsService(transport: transport),
+    );
+    await service.init();
+
+    // A restore that completes with no matching purchase event at all --
+    // the response window simply times out.
+    expect(await service.restorePurchases(), isTrue);
+    await _flushEvents();
+    expect(transport.tracked, isEmpty);
+
+    // A genuine restore that does confirm Keeper.
+    expect(await service.restorePurchases(), isTrue);
+    platform.emitPurchase(
+      PurchaseStatus.restored,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(service.isKeeper, isTrue);
+    expect(transport.tracked, [AnalyticsEvent.keeperRestoreCompleted]);
+  });
+
+  test('a failing analytics transport never affects a real purchase or '
+      'restore completing', () async {
+    service.dispose();
+    final transport = _FakeAnalyticsTransport()..shouldThrow = true;
+    service = PurchaseService(
+      analyticsService: AnalyticsService(transport: transport),
+    );
+    await service.init();
+
+    expect(await service.buyKeeper(), isTrue);
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(service.isKeeper, isTrue);
+    expect(service.entitlementPersistenceFailed, isFalse);
+    expect(platform.completedPurchases, 1);
+  });
+}
+
+class _FakeAnalyticsTransport implements AnalyticsTransport {
+  final List<AnalyticsEvent> tracked = [];
+  bool shouldThrow = false;
+
+  @override
+  void track(AnalyticsEvent event) {
+    if (shouldThrow) {
+      throw StateError('transport unavailable');
+    }
+    tracked.add(event);
+  }
 }
 
 Future<void> _flushEvents() async {

@@ -1,7 +1,10 @@
 import 'cloud_kit_account_change_event.dart';
 import 'cloud_kit_account_snapshot.dart';
 import 'cloud_kit_bridge_info.dart';
+import 'cloud_kit_delete_records_contract.dart';
+import 'cloud_kit_kept_wisdom_record_names_contract.dart';
 import 'cloud_kit_modify_records_contract.dart';
+import 'cloud_kit_sync_state_epoch_contract.dart';
 import 'cloud_kit_zone_changes_contract.dart';
 import 'cloud_kit_zone_configuration_result.dart';
 
@@ -63,5 +66,35 @@ abstract interface class CloudKitPlatformBridge {
   /// resolves a conflict -- purely a read primitive.
   Future<CloudKitZoneChangesResult> fetchPrivateZoneChanges(
     CloudKitZoneChangesRequest request,
+  );
+
+  /// Build 26 Phase 5 (slice 2): a narrow, single-record, content-minimal
+  /// read of the `CKEastSyncState` singleton -- used only by the Phase 5
+  /// remote deletion runner (`lib/sync_deletion/`) to read the current
+  /// authoritative epoch before establishing its replacement. Never called
+  /// by [modifyPrivateRecords]/[fetchPrivateZoneChanges]'s own callers
+  /// (`SyncOrchestrator`/`KeptSyncBootstrapCoordinator`), and never mutates
+  /// anything itself. See `cloud_kit_sync_state_epoch_contract.dart` for why
+  /// this exists separately from [fetchPrivateZoneChanges].
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch();
+
+  /// Build 26 Phase 5 (slice 2): lists every `CKKeptWisdom` record currently
+  /// in `EASTKeptZone`, by `recordName` only -- never wisdom/Reflection
+  /// content, never a `revealId` decoded from the name. Used only by the
+  /// Phase 5 remote deletion runner, to discover which records to purge and
+  /// again afterward to verify zero remain. Aggregates every page CloudKit
+  /// reports internally before returning once, exactly like
+  /// [fetchPrivateZoneChanges] already does for its own read.
+  Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames();
+
+  /// Build 26 Phase 5 (slice 2): physically deletes the named `CKKeptWisdom`
+  /// records from `EASTKeptZone`. Used only by the Phase 5 remote deletion
+  /// runner. Deliberately a distinct method from [modifyPrivateRecords],
+  /// whose own native transport has a locked, tested invariant that it
+  /// never issues a physical CloudKit record deletion (normal sync remains
+  /// tombstone-only, exactly as before this phase) -- see
+  /// `cloud_kit_delete_records_contract.dart`.
+  Future<CloudKitDeleteKeptWisdomRecordsResult> deleteKeptWisdomRecords(
+    CloudKitDeleteKeptWisdomRecordsRequest request,
   );
 }

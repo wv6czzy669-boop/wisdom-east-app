@@ -5,12 +5,15 @@ import 'package:uuid/uuid.dart';
 
 import '../persistence/file_protection_bridge.dart';
 import '../persistence/persistence_operation_coordinator.dart';
+import '../sync/data_epoch.dart';
 import '../sync/sync_change.dart';
 import '../utils/kept_diagnostics.dart';
 import 'account_sync_state.dart';
 import 'associated_account_fingerprint_commit.dart';
+import 'deletion_transaction_result.dart';
 import 'incoming_batch_checkpoint.dart';
 import 'outbox_mutation_retirement.dart';
+import 'pending_deletion_transaction.dart';
 import 'persisted_outbox_mutation.dart';
 import 'sync_persistence_envelope.dart';
 import 'sync_persistence_store.dart';
@@ -60,6 +63,7 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
     FileProtectionBridge? fileProtectionBridge,
     String Function()? tokenFactory,
     DateTime Function()? clock,
+    DataEpoch Function()? epochFactory,
     PersistenceOperationCoordinator? operationCoordinator,
   })  : _rootDirectoryProvider =
             rootDirectoryProvider ?? getApplicationSupportDirectory,
@@ -67,6 +71,7 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
             fileProtectionBridge ?? const MethodChannelFileProtectionBridge(),
         _tokenFactory = tokenFactory ?? (() => const Uuid().v4()),
         _clock = clock ?? DateTime.now,
+        _epochFactory = epochFactory ?? DataEpoch.generate,
         _coordinator =
             operationCoordinator ?? PersistenceOperationCoordinator();
 
@@ -78,6 +83,7 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
   final FileProtectionBridge _fileProtectionBridge;
   final String Function() _tokenFactory;
   final DateTime Function() _clock;
+  final DataEpoch Function() _epochFactory;
   final PersistenceOperationCoordinator _coordinator;
 
   // -----------------------------------------------------------------------
@@ -714,6 +720,48 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
   }
 
   @override
+  Future<ClearAssociatedAccountFingerprintResult>
+      clearAssociatedAccountFingerprintIfCurrent({
+    required String expectedCurrent,
+  }) {
+    return _coordinator
+        .runExclusive<ClearAssociatedAccountFingerprintResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.associatedAccountFingerprint;
+
+        if (current == null) {
+          // Already the target state -- an idempotent no-op repeat, exactly
+          // mirroring commitAssociatedAccountFingerprint's own
+          // already-matches shortcut.
+          return const ClearAssociatedAccountFingerprintResult(
+            AssociatedAccountFingerprintClearStatus.alreadyClear,
+          );
+        }
+        if (current != expectedCurrent) {
+          // A different, non-null fingerprint is currently associated --
+          // fail-closed. Never cleared, never overwritten, never
+          // retargeted.
+          return const ClearAssociatedAccountFingerprintResult(
+            AssociatedAccountFingerprintClearStatus.expectedCurrentMismatch,
+          );
+        }
+
+        await _replaceEnvelope(
+          envelope.withAssociatedAccountFingerprintCleared(),
+        );
+        keptDiagnostic(
+          'sync-persistence-store: clear-associated-fingerprint-ok',
+        );
+        return const ClearAssociatedAccountFingerprintResult(
+          AssociatedAccountFingerprintClearStatus.cleared,
+        );
+      },
+    );
+  }
+
+  @override
   Future<List<String>> loadMeaningfulAccountFingerprints() {
     return _coordinator.runExclusive<List<String>>(
       resourceKey: resourceKey,
@@ -724,6 +772,159 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
             if (entry.value.bootstrapState != AccountBootstrapState.notStarted)
               entry.key,
         ];
+      },
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Build 26 Phase 5 (slice 1): the durable "Remove from iCloud" deletion
+  // transaction. See `pending_deletion_transaction.dart`'s own doc comment
+  // and `SyncPersistenceStore`'s doc comments on these three methods for the
+  // full contract. None of these methods performs any CloudKit operation or
+  // touches any `AccountSyncState` bucket beyond a single read (to capture
+  // `originalDataEpoch` once, in `beginDeletionTransaction`).
+  // -----------------------------------------------------------------------
+
+  @override
+  Future<PendingDeletionTransaction?> loadPendingDeletionTransaction() {
+    return _coordinator.runExclusive<PendingDeletionTransaction?>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        return envelope.pendingDeletionTransaction;
+      },
+    );
+  }
+
+  @override
+  Future<BeginDeletionTransactionResult> beginDeletionTransaction({
+    required String accountFingerprint,
+  }) {
+    if (!looksLikeAccountFingerprint(accountFingerprint)) {
+      return Future.value(
+        const BeginDeletionTransactionResult(
+          status: BeginDeletionTransactionStatus.invalidFingerprint,
+        ),
+      );
+    }
+    return _coordinator.runExclusive<BeginDeletionTransactionResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.pendingDeletionTransaction;
+
+        if (current != null) {
+          if (current.accountFingerprint == accountFingerprint) {
+            // Idempotent resume -- never regenerates the epoch, never
+            // resets the stage.
+            return BeginDeletionTransactionResult(
+              status: BeginDeletionTransactionStatus.resumedExisting,
+              transaction: current,
+            );
+          }
+          return const BeginDeletionTransactionResult(
+            status: BeginDeletionTransactionStatus.accountMismatch,
+          );
+        }
+
+        // Genuinely new transaction: capture this account's current
+        // dataEpoch (if any bucket exists at all) exactly once, and
+        // generate the replacement epoch exactly once.
+        final bucket = envelope.accounts[accountFingerprint];
+        final transaction = PendingDeletionTransaction(
+          accountFingerprint: accountFingerprint,
+          originalDataEpoch: bucket?.dataEpoch,
+          replacementDataEpoch: _epochFactory(),
+          stage: DeletionTransactionStage.prepared,
+        );
+        await _replaceEnvelope(
+          envelope.withPendingDeletionTransaction(transaction),
+        );
+        keptDiagnostic(
+          'sync-persistence-store: begin-deletion-transaction-ok',
+        );
+        return BeginDeletionTransactionResult(
+          status: BeginDeletionTransactionStatus.started,
+          transaction: transaction,
+        );
+      },
+    );
+  }
+
+  @override
+  Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
+    required String accountFingerprint,
+    required DeletionTransactionStage expectedCurrentStage,
+    required DeletionTransactionStage nextStage,
+  }) {
+    return _coordinator.runExclusive<AdvanceDeletionTransactionResult>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.pendingDeletionTransaction;
+
+        if (current == null) {
+          return const AdvanceDeletionTransactionResult(
+            status: AdvanceDeletionTransactionStatus.noTransaction,
+          );
+        }
+        if (current.accountFingerprint != accountFingerprint) {
+          return const AdvanceDeletionTransactionResult(
+            status: AdvanceDeletionTransactionStatus.accountMismatch,
+          );
+        }
+        if (current.stage == nextStage) {
+          // Idempotent-retry shortcut, mirroring this store's other
+          // CAS-style methods (e.g. commitAssociatedAccountFingerprint).
+          return AdvanceDeletionTransactionResult(
+            status: AdvanceDeletionTransactionStatus.advanced,
+            transaction: current,
+          );
+        }
+        if (current.stage != expectedCurrentStage) {
+          return const AdvanceDeletionTransactionResult(
+            status: AdvanceDeletionTransactionStatus.stageMismatch,
+          );
+        }
+        if (!isValidDeletionTransactionTransition(current.stage, nextStage)) {
+          return const AdvanceDeletionTransactionResult(
+            status: AdvanceDeletionTransactionStatus.invalidTransition,
+          );
+        }
+
+        final updated = current.copyWithStage(nextStage);
+        await _replaceEnvelope(
+          envelope.withPendingDeletionTransaction(updated),
+        );
+        keptDiagnostic(
+          'sync-persistence-store: advance-deletion-transaction-stage-ok',
+        );
+        return AdvanceDeletionTransactionResult(
+          status: AdvanceDeletionTransactionStatus.advanced,
+          transaction: updated,
+        );
+      },
+    );
+  }
+
+  @override
+  Future<void> clearDeletionTransaction({
+    required String accountFingerprint,
+  }) {
+    return _coordinator.runExclusive<void>(
+      resourceKey: resourceKey,
+      operation: () async {
+        final envelope = await _loadEnvelope();
+        final current = envelope.pendingDeletionTransaction;
+        if (current == null || current.accountFingerprint != accountFingerprint) {
+          return;
+        }
+        await _replaceEnvelope(
+          envelope.withPendingDeletionTransactionCleared(),
+        );
+        keptDiagnostic(
+          'sync-persistence-store: clear-deletion-transaction-ok',
+        );
       },
     );
   }
@@ -985,7 +1186,23 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
       return envelope;
     }
 
-    return null;
+    // Build 26 Phase 5 (slice 1, safety correction): reaching here means one
+    // or more backup files existed (the early `if (backups.isEmpty) return
+    // null;` above already handles the case where none ever did) but every
+    // single one of them failed to read or decode. That is evidence of prior
+    // durable state having existed and now being lost to corruption -- not
+    // the same thing as this device never having any sync state at all --
+    // and the two must not be conflated. A caller (e.g.
+    // `loadPendingDeletionTransaction`) that receives a plain `null` here
+    // cannot tell them apart, and could otherwise silently proceed as though
+    // no deletion transaction (or account state) had ever existed. Fails
+    // the whole load closed instead, exactly like the "final file exists but
+    // is undecodable" case just above in `_loadEnvelope`.
+    throw const SyncPersistenceStoreException(
+      'load-recover-exhausted',
+      'The authoritative sync-state file is missing, and every candidate '
+          'backup failed to read or decode.',
+    );
   }
 
   Future<void> _preserveCorrupt(String dirPath, String rawBytes) async {

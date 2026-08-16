@@ -30,6 +30,7 @@ library;
 import 'dart:convert';
 
 import 'account_sync_state.dart';
+import 'pending_deletion_transaction.dart';
 
 /// A conservative shape check for the opaque account fingerprint
 /// (`CloudKitAccountFingerprintUtility.fingerprint(for:)`, Phase 4B-1): a
@@ -54,6 +55,7 @@ final class SyncPersistenceEnvelope {
     Map<String, AccountSyncState> accounts = const {},
     Map<String, AccountSyncState> quarantinedAccounts = const {},
     String? associatedAccountFingerprint,
+    PendingDeletionTransaction? pendingDeletionTransaction,
   }) {
     _validate(
       accounts: accounts,
@@ -64,6 +66,7 @@ final class SyncPersistenceEnvelope {
       accounts: Map.unmodifiable(accounts),
       quarantinedAccounts: Map.unmodifiable(quarantinedAccounts),
       associatedAccountFingerprint: associatedAccountFingerprint,
+      pendingDeletionTransaction: pendingDeletionTransaction,
     );
   }
 
@@ -71,6 +74,7 @@ final class SyncPersistenceEnvelope {
     required this.accounts,
     required this.quarantinedAccounts,
     required this.associatedAccountFingerprint,
+    required this.pendingDeletionTransaction,
   });
 
   factory SyncPersistenceEnvelope.empty() => SyncPersistenceEnvelope();
@@ -92,6 +96,17 @@ final class SyncPersistenceEnvelope {
   /// comment for the separate, explicit, mutation-capable repair path.
   final String? associatedAccountFingerprint;
 
+  /// Build 26 Phase 5 (slice 1): the durable "Remove from iCloud" deletion
+  /// transaction currently in progress for this device, or `null` if none
+  /// is. `null` is also the safe, backward-compatible decode default for any
+  /// envelope written before this field existed. Never written into a file
+  /// path, a diagnostic string, or a log line -- only
+  /// [PendingDeletionTransaction.toLogSafeSummary]'s own stage-only summary
+  /// is ever safe to log. See [withPendingDeletionTransaction]/
+  /// [withPendingDeletionTransactionCleared] for the only two ways this
+  /// field's value ever changes.
+  final PendingDeletionTransaction? pendingDeletionTransaction;
+
   SyncPersistenceEnvelope copyWith({
     Map<String, AccountSyncState>? accounts,
     Map<String, AccountSyncState>? quarantinedAccounts,
@@ -102,6 +117,35 @@ final class SyncPersistenceEnvelope {
       quarantinedAccounts: quarantinedAccounts ?? this.quarantinedAccounts,
       associatedAccountFingerprint:
           associatedAccountFingerprint ?? this.associatedAccountFingerprint,
+      pendingDeletionTransaction: pendingDeletionTransaction,
+    );
+  }
+
+  /// Returns a copy with [pendingDeletionTransaction] set to [transaction].
+  /// A raw, unconditional envelope-level replacement -- every compare-and-
+  /// swap guard (existing-transaction/account-mismatch checks) lives one
+  /// layer up, in `ProtectedSyncPersistenceStore.beginDeletionTransaction`/
+  /// `advanceDeletionTransactionStage`, never here.
+  SyncPersistenceEnvelope withPendingDeletionTransaction(
+    PendingDeletionTransaction transaction,
+  ) {
+    return SyncPersistenceEnvelope(
+      accounts: accounts,
+      quarantinedAccounts: quarantinedAccounts,
+      associatedAccountFingerprint: associatedAccountFingerprint,
+      pendingDeletionTransaction: transaction,
+    );
+  }
+
+  /// Returns a copy with [pendingDeletionTransaction] cleared to `null`.
+  /// Deliberately bypasses [copyWith] (which has no way to explicitly null
+  /// out a field it was not given) via a direct factory call instead.
+  SyncPersistenceEnvelope withPendingDeletionTransactionCleared() {
+    return SyncPersistenceEnvelope(
+      accounts: accounts,
+      quarantinedAccounts: quarantinedAccounts,
+      associatedAccountFingerprint: associatedAccountFingerprint,
+      pendingDeletionTransaction: null,
     );
   }
 
@@ -115,6 +159,25 @@ final class SyncPersistenceEnvelope {
     String fingerprint,
   ) {
     return copyWith(associatedAccountFingerprint: fingerprint);
+  }
+
+  /// Build 26 Phase 5 (slice 3): returns a copy with
+  /// [associatedAccountFingerprint] cleared to `null`. Deliberately bypasses
+  /// [copyWith] (which has no way to explicitly null out a field it was not
+  /// given) via a direct factory call instead -- exactly mirroring
+  /// [withPendingDeletionTransactionCleared]'s own precedent. A raw,
+  /// unconditional envelope-level replacement -- the compare-and-swap guard
+  /// against clearing a *different*, currently-associated marker lives one
+  /// layer up, in
+  /// `ProtectedSyncPersistenceStore.clearAssociatedAccountFingerprintIfCurrent`,
+  /// never here.
+  SyncPersistenceEnvelope withAssociatedAccountFingerprintCleared() {
+    return SyncPersistenceEnvelope(
+      accounts: accounts,
+      quarantinedAccounts: quarantinedAccounts,
+      associatedAccountFingerprint: null,
+      pendingDeletionTransaction: pendingDeletionTransaction,
+    );
   }
 
   /// Returns a copy with [fingerprint]'s active entry set to [state].
@@ -166,6 +229,8 @@ final class SyncPersistenceEnvelope {
         ),
         if (associatedAccountFingerprint != null)
           'associatedAccountFingerprint': associatedAccountFingerprint,
+        if (pendingDeletionTransaction != null)
+          'pendingDeletionTransaction': pendingDeletionTransaction!.encode(),
       };
 
   String encodeString() => jsonEncode(encode());
@@ -176,6 +241,7 @@ final class SyncPersistenceEnvelope {
       'accounts',
       'quarantinedAccounts',
       'associatedAccountFingerprint',
+      'pendingDeletionTransaction',
     };
     for (final key in data.keys) {
       if (!allowedKeys.contains(key)) {
@@ -221,10 +287,58 @@ final class SyncPersistenceEnvelope {
       associatedAccountFingerprint = associatedAccountFingerprintValue;
     }
 
+    // Build 26 Phase 5 (slice 1): absent (any envelope written before this
+    // field existed) decodes safely to `null` -- never inferred, never
+    // repaired here. A present-but-malformed value fails the whole decode
+    // closed, exactly like every other opaque-identity field in this
+    // codebase.
+    //
+    // Build 26 Phase 5 (slice 1, safety correction): key *absence* is
+    // distinguished from a key *present with an explicit JSON `null`* via
+    // `containsKey` rather than `data['pendingDeletionTransaction'] != null`.
+    // `encode()` (above) only ever writes this key inside
+    // `if (pendingDeletionTransaction != null)` -- it never emits the key
+    // with a `null` value. A key present with an explicit `null` is
+    // therefore a shape this app itself never produces, and can only be
+    // external corruption or tampering. Because a genuine deletion
+    // transaction must never be observable as "no deletion pending" (see
+    // `SyncRuntimeOutcome.deletionStateCorrupted`), that shape fails the
+    // whole decode closed rather than being silently treated the same as
+    // the field's legitimate absence.
+    final hasPendingDeletionTransactionKey =
+        data.containsKey('pendingDeletionTransaction');
+    final pendingDeletionTransactionValue = data['pendingDeletionTransaction'];
+    PendingDeletionTransaction? pendingDeletionTransaction;
+    if (hasPendingDeletionTransactionKey) {
+      if (pendingDeletionTransactionValue == null) {
+        throw const FormatException(
+          'Invalid pending deletion transaction in sync persistence '
+          'envelope.',
+        );
+      }
+      if (pendingDeletionTransactionValue is! Map<Object?, Object?>) {
+        throw const FormatException(
+          'Invalid pending deletion transaction in sync persistence '
+          'envelope.',
+        );
+      }
+      final parsed = PendingDeletionTransaction.tryDecode(
+        pendingDeletionTransactionValue,
+      );
+      if (parsed == null) {
+        throw const FormatException(
+          'Invalid pending deletion transaction in sync persistence '
+          'envelope.',
+        );
+      }
+      pendingDeletionTransaction = parsed;
+    }
+
     return SyncPersistenceEnvelope(
       accounts: accounts,
       quarantinedAccounts: quarantinedAccounts,
       associatedAccountFingerprint: associatedAccountFingerprint,
+      pendingDeletionTransaction: pendingDeletionTransaction,
     );
   }
 
@@ -304,7 +418,8 @@ final class SyncPersistenceEnvelope {
     return other is SyncPersistenceEnvelope &&
         _mapEquals(other.accounts, accounts) &&
         _mapEquals(other.quarantinedAccounts, quarantinedAccounts) &&
-        other.associatedAccountFingerprint == associatedAccountFingerprint;
+        other.associatedAccountFingerprint == associatedAccountFingerprint &&
+        other.pendingDeletionTransaction == pendingDeletionTransaction;
   }
 
   @override
@@ -316,6 +431,7 @@ final class SyncPersistenceEnvelope {
           quarantinedAccounts.entries.map((e) => Object.hash(e.key, e.value)),
         ),
         associatedAccountFingerprint,
+        pendingDeletionTransaction,
       );
 
   static bool _mapEquals(

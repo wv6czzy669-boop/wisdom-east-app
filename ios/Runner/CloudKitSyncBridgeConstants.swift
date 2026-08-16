@@ -23,6 +23,14 @@ enum CloudKitSyncBridgeConstants {
   static let methodModifyPrivateRecords = "modifyPrivateRecords"
   static let methodFetchPrivateZoneChanges = "fetchPrivateZoneChanges"
 
+  /// Build 26 Phase 5 (slice 2): the three narrow methods the remote
+  /// deletion runner (`lib/sync_deletion/`) uses exclusively -- never
+  /// called by `SyncOrchestrator` or `KeptSyncBootstrapCoordinator`'s own
+  /// normal sync/bootstrap paths.
+  static let methodFetchSyncStateEpoch = "fetchSyncStateEpoch"
+  static let methodListKeptWisdomRecordNames = "listKeptWisdomRecordNames"
+  static let methodDeleteKeptWisdomRecords = "deleteKeptWisdomRecords"
+
   /// Bumped whenever the wire shape of any method's result changes.
   static let bridgeVersion = 1
 
