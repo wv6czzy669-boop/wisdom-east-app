@@ -1675,6 +1675,21 @@ They should receive stronger treatment than normal favorites:
 
 # 15. Analytics Architecture
 
+## 15.0 Current shipped implementation (EAST. Phase 7)
+
+The taxonomy below (§15.2) is the full future/roadmap vision for this section and is **not** what is currently implemented. The actual shipped analytics surface (`lib/services/analytics_event.dart`, `lib/services/analytics_service.dart`) is a closed, privacy-safe, parameter-free allow-list of exactly six events, with no path to construct or emit any other event name:
+
+* `ritual_completed`
+* `kept_saved`
+* `reflection_saved`
+* `keeper_purchase_started`
+* `keeper_purchase_completed`
+* `keeper_restore_completed`
+
+No event ever carries parameters — no wisdom/reflection text, no Kept content, no `revealId`/local/CloudKit record identifier, no account fingerprint, and no daily-access timestamp is ever attached to an event, because none of those values are ever passed to one. The current release transport (`DebugLogAnalyticsTransport`) is intentionally local-only/debug-only: it writes the event name to the debug console via `dart:developer` and makes no network call of any kind in any build configuration — there is no production analytics backend wired up today. A real, privacy-reviewed backend could be added later behind the same `AnalyticsTransport` interface without any call site changing, but that is future work, not the current implementation.
+
+The commerce/product/editorial taxonomy in §15.2 describes a future platform this app does not yet have (no product catalog, checkout, or editorial content ships today) and should be read as roadmap, not current state.
+
 ## 15.1 Event philosophy
 
 Analytics should answer decisions, not merely collect activity.

@@ -13,6 +13,16 @@ import 'journal_layout.dart';
 /// Reflection content anywhere. Read-only over [FavoriteItem] data — never
 /// mutates a Kept record, a Reflection, daily-access state, or Return
 /// state, and never touches CloudKit.
+///
+/// Visual fidelity repair: every constant below is derived from
+/// "EAST Journal - Direction.dc.html" → the "The publication" section
+/// (five 340×481px page figures, each a proportional preview of a real A4
+/// page). Position offsets are page-relative fractions of that figure box,
+/// applied to the real A4 page height/width so they hold regardless of the
+/// figure's own display scale; literal sizes (font size, ring diameter,
+/// margins, gaps, indent) are the figure's own px values scaled uniformly
+/// by 595.27559/340 ≈ 1.7508 -- the ratio between the figure's width and a
+/// true A4 page's width -- onto real PDF points.
 class JournalPdfBuilder {
   JournalPdfBuilder({JournalLayoutPlanner? planner})
       : _planner = planner ?? const JournalLayoutPlanner();
@@ -23,20 +33,66 @@ class JournalPdfBuilder {
   // black/warm-white constants already used throughout every screen.
   static const PdfColor _black = PdfColor.fromInt(0xFF040404);
   static const PdfColor _warmWhite = PdfColor.fromInt(0xFFF4F0E8);
-  static const PdfColor _muted = PdfColor.fromInt(0xFFA29B8C);
-  // A quieter, still highly-legible warm tone for Reflection text --
-  // distinct from the wisdom's full warm-white without resorting to
-  // italics. See the class doc comment on why this is a fixed blend
-  // rather than relying on alpha compositing.
-  static const PdfColor _reflectionTone = PdfColor.fromInt(0xFFCAC6C0);
 
-  static const double _mm = PdfPageFormat.mm;
-  static const double _bodyMarginTop = 34 * _mm;
-  static const double _bodyMarginBottom = 32 * _mm;
-  static const double _bodyMarginLeft = 24 * _mm;
-  static const double _bodyMarginRight = 26 * _mm;
-  static const double _dateColumnWidth = 26 * _mm;
-  static const double _dateColumnGap = 8 * _mm;
+  // Design's own muted hierarchy (Journal rules #10, #12): date/metadata is
+  // the dimmest tier; the title page's month and owner sit in their own two
+  // quiet tiers; reflection sits mid-muted beneath the wisdom's full
+  // warm-white. Fixed, pre-blended-against-black tones (never alpha) so the
+  // share/print pipeline never has to composite transparency.
+  static const PdfColor _dateMuted = PdfColor.fromInt(0xFF7C7770);
+  static const PdfColor _monthMuted = PdfColor.fromInt(0xFF8F8983);
+  static const PdfColor _ownerMuted = PdfColor.fromInt(0xFF9C968E);
+  static const PdfColor _reflectionTone = PdfColor.fromInt(0xFF938F89);
+  // The cover ring is a hairline at ~42% of warm-white; the final page's
+  // ring and the body folio number are the same family reduced further, to
+  // ~34% -- "the same mark that opened the cover, reduced."
+  static const PdfColor _coverRingTone = PdfColor.fromInt(0xFF666561);
+  static const PdfColor _faintTone = PdfColor.fromInt(0xFF53524F);
+
+  // ---- Cover (physical page 1) ----
+  static const double _coverRingDiameter = 154.07;
+  static const double _coverRingBorder = 1.2;
+  static const double _coverRingCenterYFraction = 221 / 481;
+  static const double _coverEastFontSize = 19.26;
+  static const double _coverEastLetterSpacing = 7.32;
+  // Empirically measured residual: even after the full-letterSpacing left
+  // padding below, rasterizing the actual generated PDF and comparing the
+  // ring's measured center against the ink bounds of "EAST." (not just its
+  // theoretical layout box) showed the ink still sitting ~4pt left of ring
+  // center -- real glyph advance widths (E/A/S/T/. are not uniform) aren't
+  // fully captured by the Tc-only box/ink algebra alone. This constant is
+  // that measured gap, applied as additional left padding.
+  static const double _coverEastOpticalNudge = 8.0;
+
+  // ---- Title page (physical page 2) ----
+  static const double _titleMargin = 70.03;
+  static const double _titleFontSize = 59.53;
+  static const double _titleTopFraction = 183 / 481;
+  static const double _monthFontSize = 17.51;
+  static const double _monthLetterSpacing = 5.95;
+  static const double _monthTopFraction = 243 / 481;
+  static const double _ownerFontSize = 24.51;
+  static const double _ownerTopFraction = 279 / 481;
+
+  // ---- Body (physical page 3 onward) ----
+  static const double _bodyMarginLeft = 70.03;
+  static const double _bodyMarginRight = 70.03;
+  static const double _bodyMarginTop = 98.05;
+  static const double _bodyMarginBottom = 78.0;
+  static const double _entryGap = 59.53;
+  static const double _entryLineGap = 17.51;
+  static const double _reflectionIndent = 38.52;
+  static const double _dateFontSize = 14.01;
+  static const double _dateLetterSpacing = 3.64;
+  static const double _wisdomFontSize = 26.26;
+  static const double _reflectionFontSize = 21.01;
+  static const double _folioFontSize = 15.76;
+  static const double _folioLetterSpacing = 3.78;
+
+  // ---- Final page ----
+  static const double _finalRingDiameter = 70.03;
+  static const double _finalRingBorder = 0.9;
+  static const double _finalRingCenterYFraction = 221 / 481; // same as cover
 
   static const List<String> _months = [
     'JANUARY',
@@ -122,21 +178,17 @@ class JournalPdfBuilder {
       document.addPage(_buildBody(font, groups));
     }
 
-    document.addPage(_buildFinalPage(font));
+    document.addPage(_buildFinalPage());
 
     return document.save();
   }
 
   // ---------------------------------------------------------------------
-  // Physical page 1 — cover. The EAST mark alone; nothing else. Mirrors
-  // `_HomeLaunchMark` (lib/widgets/home/home_ritual_widgets.dart): a thin
-  // circular ring with "EAST." centered inside it, the app's own real
-  // entrance composition, recreated at book-cover scale rather than an
-  // invented replacement mark.
+  // Physical page 1 — cover. The EAST mark alone, at the Design's own
+  // ring scale and optical center (46% down the page, not dead center),
+  // with a dimmed 42%-tone ring rather than a solid warm-white one.
   // ---------------------------------------------------------------------
   pw.Page _buildCoverPage(pw.Font font) {
-    const diameter = 78 * _mm;
-
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
@@ -145,22 +197,39 @@ class JournalPdfBuilder {
           color: _black,
           width: double.infinity,
           height: double.infinity,
-          alignment: const pw.FractionalOffset(0.5, 0.44),
+          alignment: pw.FractionalOffset(0.5, _coverRingCenterYFraction),
           child: pw.Container(
-            width: diameter,
-            height: diameter,
+            width: _coverRingDiameter,
+            height: _coverRingDiameter,
             alignment: pw.Alignment.center,
             decoration: pw.BoxDecoration(
               shape: pw.BoxShape.circle,
-              border: pw.Border.all(color: _warmWhite, width: 0.9),
+              border:
+                  pw.Border.all(color: _coverRingTone, width: _coverRingBorder),
             ),
-            child: pw.Text(
-              'EAST.',
-              style: pw.TextStyle(
-                font: font,
-                fontSize: 27,
-                color: _warmWhite,
-                letterSpacing: 0.8,
+            // Optical-centering correction: the PDF character-spacing
+            // operator this text's `letterSpacing` compiles to (`Tc`) adds
+            // its gap *after* every glyph, including the last one -- so the
+            // text's own measured layout box is one `letterSpacing` wider
+            // than its visible ink, entirely on the right. Centering that
+            // box (as a plain `Text` child would) therefore visibly shifts
+            // the ink left of true center by exactly `letterSpacing / 2`.
+            // Adding an equal amount of left padding restores symmetry:
+            // provably (by the same box-vs-ink algebra), it re-centers the
+            // ink exactly, regardless of ring size or font metrics -- never
+            // a hand-tuned pixel offset.
+            child: pw.Padding(
+              padding: const pw.EdgeInsets.only(
+                left: _coverEastLetterSpacing + _coverEastOpticalNudge,
+              ),
+              child: pw.Text(
+                'EAST.',
+                style: pw.TextStyle(
+                  font: font,
+                  fontSize: _coverEastFontSize,
+                  color: _warmWhite,
+                  letterSpacing: _coverEastLetterSpacing,
+                ),
               ),
             ),
           ),
@@ -171,7 +240,10 @@ class JournalPdfBuilder {
 
   // ---------------------------------------------------------------------
   // Physical page 2 — title page. "Journal.", the generation MONTH YEAR,
-  // and the optional owner name -- nothing else, no page number.
+  // and the optional owner name -- three tiers anchored from the top at
+  // the Design's own fractional offsets (title at 38% of page height),
+  // never a loosely centered block, so the composition holds identically
+  // whether or not the owner name exists.
   // ---------------------------------------------------------------------
   pw.Page _buildTitlePage(
     pw.Font font, {
@@ -180,6 +252,7 @@ class JournalPdfBuilder {
   }) {
     final monthYear = '${_months[generatedAt.month - 1]} ${generatedAt.year}';
     final trimmedOwnerName = ownerName?.trim();
+    final pageHeight = PdfPageFormat.a4.height;
 
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -189,42 +262,52 @@ class JournalPdfBuilder {
           color: _black,
           width: double.infinity,
           height: double.infinity,
-          alignment: const pw.FractionalOffset(0.5, 0.4),
-          child: pw.Column(
-            mainAxisSize: pw.MainAxisSize.min,
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
+          child: pw.Stack(
             children: [
-              pw.Text(
-                'Journal.',
-                style: pw.TextStyle(
-                  font: font,
-                  fontSize: 36,
-                  color: _warmWhite,
-                  letterSpacing: 0.6,
-                ),
-              ),
-              pw.SizedBox(height: 26 * _mm),
-              pw.Text(
-                monthYear,
-                style: pw.TextStyle(
-                  font: font,
-                  fontSize: 12.5,
-                  color: _muted,
-                  letterSpacing: 2.4,
-                ),
-              ),
-              if (trimmedOwnerName != null && trimmedOwnerName.isNotEmpty) ...[
-                pw.SizedBox(height: 14 * _mm),
-                pw.Text(
-                  trimmedOwnerName,
+              pw.Positioned(
+                top: _titleTopFraction * pageHeight,
+                left: _titleMargin,
+                right: _titleMargin,
+                child: pw.Text(
+                  'Journal.',
+                  textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
                     font: font,
-                    fontSize: 14,
-                    color: _reflectionTone,
-                    letterSpacing: 0.4,
+                    fontSize: _titleFontSize,
+                    color: _warmWhite,
                   ),
                 ),
-              ],
+              ),
+              pw.Positioned(
+                top: _monthTopFraction * pageHeight,
+                left: _titleMargin,
+                right: _titleMargin,
+                child: pw.Text(
+                  monthYear,
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(
+                    font: font,
+                    fontSize: _monthFontSize,
+                    color: _monthMuted,
+                    letterSpacing: _monthLetterSpacing,
+                  ),
+                ),
+              ),
+              if (trimmedOwnerName != null && trimmedOwnerName.isNotEmpty)
+                pw.Positioned(
+                  top: _ownerTopFraction * pageHeight,
+                  left: _titleMargin,
+                  right: _titleMargin,
+                  child: pw.Text(
+                    trimmedOwnerName,
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      font: font,
+                      fontSize: _ownerFontSize,
+                      color: _ownerMuted,
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -281,7 +364,7 @@ class JournalPdfBuilder {
 
     final widgets = <pw.Widget>[];
     for (var i = 0; i < group.entries.length; i++) {
-      if (i > 0) widgets.add(pw.SizedBox(height: 30));
+      if (i > 0) widgets.add(pw.SizedBox(height: _entryGap));
       widgets.addAll(
         _buildEntryWidgets(font, group.entries[i], keepTogether: true),
       );
@@ -289,42 +372,40 @@ class JournalPdfBuilder {
     return widgets;
   }
 
-  /// One occurrence: a quiet marginal date beside the wisdom, then (if
-  /// present) its Reflection, visually distinguished from the wisdom by
-  /// scale/tone/spacing alone -- no "Wisdom"/"Reflection" label anywhere.
-  /// When [keepTogether] is true, the whole entry is one non-splitting
-  /// unit (the ordinary case); when false, only the date+wisdom stay
-  /// paired and the Reflection is free to flow across a page boundary.
+  /// One occurrence: a tracked, dimmed date on its own line, the wisdom
+  /// beneath it at full warm-white (the Design's "primary published
+  /// text"), then -- if present -- its Reflection, indented and dimmed
+  /// beneath its own line. No "Wisdom"/"Reflection" label anywhere;
+  /// hierarchy is entirely typographic (size/tone/indent), matching
+  /// "EAST Journal - Direction.dc.html" rule #10. When [keepTogether] is
+  /// true, the whole entry is one non-splitting unit (the ordinary case);
+  /// when false, only the date+wisdom stay paired and the Reflection is
+  /// free to flow across a page boundary.
   List<pw.Widget> _buildEntryWidgets(
     pw.Font font,
     FavoriteItem item, {
     required bool keepTogether,
   }) {
-    final header = pw.Row(
+    final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.SizedBox(
-          width: _dateColumnWidth,
-          child: pw.Text(
-            _marginalDate(item),
-            style: pw.TextStyle(
-              font: font,
-              fontSize: 8,
-              color: _muted,
-              letterSpacing: 0.7,
-              height: 1.3,
-            ),
+        pw.Text(
+          _marginalDate(item),
+          style: pw.TextStyle(
+            font: font,
+            fontSize: _dateFontSize,
+            color: _dateMuted,
+            letterSpacing: _dateLetterSpacing,
           ),
         ),
-        pw.SizedBox(width: _dateColumnGap),
-        pw.Expanded(
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(top: _entryLineGap),
           child: pw.Text(
             item.text,
             style: pw.TextStyle(
               font: font,
-              fontSize: 15,
+              fontSize: _wisdomFontSize,
               color: _warmWhite,
-              letterSpacing: 0.3,
               height: 1.5,
             ),
           ),
@@ -341,10 +422,9 @@ class JournalPdfBuilder {
 
     final reflectionStyle = pw.TextStyle(
       font: font,
-      fontSize: 10.5,
+      fontSize: _reflectionFontSize,
       color: _reflectionTone,
-      letterSpacing: 0.25,
-      height: 1.48,
+      height: 1.6,
     );
 
     if (!keepTogether) {
@@ -356,12 +436,11 @@ class JournalPdfBuilder {
       // `Padding`/`Container` (as the ordinary indented case below does)
       // hides that capability from the layout engine entirely. This is why
       // the exceptional case's Reflection starts flush at the body margin
-      // rather than indented under the date column: never clipped or
-      // truncated is the requirement that matters here, not pixel-perfect
-      // indentation.
+      // rather than indented -- never clipped or truncated is the
+      // requirement that matters here, not pixel-perfect indentation.
       return [
         header,
-        pw.SizedBox(height: 16),
+        pw.SizedBox(height: _entryLineGap),
         pw.Text(
           reflection,
           style: reflectionStyle,
@@ -377,8 +456,8 @@ class JournalPdfBuilder {
           header,
           pw.Padding(
             padding: const pw.EdgeInsets.only(
-              top: 16,
-              left: _dateColumnWidth + _dateColumnGap,
+              top: _entryLineGap,
+              left: _reflectionIndent,
             ),
             child: pw.Text(reflection, style: reflectionStyle),
           ),
@@ -387,38 +466,42 @@ class JournalPdfBuilder {
     ];
   }
 
+  /// Folios alternate to the outer edge -- odd printed pages (recto) on the
+  /// right margin, even printed pages (verso) on the left -- exactly as
+  /// "EAST Journal - Direction.dc.html" specifies, so a printed spread
+  /// breathes correctly. `context.pageNumber` is 1-indexed across the
+  /// *entire* `pw.Document` (cover + title page + this body) -- see the
+  /// class doc comment on `JournalPdfBuilder.build` for why physical pages
+  /// 1–2 always precede this MultiPage, making the offset exactly 2 for
+  /// every printed body page number.
   pw.Widget _buildFooter(pw.Font font, pw.Context context) {
-    // `context.pageNumber` is 1-indexed across the *entire* `pw.Document`
-    // (cover + title page + this body) -- see the class doc comment on
-    // `JournalPdfBuilder.build` for why physical pages 1–2 always precede
-    // this MultiPage, making the offset exactly 2 for every printed body
-    // page number.
     final printedPageNumber = context.pageNumber - 2;
     if (printedPageNumber < 1) return pw.SizedBox();
 
     return pw.Container(
-      alignment: pw.Alignment.center,
-      margin: const pw.EdgeInsets.only(top: 12),
+      alignment: printedPageNumber.isOdd
+          ? pw.Alignment.centerRight
+          : pw.Alignment.centerLeft,
+      margin: const pw.EdgeInsets.only(top: 14),
       child: pw.Text(
         '$printedPageNumber',
         style: pw.TextStyle(
           font: font,
-          fontSize: 8,
-          color: _muted,
-          letterSpacing: 0.4,
+          fontSize: _folioFontSize,
+          color: _faintTone,
+          letterSpacing: _folioLetterSpacing,
         ),
       ),
     );
   }
 
   // ---------------------------------------------------------------------
-  // Final closing page — black, almost empty, never counted in body
-  // numbering (it is a plain `pw.Page`, outside the body `MultiPage`, so
-  // it has no footer at all).
+  // Final closing page — the ring alone, at the Design's reduced scale,
+  // same optical center as the cover, no wordmark, no number, no
+  // colophon. Never counted in body numbering (it is a plain `pw.Page`,
+  // outside the body `MultiPage`, so it has no footer at all).
   // ---------------------------------------------------------------------
-  pw.Page _buildFinalPage(pw.Font font) {
-    const diameter = 40 * _mm;
-
+  pw.Page _buildFinalPage() {
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
@@ -427,23 +510,14 @@ class JournalPdfBuilder {
           color: _black,
           width: double.infinity,
           height: double.infinity,
-          alignment: pw.Alignment.center,
+          alignment: pw.FractionalOffset(0.5, _finalRingCenterYFraction),
           child: pw.Container(
-            width: diameter,
-            height: diameter,
-            alignment: pw.Alignment.center,
+            width: _finalRingDiameter,
+            height: _finalRingDiameter,
             decoration: pw.BoxDecoration(
               shape: pw.BoxShape.circle,
-              border: pw.Border.all(color: _warmWhite, width: 0.7),
-            ),
-            child: pw.Text(
-              'EAST.',
-              style: pw.TextStyle(
-                font: font,
-                fontSize: 14,
-                color: _warmWhite,
-                letterSpacing: 0.6,
-              ),
+              border:
+                  pw.Border.all(color: _faintTone, width: _finalRingBorder),
             ),
           ),
         );

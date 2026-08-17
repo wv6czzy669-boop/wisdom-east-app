@@ -19,15 +19,15 @@ import '../models/favorite_item.dart';
 class JournalLayoutPlanner {
   const JournalLayoutPlanner({
     this.maxEntriesPerPage = 3,
-    this.pageContentHeightPt = 655,
-    this.contentWidthPt = 357,
-    this.dateBlockHeightPt = 26,
-    this.entryGapPt = 30,
-    this.wisdomFontSizePt = 15,
-    this.wisdomLineHeightPt = 22.5,
-    this.reflectionGapPt = 16,
-    this.reflectionFontSizePt = 10.5,
-    this.reflectionLineHeightPt = 15.5,
+    this.pageContentHeightPt = 666,
+    this.contentWidthPt = 417,
+    this.dateBlockHeightPt = 36,
+    this.entryGapPt = 59.53,
+    this.wisdomFontSizePt = 26.26,
+    this.wisdomLineHeightPt = 39.39,
+    this.reflectionGapPt = 17.51,
+    this.reflectionFontSizePt = 21.01,
+    this.reflectionLineHeightPt = 33.62,
     this.averageCharWidthFactor = 0.46,
   });
 

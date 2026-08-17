@@ -51,16 +51,30 @@ class RatingRequestService {
   /// still waiting on a persistence retry. Idempotent no-op once a request
   /// has already been attempted; any persistence failure is swallowed so it
   /// can never affect the ritual that just completed.
-  Future<void> recordCompletedRitual() async {
-    if (_requestAttemptedInMemory) return;
+  ///
+  /// Returns the 1-based ordinal of the ritual just recorded (`1` for the
+  /// very first one this device has ever durably completed, `2` for the
+  /// second, and so on) — EAST's one authoritative "genuinely completed
+  /// ritual" counter, reused by `home_screen.dart`'s P13 first/second-
+  /// ritual gating rather than introducing a second, competing counter.
+  /// Returns `null` when the ordinal could not be determined (a rating
+  /// request has already been attempted, so this counter has stopped
+  /// advancing, or the read/write itself failed) — callers must treat
+  /// `null` exactly like "not the first or second ritual" (fall back to
+  /// existing, unmodified behavior), never as "definitely the first."
+  Future<int?> recordCompletedRitual() async {
+    if (_requestAttemptedInMemory) return null;
     try {
-      if (await _hasAttemptedRequest()) return;
+      if (await _hasAttemptedRequest()) return null;
       final count = await _preferencesAdapter
               .getInt(completedRitualCountKey) ??
           0;
-      await _preferencesAdapter.setInt(completedRitualCountKey, count + 1);
+      final next = count + 1;
+      await _preferencesAdapter.setInt(completedRitualCountKey, next);
+      return next;
     } catch (_) {
       // Local bookkeeping is best-effort only.
+      return null;
     }
   }
 

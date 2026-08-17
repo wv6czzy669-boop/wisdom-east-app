@@ -9,6 +9,7 @@ import '../services/app_services.dart' as app_services;
 import '../services/data_export_service.dart';
 import '../services/purchase_service.dart';
 import '../theme/muted_text_color.dart';
+import '../widgets/east_back_button.dart';
 import 'keeper_screen.dart';
 
 typedef SettingsUrlLauncher = Future<bool> Function(
@@ -56,6 +57,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _privacyPolicyLaunchInProgress = false;
   bool _reachOutLaunchInProgress = false;
   bool _restoreInProgress = false;
+  // Settings visual repair: the Restore Purchases result is now the same
+  // full-field EAST takeover as Delete Reflection/Journal Name (see
+  // `_restoreResultOverlay`) instead of a rounded `AlertDialog`. State only
+  // -- `restorePurchasesFromSettings` below still computes the exact same
+  // outcome-dependent message it always did.
+  bool _restoreResultVisible = false;
+  String? _restoreResultMessage;
   bool _eastProductionsLaunchInProgress = false;
   bool _dataExportInProgress = false;
 
@@ -66,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // every non-`associationRequired` status.
   SyncAssociationCheckResult? _cloudKitAssociationStatus;
   bool _cloudKitAssociationActionInProgress = false;
+  bool _enableSyncOverlayVisible = false;
 
   // Build 26 Phase 5 (final slice): the explicit "Remove from iCloud" row.
   // `null` until the first [_refreshICloudRemovalStatus] call resolves --
@@ -74,6 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // for every unexpected-failure case.
   ICloudRemovalDisplayStatus? _icloudRemovalStatus;
   bool _icloudRemovalActionInProgress = false;
+  bool _removeFromICloudConfirmVisible = false;
 
   /// `true` only once this screen instance has itself observed the removal
   /// transition from [ICloudRemovalDisplayStatus.pending] to anything else
@@ -336,15 +346,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
-    showInfoDialog(
-      context,
-      "Restore Purchases",
-      restoreStarted
+    setState(() {
+      _restoreResultMessage = restoreStarted
           ? "Restore request sent. Keeper access will update automatically."
           : _purchaseService.restoreNeedsRecovery
               ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
-              : "Restore is not available right now. Please try again shortly.",
-    );
+              : "Restore is not available right now. Please try again shortly.";
+      _restoreResultVisible = true;
+    });
+  }
+
+  void _closeRestoreResult() {
+    if (!mounted) return;
+    setState(() {
+      _restoreResultVisible = false;
+    });
   }
 
   VoidCallback? get restoreAction {
@@ -447,38 +463,293 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return 'EAST. Productions. The world beyond the ritual.';
   }
 
-  void showInfoDialog(
-    BuildContext context,
-    String title,
-    String message,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF111111),
-          title: Text(
-            title,
-            style: eastStyle(21),
-          ),
-          content: Text(
-            message,
-            style: eastStyle(
-              17,
-              color: Colors.white70,
+  /// Settings visual repair: the Restore Purchases result takeover -- same
+  /// visual system as Delete Reflection (`reflection_screen.dart`'s
+  /// `_deleteDecisionOverlay`) and Journal Name (`journal_screen.dart`'s
+  /// `_nameDecisionOverlay`): Settings stays mounted and strongly dimmed
+  /// behind it, no `AlertDialog`, no card, no rounded rectangle, no border,
+  /// no shadow. `message` is always the exact outcome-dependent copy
+  /// `restorePurchasesFromSettings` already computed -- this widget never
+  /// decides what happened, only how it is shown.
+  Widget _restoreResultOverlay() {
+    if (!_restoreResultVisible) return const SizedBox.shrink();
+    final message = _restoreResultMessage ?? '';
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_restoreResultVisible,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: _restoreResultVisible ? 1.0 : 0.0,
+          child: Container(
+            key: const ValueKey('settings-restore-result'),
+            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Restore Purchases',
+                  textAlign: TextAlign.center,
+                  style: eastStyle(28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: eastStyle(15, color: const Color(0xB3FFFFFF)),
+                ),
+                const SizedBox(height: 44),
+                Semantics(
+                  button: true,
+                  label: 'Close',
+                  child: ExcludeSemantics(
+                    child: GestureDetector(
+                      key: const ValueKey('settings-restore-result-close'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _closeRestoreResult,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'CLOSE',
+                            style: TextStyle(
+                              color: Color(0xFFF4F0E8),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w300,
+                              fontFamily: 'CormorantGaramond',
+                              letterSpacing: 3.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _removeFromICloudDecisionLabel(
+    String label, {
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            child: Center(
               child: Text(
-                "Close",
-                style: eastStyle(16),
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w300,
+                  fontFamily: 'CormorantGaramond',
+                  letterSpacing: 3.0,
+                ),
               ),
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Settings visual repair: the "Remove from iCloud" confirmation takeover
+  /// -- same visual system as Restore Purchases above, Delete Reflection
+  /// (`reflection_screen.dart`'s `_deleteDecisionOverlay`), Journal Name
+  /// (`journal_screen.dart`'s `_nameDecisionOverlay`), and Kept Limit
+  /// (`home_screen.dart`'s `_favoriteLimitOverlay`): Settings stays mounted
+  /// and strongly dimmed behind it, no `AlertDialog`, no card, no rounded
+  /// rectangle, no border, no shadow. Replaces the previous
+  /// `showGeneralDialog`-based confirmation; the removal/deletion flow
+  /// itself (`_cancelRemoveFromICloud`/`_confirmRemoveFromICloud` ->
+  /// `_beginICloudRemoval` -> `ICloudRemovalController.beginRemoval`) is
+  /// unchanged, only the presentation. REMOVE stays visually within the
+  /// family (no filled button) but reads as the more decisive action via
+  /// full warm-white -- exactly how Delete Reflection's own DELETE label
+  /// already reads as destructive without a red fill.
+  Widget _removeFromICloudOverlay() {
+    if (!_removeFromICloudConfirmVisible) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_removeFromICloudConfirmVisible,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: _removeFromICloudConfirmVisible ? 1.0 : 0.0,
+          child: Container(
+            key: const ValueKey('settings-remove-from-icloud-confirm'),
+            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Remove from iCloud?",
+                  textAlign: TextAlign.center,
+                  style: eastStyle(28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Your Kept wisdoms and Reflections will remain on this "
+                  "iPhone.",
+                  textAlign: TextAlign.center,
+                  style: eastStyle(15, color: const Color(0xB3FFFFFF)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Their iCloud copies will be removed, and iCloud Sync "
+                  "will turn off.",
+                  textAlign: TextAlign.center,
+                  style: eastStyle(14, color: const Color(0x91FFFFFF)),
+                ),
+                const SizedBox(height: 44),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _removeFromICloudDecisionLabel(
+                      'CANCEL',
+                      onTap: _cancelRemoveFromICloud,
+                      color: const Color(0xB3FFFFFF),
+                    ),
+                    const SizedBox(width: 56),
+                    _removeFromICloudDecisionLabel(
+                      'REMOVE',
+                      onTap: _confirmRemoveFromICloud,
+                      color: const Color(0xFFF4F0E8),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _enableSyncDecisionLabel(
+    String label, {
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w300,
+                  fontFamily: 'CormorantGaramond',
+                  letterSpacing: 3.0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Settings visual repair: the "Enable iCloud Sync" confirmation takeover
+  /// -- same visual system as Restore Purchases, Remove from iCloud
+  /// (above), Delete Reflection (`reflection_screen.dart`'s
+  /// `_deleteDecisionOverlay`), Journal Name (`journal_screen.dart`'s
+  /// `_nameDecisionOverlay`), and Kept Limit (`home_screen.dart`'s
+  /// `_favoriteLimitOverlay`): Settings stays mounted and strongly dimmed
+  /// behind it, no `AlertDialog`, no card, no rounded rectangle, no border,
+  /// no shadow. Replaces the previous `showDialog`-based confirmation; the
+  /// explicit-consent gating and enable flow itself
+  /// (`_cancelEnableSync`/`_confirmEnableSync` -> `_enableSyncAssociation`
+  /// -> `SyncAssociationController.enableSync`) is unchanged, only the
+  /// presentation.
+  Widget _enableSyncOverlay() {
+    if (!_enableSyncOverlayVisible) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_enableSyncOverlayVisible,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: _enableSyncOverlayVisible ? 1.0 : 0.0,
+          child: Container(
+            key: const ValueKey('settings-enable-sync-confirm'),
+            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Enable iCloud Sync?",
+                  textAlign: TextAlign.center,
+                  style: eastStyle(28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Your Kept wisdoms and Reflections will be stored in your "
+                  "private iCloud database and kept in sync across your "
+                  "devices.",
+                  textAlign: TextAlign.center,
+                  style: eastStyle(15, color: const Color(0xB3FFFFFF)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Your daily ritual timing stays on this device.",
+                  textAlign: TextAlign.center,
+                  style: eastStyle(14, color: const Color(0x91FFFFFF)),
+                ),
+                const SizedBox(height: 44),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _enableSyncDecisionLabel(
+                      'CANCEL',
+                      onTap: _cancelEnableSync,
+                      color: const Color(0xB3FFFFFF),
+                    ),
+                    const SizedBox(width: 56),
+                    _enableSyncDecisionLabel(
+                      'ENABLE',
+                      onTap: _confirmEnableSync,
+                      color: const Color(0xFFF4F0E8),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -615,52 +886,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return _showEnableICloudSyncSheet;
   }
 
-  Future<void> _showEnableICloudSyncSheet() async {
+  void _showEnableICloudSyncSheet() {
     if (_cloudKitAssociationActionInProgress || !mounted) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF111111),
-          title: Text(
-            "Enable iCloud Sync?",
-            style: eastStyle(21),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Your Kept wisdoms and Reflections will be stored in your "
-                "private iCloud database and kept in sync across your "
-                "devices.",
-                style: eastStyle(16, color: Colors.white70),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "Your daily ritual timing stays on this device.",
-                style: eastStyle(14, color: const Color(0x91FFFFFF)),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text("Cancel", style: eastStyle(16)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text("Enable", style: eastStyle(16)),
-            ),
-          ],
-        );
-      },
-    );
+    // Matches the other approved EAST full-field overlays: the guard is
+    // read via `cloudKitSyncAction`/`_enableSyncOverlayVisible` together
+    // (the row's own `IgnorePointer` beneath the overlay), so a second tap
+    // while this confirmation is showing can never open a duplicate one.
+    setState(() {
+      _enableSyncOverlayVisible = true;
+    });
+  }
 
-    if (confirmed == true) {
-      await _enableSyncAssociation();
-    }
+  void _cancelEnableSync() {
+    if (!mounted) return;
+    setState(() {
+      _enableSyncOverlayVisible = false;
+    });
+  }
+
+  void _confirmEnableSync() {
+    if (!mounted) return;
+    setState(() {
+      _enableSyncOverlayVisible = false;
+    });
+    unawaited(_enableSyncAssociation());
   }
 
   Future<void> _enableSyncAssociation() async {
@@ -797,85 +1047,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _showRemoveFromICloudSheet() async {
+  void _showRemoveFromICloudSheet() {
     if (_icloudRemovalActionInProgress || !mounted) return;
 
     // Final UI repair: the duplicate-action guard is set HERE -- before the
-    // confirmation dialog is even shown -- not merely once the user
+    // confirmation overlay is even shown -- not merely once the user
     // confirms. `icloudRemovalAction` reads this exact flag, so a second
     // tap arriving at any point from here through `_beginICloudRemoval`'s
-    // own resolution can never open a second confirmation dialog and can
+    // own resolution can never open a second confirmation overlay and can
     // never start a second attempt of any kind.
     setState(() {
       _icloudRemovalActionInProgress = true;
+      _removeFromICloudConfirmVisible = true;
     });
+  }
 
-    // Final UI repair: built via `showGeneralDialog` with a zero
-    // `transitionDuration` rather than the default `showDialog` (which
-    // fades the route out over ~150ms after `Navigator.pop`). Same dialog,
-    // same copy, same Cancel/Remove buttons, same barrier-dismiss behavior
-    // -- the only change is that dismissal is instantaneous, so the prompt
-    // is never still present in the tree while `beginRemoval` is already
-    // running.
-    final confirmed = await showGeneralDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: Colors.black54,
-      transitionDuration: Duration.zero,
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return SafeArea(
-          child: AlertDialog(
-            backgroundColor: const Color(0xFF111111),
-            title: Text(
-              "Remove from iCloud?",
-              style: eastStyle(21),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Your Kept wisdoms and Reflections will remain on this "
-                  "iPhone.",
-                  style: eastStyle(16, color: Colors.white70),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  "Their iCloud copies will be removed, and iCloud Sync "
-                  "will turn off.",
-                  style: eastStyle(14, color: const Color(0x91FFFFFF)),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text("Cancel", style: eastStyle(16)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text("Remove", style: eastStyle(16)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  void _cancelRemoveFromICloud() {
+    if (!mounted) return;
 
-    if (confirmed == true) {
-      await _beginICloudRemoval();
-      return;
-    }
+    // Cancel -- nothing was started, so a later, genuinely new attempt
+    // must remain possible.
+    setState(() {
+      _removeFromICloudConfirmVisible = false;
+      _icloudRemovalActionInProgress = false;
+    });
+  }
 
-    // Cancel (or the dialog was dismissed without an explicit choice) --
-    // nothing was started, so a later, genuinely new attempt must remain
-    // possible.
-    if (mounted) {
-      setState(() {
-        _icloudRemovalActionInProgress = false;
-      });
-    }
+  void _confirmRemoveFromICloud() {
+    if (!mounted) return;
+    setState(() {
+      _removeFromICloudConfirmVisible = false;
+    });
+    unawaited(_beginICloudRemoval());
   }
 
   Future<void> _beginICloudRemoval() async {
@@ -927,8 +1130,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shadowColor: Colors.transparent,
         scrolledUnderElevation: 0,
         elevation: 0,
+        leading: Navigator.canPop(context) ? const EastBackButton() : null,
       ),
-      body: SafeArea(
+      body: Stack(
+        children: [
+          IgnorePointer(
+            ignoring: _restoreResultVisible ||
+                _removeFromICloudConfirmVisible ||
+                _enableSyncOverlayVisible,
+            child: _settingsBody(context),
+          ),
+          _restoreResultOverlay(),
+          _removeFromICloudOverlay(),
+          _enableSyncOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingsBody(BuildContext context) {
+    return SafeArea(
         top: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1055,7 +1276,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           },
         ),
-      ),
-    );
+      );
   }
 }

@@ -240,7 +240,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('CANCEL'));
     await tester.pumpAndSettle();
 
     expect(
@@ -259,7 +259,7 @@ void main() {
     await tester.tap(find.byKey(rowKey));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Enable'));
+    await tester.tap(find.text('ENABLE'));
     await tester.pumpAndSettle();
 
     expect(
@@ -361,8 +361,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('Cancel'), findsOneWidget);
-      expect(find.text('Remove'), findsOneWidget);
+      expect(find.text('CANCEL'), findsOneWidget);
+      expect(find.text('REMOVE'), findsOneWidget);
     });
 
     testWidgets(
@@ -374,7 +374,7 @@ void main() {
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('CANCEL'));
       await tester.pumpAndSettle();
 
       expect(
@@ -396,7 +396,7 @@ void main() {
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Remove'));
+      await tester.tap(find.text('REMOVE'));
       await tester.pumpAndSettle();
 
       final transaction =
@@ -432,7 +432,7 @@ void main() {
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Remove'));
+      await tester.tap(find.text('REMOVE'));
       // Deliberately only `pump()`, not `pumpAndSettle()` -- the begin call
       // is still awaiting `gate.future`, so `_icloudRemovalActionInProgress`
       // is now `true` and must stay `true` until the gate opens.
@@ -605,7 +605,7 @@ void main() {
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Remove'));
+      await tester.tap(find.text('REMOVE'));
       await tester.pumpAndSettle();
 
       expect(

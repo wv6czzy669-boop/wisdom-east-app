@@ -10,6 +10,7 @@ import '../services/app_services.dart' as app_services;
 import '../services/journal_owner_service.dart';
 import '../services/journal_pdf_builder.dart';
 import '../theme/muted_text_color.dart';
+import '../widgets/east_back_button.dart';
 import 'keeper_screen.dart';
 
 enum _JournalStage { resolving, namePrompt, generating, preview, error }
@@ -60,6 +61,29 @@ class _JournalScreenState extends State<JournalScreen> {
   _JournalStage _stage = _JournalStage.resolving;
   String? _ownerName;
   Uint8List? _pdfBytes;
+
+  // Real-device repair: the Journal preview must never blank/flash on a
+  // regeneration that has a prior good publication to keep showing (Name
+  // Save with a changed owner, etc). `PdfPreview`'s own `build` callback is
+  // only retriggered by the `printing` package when the *function object*
+  // it receives changes identity (see `PdfPreviewCustom.didUpdateWidget`) --
+  // so `_previewBuild` is a field holding one fixed closure per accepted
+  // generation, read (never recreated) on every `build()`. An unrelated
+  // `setState` (Name overlay open/close, keyboard inset, etc.) therefore
+  // rebuilds this screen without the `PdfPreview` widget seeing a different
+  // `build` callback, and the `printing` package never re-rasters. Only
+  // `_generate` below reassigns it, and only once new bytes are actually
+  // ready -- so the previous field's pages stay visible in the *same*
+  // mounted `PdfPreviewCustomState` (never unmounted -- see
+  // `_buildPreviewSurface`) until the new ones stream in and replace them,
+  // one page at a time.
+  Future<Uint8List> Function(PdfPageFormat)? _previewBuild;
+
+  // Discards a generation's result if a newer one has since started --
+  // otherwise a slow first regeneration could resolve after a faster
+  // second one and stomp it back onto screen (real-device requirement:
+  // "only the newest valid publication replaces the visible preview").
+  int _generation = 0;
 
   // Real-device repair: the Name edit flow is now the approved full-field
   // decision takeover (same visual system as Reflection's Delete
@@ -130,23 +154,40 @@ class _JournalScreenState extends State<JournalScreen> {
   }
 
   Future<void> _generate() async {
-    setState(() => _stage = _JournalStage.generating);
+    final generation = ++_generation;
+    // Only the very first generation (no publication has ever existed yet)
+    // shows the reserved-but-empty "generating" shape -- a regeneration
+    // with a prior good preview never reverts away from `preview`, so the
+    // existing `PdfPreview` and its already-rastered pages stay mounted and
+    // visible for the whole of this call.
+    if (_pdfBytes == null) {
+      setState(() => _stage = _JournalStage.generating);
+    }
+
+    final Uint8List bytes;
     try {
-      final bytes = await _pdfBuilder.build(
+      bytes = await _pdfBuilder.build(
         items: widget.items,
         ownerName: _ownerName,
       );
-      if (!mounted) return;
-      setState(() {
-        _pdfBytes = bytes;
-        _stage = _JournalStage.preview;
-      });
     } catch (_) {
       // A generation failure never touches Kept/Reflection/Return/daily
-      // state -- `JournalPdfBuilder` only ever reads. Fails calmly here.
-      if (!mounted) return;
-      setState(() => _stage = _JournalStage.error);
+      // state -- `JournalPdfBuilder` only ever reads. Fails calmly here:
+      // if a good preview already exists, it is left exactly as-is rather
+      // than being replaced by an error state.
+      if (!mounted || generation != _generation) return;
+      if (_pdfBytes == null) {
+        setState(() => _stage = _JournalStage.error);
+      }
+      return;
     }
+
+    if (!mounted || generation != _generation) return;
+    setState(() {
+      _pdfBytes = bytes;
+      _previewBuild = (format) async => bytes;
+      _stage = _JournalStage.preview;
+    });
   }
 
   Future<void> _continueFromNamePrompt() async {
@@ -190,12 +231,21 @@ class _JournalScreenState extends State<JournalScreen> {
 
   Future<void> _saveNameEdit() async {
     final entered = _nameEditController?.text.trim() ?? '';
-    if (entered.isEmpty) {
+    final nextName = entered.isEmpty ? null : entered;
+    // An unchanged name (including "still empty") must not regenerate the
+    // publication at all -- only a genuine change to the owner name is
+    // publication-affecting.
+    if (nextName == _ownerName) {
+      if (!mounted) return;
+      setState(() => _editingName = false);
+      return;
+    }
+    if (nextName == null) {
       await _ownerService.clearName();
       _ownerName = null;
     } else {
-      await _ownerService.saveName(entered);
-      _ownerName = entered;
+      await _ownerService.saveName(nextName);
+      _ownerName = nextName;
     }
     if (!mounted) return;
     setState(() => _editingName = false);
@@ -395,6 +445,7 @@ class _JournalScreenState extends State<JournalScreen> {
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
+        leading: Navigator.canPop(context) ? const EastBackButton() : null,
         // Real-device repair: the trailing period is dropped, matching
         // Return's own app-screen title correction.
         title: Text('Journal', style: _style(24)),
@@ -477,9 +528,52 @@ class _JournalScreenState extends State<JournalScreen> {
     }
   }
 
+  static const _previewPageMargin = EdgeInsets.symmetric(
+    horizontal: 20,
+    vertical: 14,
+  );
+
+  // Real-device repair: the `printing` package's own default page widget
+  // (`PdfPreviewPage`) decorates every page with a white, drop-shadowed
+  // card -- meant for its light default theme, never overridden by this
+  // screen's own `scrollViewDecoration` (which only paints the *scroll
+  // background* behind pages, not each page itself). Since every actual
+  // page in the generated PDF is already full-bleed black (see
+  // `JournalPdfBuilder`), that white card is never the publication's own
+  // content -- it is a full A4-sized white rectangle that only ever
+  // appears for the one frame before the page's rasterized image has
+  // decoded. This `pagesBuilder` replaces that page chrome with the
+  // screen's own black, shadowless surface (so that one frame is
+  // indistinguishable from the surrounding screen) and renders each page's
+  // `Image` with `gaplessPlayback: true` -- when a regeneration replaces a
+  // page's `ImageProvider` with a new one, the previously decoded frame
+  // stays painted until the new one finishes decoding, instead of the
+  // `Image` widget clearing to nothing in between.
+  Widget _pagesBuilder(BuildContext context, List<PdfPreviewPageData> pages) {
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: pages.length,
+      itemBuilder: (context, index) {
+        final page = pages[index];
+        return Container(
+          margin: _previewPageMargin,
+          color: const Color(0xFF040404),
+          child: AspectRatio(
+            aspectRatio: page.aspectRatio,
+            child: Image(
+              image: page.image,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPreviewSurface() {
-    final bytes = _pdfBytes;
-    final ready = _stage == _JournalStage.preview && bytes != null;
+    final buildCallback = _previewBuild;
+    final ready = buildCallback != null;
 
     return Column(
       children: [
@@ -499,11 +593,20 @@ class _JournalScreenState extends State<JournalScreen> {
         // `loadingWidget` is also pinned to the same quiet emptiness so
         // the `printing` package's own default spinner never appears
         // during the preview's own internal page rendering.
+        //
+        // Real-device repair: this `PdfPreview` is only ever absent before
+        // the *first* publication has ever been generated -- once `ready`
+        // goes true for the first time, it stays mounted (same `ValueKey`,
+        // same `PdfPreviewCustomState`) for the rest of this screen's
+        // lifetime, including through every later regeneration. That is
+        // what lets a regeneration's still-visible old pages remain on
+        // screen while new ones stream in, rather than the whole preview
+        // collapsing to blank and popping back once new bytes exist.
         Expanded(
           child: ready
-              ? PdfPreview(
+              ? PdfPreview.builder(
                   key: const ValueKey('journal-pdf-preview'),
-                  build: (format) async => bytes,
+                  build: buildCallback,
                   initialPageFormat: PdfPageFormat.a4,
                   pageFormats: const {'A4': PdfPageFormat.a4},
                   canChangePageFormat: false,
@@ -515,11 +618,8 @@ class _JournalScreenState extends State<JournalScreen> {
                   pdfFileName: 'Journal.pdf',
                   scrollViewDecoration:
                       const BoxDecoration(color: Color(0xFF040404)),
-                  previewPageMargin: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
-                  ),
                   loadingWidget: const SizedBox.shrink(),
+                  pagesBuilder: _pagesBuilder,
                 )
               : const SizedBox.shrink(),
         ),

@@ -310,6 +310,27 @@ void main() {
     // file-path exception, never a directory-wide one.
     const deletionRunnerPath =
         'lib/sync_deletion/cloud_kit_remote_deletion_runner.dart';
+    // Build 26 (Sync Diagnostics / Safe Recovery core) Exception 5: the
+    // read-only sync-health evaluator. Like kept_sync_bootstrap_coordinator
+    // .dart (Exception 1), cloud_kit_sync_runtime_coordinator.dart
+    // (Exception 3), and cloud_kit_remote_deletion_runner.dart (Exception
+    // 4), it depends on abstract sync_platform CONTRACTS only -- never the
+    // concrete method_channel_cloud_kit_platform_bridge.dart adapter, and
+    // never MethodChannelCloudKitPlatformBridge in code. This is an exact
+    // file-path exception, never a directory-wide one --
+    // lib/sync_diagnostics/sync_recovery_coordinator.dart is deliberately
+    // NOT an exception: it never imports a sync_platform path at all (see
+    // its own doc comment).
+    const diagnosticsEvaluatorPath =
+        'lib/sync_diagnostics/sync_health_evaluator.dart';
+    // Build 26 (Sync Diagnostics / Safe Recovery core) Exception 6: the
+    // content-free snapshot type [diagnosticsEvaluatorPath] returns --
+    // `SyncHealthSnapshot.accountAvailability` reuses the exact
+    // `CloudKitAccountAvailability` enum every other sync layer already
+    // reports, never a second, independently-maintained copy of it. Also an
+    // exact file-path exception, never a directory-wide one.
+    const diagnosticsSnapshotPath =
+        'lib/sync_diagnostics/sync_health_snapshot.dart';
 
     List<File> dartFilesIn(Directory dir) {
       if (!dir.existsSync()) return const [];
@@ -394,6 +415,10 @@ void main() {
         final isRuntimeCoordinator =
             normalizedPath.endsWith(runtimeCoordinatorPath);
         final isDeletionRunner = normalizedPath.endsWith(deletionRunnerPath);
+        final isDiagnosticsEvaluator =
+            normalizedPath.endsWith(diagnosticsEvaluatorPath);
+        final isDiagnosticsSnapshot =
+            normalizedPath.endsWith(diagnosticsSnapshotPath);
         final isAppServices = normalizedPath.endsWith(appServicesPath);
 
         if (!isPlatformFile &&
@@ -401,6 +426,8 @@ void main() {
             !isBootstrapCoordinator &&
             !isRuntimeCoordinator &&
             !isDeletionRunner &&
+            !isDiagnosticsEvaluator &&
+            !isDiagnosticsSnapshot &&
             !isAppServices) {
           for (final line in importExportLines(file)) {
             if (line.contains('sync_platform/')) {
@@ -534,6 +561,64 @@ void main() {
       if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
         violations.add(
           '$deletionRunnerPath references '
+          'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
+          'mention would already have been stripped above)',
+        );
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'sync_health_evaluator.dart never imports the concrete '
+        'method_channel_cloud_kit_platform_bridge.dart adapter and never '
+        'references MethodChannelCloudKitPlatformBridge in code -- it '
+        'depends on abstract sync_platform CONTRACTS only (Build 26 Sync '
+        'Diagnostics / Safe Recovery core Exception 5, mirroring '
+        'kept_sync_bootstrap_coordinator.dart\'s own Exception 1)', () {
+      final file = File(diagnosticsEvaluatorPath);
+      expect(file.existsSync(), isTrue,
+          reason: '$diagnosticsEvaluatorPath must exist.');
+
+      final violations = <String>[];
+      for (final line in importExportLines(file)) {
+        if (line.contains('sync_platform/') &&
+            line.contains('method_channel_cloud_kit_platform_bridge.dart')) {
+          violations.add('$diagnosticsEvaluatorPath: "$line"');
+        }
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+        violations.add(
+          '$diagnosticsEvaluatorPath references '
+          'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
+          'mention would already have been stripped above)',
+        );
+      }
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+
+    test(
+        'sync_health_snapshot.dart never imports the concrete '
+        'method_channel_cloud_kit_platform_bridge.dart adapter and never '
+        'references MethodChannelCloudKitPlatformBridge in code -- it '
+        'depends on abstract sync_platform CONTRACTS only (Build 26 Sync '
+        'Diagnostics / Safe Recovery core Exception 6, mirroring '
+        'kept_sync_bootstrap_coordinator.dart\'s own Exception 1)', () {
+      final file = File(diagnosticsSnapshotPath);
+      expect(file.existsSync(), isTrue,
+          reason: '$diagnosticsSnapshotPath must exist.');
+
+      final violations = <String>[];
+      for (final line in importExportLines(file)) {
+        if (line.contains('sync_platform/') &&
+            line.contains('method_channel_cloud_kit_platform_bridge.dart')) {
+          violations.add('$diagnosticsSnapshotPath: "$line"');
+        }
+      }
+      final codeOnly = _stripComments(file.readAsStringSync());
+      if (codeOnly.contains('MethodChannelCloudKitPlatformBridge')) {
+        violations.add(
+          '$diagnosticsSnapshotPath references '
           'MethodChannelCloudKitPlatformBridge in real code (a doc-comment '
           'mention would already have been stripped above)',
         );

@@ -23,6 +23,33 @@ class KeptDiscoveryHintService {
   static const String hintCountKey = 'kept_discovery_hint_count';
   static const String completedKey = 'kept_discovery_completed';
 
+  /// P13: persisted the moment the central "Keep this wisdom." first-use
+  /// discovery is actually presented for the first (and only) time it is
+  /// ever eligible to appear (the very first completed ritual). Read back
+  /// on cold start so a killed/relaunched app resumes showing it against
+  /// the same still-revealed, still-unkept wisdom rather than silently
+  /// losing the in-memory "currently showing" state -- see
+  /// [KeptDiscoveryHintService] class doc and `home_screen.dart`'s
+  /// `_resumePersistedDiscoveryStateIfNeeded`. Superseded by [completedKey]
+  /// once the user actually saves; never read once that is true.
+  static const String centralDiscoveryPendingKey = 'kept_discovery_pending';
+
+  /// P13: persisted the moment the user completes the central discovery by
+  /// saving their first wisdom -- marks the *second* phase (teaching where
+  /// Kept lives, via the top-right control's discovery breathing) as
+  /// pending until the user actually opens Kept. Deliberately a separate
+  /// flag from [completedKey]: completing the central "how to Keep"
+  /// discovery and completing the "where Kept lives" discovery are two
+  /// distinct moments (see `home_screen.dart`'s
+  /// `_onWisdomSuccessfullyKept`/`openFavorites`).
+  static const String keptNavDiscoveryPendingKey = 'kept_nav_discovery_pending';
+
+  /// P13: permanently true once the user has opened Kept via the top-right
+  /// discovery flow at least once. Never re-checked or reset afterward --
+  /// this first-use training sequence never automatically replays.
+  static const String keptNavDiscoveryCompletedKey =
+      'kept_nav_discovery_completed';
+
   /// The hint is shown at most twice, ever: once on the first eligible
   /// revealed wisdom, and once more on a later daily reveal if the user did
   /// not save through it the first time.
@@ -32,6 +59,9 @@ class KeptDiscoveryHintService {
 
   bool? _completedInMemory;
   int? _displayCountInMemory;
+  bool? _centralPendingInMemory;
+  bool? _navPendingInMemory;
+  bool? _navCompletedInMemory;
 
   /// Missing persisted value defaults to `false` (not completed).
   Future<bool> isCompleted() async {
@@ -89,6 +119,90 @@ class KeptDiscoveryHintService {
     _completedInMemory = true;
     try {
       await _storage.setBool(completedKey, true);
+    } catch (_) {
+      // Non-critical: see class doc comment.
+    }
+  }
+
+  /// Missing persisted value defaults to `false` -- correct both for a
+  /// genuinely fresh install and for an existing install that predates P13
+  /// (this key never existed before, so it is simply never true for them).
+  Future<bool> isCentralDiscoveryPending() async {
+    if (_centralPendingInMemory == true) return true;
+    try {
+      final stored = await _storage.getBool(centralDiscoveryPendingKey) ??
+          false;
+      _centralPendingInMemory ??= stored;
+      return stored;
+    } catch (_) {
+      return _centralPendingInMemory ?? false;
+    }
+  }
+
+  /// Records that the central "Keep this wisdom." discovery has actually
+  /// been presented, so a killed/relaunched app can resume it. A write
+  /// failure is non-critical and swallowed, matching every other method on
+  /// this class.
+  Future<void> markCentralDiscoveryPending() async {
+    _centralPendingInMemory = true;
+    try {
+      await _storage.setBool(centralDiscoveryPendingKey, true);
+    } catch (_) {
+      // Non-critical: see class doc comment.
+    }
+  }
+
+  /// Missing persisted value defaults to `false`.
+  Future<bool> isNavDiscoveryCompleted() async {
+    if (_navCompletedInMemory == true) return true;
+    try {
+      final stored =
+          await _storage.getBool(keptNavDiscoveryCompletedKey) ?? false;
+      _navCompletedInMemory ??= stored;
+      return stored;
+    } catch (_) {
+      return _navCompletedInMemory ?? false;
+    }
+  }
+
+  /// Missing persisted value defaults to `false`.
+  Future<bool> isNavDiscoveryPending() async {
+    if (_navPendingInMemory == true) return true;
+    try {
+      final stored = await _storage.getBool(keptNavDiscoveryPendingKey) ??
+          false;
+      _navPendingInMemory ??= stored;
+      return stored;
+    } catch (_) {
+      return _navPendingInMemory ?? false;
+    }
+  }
+
+  /// Marks the top-right Kept-navigation discovery pending -- called once,
+  /// right after the save that completes the central discovery for the
+  /// first time. A write failure is non-critical and swallowed; the
+  /// in-memory flag alone drives the discovery animation for the rest of
+  /// this process.
+  Future<void> markNavDiscoveryPending() async {
+    _navPendingInMemory = true;
+    try {
+      await _storage.setBool(keptNavDiscoveryPendingKey, true);
+    } catch (_) {
+      // Non-critical: see class doc comment.
+    }
+  }
+
+  /// Marks the top-right Kept-navigation discovery permanently complete --
+  /// called only once the user has actually opened Kept via that control.
+  /// This first-use training sequence never automatically replays after
+  /// this. A write failure is non-critical and swallowed; the in-memory
+  /// flag alone prevents replay for the rest of this process.
+  Future<void> markNavDiscoveryCompleted() async {
+    _navCompletedInMemory = true;
+    _navPendingInMemory = false;
+    try {
+      await _storage.setBool(keptNavDiscoveryCompletedKey, true);
+      await _storage.setBool(keptNavDiscoveryPendingKey, false);
     } catch (_) {
       // Non-critical: see class doc comment.
     }

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/objects_catalog.dart';
 import '../theme/muted_text_color.dart';
+import '../widgets/east_back_button.dart';
 import '../widgets/objects/looping_product_gallery.dart';
 import '../widgets/objects/tshirt_color_selector.dart';
 
@@ -125,6 +126,7 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
         shadowColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        leading: Navigator.canPop(context) ? const EastBackButton() : null,
         title: Text('Objects', style: _style(24)),
       ),
       body: SafeArea(
@@ -193,7 +195,7 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
                           'DISCOVER THE OBJECTS',
                           textAlign: TextAlign.center,
                           style: _style(
-                            11,
+                            15.5,
                             color: eastMutedTextColor,
                             letterSpacing: 2.2,
                           ),

@@ -406,7 +406,7 @@ void main() {
     expect(observer.pushCount, 1);
     expect(find.text('Enter the Circle'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Enter the Circle'), findsNothing);

@@ -986,11 +986,14 @@ class _SaveRingBreath extends StatelessWidget {
   }
 }
 
-/// Item 6: the one-time "Keep this wisdom." / "Kept." discovery hint,
-/// positioned above the save ring in the negative space. Never a tutorial
-/// overlay — no box, border, arrow, spotlight, or dimming; plain text only.
-/// Wrapped in `ExcludeSemantics` so it never becomes a separately-focusable
-/// VoiceOver element or duplicates the save control's own announcement.
+/// P13: the once-ever "Keep this wisdom." / "Kept." first-use discovery
+/// text, positioned to the RIGHT of the save ring rather than above it, so
+/// ring and text read as one quiet horizontal discovery unit rather than a
+/// stacked label. Never a tutorial overlay — no box, border, arrow,
+/// spotlight, or dimming; plain text only. Wrapped in `ExcludeSemantics` so
+/// it never becomes a separately-focusable VoiceOver element or duplicates
+/// the save control's own announcement (the ring itself remains the sole
+/// actionable/announced control).
 class _HomeKeptDiscoveryHint extends StatelessWidget {
   const _HomeKeptDiscoveryHint({
     required this.opacity,
@@ -1000,22 +1003,34 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
   final double opacity;
   final String text;
 
+  /// Matches `_HomeSaveControl`'s own ring geometry (the default
+  /// `IconButton` minimum interactive dimension) and vertical anchor
+  /// (`height / 2 + 72`) exactly, without touching that control's own
+  /// position -- so this text's vertical center aligns with the ring's own
+  /// vertical center purely by sharing the same `top`/height, never by a
+  /// hand-tuned offset.
+  static const double _ringDiameter = 48.0;
+  static const double _ringGap = 16.0;
+
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
     return Positioned(
-      left: 0,
-      right: 0,
-      top: MediaQuery.of(context).size.height / 2 + 30,
+      top: size.height / 2 + 72,
+      height: _ringDiameter,
+      left: size.width / 2 + (_ringDiameter / 2) + _ringGap,
+      right: 24,
       child: ExcludeSemantics(
         child: IgnorePointer(
-          child: Center(
+          child: Align(
+            alignment: Alignment.centerLeft,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeOutCubic,
               opacity: opacity,
               child: Text(
                 text,
-                textAlign: TextAlign.center,
+                textAlign: TextAlign.left,
                 style: TextStyle(
                   color: eastMutedTextColor.withValues(alpha: 0.70),
                   fontSize: 14.5,

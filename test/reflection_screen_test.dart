@@ -267,7 +267,7 @@ void main() {
         'Some private words.',
       );
       await tester.pump(const Duration(milliseconds: 250));
-      await tester.pageBack();
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
       await tester.pumpAndSettle();
 
       final reflected = (await service.load()).single;
@@ -456,7 +456,7 @@ void main() {
         'Written and left at once.',
       );
       // No time advanced past the debounce -- leave right away.
-      await tester.pageBack();
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
       await tester.pumpAndSettle();
 
       expect(find.byType(ReflectionScreen), findsNothing);
@@ -709,7 +709,7 @@ void main() {
       );
       // No time advanced past the debounce -- leave right away, so the
       // pop-triggered flush is the one and only attempt path exercised.
-      await tester.pageBack();
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
       await tester.pumpAndSettle();
 
       expect(flaky.callCount, greaterThan(1));

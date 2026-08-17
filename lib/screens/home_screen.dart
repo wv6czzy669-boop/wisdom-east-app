@@ -92,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _dailyLockActive = false;
   bool _showingLockedWisdom = false;
   bool _saveOperationInProgress = false;
+  bool _favoriteLimitOverlayVisible = false;
   bool _shareInProgress = false;
   bool _notificationPermissionOfferShowing = false;
   bool _notificationPermissionOfferScheduled = false;
@@ -122,44 +123,49 @@ class _HomeScreenState extends State<HomeScreen>
   double _homeSwipeDy = 0;
   bool _homeSwipeHandled = false;
 
-  // Item 6 — Save -> Kept micro-guidance (one-time discovery hint).
+  // Item 6 / P13 — Save -> Kept micro-guidance.
+  //
+  // P13: the central "Keep this wisdom." discovery is now shown at most
+  // once, ever -- on the device's first genuinely completed ritual only
+  // (see `_pendingRitualOrdinal`/`_beginFirstUseKeepDiscovery` below) --
+  // and, unlike the old twice-shown/auto-timeout hint this replaces, never
+  // times out: it remains visible (and the ring keeps calmly breathing)
+  // until the user actually taps the Keep ring. `_firstUseKeepDiscoveryActive`
+  // is the persistent (survives navigation-away/backgrounding, cleared only
+  // by an actual save) marker that this discovery is still owed to the
+  // user; it is never reset merely because the app was backgrounded or the
+  // user briefly navigated elsewhere (see `_resumePendingDiscoveryIfNeeded`).
+  bool _firstUseKeepDiscoveryActive = false;
   String _keptDiscoveryHintText = '';
   double _keptDiscoveryHintOpacity = 0.0;
   bool _keptDiscoveryBreathActive = false;
   bool _keptIconEmphasized = false;
-  Timer? _keptDiscoveryShowTimer;
-  Timer? _keptDiscoveryHideTimer;
   Timer? _keptDiscoverySavedTextTimer;
-  // Update 1D: the top-right Kept teaching breath chain's own timer (start
-  // delay, each breath's own duration, and the pause between breaths).
+  // P13: true from the moment the first-ever successful save completes the
+  // central discovery until the user actually opens Kept via the top-right
+  // control -- drives the (also no-timeout) top-right Kept-icon teaching
+  // breath, and survives navigation/backgrounding exactly like
+  // `_firstUseKeepDiscoveryActive` above (see `KeptDiscoveryHintService`'s
+  // `keptNavDiscoveryPendingKey`).
+  bool _keptNavDiscoveryActive = false;
+  // The top-right Kept teaching breath chain's own timer (start delay, each
+  // breath's own duration, and the pause between breaths).
   Timer? _keptIconEmphasisTimer;
-  // Update 1D: how many of the 5 top-right teaching breaths have started
-  // so far in the current activation.
-  int _keptTopNavBreathCycle = 0;
-  // Update 1B: the center save-ring breath chain's own timer (first-breath
-  // delay, each breath's own duration, and the pause between breaths).
-  // Renamed in spirit from the old single one-shot "breath reset" timer,
-  // which this field replaces — it now drives all 4 repeated breaths, not
-  // just a single reset-to-false.
+  // The center save-ring breath chain's own timer (first-breath delay,
+  // each breath's own duration, and the pause between breaths).
   Timer? _keptDiscoveryBreathResetTimer;
-  // Update 1B: how many of the 4 center save-ring breaths have started so
-  // far in the current presentation.
-  int _keptDiscoveryBreathCycle = 0;
   int _keptDiscoverySessionId = 0;
-  bool _keptDiscoveryOfferedForCurrentWisdom = false;
 
-  // Update 1A/B: the discovery hint text remains visible for a total of
-  // 7.5 seconds (replacing the previous ~4s window) unless a successful
-  // save interrupts it first.
-  static const Duration _keptDiscoveryHintDuration = Duration(
-    milliseconds: 7500,
-  );
-  // Update 1B: exactly 4 center save-ring breaths, ~1.2s each (matching
-  // `_SaveRingBreath`'s own animation duration), with a calm ~200ms pause
-  // between each. The first breath begins ~250ms after the discovery text
-  // begins appearing. 4 * 1200ms + 3 * 200ms = 5400ms, comfortably within
-  // the 7.5s text window.
-  static const int _keptDiscoveryBreathCount = 4;
+  // P13: the ritual ordinal (1-based) of the reveal currently in flight,
+  // set once `finishCommittedDailyWisdom` learns it from
+  // `RatingRequestService.recordCompletedRitual` -- EAST's one
+  // authoritative "genuinely completed ritual" counter, never a second,
+  // competing one. `null` until known (or if it could not be determined --
+  // see that method's own doc comment), and reset to `null` at the start
+  // of every fresh reveal so a stale value from an earlier reveal can never
+  // leak into the next one's notification/discovery decision.
+  int? _pendingRitualOrdinal;
+
   static const Duration _keptDiscoveryBreathFirstDelay = Duration(
     milliseconds: 250,
   );
@@ -176,11 +182,6 @@ class _HomeScreenState extends State<HomeScreen>
     milliseconds: 1300,
   );
 
-  // Update 1D: exactly 5 top-right Kept teaching breaths, ~1.05s each
-  // (matching `_KeptTopNavBreath`'s own animation duration), with a calm
-  // ~165ms pause between each, starting ~350ms after a successful save
-  // that completes discovery for the first time.
-  static const int _keptTopNavBreathCount = 5;
   static const Duration _keptTopNavBreathStartDelay = Duration(
     milliseconds: 350,
   );
@@ -510,7 +511,35 @@ class _HomeScreenState extends State<HomeScreen>
     await loadKeeperStatus();
     await updateNextWisdomMessage();
     await synchronizeUnlockNotification();
+    await _resumePersistedDiscoveryStateIfNeeded();
     _maybeRequestAppRating();
+  }
+
+  // P13: recovers both first-use discovery phases from persisted state on
+  // a cold start (a killed-and-relaunched app, not merely backgrounded --
+  // see `_resumePendingDiscoveryIfNeeded` for the backgrounded/navigated-
+  // away case, which uses the in-memory flags directly since the process
+  // never died). Read only, never marks anything completed merely because
+  // this ran; completion only ever happens via an actual save
+  // (`_onWisdomSuccessfullyKept`) or an actual Kept-open (`openFavorites`).
+  Future<void> _resumePersistedDiscoveryStateIfNeeded() async {
+    try {
+      final centralCompleted = await keptDiscoveryHintService.isCompleted();
+      if (!centralCompleted &&
+          await keptDiscoveryHintService.isCentralDiscoveryPending()) {
+        _firstUseKeepDiscoveryActive = true;
+      }
+
+      final navCompleted =
+          await keptDiscoveryHintService.isNavDiscoveryCompleted();
+      if (!navCompleted &&
+          await keptDiscoveryHintService.isNavDiscoveryPending()) {
+        _keptNavDiscoveryActive = true;
+      }
+    } catch (_) {
+      return;
+    }
+    _resumePendingDiscoveryIfNeeded();
   }
 
   // EAST. Phase 6 — App Store rating request.
@@ -595,6 +624,11 @@ class _HomeScreenState extends State<HomeScreen>
     if (unlockAt != null) {
       _queueNotificationPermissionOffer(unlockAt);
     }
+    // P13: a foreground resume never killed the process, so the in-memory
+    // `_firstUseKeepDiscoveryActive`/`_keptNavDiscoveryActive` flags (never
+    // cleared by backgrounding -- only by an actual save/Kept-open) are
+    // still authoritative; just re-present whichever is still owed.
+    _resumePendingDiscoveryIfNeeded();
     _maybeRequestAppRating();
   }
 
@@ -997,7 +1031,20 @@ class _HomeScreenState extends State<HomeScreen>
       // Recording is fire-and-forget local bookkeeping only; the actual
       // native rating request happens later, at a safe idle moment (see
       // `_maybeRequestAppRating`), never here mid-reveal.
-      unawaited(ratingRequestService.recordCompletedRitual());
+      //
+      // P13: this call's return value doubles as the ritual ordinal
+      // (`_pendingRitualOrdinal`) the notification/discovery timing branch
+      // reads once its own Timer fires, several seconds later -- ample
+      // time for this single SharedPreferences round trip to resolve.
+      // `_pendingRitualOrdinal` was already reset to `null` at the start of
+      // this reveal (see the reveal-transition method above), so a stale
+      // value can never leak in.
+      unawaited(
+        ratingRequestService.recordCompletedRitual().then((ordinal) {
+          if (!mounted) return;
+          _pendingRitualOrdinal = ordinal;
+        }),
+      );
 
       // EAST. Phase 7: the same authoritative "ritual successfully
       // completed" moment as the rating-eligibility bookkeeping directly
@@ -1076,6 +1123,17 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  // P13: the exact same existing delay/trigger-timing infrastructure that
+  // previously ALWAYS led to the native notification-permission prompt.
+  // What happens once the Timer below fires now branches on
+  // `_pendingRitualOrdinal` via an explicit, closed switch (see
+  // `_runQueuedNotificationPermissionOffer`): ritual 1 begins the
+  // first-use Keep discovery; ritual 2 alone reaches the native prompt;
+  // every other ordinal (3+, or one that could not be determined) offers
+  // neither, automatically -- it never falls through to the native prompt
+  // "by default". The scheduling mechanism itself -- delay, guard flags,
+  // single-flight behavior -- is unchanged from the pre-P13
+  // implementation.
   void _queueNotificationPermissionOffer(
     DateTime unlockAt, {
     Duration delay = const Duration(seconds: 6),
@@ -1100,10 +1158,7 @@ class _HomeScreenState extends State<HomeScreen>
         // `_notificationPermissionOfferShowing = true` — leaving a real
         // window, between this Timer firing and that first `await`
         // resolving, where *both* guard flags were `false` while the offer
-        // was still genuinely in flight. `_maybeOfferKeptDiscoveryHint()`'s
-        // own guard (and `_presentKeptDiscoveryHint`'s re-check) only look
-        // at these two booleans, so anything reaching either check during
-        // that window was wrongly let through.
+        // was still genuinely in flight.
         //
         // The fix: `_notificationPermissionOfferScheduled` is no longer
         // cleared here at all, and `_notificationPermissionOfferShowing` is
@@ -1114,8 +1169,7 @@ class _HomeScreenState extends State<HomeScreen>
         // the two flags is continuously `true`, with no tick where both
         // are `false`. Both are cleared together, exactly once, in that
         // `finally` — the sole completion path, reached regardless of
-        // which branch is taken — which is also the single place the
-        // discovery hint is retried afterward.
+        // which branch is taken.
         _notificationPermissionOfferShowing = true;
         unawaited(_runQueuedNotificationPermissionOffer(offerFlow, unlockAt));
       },
@@ -1136,15 +1190,30 @@ class _HomeScreenState extends State<HomeScreen>
           _isInBlackSilence) {
         return;
       }
-      await _showNotificationPermissionOffer(unlockAt);
+      // P13 (locked contract): an explicit, closed three-way switch on the
+      // ritual ordinal -- never an `!= 1`/`else` fallthrough. Ritual 1
+      // begins the first-use Keep discovery and never reaches the native
+      // prompt. Ritual 2 alone reaches the existing, unmodified
+      // native-prompt path. Every other ordinal -- 3+, or undetermined
+      // (`null`, e.g. a rating request already attempted, or a read/write
+      // failure) -- does neither: the automatic offer fails closed rather
+      // than falling through to the native prompt "by default". This also
+      // means a missed ritual-2 timing window (app killed/backgrounded
+      // before its own offer fired) is never silently deferred to ritual
+      // 3 -- ordinal 3 simply matches neither case below.
+      if (_pendingRitualOrdinal == 1) {
+        _pendingNotificationUnlockAt = null;
+        await _beginFirstUseKeepDiscovery();
+        return;
+      }
+      if (_pendingRitualOrdinal == 2) {
+        await _showNotificationPermissionOffer(unlockAt);
+        return;
+      }
+      _pendingNotificationUnlockAt = null;
     } finally {
       _notificationPermissionOfferScheduled = false;
       _notificationPermissionOfferShowing = false;
-      // The permission flow — native prompt, "nothing to offer", or an
-      // early guard return above — has now fully resolved one way or
-      // another. Retry the discovery hint exactly once, now that both
-      // guard flags are clear.
-      _maybeOfferKeptDiscoveryHint();
     }
   }
 
@@ -1152,9 +1221,9 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
     if (!await wisdomNotificationService.shouldOfferPermission()) {
       _pendingNotificationUnlockAt = null;
-      // Item 6: no native prompt is coming after all — the caller's own
-      // `finally` (in `_runQueuedNotificationPermissionOffer`) clears both
-      // guard flags and retries the discovery hint.
+      // No native prompt is coming after all — the caller's own `finally`
+      // (in `_runQueuedNotificationPermissionOffer`) clears both guard
+      // flags.
       return;
     }
     if (!mounted ||
@@ -1175,183 +1244,127 @@ class _HomeScreenState extends State<HomeScreen>
       // Native authorization is always optional and must never affect the
       // ritual.
     }
-    // Flag clearing and the discovery-hint retry happen exactly once, in
-    // the caller's own `finally` block (`_runQueuedNotificationPermissionOffer`),
-    // regardless of which path above was taken.
+    // Flag clearing happens exactly once, in the caller's own `finally`
+    // block (`_runQueuedNotificationPermissionOffer`), regardless of which
+    // path above was taken.
   }
 
-  // Item 6 — Save -> Kept micro-guidance.
-  //
-  // Never shown at the same time as the native notification-permission
-  // prompt: if one is queued or currently on screen, this returns
-  // immediately without scheduling anything. `_showNotificationPermissionOffer`
-  // itself calls this again once the native prompt has resolved — granted
-  // or denied — so the hint appears ~800-1200ms after that resolution when
-  // the wisdom is still eligible and unsaved; `onFullyVisible` below also
-  // calls it once the save ring has finished fading in, covering the "no
-  // prompt is coming" case. Correction pass Item 3: single-flight — this
-  // method may legitimately be reached twice for the same reveal (once
-  // from `onFullyVisible`, once from a notification-offer exit path), so
-  // the per-wisdom "already offered" flag is claimed *synchronously*,
-  // before the only `await` in this method, so a second concurrent call
-  // sees it already claimed and returns immediately rather than also
-  // resolving `isEligible()` and scheduling a second timer.
-  Future<void> _maybeOfferKeptDiscoveryHint() async {
+  // P13 — the central "Keep this wisdom." first-use discovery. Reached
+  // only once, ever, per device: from `_runQueuedNotificationPermissionOffer`
+  // at the exact timing slot the native notification prompt would
+  // otherwise have appeared, and only when `_pendingRitualOrdinal == 1`
+  // (this device's first genuinely completed ritual -- see
+  // `RatingRequestService.recordCompletedRitual`). Unlike the discovery
+  // hint this replaces, there is deliberately no hide/timeout timer
+  // anywhere in this method or in the breath chain it starts: the text and
+  // the ring's calm breathing both remain until the user actually taps the
+  // Keep ring (`_onWisdomSuccessfullyKept` is what ends it), or resume
+  // identically after a navigation/backgrounding interruption (see
+  // `_resumePendingDiscoveryIfNeeded`).
+  Future<void> _beginFirstUseKeepDiscovery() async {
     if (!mounted || !wisdomRevealed) return;
     if (transitionInProgress || _transitionLock || _isInBlackSilence) return;
     if (_revealPersistenceNeedsRetry) return;
     if (navigationInProgress) return;
     if (_shareInProgress || _saveOperationInProgress) return;
+    // Already kept (e.g. the user tapped the ring before this timing slot
+    // even arrived) -- nothing left to teach for this reveal.
     if (isCurrentFavorite()) return;
-    if (_keptDiscoveryHintOpacity > 0.0) return;
-    if (_keptDiscoveryOfferedForCurrentWisdom) return;
-    if (_notificationPermissionOfferScheduled ||
-        _notificationPermissionOfferShowing) {
-      return;
-    }
-
-    // Claim this reveal's one offer attempt now, before the await below,
-    // so no second caller can also pass the check above and race to
-    // schedule a duplicate presentation.
-    _keptDiscoveryOfferedForCurrentWisdom = true;
-    final session = ++_keptDiscoverySessionId;
-    final currentFlow = flowSessionId;
-    final scheduledForText = currentText;
-
-    bool eligible;
-    try {
-      eligible = await keptDiscoveryHintService.isEligible();
-    } catch (_) {
-      eligible = false;
-    }
-    if (!eligible) return;
-    // Re-validate after the only await in this method: navigation,
-    // disposal, or a new flow session may have invalidated this attempt
-    // while `isEligible()` was resolving.
-    if (!mounted ||
-        session != _keptDiscoverySessionId ||
-        currentFlow != flowSessionId) {
-      return;
-    }
-
-    _keptDiscoveryShowTimer?.cancel();
-    _keptDiscoveryShowTimer = Timer(
-      const Duration(milliseconds: 1000),
-      () => _presentKeptDiscoveryHint(session, currentFlow, scheduledForText),
-    );
-  }
-
-  // Correction: re-checked at both entry and immediately before commit, so
-  // a call blocked by any of these conditions can never be mistaken for one
-  // that actually presented (see `_presentKeptDiscoveryHint` below).
-  bool _keptDiscoveryPresentationBlocked(
-    int session,
-    int currentFlow,
-    String scheduledForText,
-  ) {
-    return !mounted ||
-        session != _keptDiscoverySessionId ||
-        currentFlow != flowSessionId ||
-        currentText != scheduledForText ||
-        !wisdomRevealed ||
-        transitionInProgress ||
-        _transitionLock ||
-        _isInBlackSilence ||
-        navigationInProgress ||
-        _saveOperationInProgress ||
-        _shareInProgress ||
-        _revealPersistenceNeedsRetry ||
-        _notificationPermissionOfferScheduled ||
-        _notificationPermissionOfferShowing ||
-        isCurrentFavorite();
-  }
-
-  Future<void> _presentKeptDiscoveryHint(
-    int session,
-    int currentFlow,
-    String scheduledForText,
-  ) async {
-    if (_keptDiscoveryPresentationBlocked(
-      session,
-      currentFlow,
-      scheduledForText,
-    )) {
-      return;
-    }
-
-    // Step 5's "service still eligible" re-check: `isEligible()` was
-    // already true when this timer was scheduled, but discovery may have
-    // been completed by some other path during the ~1000ms wait.
-    bool eligible;
-    try {
-      eligible = await keptDiscoveryHintService.isEligible();
-    } catch (_) {
-      eligible = false;
-    }
-    if (!eligible) return;
-
-    // Final re-check, immediately before committing to presentation: no
-    // further `await` happens between this and the `setState`/
-    // `recordDisplayShown()` pair below, so a blocked result can never
-    // leave a "recorded but not shown" gap — the previous implementation
-    // called `recordDisplayShown()` *before* this second re-check, which
-    // meant a blocked/invalidated attempt could still have incremented the
-    // display count despite never actually presenting anything.
-    if (_keptDiscoveryPresentationBlocked(
-      session,
-      currentFlow,
-      scheduledForText,
-    )) {
-      return;
-    }
 
     final reduceMotion = _reduceMotion;
+    final session = ++_keptDiscoverySessionId;
     setState(() {
+      _firstUseKeepDiscoveryActive = true;
       _keptDiscoveryHintText = 'Keep this wisdom.';
       _keptDiscoveryHintOpacity = 1.0;
       _keptDiscoveryBreathActive = false;
     });
-    // Only reached once the hint is actually presented: mark it presented
-    // for this wisdom (fire-and-forget, matching `markCompleted()`'s own
-    // pattern elsewhere — its in-memory bookkeeping is what other calls in
-    // this process observe; the persisted write is best-effort).
+    // Best-effort persisted bookkeeping (see `KeptDiscoveryHintService`'s
+    // own doc comments): `recordDisplayShown` for continuity with the
+    // service's existing display-count bookkeeping, and
+    // `markCentralDiscoveryPending` so a killed/relaunched app can resume
+    // showing this against the same still-revealed, still-unkept wisdom
+    // (see `_resumePersistedDiscoveryStateIfNeeded`).
     unawaited(keptDiscoveryHintService.recordDisplayShown());
+    unawaited(keptDiscoveryHintService.markCentralDiscoveryPending());
 
-    // Update 1B: exactly 4 center save-ring breaths, the first beginning
-    // ~250ms after the text above just appeared. Under Reduce Motion, no
-    // breath ever starts (text-only, per Update 1G).
     if (!reduceMotion) {
-      _keptDiscoveryBreathCycle = 0;
       _keptDiscoveryBreathResetTimer?.cancel();
       _keptDiscoveryBreathResetTimer = Timer(
         _keptDiscoveryBreathFirstDelay,
         () => _startKeptDiscoveryBreath(session),
       );
     }
-
-    // Update 1A: if the user does not save, keep the hint visible for a
-    // total of 7.5s, then fade it.
-    _keptDiscoveryHideTimer?.cancel();
-    _keptDiscoveryHideTimer = Timer(_keptDiscoveryHintDuration, () {
-      if (!mounted || session != _keptDiscoverySessionId) return;
-      if (isCurrentFavorite()) return;
-      setState(() {
-        _keptDiscoveryHintOpacity = 0.0;
-      });
-    });
+    // Deliberately no hide timer: this discovery never times out (see
+    // this method's own doc comment).
   }
 
-  // Update 1B: starts one center save-ring breath (`_keptDiscoveryBreathActive
-  // = true`); `_endKeptDiscoveryBreath` (scheduled below) turns it back off
-  // after that single breath's own ~1.2s duration and, unless the 4th
-  // breath has already played, schedules the next one after a calm ~200ms
-  // pause. Guarded by the same `session` id every other discovery timer
-  // uses, so a stale chain from a dismissed/replaced reveal can never touch
-  // a later reveal's state.
+  // Re-presents the central discovery (text + breathing) after a
+  // navigation-away/backgrounding interruption paused it, or after a cold
+  // relaunch recovers it from persisted state -- never re-evaluates
+  // eligibility/ordinal, since `_firstUseKeepDiscoveryActive` being true
+  // already proves this device owes the user this discovery. Also resumes
+  // the top-right Kept-navigation teaching breath under the same
+  // circumstances. A no-op whenever neither is currently owed, or the
+  // current screen state cannot show them (already kept, mid-transition,
+  // navigating, etc).
+  void _resumePendingDiscoveryIfNeeded() {
+    if (!mounted) return;
+
+    // The central discovery needs a stable, fully-revealed ritual view to
+    // render text next to the ring, so it stays guarded on ritual
+    // transition/navigation state.
+    if (!transitionInProgress &&
+        !_transitionLock &&
+        !navigationInProgress &&
+        _firstUseKeepDiscoveryActive &&
+        wisdomRevealed &&
+        !_isInBlackSilence &&
+        !isCurrentFavorite() &&
+        _keptDiscoveryHintOpacity <= 0.0) {
+      final session = ++_keptDiscoverySessionId;
+      setState(() {
+        _keptDiscoveryHintText = 'Keep this wisdom.';
+        _keptDiscoveryHintOpacity = 1.0;
+        _keptDiscoveryBreathActive = false;
+      });
+      if (!_reduceMotion) {
+        _keptDiscoveryBreathResetTimer?.cancel();
+        _keptDiscoveryBreathResetTimer = Timer(
+          _keptDiscoveryBreathFirstDelay,
+          () => _startKeptDiscoveryBreath(session),
+        );
+      }
+    }
+
+    // The top-right nav breath deliberately is NOT gated on
+    // transition/navigation state: unlike the central discovery, it does
+    // not depend on a settled ritual view -- the icon it decorates is only
+    // ever rendered in the tree when chrome is actually visible (see
+    // `_chromeVisible`), which already self-gates its visual appearance.
+    // Gating this on ritual-transition state too would create a real race
+    // on cold start: `loadInitialState()`'s own call here can land while
+    // the user's own tap has already kicked off
+    // `transitionToExistingWisdom` (which holds `transitionInProgress`
+    // true for over a second), and nothing would ever retry afterward --
+    // silently losing the resumed animation for the rest of the session.
+    if (_keptNavDiscoveryActive &&
+        !_keptIconEmphasized &&
+        _keptIconEmphasisTimer == null &&
+        !_reduceMotion) {
+      _scheduleKeptTopNavBreaths();
+    }
+  }
+
+  // Loops for as long as `_firstUseKeepDiscoveryActive` is true -- there is
+  // no fixed breath count under P13's no-timeout contract; the ring simply
+  // keeps breathing, calmly, for as long as the discovery remains owed.
+  // Guarded by the same `session` id every other discovery timer uses, so
+  // a stale chain from a dismissed/replaced reveal can never touch a later
+  // reveal's state.
   void _startKeptDiscoveryBreath(int session) {
     if (!mounted || session != _keptDiscoverySessionId) return;
     setState(() => _keptDiscoveryBreathActive = true);
-    _keptDiscoveryBreathCycle++;
     _keptDiscoveryBreathResetTimer = Timer(
       _keptDiscoveryBreathDuration,
       () => _endKeptDiscoveryBreath(session),
@@ -1361,7 +1374,7 @@ class _HomeScreenState extends State<HomeScreen>
   void _endKeptDiscoveryBreath(int session) {
     if (!mounted || session != _keptDiscoverySessionId) return;
     setState(() => _keptDiscoveryBreathActive = false);
-    if (_keptDiscoveryBreathCycle >= _keptDiscoveryBreathCount) return;
+    if (!_firstUseKeepDiscoveryActive) return;
     _keptDiscoveryBreathResetTimer = Timer(
       _keptDiscoveryBreathPause,
       () => _startKeptDiscoveryBreath(session),
@@ -1369,25 +1382,21 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // Correction: single central cancellation point for every discovery-hint
-  // UI timer (offer delay, breath reset, hint auto-dismiss, "Kept."
-  // dismissal, Kept-icon emphasis reset). Called from `dispose`, navigation
-  // interruption and lifecycle pause/inactive (both via
-  // `_dismissKeptDiscoveryHint` below), a successful save, and the start of
-  // a replacement wisdom reveal — so no discovery timer can ever outlive
-  // the state it was scheduled for.
+  // UI timer (breath reset, "Kept." dismissal, Kept-icon emphasis reset).
+  // Called from `dispose`, navigation interruption and lifecycle
+  // pause/inactive (both via `_dismissKeptDiscoveryHint` below), a
+  // successful save, and the start of a replacement wisdom reveal — so no
+  // discovery timer can ever outlive the state it was scheduled for. Never
+  // clears `_firstUseKeepDiscoveryActive`/`_keptNavDiscoveryActive`
+  // themselves -- those persist across interruption by design (see
+  // `_resumePendingDiscoveryIfNeeded`).
   void _cancelAllDiscoveryTimers() {
-    _keptDiscoveryShowTimer?.cancel();
-    _keptDiscoveryShowTimer = null;
-    _keptDiscoveryHideTimer?.cancel();
-    _keptDiscoveryHideTimer = null;
     _keptDiscoverySavedTextTimer?.cancel();
     _keptDiscoverySavedTextTimer = null;
     _keptIconEmphasisTimer?.cancel();
     _keptIconEmphasisTimer = null;
-    _keptTopNavBreathCycle = 0;
     _keptDiscoveryBreathResetTimer?.cancel();
     _keptDiscoveryBreathResetTimer = null;
-    _keptDiscoveryBreathCycle = 0;
   }
 
   void _dismissKeptDiscoveryHint() {
@@ -1406,33 +1415,31 @@ class _HomeScreenState extends State<HomeScreen>
   // (never on a failed save — see the try block in `toggleFavorite()`,
   // which only reaches this call after the persisted write succeeds).
   //
-  // Correction pass Item 1: every successful save permanently completes
-  // Kept discovery — in-memory immediately, persisted best-effort — no
-  // matter whether the discovery hint happened to be visible for this
-  // save. Only the *visual* "Kept." transition is gated on the hint having
-  // actually been showing; an ordinary save (hint not visible) still
-  // completes discovery, it just shows no new "Kept." feedback for it.
+  // Every successful save permanently completes the central Kept
+  // discovery — in-memory immediately, persisted best-effort — no matter
+  // whether the discovery hint happened to be visible for this save. Only
+  // the *visual* "Kept." transition is gated on the hint having actually
+  // been showing; an ordinary save (hint not visible) still completes
+  // discovery, it just shows no new "Kept." feedback for it.
   //
-  // Correction: the top-right Kept teaching breath is gated ONLY on
+  // P13: the top-right Kept-navigation discovery begins ONLY on
   // `justCompletedDiscovery` — whether *this* save is the one that changes
-  // discovery from incomplete to completed (checked below via
+  // central discovery from incomplete to completed (checked below via
   // `keptDiscoveryHintService.isCompleted()` *before* calling
-  // `markCompleted()`). `hintWasShowing` must never suppress it: a save
-  // made before "Keep this wisdom." ever became visible still completes
-  // discovery for the first time, and the locked discovery contract
-  // requires the teaching breath to run for that transition too — the
-  // teaching animation's own trigger is "discovery just completed," not
-  // "the text hint happened to be on screen." `hintWasShowing` is used
-  // below only to gate the separate "Kept." text transition, which is a
-  // distinct concern.
+  // `markCompleted()`). `hintWasShowing` must never gate it: a save made
+  // before "Keep this wisdom." ever became visible still completes central
+  // discovery for the first time, and still owes the user the "where Kept
+  // lives" teaching. `hintWasShowing` is used below only to gate the
+  // separate "Kept." text transition, which is a distinct concern.
   Future<void> _onWisdomSuccessfullyKept() async {
     final hintWasShowing = _keptDiscoveryHintOpacity > 0.0;
 
-    // Cancels every pending discovery timer (offer delay, breath chains,
-    // any stale hint-hide) before deciding what — if anything — to show
-    // next, so nothing from the pre-save state can fire later.
+    // Cancels every pending discovery timer (breath chains, any stale
+    // hint state) before deciding what — if anything — to show next, so
+    // nothing from the pre-save state can fire later.
     _cancelAllDiscoveryTimers();
     _keptDiscoverySessionId++;
+    _firstUseKeepDiscoveryActive = false;
 
     bool wasCompletedBefore;
     try {
@@ -1466,28 +1473,37 @@ class _HomeScreenState extends State<HomeScreen>
           });
         },
       );
+    } else {
+      setState(() {
+        _keptDiscoveryHintOpacity = 0.0;
+        _keptDiscoveryBreathActive = false;
+      });
     }
 
-    // Update 1D/E: the 5-breath top-right Kept teaching emphasis runs only
-    // once — on the first successful save that completes discovery,
+    // P13: the top-right Kept-navigation discovery begins only once — on
+    // the first successful save that completes central discovery,
     // regardless of whether the hint text was visible for it — and never
-    // again on any later save. Reduce Motion skips scheduling entirely (in
-    // addition to `_KeptIconEmphasis`'s own render-time gate).
-    if (justCompletedDiscovery && !_reduceMotion) {
-      _scheduleKeptTopNavBreaths();
+    // again on any later save. It has no fixed breath count and no
+    // timeout: it stays pending (in memory and persisted) until the user
+    // actually opens Kept via that control (see `openFavorites`).
+    if (justCompletedDiscovery) {
+      _keptNavDiscoveryActive = true;
+      unawaited(keptDiscoveryHintService.markNavDiscoveryPending());
+      if (!_reduceMotion) {
+        _scheduleKeptTopNavBreaths();
+      }
     }
   }
 
-  // Update 1D: schedules the 5-breath top-right Kept teaching emphasis,
-  // starting ~350ms after the successful save that completes discovery.
-  // Not tied to `_keptDiscoverySessionId` (that id belongs to the
-  // reveal-scoped discovery-hint text/center-breath flow, which this
-  // emphasis is deliberately independent of); guarded only by `mounted`,
-  // and cancelled the same way every other discovery timer is — via
-  // `_cancelAllDiscoveryTimers()` on dispose, navigation, lifecycle change,
-  // or a new wisdom reveal.
+  // Starts the top-right Kept-navigation teaching breath chain. Not tied
+  // to `_keptDiscoverySessionId` (that id belongs to the reveal-scoped
+  // discovery-hint text/center-breath flow, which this emphasis is
+  // deliberately independent of); guarded only by `mounted` and
+  // `_keptNavDiscoveryActive`, and cancelled the same way every other
+  // discovery timer is — via `_cancelAllDiscoveryTimers()` on dispose,
+  // navigation, lifecycle change, or a new wisdom reveal (see
+  // `_resumePendingDiscoveryIfNeeded` for how it resumes afterward).
   void _scheduleKeptTopNavBreaths() {
-    _keptTopNavBreathCycle = 0;
     _keptIconEmphasisTimer?.cancel();
     _keptIconEmphasisTimer = Timer(
       _keptTopNavBreathStartDelay,
@@ -1496,9 +1512,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _startKeptTopNavBreath() {
-    if (!mounted) return;
+    if (!mounted || !_keptNavDiscoveryActive) return;
     setState(() => _keptIconEmphasized = true);
-    _keptTopNavBreathCycle++;
     _keptIconEmphasisTimer = Timer(
       _keptTopNavBreathDuration,
       _endKeptTopNavBreath,
@@ -1508,7 +1523,7 @@ class _HomeScreenState extends State<HomeScreen>
   void _endKeptTopNavBreath() {
     if (!mounted) return;
     setState(() => _keptIconEmphasized = false);
-    if (_keptTopNavBreathCycle >= _keptTopNavBreathCount) return;
+    if (!_keptNavDiscoveryActive) return;
     _keptIconEmphasisTimer = Timer(
       _keptTopNavBreathPause,
       _startKeptTopNavBreath,
@@ -1618,14 +1633,15 @@ class _HomeScreenState extends State<HomeScreen>
         },
       );
 
-      // Correction: a replacement wisdom reveal (a new daily reveal in the
-      // same session) must not inherit the previous wisdom's discovery-hint
-      // "already offered" flag or any of its pending timers — otherwise the
-      // hint could never be offered again for a later eligible day, even
-      // though `KeptDiscoveryHintService.isEligible()` would still allow up
-      // to `maximumDisplayCount` presentations across different days.
-      _keptDiscoveryOfferedForCurrentWisdom = false;
+      // A replacement wisdom reveal (a new daily reveal in the same
+      // session) must not inherit any of the previous wisdom's pending
+      // discovery timers. `_pendingRitualOrdinal` is reset here too, so a
+      // stale ordinal from an earlier reveal can never leak into this new
+      // reveal's notification/discovery decision — `finishCommittedDailyWisdom`
+      // (reached once this reveal's own commit resolves, well before its
+      // notification/discovery timing slot fires) sets the real value.
       _cancelAllDiscoveryTimers();
+      _pendingRitualOrdinal = null;
 
       setState(() {
         textOpacity = 1.0;
@@ -1727,18 +1743,13 @@ class _HomeScreenState extends State<HomeScreen>
       // Correction: the notification-offer "scheduled" guard
       // (`_notificationPermissionOfferScheduled`) must become active in
       // the same synchronous turn the reveal itself becomes visible — not
-      // deferred to a post-frame callback. `onFullyVisible` (the save
-      // ring's own fade-completion callback, reached independently ~1.9s
-      // later via `Future.delayed`/`AnimatedOpacity`) also calls
-      // `_maybeOfferKeptDiscoveryHint()`, and a real Mac run showed that
-      // call winning the race and presenting the discovery hint before
-      // this guard had been raised, incrementing its display count while
-      // the native permission Future was still genuinely pending. Queueing
-      // the offer here — synchronously, before anything in this method
-      // yields control again — closes that window entirely. This is only
-      // a reordering: the offer's own delay/Timer, its guard conditions,
-      // and `wisdomRevealController.forward` (still correctly deferred to
-      // the next frame below) are all unchanged.
+      // deferred to a post-frame callback, closing a race window a real
+      // Mac run once exposed. Queueing the offer here — synchronously,
+      // before anything in this method yields control again — closes that
+      // window entirely. This is only a reordering: the offer's own
+      // delay/Timer, its guard conditions, and `wisdomRevealController.forward`
+      // (still correctly deferred to the next frame below) are all
+      // unchanged.
       final unlockAt = revealedAccess.unlockAt;
       if (revealedAccess.isNew && unlockAt != null) {
         _queueNotificationPermissionOffer(
@@ -1962,6 +1973,11 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (mounted) {
         navigationInProgress = false;
+        // P13: still-pending first-use discovery (central or top-right
+        // Kept-nav) resumes on return, exactly as it would after a
+        // lifecycle resume -- neither phase was cleared by navigating
+        // away, only paused visually.
+        _resumePendingDiscoveryIfNeeded();
       }
     }
   }
@@ -1982,6 +1998,7 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (mounted) {
         navigationInProgress = false;
+        _resumePendingDiscoveryIfNeeded();
       }
     }
   }
@@ -2011,6 +2028,7 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (mounted) {
         navigationInProgress = false;
+        _resumePendingDiscoveryIfNeeded();
       }
     }
   }
@@ -2044,34 +2062,119 @@ class _HomeScreenState extends State<HomeScreen>
 
   void showFavoriteLimitDialog() {
     if (!mounted) return;
+    setState(() {
+      _favoriteLimitOverlayVisible = true;
+    });
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF111111),
-          title: Text(
-            "Kept Limit",
-            style: _homeWisdomStyle(22),
-          ),
-          content: Text(
-            "Free users can keep up to 3 wisdoms.",
-            style: _homeWisdomStyle(18),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                openKeeperScreen();
-              },
+  void _dismissFavoriteLimitOverlay() {
+    if (!mounted) return;
+    setState(() {
+      _favoriteLimitOverlayVisible = false;
+    });
+  }
+
+  void _becomeKeeperFromLimitOverlay() {
+    _dismissFavoriteLimitOverlay();
+    unawaited(openKeeperScreen());
+  }
+
+  Widget _favoriteLimitDecisionLabel(
+    String label, {
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            child: Center(
               child: Text(
-                "Become a Keeper",
-                style: _homeWisdomStyle(17),
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w300,
+                  fontFamily: 'CormorantGaramond',
+                  letterSpacing: 3.0,
+                ),
               ),
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The approved full-field EAST decision takeover -- same visual system
+  /// as Reflection's Delete Reflection (`reflection_screen.dart`'s
+  /// `_deleteDecisionOverlay`), Journal Name
+  /// (`journal_screen.dart`'s `_nameDecisionOverlay`), and Settings'
+  /// Restore Purchases result (`settings_screen.dart`'s
+  /// `_restoreResultOverlay`): the screen beneath stays mounted and
+  /// strongly dimmed, no `AlertDialog`, no card, no rounded rectangle, no
+  /// border, no shadow. Replaces the previous `AlertDialog`-based
+  /// `showFavoriteLimitDialog`; the limit/entitlement logic that decides
+  /// *when* this is shown is unchanged, only the presentation.
+  Widget _favoriteLimitOverlay() {
+    if (!_favoriteLimitOverlayVisible) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_favoriteLimitOverlayVisible,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: _favoriteLimitOverlayVisible ? 1.0 : 0.0,
+          child: Container(
+            key: const ValueKey('home-favorite-limit-overlay'),
+            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Kept Limit",
+                  textAlign: TextAlign.center,
+                  style: _homeWisdomStyle(28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Free users can keep up to 3 wisdoms.",
+                  textAlign: TextAlign.center,
+                  style: _homeWisdomStyle(
+                    15,
+                    color: const Color(0xB3FFFFFF),
+                  ),
+                ),
+                const SizedBox(height: 44),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _favoriteLimitDecisionLabel(
+                      'CANCEL',
+                      onTap: _dismissFavoriteLimitOverlay,
+                      color: const Color(0xB3FFFFFF),
+                    ),
+                    const SizedBox(width: 56),
+                    _favoriteLimitDecisionLabel(
+                      'BECOME A KEEPER',
+                      onTap: _becomeKeeperFromLimitOverlay,
+                      color: const Color(0xFFF4F0E8),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -2188,6 +2291,22 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> openFavorites() async {
     if (navigationInProgress || transitionInProgress || _transitionLock) return;
 
+    // P13: opening Kept (via this control or the equivalent swipe gesture
+    // -- both funnel through here) is the one authoritative "the user
+    // found where Kept lives" moment. Stop the top-right teaching breath
+    // and permanently mark this first-use discovery complete -- it never
+    // automatically replays after this, on this device. A no-op (no
+    // write) when the discovery was never pending in the first place.
+    if (_keptNavDiscoveryActive) {
+      _keptIconEmphasisTimer?.cancel();
+      _keptIconEmphasisTimer = null;
+      _keptNavDiscoveryActive = false;
+      setState(() {
+        _keptIconEmphasized = false;
+      });
+      unawaited(keptDiscoveryHintService.markNavDiscoveryCompleted());
+    }
+
     navigationInProgress = true;
     interruptRitualForNavigation();
 
@@ -2207,6 +2326,7 @@ class _HomeScreenState extends State<HomeScreen>
     } finally {
       if (mounted) {
         navigationInProgress = false;
+        _resumePendingDiscoveryIfNeeded();
       }
     }
   }
@@ -2354,7 +2474,6 @@ class _HomeScreenState extends State<HomeScreen>
                   setState(() {
                     saveInteractionEnabled = true;
                   });
-                  _maybeOfferKeptDiscoveryHint();
                 },
               ),
             if (wisdomRevealed)
@@ -2367,6 +2486,7 @@ class _HomeScreenState extends State<HomeScreen>
                 opacity: _keptDiscoveryHintOpacity,
                 text: _keptDiscoveryHintText,
               ),
+            _favoriteLimitOverlay(),
           ],
         ),
       ),

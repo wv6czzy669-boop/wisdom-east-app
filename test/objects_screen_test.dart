@@ -58,7 +58,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Objects'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Objects'), findsNothing);

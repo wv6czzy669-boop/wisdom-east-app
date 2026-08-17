@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../theme/muted_text_color.dart';
+import '../widgets/east_back_button.dart';
 
 class KeeperScreen extends StatefulWidget {
   const KeeperScreen({
@@ -134,6 +135,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
+        leading: Navigator.canPop(context) ? const EastBackButton() : null,
       ),
       body: SafeArea(
         top: false,
@@ -223,19 +225,39 @@ class _KeeperScreenState extends State<KeeperScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 108),
+                    // Lower composition: a quiet editorial close, not a
+                    // feature list. Hierarchy comes entirely from spacing
+                    // rhythm -- no rules/labels/graphic dividers. Two
+                    // two-line groups (KEEPER CORE, then DEEPER KEEPER
+                    // VALUE -- concepts only, never rendered) each pair
+                    // tightly bound internally, separated from each other
+                    // by a wider pause, with the widest pause reserved for
+                    // the closing sentiment before it.
+                    const SizedBox(height: 72),
                     Text(
-                      "Unlimited Kept Wisdoms",
+                      "Keep without limit.",
                       textAlign: TextAlign.center,
                       style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
-                    const SizedBox(height: 11),
+                    const SizedBox(height: 10),
                     Text(
-                      "Unlimited Reflections",
+                      "Reflect without limit.",
                       textAlign: TextAlign.center,
                       style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
-                    const SizedBox(height: 11),
+                    const SizedBox(height: 28),
+                    Text(
+                      "Return to what stayed.",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      "Take your Journal with you.",
+                      textAlign: TextAlign.center,
+                      style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                    ),
+                    const SizedBox(height: 44),
                     Text(
                       "Keep EAST. alive.",
                       textAlign: TextAlign.center,

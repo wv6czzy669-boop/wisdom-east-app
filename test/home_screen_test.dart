@@ -369,7 +369,7 @@ void main() {
       reason: 'Settings tap must produce exactly one didPush.',
     );
     expect(find.text('Where silence speaks.'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
       settingsDuration,
@@ -405,7 +405,7 @@ void main() {
     );
     expect(find.text('Objects'), findsOneWidget);
     expect(find.text('Where silence speaks.'), findsNothing);
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
       objectsDuration,
@@ -1022,7 +1022,7 @@ void main() {
     // Returning from Kept preserves the filled state.
     await tester.tap(find.byKey(const ValueKey('home-kept-control')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
@@ -1159,7 +1159,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(wisdom), findsNothing);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
@@ -1583,7 +1583,7 @@ void main() {
       find.byKey(const ValueKey('objects-screen-root')),
     );
     expect(find.text('Objects'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
       objectsDuration,
@@ -1645,7 +1645,7 @@ void main() {
     // production value (`MaterialPageRoute`'s own default), not a value
     // re-declared in the test.
     expect(settingsRoute!.transitionDuration, settingsDuration);
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
       settingsDuration,
@@ -1676,7 +1676,7 @@ void main() {
       tester.element(find.byKey(const ValueKey('objects-screen-root'))),
     );
     expect(objectsRoute, isA<MaterialPageRoute>());
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
       objectsDuration,
@@ -1903,7 +1903,7 @@ void main() {
     expect(_keptGuard(tester).ignoring, isTrue);
     await tester.pump(const Duration(milliseconds: 1100));
     expect(_keptGuard(tester).ignoring, isFalse);
-    expect(find.byTooltip('Back'), findsNothing);
+    expect(find.byKey(const ValueKey('east-back-button')), findsNothing);
     expect(find.byKey(const ValueKey('home-save-control-unsaved')),
         findsOneWidget);
     expect(
@@ -2167,47 +2167,77 @@ void main() {
   });
 
   testWidgets(
-      'notDetermined status triggers exactly one direct native permission '
-      'request at the existing timing, with no custom permission dialog '
-      'ever shown, and no repeat request on a later resume', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
+      'P13: the first genuinely completed ritual never requests native '
+      'notification permission at the existing timing (the first-use Keep '
+      'discovery begins there instead); the second ritual requests it '
+      'exactly once, at that same existing timing; a third ritual repeats '
+      'neither', (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(enabled: false);
     final notificationService = WisdomNotificationService(
       platform: notificationPlatform,
       clock: () => now,
     );
 
+    // Ritual 1.
     await tester.pumpWidget(
       _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        dailyGraph: dailyGraph,
         clock: () => now,
         wisdomNotificationService: notificationService,
       ),
     );
-    await _finishOpeningIntro(tester);
-    expect(notificationPlatform.permissionRequests, 0);
-
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
+    await _completeFreshRitual(tester);
+    // Well past the existing trigger delay (revealController.duration + 6s)
+    // -- and well past the old discovery hint's retired 7.5s timeout, too:
+    // ritual 1 must never reach the native prompt.
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
-    await _pumpInSteps(tester, const Duration(milliseconds: 5999));
-    // Not yet at the existing trigger delay: no request fired, no dialog.
+
     expect(notificationPlatform.permissionRequests, 0);
-    expect(find.text('Not now'), findsNothing);
-    expect(find.text('Allow'), findsNothing);
-
-    await _pumpInSteps(tester, const Duration(milliseconds: 2));
-    // At the existing trigger delay: the native request fires directly.
-    expect(notificationPlatform.permissionRequests, 1);
-    expect(tester.takeException(), isNull);
-
-    // No application-owned dialog was ever shown, at any point.
     expect(find.text('Not now'), findsNothing);
     expect(find.text('Allow'), findsNothing);
     expect(find.byType(AlertDialog), findsNothing);
+    // The first-use Keep discovery begins at that exact timing slot
+    // instead, and does not time out.
+    expect(find.text('Keep this wisdom.'), findsOneWidget);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    expect(find.text('Keep this wisdom.'), findsOneWidget);
+    expect(notificationPlatform.permissionRequests, 0);
+
+    // Keep the ritual-1 wisdom so ritual 2 starts from a clean, unsaved
+    // slate and to avoid any interaction between the still-open discovery
+    // and the next reveal.
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 1400));
+
+    // Ritual 2: simulated as a fresh app launch the next day (the daily
+    // lock has rolled over), reusing the same daily-access graph and
+    // notification platform/service so both the daily record and the
+    // cumulative `permissionRequests` count carry over realistically.
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(milliseconds: 5999));
+    // Not yet at the existing trigger delay: no request fired.
+    expect(notificationPlatform.permissionRequests, 0);
+    await _pumpInSteps(tester, const Duration(milliseconds: 2));
+    // At the existing trigger delay: the native request fires directly,
+    // with no application-owned dialog and no Keep-discovery replay.
+    expect(notificationPlatform.permissionRequests, 1);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Keep this wisdom.'), findsNothing);
+    expect(tester.takeException(), isNull);
 
     // The prompt is now marked handled, so a later resume must not
     // request again.
@@ -2216,12 +2246,190 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump(const Duration(milliseconds: 6800));
     expect(notificationPlatform.permissionRequests, 1);
+
+    // Ritual 3: neither the native prompt nor the Keep-discovery tutorial
+    // ever automatically replays.
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    await tester.pump();
+
+    expect(notificationPlatform.permissionRequests, 1);
+    expect(find.text('Keep this wisdom.'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-      'native grant at the existing trigger schedules exactly once, with no '
-      'tap or intermediate step required', (tester) async {
+      'P13 (locked contract): ritual ordinal 4 and beyond never '
+      'automatically offers the native notification permission -- not '
+      'merely "ritual 3 does not repeat an already-resolved ritual 2 '
+      'request", but genuinely never initiated at all for these later '
+      'ordinals', (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    // notDetermined the whole way through and never actually asked (no
+    // ritual 2 in this test): if ordinal 4 ever fell through to the
+    // native-prompt path the way a plain `ordinal != 1` check would, this
+    // status would make it fire immediately.
+    final notificationPlatform = _HomeNotificationPlatform(enabled: false);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    for (var ritual = 1; ritual <= 4; ritual++) {
+      if (ritual > 1) {
+        now = now.add(const Duration(hours: 25));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: dailyGraph,
+          clock: () => now,
+          wisdomNotificationService: notificationService,
+        ),
+      );
+      await _completeFreshRitual(tester);
+      await _pumpInSteps(tester, const Duration(seconds: 10));
+      await tester.pump();
+      // Keep every ritual's wisdom so the next day's reveal starts clean.
+      if (find.byKey(const ValueKey('home-save-control-unsaved'))
+          .evaluate()
+          .isNotEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('home-save-control-unsaved')),
+        );
+        await tester.pump(const Duration(milliseconds: 1400));
+      }
+    }
+
+    // Ritual 2 asked once (and only once); rituals 3 and 4 never asked
+    // again, and never asked for the first time either.
+    expect(notificationPlatform.permissionRequests, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'P13 (locked contract): an ordinal that could not be determined '
+      '(RatingRequestService.recordCompletedRitual returns null -- e.g. a '
+      'rating request has already been attempted) fails closed: no '
+      'automatic native notification request, and no first-use Keep '
+      'discovery either', (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final notificationPlatform = _HomeNotificationPlatform(enabled: false);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+    // `RatingRequestService.recordCompletedRitual()` returns `null` once a
+    // rating request has already been attempted (see its own doc
+    // comment) -- pre-seed that exact persisted state so this ritual's
+    // ordinal is genuinely undeterminable, independent of the ritual
+    // count itself.
+    SharedPreferences.setMockInitialValues({
+      RatingRequestService.requestAttemptedKey: true,
+    });
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    await tester.pump();
+
+    expect(notificationPlatform.permissionRequests, 0);
+    expect(find.text('Keep this wisdom.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'P13 (locked contract): missing ritual 2\'s own notification-timing '
+      'opportunity (the app is backgrounded/killed before that ritual\'s '
+      'own offer Timer ever fires) never defers the automatic native '
+      'request to ritual 3 -- ritual 3 offers nothing, automatically, '
+      'exactly like every later ritual', (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    final notificationPlatform = _HomeNotificationPlatform(enabled: false);
+    final notificationService = WisdomNotificationService(
+      platform: notificationPlatform,
+      clock: () => now,
+    );
+
+    // Ritual 1.
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 1400));
+
+    // Ritual 2: reveal completes (so the ordinal-2 bookkeeping is
+    // recorded), but the app is killed immediately -- well before its own
+    // notification-timing slot (revealController.duration + 6s) ever
+    // fires, so ritual 2's own native request never actually happens.
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    // Deliberately much less than the ~7.2s trigger delay.
+    await _pumpInSteps(tester, const Duration(milliseconds: 500));
+    expect(notificationPlatform.permissionRequests, 0);
+    // Kill the app now, mid-ritual-2, before its own offer ever fires.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    // Ritual 3: never asks -- the missed ritual-2 opportunity is not
+    // carried forward.
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    await tester.pump();
+
+    expect(notificationPlatform.permissionRequests, 0);
+    expect(find.text('Keep this wisdom.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'P13: on the second ritual, native grant at the existing trigger '
+      'schedules exactly once, with no tap or intermediate step required',
+      (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
     final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(
       enabled: false,
@@ -2239,13 +2447,24 @@ void main() {
         wisdomNotificationService: notificationService,
       ),
     );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
+    expect(notificationPlatform.permissionRequests, 0);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 1400));
+
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
     await _pumpInSteps(tester, const Duration(seconds: 7));
     await tester.pump();
 
@@ -2260,9 +2479,10 @@ void main() {
   });
 
   testWidgets(
-      'native denial at the existing trigger is nonfatal, requests only '
-      'once, and shows no custom UI', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
+      'P13: on the second ritual, native denial at the existing trigger is '
+      'nonfatal, requests only once, and shows no custom UI', (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(
       enabled: false,
       permissionResult: false,
@@ -2274,18 +2494,28 @@ void main() {
 
     await tester.pumpWidget(
       _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        dailyGraph: dailyGraph,
         clock: () => now,
         wisdomNotificationService: notificationService,
       ),
     );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 1400));
+
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
     await _pumpInSteps(tester, const Duration(seconds: 7));
     await tester.pump();
 
@@ -2297,9 +2527,11 @@ void main() {
   });
 
   testWidgets(
-      'already-authorized status never requests native permission again at '
-      'the existing trigger', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
+      'already-authorized status never requests native permission again -- '
+      'true on the first ritual (never reached at all) and still true on '
+      'the second', (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(enabled: true);
     final notificationService = WisdomNotificationService(
       platform: notificationPlatform,
@@ -2308,18 +2540,29 @@ void main() {
 
     await tester.pumpWidget(
       _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        dailyGraph: dailyGraph,
         clock: () => now,
         wisdomNotificationService: notificationService,
       ),
     );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
+    expect(notificationPlatform.permissionRequests, 0);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 1400));
+
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
     await _pumpInSteps(tester, const Duration(seconds: 7));
     await tester.pump();
 
@@ -2327,9 +2570,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('disposal during an in-flight native permission request is safe',
-      (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
+  testWidgets(
+      'P13: disposal during an in-flight native permission request on the '
+      'second ritual is safe', (tester) async {
+    var now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final permissionGate = Completer<bool>();
     final notificationPlatform = _HomeNotificationPlatform(
       enabled: false,
@@ -2342,18 +2587,28 @@ void main() {
 
     await tester.pumpWidget(
       _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        dailyGraph: dailyGraph,
         clock: () => now,
         wisdomNotificationService: notificationService,
       ),
     );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 1400));
+
+    now = now.add(const Duration(hours: 25));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
     await _pumpInSteps(tester, const Duration(seconds: 7));
     expect(notificationPlatform.permissionRequests, 1);
 
@@ -3006,25 +3261,24 @@ void main() {
       'KeptDiscoveryHintService never observes another instance\'s '
       'in-memory completed/count state, regardless of test execution order',
       (tester) async {
-    // Part 1: drive an environment to actually complete discovery, using
-    // its own fresh service (exactly what `_homeApp()` now does by
+    // Part 1: drive a genuine first ritual to actually complete discovery,
+    // using its own fresh service (exactly what `_homeApp()` now does by
     // default) and its own fresh, empty `SharedPreferences` store.
-    final now = DateTime.now();
-    const firstWisdom = 'A wisdom used to complete discovery in part 1';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: firstWisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
+    final now = DateTime.utc(2041, 7, 23, 8);
+    SharedPreferences.setMockInitialValues({});
     final serviceA = KeptDiscoveryHintService();
 
-    await tester.pumpWidget(_homeApp(keptDiscoveryHintService: serviceA));
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        keptDiscoveryHintService: serviceA,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 1100));
+    expect(find.text('Keep this wisdom.'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -3059,23 +3313,21 @@ void main() {
 
     // And a fresh `_homeApp()` environment (the actual mechanism every
     // other discovery test in this file relies on) independently confirms
-    // the hint is offerable again from a clean slate.
-    const secondWisdom = 'A wisdom used to verify part 2 starts fresh';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: secondWisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
-
+    // the hint is offerable again from a clean slate -- also a genuine
+    // first ritual, so `RatingRequestService`'s own fresh, independent
+    // storage reports ordinal 1 for this environment too.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-    await tester.pumpWidget(_homeApp(keptDiscoveryHintService: serviceB));
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        keptDiscoveryHintService: serviceB,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 1100));
 
     expect(
       find.text('Keep this wisdom.'),
@@ -3088,123 +3340,243 @@ void main() {
   });
 
   testWidgets(
-      'Build 25 Item 6 (Update 1): the Save -> Kept discovery hint shows '
-      'once for 7.5s with 4 center breaths, transitions to "Kept." for '
-      '~1.3s on a successful save, runs exactly 5 top-right Kept teaching '
-      'breaths starting ~350ms after that first completing save, and marks '
-      'the discovery permanently complete', (tester) async {
-    final now = DateTime.now();
-    const wisdom = 'A wisdom used to verify the Kept discovery hint';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: wisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
+      'P13: the first-use Keep discovery never times out -- it (and its '
+      'ring breathing) remains present and actionable indefinitely -- and '
+      'tapping the ring saves exactly once, transitions to "Kept.", ends '
+      'the central discovery, and begins the top-right Kept-nav discovery '
+      'with no fixed breath count of its own', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
     final keptGraph = KeptRepositoryTestGraph();
 
-    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
-    await tester.pump();
-    expect(_keptGuard(tester).ignoring, isFalse);
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        keptGraph: keptGraph,
+      ),
+    );
+    await _completeFreshRitual(tester);
 
-    // The hint's own internal ~1000ms delay after the save ring settles.
-    await tester.pump(const Duration(milliseconds: 1100));
-
+    // Reach the existing notification-timing slot: ritual 1's first-use
+    // discovery begins there.
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
 
-    // Update 1B: the first of 4 center save-ring breaths begins ~250ms
-    // after the text above just appeared.
-    await _pumpInSteps(tester, const Duration(milliseconds: 300));
-    expect(find.byKey(const ValueKey('save-ring-breath')), findsOneWidget);
+    // No timeout: wait far longer than the old (now-retired) 7.5s
+    // auto-hide window, well past several full breath cycles. The text
+    // and the ring's breathing both remain, calmly, the whole time.
+    await _pumpInSteps(tester, const Duration(seconds: 20));
+    expect(find.text('Keep this wisdom.'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('home-save-control-unsaved')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // Update 1A/C: saving interrupts the remaining discovery hint duration
-    // immediately — the center breath stops, and text transitions straight
-    // to "Kept.".
+    // Saving ends the central discovery immediately and transitions
+    // straight to "Kept.".
     expect(find.text('Kept.'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
-    expect(
-      (await keptGraph.service.load()).single.text,
-      wisdom,
-    );
+    final saved = await keptGraph.service.load();
+    expect(saved, hasLength(1));
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(KeptDiscoveryHintService.completedKey), isTrue);
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
+      isTrue,
+      reason: 'The first save that completes central discovery must mark '
+          'the top-right Kept-navigation discovery pending.',
+    );
 
-    // Update 1D: this save is the first to complete discovery, so exactly
-    // 5 top-right Kept teaching breaths must run, starting ~350ms from now
-    // — counted here as the number of absent->present transitions of the
-    // teaching-breath overlay over the whole ~5.9s emphasis window.
-    // Total: 350ms start delay + 5 * 1050ms breaths + 4 * 165ms pauses =
-    // 6260ms. Pumped well past that (6500ms) so the 5th breath's own end is
-    // definitely captured before the loop finishes.
+    // The top-right teaching breath begins and keeps looping -- no fixed
+    // count of its own under P13's no-timeout contract. Pumped well past
+    // the old (now-retired) 5-breath ~6.3s window; it must still be
+    // running, not have stopped on its own.
     const emphasisKey = ValueKey('kept-icon-emphasis-pulse');
-    var breathStarts = 0;
-    var wasPresent = false;
-    for (var elapsed = 0; elapsed < 6500; elapsed += 50) {
-      await tester.pump(const Duration(milliseconds: 50));
-      final isPresent = find.byKey(emphasisKey).evaluate().isNotEmpty;
-      if (isPresent && !wasPresent) breathStarts++;
-      wasPresent = isPresent;
+    await _pumpInSteps(tester, const Duration(seconds: 8));
+    var sawEmphasis = false;
+    for (var i = 0; i < 20; i++) {
+      if (find.byKey(emphasisKey).evaluate().isNotEmpty) sawEmphasis = true;
+      await tester.pump(const Duration(milliseconds: 200));
     }
     expect(
-      breathStarts,
-      5,
-      reason: 'The top-right Kept teaching emphasis must run exactly 5 '
-          'breaths on the first save that completes discovery.',
-    );
-    expect(
-      find.byKey(emphasisKey),
-      findsNothing,
-      reason: 'The teaching emphasis must have fully finished well within '
-          'the ~5.8-6.2s total window.',
+      sawEmphasis,
+      isTrue,
+      reason: 'The top-right Kept teaching breath must still be looping '
+          'well past the old fixed 5-breath window -- it has no timeout.',
     );
 
-    // "Kept." itself faded on its own independent ~1.3s timer, well before
-    // the teaching-emphasis loop above finished.
+    // "Kept." itself still fades on its own independent ~1.3s timer.
     expect(find.text('Kept.'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-      'Correction pass Item 1: a successful save before the discovery hint '
-      'ever appears still permanently completes discovery, with no "Kept." '
-      'text, no display-count increment, and the top-right Kept teaching '
-      'breath still runs exactly once for this incomplete -> completed '
-      'transition', (tester) async {
-    final now = DateTime.now();
-    const wisdom = 'A wisdom used to verify completion before the hint appears';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: wisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
-    final keptGraph = KeptRepositoryTestGraph();
+      'P13: the top-right Kept-navigation discovery stays pending across '
+      'mere waiting and across an app relaunch -- neither falsely '
+      'completes it -- and only completes, permanently, once the user '
+      'actually opens Kept; it never replays after that', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    // A clean slate: this test deliberately spans two `pumpWidget` calls
+    // sharing the same underlying SharedPreferences mock (to simulate a
+    // real relaunch persisting state across them) -- unlike every other
+    // discovery test in this file, it never constructs its own
+    // `KeptDiscoveryHintService`/`RatingRequestService` instance to force
+    // isolation, so it must reset the store itself first.
+    SharedPreferences.setMockInitialValues({});
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
+    // An explicit mocked notification service (never the production
+    // default, which talks to a real platform channel with no test
+    // handler registered) -- this test spans a dispose+remount and must
+    // not depend on incidental cross-test platform-channel state.
+    final notificationService = WisdomNotificationService(
+      platform: _HomeNotificationPlatform(enabled: true),
+      clock: () => now,
+    );
 
-    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    var prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
+      isTrue,
+    );
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryCompletedKey) ??
+          false,
+      isFalse,
+    );
+
+    // Merely waiting -- a long time, well past the old fixed 5-breath
+    // window -- must never complete it on its own.
+    await _pumpInSteps(tester, const Duration(seconds: 15));
+    prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryCompletedKey) ??
+          false,
+      isFalse,
+      reason: 'Waiting alone must never complete the Kept-nav discovery.',
+    );
+
+    // A full app relaunch (kill and reopen, not merely backgrounding) --
+    // the persisted pending flag must resume the discovery animation on
+    // the fresh `HomeScreen` instance, whenever the top-right control is
+    // available on the normal wisdom/home state, without needing to
+    // rediscover eligibility from scratch.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: dailyGraph,
+        clock: () => now,
+        wisdomNotificationService: notificationService,
+      ),
+    );
     await _finishOpeningIntro(tester);
+    // The chrome (and the top-right Kept control within it) only appears
+    // once the wisdom is actually being viewed/locked-countdown, not on
+    // the bare idle "EAST." tap prompt -- reopen today's already-kept
+    // wisdom, exactly as a real relaunch-and-tap would.
     await _openExistingWisdom(tester);
     await tester.pump();
-    expect(_keptGuard(tester).ignoring, isFalse);
 
-    // Save immediately — well before the hint's own ~1000ms internal delay
-    // has elapsed, so the hint has never become visible for this reveal.
+    const emphasisKey = ValueKey('kept-icon-emphasis-pulse');
+    var sawEmphasisAfterRelaunch = false;
+    for (var i = 0; i < 30; i++) {
+      if (find.byKey(emphasisKey).evaluate().isNotEmpty) {
+        sawEmphasisAfterRelaunch = true;
+      }
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(
+      sawEmphasisAfterRelaunch,
+      isTrue,
+      reason: 'A relaunched app must resume the pending Kept-nav discovery '
+          'animation, recovered from persisted state.',
+    );
+    prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryCompletedKey) ??
+          false,
+      isFalse,
+      reason: 'A relaunch/rebuild alone must never falsely complete it.',
+    );
+
+    // Opening Kept via the top-right control is the one thing that
+    // completes it, permanently.
+    await tester.tap(find.byKey(const ValueKey('home-kept-control')));
+    await _settleRoutePush(
+      tester,
+      find.byKey(const ValueKey('kept-screen-root')),
+    );
+    expect(find.byKey(const ValueKey('kept-screen-root')), findsOneWidget);
+
+    prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryCompletedKey),
+      isTrue,
+    );
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
+      isFalse,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
+    await _settleRoutePop(
+      tester,
+      const Duration(milliseconds: 300),
+      poppedRouteFinder: find.byKey(const ValueKey('kept-screen-root')),
+    );
+
+    // It never replays: the top-right control's emphasis animation is
+    // gone for good on this device, even after time passes back on Home.
+    await _pumpInSteps(tester, const Duration(seconds: 3));
+    expect(find.byKey(emphasisKey), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'P13: a successful save before the first-use discovery ever appears '
+      '(the user taps Keep before reaching the existing notification-'
+      'timing slot) still permanently completes central discovery, with no '
+      '"Kept." text, and still begins the top-right Kept-nav discovery for '
+      'this incomplete -> completed transition -- and the discovery never '
+      'appears afterward for this already-kept wisdom', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final keptGraph = KeptRepositoryTestGraph();
+
+    await tester.pumpWidget(
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        keptGraph: keptGraph,
+      ),
+    );
+    await _completeFreshRitual(tester);
+
+    // Save as soon as the ring becomes interactive (~1.9s: the save ring's
+    // own fade-in) — well before the existing notification-timing slot
+    // (revealController.duration + 6s) is ever reached, so the discovery
+    // has never become visible for this reveal.
+    await _pumpInSteps(tester, const Duration(milliseconds: 2000));
+    expect(_keptGuard(tester).ignoring, isFalse);
     expect(find.text('Keep this wisdom.'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(
-      (await keptGraph.service.load()).single.text,
-      wisdom,
-    );
+    expect(await keptGraph.service.load(), hasLength(1));
     expect(find.text('Kept.'), findsNothing);
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
@@ -3214,43 +3586,37 @@ void main() {
       prefsRightAfterSave.getBool(KeptDiscoveryHintService.completedKey),
       isTrue,
       reason: 'Completion must be persisted immediately on a successful '
-          'save even though the hint was never visible.',
+          'save even though the discovery was never visible.',
+    );
+    expect(
+      prefsRightAfterSave
+          .getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
+      isTrue,
+      reason: 'The top-right Kept-nav discovery must still begin for this '
+          'incomplete -> completed transition, even though the central '
+          'discovery text itself was never visible.',
     );
 
-    // Let the originally-scheduled hint timer's window fully elapse: it
-    // must never present now that discovery is already complete.
-    await tester.pump(const Duration(milliseconds: 1100));
+    // Let the originally-scheduled notification/discovery timing slot
+    // fully elapse: the central discovery must never present now that
+    // this wisdom is already kept.
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.text('Kept.'), findsNothing);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt(KeptDiscoveryHintService.hintCountKey) ?? 0, 0);
 
-    // Correction: the top-right Kept teaching breath is gated only on
-    // `justCompletedDiscovery`, never on `hintWasShowing` — this save is
-    // the one that changed discovery from incomplete to completed, even
-    // though the hint text itself never appeared, so the 5-breath teaching
-    // sequence must still run once. Counted the same way as the "hint
-    // visible" test above: absent->present transitions of the overlay over
-    // the whole ~6.3s emphasis window (350ms start delay + 5 * 1050ms
-    // breaths + 4 * 165ms pauses = 6260ms).
+    // The top-right teaching breath is running (looping) for the nav
+    // discovery this save just began -- polled across several on/off
+    // cycles since the breath itself toggles present/absent rhythmically.
     const emphasisKey = ValueKey('kept-icon-emphasis-pulse');
-    var breathStarts = 0;
-    var wasPresent = false;
-    for (var elapsed = 0; elapsed < 6500; elapsed += 50) {
-      await tester.pump(const Duration(milliseconds: 50));
-      final isPresent = find.byKey(emphasisKey).evaluate().isNotEmpty;
-      if (isPresent && !wasPresent) breathStarts++;
-      wasPresent = isPresent;
+    var sawEmphasis = false;
+    for (var i = 0; i < 20; i++) {
+      if (find.byKey(emphasisKey).evaluate().isNotEmpty) sawEmphasis = true;
+      await tester.pump(const Duration(milliseconds: 200));
     }
-    expect(
-      breathStarts,
-      5,
-      reason: 'The top-right Kept teaching emphasis must run exactly 5 '
-          'breaths for the first incomplete -> completed transition, even '
-          'when the hint text was never visible for the completing save.',
-    );
-    expect(find.byKey(emphasisKey), findsNothing);
+    expect(sawEmphasis, isTrue);
     expect(tester.takeException(), isNull);
   });
 
@@ -3309,354 +3675,9 @@ void main() {
   });
 
   testWidgets(
-      'Correction pass Item 4 correction: a granted native permission '
-      'prompt whose Future is left genuinely pending blocks the discovery '
-      'hint until it resolves, then schedules once and shows the hint '
-      '~800-1200ms later, never twice', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
-    final dailyGraph = DailyAccessTestGraph(clock: () => now);
-    // A controllable `Completer`, not a mock that resolves immediately —
-    // this is what lets this test actually model a real native dialog: the
-    // permission Future stays pending until this test explicitly completes
-    // it below, so every "request is still in flight" assertion here is
-    // proving real intermediate behavior rather than racing an
-    // already-resolved value.
-    final permissionGate = Completer<bool>();
-    final notificationPlatform = _HomeNotificationPlatform(
-      enabled: false,
-      permissionGate: permissionGate,
-    );
-    final notificationService = WisdomNotificationService(
-      platform: notificationPlatform,
-      clock: () => now,
-    );
-
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: dailyGraph,
-        clock: () => now,
-        wisdomNotificationService: notificationService,
-      ),
-    );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
-    await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
-
-    // PHASE A — unresolved native prompt Future: `permissionGate` has not
-    // been completed at all yet at this point. A real Mac run confirmed
-    // that, with the corrected `home_screen.dart` flag lifecycle (the
-    // scheduled/showing guards no longer have a gap between them), the
-    // native permission request has already fired exactly once by this
-    // checkpoint — it no longer waits for a further pump past this delay.
-    // A separate, still-guarded-against regression is the discovery hint
-    // itself appearing this early: that must remain impossible for as
-    // long as the prompt stays genuinely unresolved.
-    await _pumpInSteps(tester, const Duration(milliseconds: 6900));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason:
-          'PHASE A (gate unresolved): exactly one native permission request must be pending.',
-    );
-    expect(
-      permissionGate.isCompleted,
-      isFalse,
-      reason:
-          'PHASE A (gate unresolved): the native permission request must still be awaiting its result.',
-    );
-    expect(
-      find.text('Keep this wisdom.'),
-      findsNothing,
-      reason: 'PHASE A (gate unresolved): hint must be absent.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      0,
-      reason: 'PHASE A (gate unresolved): display count must still be 0.',
-    );
-
-    // Reconfirm the same PHASE A invariants a little further into the
-    // still-pending wait: the request must not fire a second time, and the
-    // Future must still be unresolved.
-    await _pumpInSteps(tester, const Duration(milliseconds: 300));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason: 'PHASE A (gate unresolved): the native request must have '
-          'fired exactly once by now.',
-    );
-    expect(
-      permissionGate.isCompleted,
-      isFalse,
-      reason: 'PHASE A (gate unresolved): the permission Future must still '
-          'be pending.',
-    );
-
-    // PHASE A continued — while the prompt is genuinely pending —
-    // regardless of how long — nothing related to the discovery hint may
-    // appear, and nothing is scheduled yet.
-    await _pumpInSteps(tester, const Duration(seconds: 3));
-    expect(
-      find.text('Keep this wisdom.'),
-      findsNothing,
-      reason: 'PHASE A (gate unresolved): hint must still be absent no '
-          'matter how long the prompt stays pending.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      0,
-      reason: 'PHASE A (gate unresolved): display count must still be 0.',
-    );
-    expect(
-      notificationPlatform.schedules,
-      isEmpty,
-      reason: 'PHASE A (gate unresolved): nothing may be scheduled yet.',
-    );
-
-    // The user grants the permission. Pump microtasks so the completion
-    // actually propagates through the awaiting service/screen code. This
-    // marks the boundary into PHASE B.
-    permissionGate.complete(true);
-    await tester.pump();
-
-    // PHASE B — resolved, before the ~800ms discovery delay: the hint must
-    // still be absent, and the earlier single native request must not be
-    // repeated.
-    await _pumpInSteps(tester, const Duration(milliseconds: 799));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason: 'PHASE B (resolved, <800ms): the native request count must '
-          'remain exactly 1.',
-    );
-    expect(
-      find.text('Keep this wisdom.'),
-      findsNothing,
-      reason: 'PHASE B (resolved, <800ms): hint must still be absent.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      0,
-      reason: 'PHASE B (resolved, <800ms): display count must still be 0.',
-    );
-
-    // PHASE C — resolved, ~800-1200ms: the hint appears exactly once, and
-    // the schedule was written exactly once.
-    await _pumpInSteps(tester, const Duration(milliseconds: 300));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason: 'PHASE C (resolved, ~800-1200ms): the native request count '
-          'must remain exactly 1.',
-    );
-    expect(
-      find.text('Keep this wisdom.'),
-      findsOneWidget,
-      reason: 'PHASE C (resolved, ~800-1200ms): hint must now be visible.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      1,
-      reason: 'PHASE C (resolved, ~800-1200ms): display count must become 1.',
-    );
-    expect(
-      notificationPlatform.schedules,
-      hasLength(1),
-      reason: 'PHASE C (resolved, ~800-1200ms): the granted permission must '
-          'have written exactly one schedule.',
-    );
-
-    // No duplicate presentation past PHASE C.
-    await _pumpInSteps(tester, const Duration(milliseconds: 500));
-    expect(
-      find.text('Keep this wisdom.'),
-      findsOneWidget,
-      reason: 'PHASE C (resolved, past 1200ms): hint must not disappear or '
-          'duplicate.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      1,
-      reason: 'PHASE C (resolved, past 1200ms): display count must not '
-          'increment again — no duplicate presentation.',
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-      'Correction pass Item 4 correction: a denied native permission '
-      'prompt whose Future is left genuinely pending is nonfatal once '
-      'resolved, and the discovery hint still appears afterward, never '
-      'twice', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
-    final dailyGraph = DailyAccessTestGraph(clock: () => now);
-    final permissionGate = Completer<bool>();
-    final notificationPlatform = _HomeNotificationPlatform(
-      enabled: false,
-      permissionGate: permissionGate,
-    );
-    final notificationService = WisdomNotificationService(
-      platform: notificationPlatform,
-      clock: () => now,
-    );
-
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: dailyGraph,
-        clock: () => now,
-        wisdomNotificationService: notificationService,
-      ),
-    );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
-    await tester.pump();
-    await _pumpUntilWisdomFullyAppeared(tester);
-
-    // PHASE A — unresolved native prompt Future (see the matching, more
-    // detailed note in the granted test above: with the corrected
-    // `home_screen.dart` flag lifecycle, the native permission request has
-    // already fired exactly once by this checkpoint).
-    await _pumpInSteps(tester, const Duration(milliseconds: 6900));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason:
-          'PHASE A (gate unresolved): exactly one native permission request must be pending.',
-    );
-    expect(
-      permissionGate.isCompleted,
-      isFalse,
-      reason:
-          'PHASE A (gate unresolved): the native permission request must still be awaiting its result.',
-    );
-    expect(
-      find.text('Keep this wisdom.'),
-      findsNothing,
-      reason: 'PHASE A (gate unresolved): hint must be absent.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      0,
-      reason: 'PHASE A (gate unresolved): display count must still be 0.',
-    );
-
-    // Reconfirm the same PHASE A invariants a little further into the
-    // still-pending wait: the request must not fire a second time, and the
-    // Future must still be unresolved.
-    await _pumpInSteps(tester, const Duration(milliseconds: 300));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason: 'PHASE A (gate unresolved): the native request must have '
-          'fired exactly once by now.',
-    );
-    expect(
-      permissionGate.isCompleted,
-      isFalse,
-      reason: 'PHASE A (gate unresolved): the permission Future must still '
-          'be pending.',
-    );
-
-    // PHASE A continued.
-    await _pumpInSteps(tester, const Duration(seconds: 3));
-    expect(
-      find.text('Keep this wisdom.'),
-      findsNothing,
-      reason: 'PHASE A (gate unresolved): hint must still be absent no '
-          'matter how long the prompt stays pending.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      0,
-      reason: 'PHASE A (gate unresolved): display count must still be 0.',
-    );
-    expect(
-      notificationPlatform.schedules,
-      isEmpty,
-      reason: 'PHASE A (gate unresolved): nothing may be scheduled yet.',
-    );
-
-    // The user denies the permission. Pump microtasks. This marks the
-    // boundary into PHASE B.
-    permissionGate.complete(false);
-    await tester.pump();
-
-    // PHASE B — resolved, before the ~800ms discovery delay: the hint must
-    // still be absent, and the earlier single native request must not be
-    // repeated.
-    await _pumpInSteps(tester, const Duration(milliseconds: 799));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason: 'PHASE B (resolved, <800ms): the native request count must '
-          'remain exactly 1.',
-    );
-    expect(
-      find.text('Keep this wisdom.'),
-      findsNothing,
-      reason: 'PHASE B (resolved, <800ms): hint must still be absent.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      0,
-      reason: 'PHASE B (resolved, <800ms): display count must still be 0.',
-    );
-
-    // PHASE C — resolved, ~800-1200ms: the hint appears exactly once. A
-    // denial is nonfatal and must never schedule a notification.
-    await _pumpInSteps(tester, const Duration(milliseconds: 300));
-    expect(
-      notificationPlatform.permissionRequests,
-      1,
-      reason: 'PHASE C (resolved, ~800-1200ms): the native request count '
-          'must remain exactly 1.',
-    );
-    expect(
-      find.text('Keep this wisdom.'),
-      findsOneWidget,
-      reason: 'PHASE C (resolved, ~800-1200ms): hint must now be visible.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      1,
-      reason: 'PHASE C (resolved, ~800-1200ms): display count must become 1.',
-    );
-    expect(
-      notificationPlatform.schedules,
-      isEmpty,
-      reason: 'PHASE C (resolved, ~800-1200ms): a denial must never write a '
-          'schedule.',
-    );
-
-    // No duplicate presentation past PHASE C.
-    await _pumpInSteps(tester, const Duration(milliseconds: 500));
-    expect(
-      find.text('Keep this wisdom.'),
-      findsOneWidget,
-      reason: 'PHASE C (resolved, past 1200ms): hint must not disappear or '
-          'duplicate.',
-    );
-    expect(
-      await _keptDiscoveryDisplayCount(),
-      1,
-      reason: 'PHASE C (resolved, past 1200ms): display count must not '
-          'increment again — no duplicate presentation.',
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-      'Correction pass Item 4 & 3: the notification-offer path and '
-      "onFullyVisible's own call both reach _maybeOfferKeptDiscoveryHint "
-      'for the same reveal, but only one presentation ever results',
-      (tester) async {
+      'P13: the first-use discovery hint is presented exactly once for a '
+      'ritual-1 reveal, with the persisted display count incrementing '
+      'exactly once', (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
     final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(
@@ -3728,7 +3749,7 @@ void main() {
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
       const Duration(milliseconds: 300),
@@ -3771,65 +3792,49 @@ void main() {
   });
 
   testWidgets(
-      'Disposing HomeScreen while the discovery hint\'s own center '
-      'breath-chain timer is pending (not merely the 1000ms offer-delay '
-      'timer the test above covers) cancels it cleanly — no pending Timer, '
-      'no setState-after-dispose exception', (tester) async {
-    final now = DateTime.now();
-    const wisdom =
-        'A wisdom used to verify the breath-reset timer is cancelled '
-        'on dispose';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: wisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
+      'P13: disposing HomeScreen while the first-use discovery\'s own '
+      'center breath-chain timer is pending (mid-loop, since it never '
+      'stops on its own under the no-timeout contract) cancels it cleanly '
+      '— no pending Timer, no setState-after-dispose exception',
+      (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
 
     // A fresh service (see "Discovery test isolation" above) so this test
     // is independent of every other test's discovery state.
     await tester.pumpWidget(
-      _homeApp(keptDiscoveryHintService: KeptDiscoveryHintService()),
+      _homeApp(
+        dailyGraph: DailyAccessTestGraph(clock: () => now),
+        clock: () => now,
+        keptDiscoveryHintService: KeptDiscoveryHintService(),
+      ),
     );
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
-    await tester.pump();
-    expect(_keptGuard(tester).ignoring, isFalse);
+    await _completeFreshRitual(tester);
 
-    // The hint's own internal ~1000ms offer-delay must actually elapse to
-    // reach presentation. Pumped in bounded 100ms steps (never
-    // `pumpAndSettle`, which would never return while Home's continuous
-    // ritual animations are running) rather than one fixed guessed
-    // duration.
-    await _pumpInSteps(tester, const Duration(milliseconds: 1100));
-
+    // Reach the existing notification-timing slot, where ritual 1's
+    // first-use discovery begins.
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
 
-    // Update 1B: the first of 4 center save-ring breaths begins ~250ms
-    // after the text above just appeared — not synchronously with it.
-    await _pumpInSteps(tester, const Duration(milliseconds: 300));
+    // The breath chain loops indefinitely under P13's no-timeout contract
+    // — pump well past several full breath cycles, so disposal genuinely
+    // happens mid-loop rather than merely during the first breath. Each
+    // breath is only actually mounted for its own ~1.2s "on" phase (with a
+    // ~200ms "off" gap between breaths), so land inside an "on" phase by
+    // polling rather than checking one arbitrary instant.
+    await _pumpInSteps(tester, const Duration(seconds: 6));
+    const breathKey = ValueKey('save-ring-breath');
+    for (var i = 0; i < 20; i++) {
+      if (find.byKey(breathKey).evaluate().isNotEmpty) break;
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(breathKey), findsOneWidget);
 
-    // `_HomeScreenState`'s discovery fields are private and unreachable
-    // from this test file, so the breath timer's existence is confirmed
-    // behaviorally: `_startKeptDiscoveryBreath` mounts the save-ring breath
-    // and schedules `_keptDiscoveryBreathResetTimer` (the timer that
-    // previously leaked past disposal) in the exact same `setState`/guard
-    // block — the breath widget being mounted here is direct proof that
-    // timer now exists and is pending, which the existing "disposing...
-    // before the hint's own delay elapses" test above never reaches (it
-    // disposes before presentation ever happens, so that timer is never
-    // even created).
-    expect(find.byKey(const ValueKey('save-ring-breath')), findsOneWidget);
-
-    // Dispose HomeScreen right now, while the breath's own ~1.2s duration
-    // timer is freshly scheduled and nowhere near its own fire time yet —
-    // then stop. Deliberately not pumping past that window: doing so would
-    // let an uncancelled timer simply fire and disappear here, proving
-    // nothing. Whether `dispose()`'s `_cancelAllDiscoveryTimers()` actually
-    // cancelled it is instead left entirely to flutter_test's own
-    // end-of-test teardown, which fails the test on any Timer still
-    // pending once it ends.
+    // Dispose HomeScreen right now, mid-breath, then stop. Deliberately
+    // not pumping past that window: doing so would let an uncancelled
+    // timer simply fire and disappear here, proving nothing. Whether
+    // `dispose()`'s `_cancelAllDiscoveryTimers()` actually cancelled it is
+    // instead left entirely to flutter_test's own end-of-test teardown,
+    // which fails the test on any Timer still pending once it ends.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
 
@@ -3944,18 +3949,11 @@ void main() {
   });
 
   testWidgets(
-      'Final correction Item 2: Reduce Motion still shows the discovery '
-      'hint text and completes a save, while the save-ring breath and the '
-      'Kept-icon emphasis pulse do not run', (tester) async {
-    final now = DateTime.now();
-    const wisdom = 'A wisdom used to verify Reduce Motion discovery';
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_access': DailyWisdomRecord(
-        text: wisdom,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-      ).encode(),
-    });
+      'P13: Reduce Motion still shows the first-use discovery text (with '
+      'no timeout) and completes a save, while the save-ring breath and '
+      'the Kept-icon emphasis pulse never run', (tester) async {
+    final now = DateTime.utc(2041, 7, 23, 8);
+    final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final keptGraph = KeptRepositoryTestGraph();
 
     await tester.pumpWidget(
@@ -3965,13 +3963,25 @@ void main() {
             return MediaQuery(
               data: MediaQuery.of(context).copyWith(disableAnimations: true),
               child: HomeScreen(
-                dailyWisdomAccessService: DailyAccessTestGraph().service,
+                dailyWisdomAccessService: dailyGraph.service,
+                clock: () => now,
                 // Discovery test isolation: this test drives a real save
                 // through the discovery hint and reads back
                 // `KeptDiscoveryHintService.completedKey` — a fresh
                 // instance keeps it independent of every other test in
                 // this file (see `_homeApp`'s own doc comment).
                 keptDiscoveryHintService: KeptDiscoveryHintService(),
+                // P13: this test (unlike every other reveal test in this
+                // file) constructs `HomeScreen` directly instead of going
+                // through `_homeApp()` — a fresh `RatingRequestService`
+                // must be passed explicitly here too, for exactly the same
+                // isolation reason `_homeApp()`'s own doc comment gives:
+                // without it, this would fall back to the process-wide
+                // `app_services.ratingRequestService` singleton, whose
+                // in-memory "already attempted"/count state could leak in
+                // from another test and falsify the ritual-1 ordinal this
+                // test depends on.
+                ratingRequestService: RatingRequestService(),
                 // Correction: this test (unlike every other reveal test in
                 // this file) constructs `HomeScreen` directly instead of
                 // going through `_homeApp()` — which is exactly what
@@ -3989,21 +3999,22 @@ void main() {
         ),
       ),
     );
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
-    await tester.pump();
-    expect(_keptGuard(tester).ignoring, isFalse);
+    await _completeFreshRitual(tester);
 
-    // The hint's own internal ~1000ms delay after the save ring settles.
-    await tester.pump(const Duration(milliseconds: 1100));
-
-    // "Keep this wisdom." still appears under Reduce Motion.
+    // Reach the existing notification-timing slot: ritual 1's first-use
+    // discovery begins there, even under Reduce Motion.
+    await _pumpInSteps(tester, const Duration(seconds: 10));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
 
-    // The save-ring breath never mounts: `_presentKeptDiscoveryHint` sets
-    // `_keptDiscoveryBreathActive = !_reduceMotion`, and `_HomeSaveControl`
-    // itself additionally gates on `showBreath && !reduceMotion` — both
-    // layers must agree here.
+    // No timeout under Reduce Motion either.
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    expect(find.text('Keep this wisdom.'), findsOneWidget);
+
+    // The save-ring breath never mounts under Reduce Motion:
+    // `_beginFirstUseKeepDiscovery` skips scheduling it entirely when
+    // `_reduceMotion` is true, and `_HomeSaveControl` itself additionally
+    // gates on `showBreath && !reduceMotion` — both layers must agree
+    // here.
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
@@ -4012,26 +4023,25 @@ void main() {
     // The save still succeeds and "Kept." still appears.
     expect(find.text('Kept.'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
-    // Correction: assert the list actually has exactly one entry before
-    // reading `.single` — this is the exact expression the reported
-    // "Bad state: No element" came from (`.single` on a list that was, in
-    // fact, still empty because this test previously read from the
-    // process-wide `SavedReflectionsService` singleton's persistence
-    // queue rather than a test-local instance; see the `savedReflectionsService:
-    // keptGraph.service` correction above).
     final savedAfterReduceMotionSave = await keptGraph.service.load();
     expect(savedAfterReduceMotionSave, hasLength(1));
-    expect(savedAfterReduceMotionSave.single.text, wisdom);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(KeptDiscoveryHintService.completedKey), isTrue);
 
-    // Update 1G: the top-right Kept teaching breath never runs under
-    // Reduce Motion either — `_onWisdomSuccessfullyKept` itself now checks
-    // `!_reduceMotion` before ever scheduling `_scheduleKeptTopNavBreaths`,
-    // so `_keptIconEmphasized` is never even set true here (a stricter,
+    // The top-right Kept teaching breath never runs under Reduce Motion
+    // either — `_onWisdomSuccessfullyKept` itself checks `!_reduceMotion`
+    // before ever scheduling `_scheduleKeptTopNavBreaths`, so
+    // `_keptIconEmphasized` is never even set true here (a stricter,
     // state-level gate on top of `_KeptIconEmphasis`'s own render-time
-    // `!MediaQuery.of(context).disableAnimations` check).
-    await _pumpInSteps(tester, const Duration(milliseconds: 500));
+    // `!MediaQuery.of(context).disableAnimations` check). The nav
+    // discovery is still marked pending in persisted state, though --
+    // Reduce Motion only ever suppresses the *animation*, never the
+    // underlying discovery state itself.
+    expect(
+      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
+      isTrue,
+    );
+    await _pumpInSteps(tester, const Duration(seconds: 3));
     expect(
       find.byKey(const ValueKey('kept-icon-emphasis-pulse')),
       findsNothing,
@@ -4573,7 +4583,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Kept Limit'), findsOneWidget);
-    expect(find.text('Become a Keeper'), findsOneWidget);
+    expect(find.text('BECOME A KEEPER'), findsOneWidget);
     final storedAfterLimit = await keptGraph.service.load();
     expect(storedAfterLimit, hasLength(3));
     // The attempted (blocked) wisdom's revealId — `_fixedRevealId`, set on
@@ -5590,6 +5600,24 @@ Future<void> _pumpUntilWisdomFullyAppeared(WidgetTester tester) async {
   fail('Wisdom reveal fade did not complete.');
 }
 
+/// P13: performs one complete, genuine ritual -- opening intro through a
+/// fully-appeared fresh wisdom reveal -- on a freshly pumped `HomeScreen`.
+/// Used by every P13 first/second/third-ritual test so each ritual's own
+/// `finishCommittedDailyWisdom` genuinely runs (the one authoritative path
+/// that records a ritual ordinal via `RatingRequestService
+/// .recordCompletedRitual` and sets `_pendingRitualOrdinal`) -- unlike the
+/// older `_openExistingWisdom` fixture, which seeds an already-locked
+/// wisdom and therefore never reaches that call at all.
+Future<void> _completeFreshRitual(WidgetTester tester) async {
+  await _finishOpeningIntro(tester);
+  await _advanceToQuestion(tester);
+  await _tapCenter(tester);
+  await tester.pump(const Duration(milliseconds: 1250));
+  await tester.pump(const Duration(milliseconds: 550));
+  await tester.pump();
+  await _pumpUntilWisdomFullyAppeared(tester);
+}
+
 Future<void> _pumpInSteps(
   WidgetTester tester,
   Duration duration, {
@@ -5601,15 +5629,6 @@ Future<void> _pumpInSteps(
     await tester.pump(next);
     remaining -= next;
   }
-}
-
-/// Reads the discovery hint's own persisted display counter directly —
-/// used by the granted/denied notification-Completer tests to prove the
-/// hint was presented exactly once (never zero while pending, never twice
-/// after resolution), independent of `find.text(...)`'s own timing.
-Future<int> _keptDiscoveryDisplayCount() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(KeptDiscoveryHintService.hintCountKey) ?? 0;
 }
 
 // Home's ritual pulse animation never idles on its own, so `pumpAndSettle()`

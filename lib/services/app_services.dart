@@ -11,6 +11,8 @@ import '../persistence/legacy_favorites_store.dart';
 import '../persistence/storage_preferences_adapter.dart';
 import '../repositories/daily_access_repository.dart';
 import '../repositories/kept_repository.dart';
+import '../sync_diagnostics/sync_health_evaluator.dart';
+import '../sync_diagnostics/sync_recovery_coordinator.dart';
 import '../sync_integration/incoming_kept_sync_coordinator.dart';
 import '../sync_integration/kept_sync_bootstrap_coordinator.dart';
 import '../sync_integration/kept_sync_integration_coordinator.dart';
@@ -302,6 +304,43 @@ SyncAssociationController? cloudKitAssociationController;
 /// never by silently constructing a second, disconnected controller.
 ICloudRemovalController? icloudRemovalController;
 
+/// Build 26 (Sync Diagnostics / Safe Recovery core): the pure, read-only
+/// health-classification composition over [keptSyncBootstrapCoordinator]'s/
+/// [cloudKitSyncRuntimeCoordinator]'s own already-canonical state -- never a
+/// new source of truth, never wired to any Settings/debug screen in this
+/// phase (see `lib/sync_diagnostics/sync_health_evaluator.dart`'s own doc
+/// comment). Populated in the same single bootstrap attempt as every other
+/// sync coordinator above, alongside [syncRecoveryCoordinator].
+///
+/// Deliberately **nullable**, never `late final` -- mirrors
+/// [cloudKitAssociationController]'s own identical reasoning: safe to read
+/// before [initializeKeptStorage] has finished (or in an isolated widget
+/// test that never calls it), with `null` meaning exactly "the composition
+/// root has not finished bootstrapping yet."
+SyncHealthEvaluator? syncHealthEvaluator;
+
+/// Build 26 (Sync Diagnostics / Safe Recovery core): the narrowly-scoped
+/// "resume the existing safe sync/recovery pipeline, only when
+/// [syncHealthEvaluator] says it is safe to" coordinator (see
+/// `lib/sync_diagnostics/sync_recovery_coordinator.dart`'s own doc comment
+/// for exactly what it will and will not do). Composes
+/// [syncHealthEvaluator] with a fire-and-forget closure over
+/// [cloudKitSyncRuntimeCoordinator] using
+/// [SyncRuntimeTrigger.diagnosticsRecovery] -- another disclosed
+/// `requestSync` call site alongside
+/// [cloudKitAssociationController]'s/[icloudRemovalController]'s own, per
+/// `test/sync_runtime/sync_runtime_layering_test.dart`. Not called
+/// automatically by any lifecycle hook in this phase -- `lib/main.dart`'s
+/// existing startup/foreground triggers, plus this coordinator's own
+/// account-change/retry triggers, already resume every recoverable state
+/// [syncHealthEvaluator] can classify; this coordinator exists as an
+/// already-tested, already-wired seam for a future explicit caller, not a
+/// new automatic poll.
+///
+/// Deliberately **nullable**, never `late final` -- mirrors
+/// [syncHealthEvaluator]'s own identical reasoning.
+SyncRecoveryCoordinator? syncRecoveryCoordinator;
+
 /// The pure sequencing helper (see `kept_storage_bootstrap.dart`) doing the
 /// actual "migrate once, map the result, then construct" work. Production
 /// wires it to the real migration coordinator and the real stores above;
@@ -408,6 +447,21 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
               .catchError((_) {}),
         );
       },
+    );
+    syncHealthEvaluator = SyncHealthEvaluator(
+      syncPersistenceStore: syncPersistenceStore,
+      bridge: cloudKitPlatformBridge,
+      readRuntimeStatus: () => cloudKitSyncRuntimeCoordinator.status,
+    );
+    syncRecoveryCoordinator = SyncRecoveryCoordinator(
+      evaluateHealth: syncHealthEvaluator!.evaluate,
+      // Fire-and-forget only, mirroring cloudKitAssociationController's own
+      // requestSyncAfterAssociation callback above: never awaited by the
+      // caller, and any error the returned Future carries is swallowed here
+      // so it can never surface as an unhandled async error.
+      triggerRecoverySync: () => cloudKitSyncRuntimeCoordinator
+          .requestSync(SyncRuntimeTrigger.diagnosticsRecovery)
+          .catchError((_) {}),
     );
     return SavedReflectionsService(
       keptRepository: repository,

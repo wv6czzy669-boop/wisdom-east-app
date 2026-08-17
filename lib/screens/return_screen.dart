@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/favorite_item.dart';
+import '../widgets/east_back_button.dart';
 
 /// EAST. Phase 9 — Return's own dedicated, read-only display screen.
 ///
@@ -49,6 +50,7 @@ class ReturnScreen extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
+        leading: Navigator.canPop(context) ? const EastBackButton() : null,
         // Real-device repair: Return is a peer surface to Objects/Kept/
         // Journal, so its title now lives in the same page-title/nav
         // hierarchy as theirs (a real AppBar title, not a small in-body

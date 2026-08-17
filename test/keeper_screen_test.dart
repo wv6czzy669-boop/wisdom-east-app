@@ -47,8 +47,10 @@ void main() {
       'Keeper',
       'Keep what stays.',
       'Enter the Circle',
-      'Unlimited Kept Wisdoms',
-      'Unlimited Reflections',
+      'Keep without limit.',
+      'Reflect without limit.',
+      'Return to what stayed.',
+      'Take your Journal with you.',
       'Keep EAST. alive.',
     ];
 
@@ -81,11 +83,22 @@ void main() {
       eastMutedTextColor,
     );
     expect(
-      tester.widget<Text>(find.text('Unlimited Kept Wisdoms')).style?.color,
+      tester.widget<Text>(find.text('Keep without limit.')).style?.color,
       isNot(eastMutedTextColor),
     );
     expect(
-      tester.widget<Text>(find.text('Unlimited Reflections')).style?.color,
+      tester.widget<Text>(find.text('Reflect without limit.')).style?.color,
+      isNot(eastMutedTextColor),
+    );
+    expect(
+      tester.widget<Text>(find.text('Return to what stayed.')).style?.color,
+      isNot(eastMutedTextColor),
+    );
+    expect(
+      tester
+          .widget<Text>(find.text('Take your Journal with you.'))
+          .style
+          ?.color,
       isNot(eastMutedTextColor),
     );
   });
@@ -120,14 +133,14 @@ void main() {
     );
     expect(ringBox, const Size(238, 238));
 
-    // 1B: "Unlimited Kept Wisdoms" / "Unlimited Reflections" must resolve
-    // to the exact same color as the "Keeper" heading — only color
-    // changes; font, size, and copy are untouched.
+    // 1B: the value-copy lines must resolve to the exact same color as the
+    // "Keeper" heading — only color changes; font, size, and copy are
+    // untouched.
     final keeperHeadingStyle = tester.widget<Text>(find.text('Keeper')).style!;
     final keptWisdomsStyle =
-        tester.widget<Text>(find.text('Unlimited Kept Wisdoms')).style!;
+        tester.widget<Text>(find.text('Keep without limit.')).style!;
     final reflectionsStyle =
-        tester.widget<Text>(find.text('Unlimited Reflections')).style!;
+        tester.widget<Text>(find.text('Reflect without limit.')).style!;
 
     expect(keptWisdomsStyle.color, keeperHeadingStyle.color);
     expect(reflectionsStyle.color, keeperHeadingStyle.color);
@@ -229,9 +242,10 @@ void main() {
     expect(find.byType(SingleChildScrollView), findsNothing);
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text(removedThreeRevealCopy), findsNothing);
-    expect(find.text('Unlimited Kept Wisdoms'), findsOneWidget);
-    expect(find.text('Unlimited Reflections'), findsOneWidget);
-    expect(find.text('Keep reflections without limit.'), findsNothing);
+    expect(find.text('Keep without limit.'), findsOneWidget);
+    expect(find.text('Reflect without limit.'), findsOneWidget);
+    expect(find.text('Return to what stayed.'), findsOneWidget);
+    expect(find.text('Take your Journal with you.'), findsOneWidget);
     expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Keep EAST. alive.'), findsOneWidget);
     expect(find.text('Support EAST.'), findsNothing);

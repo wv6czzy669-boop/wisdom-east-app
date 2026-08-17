@@ -178,6 +178,25 @@ enum SyncRuntimeTrigger {
   /// wiring in `app_services.dart`.
   explicitDeletion,
 
+  /// Build 26 (Sync Diagnostics / Safe Recovery core): `SyncRecoveryCoordinator`
+  /// (`lib/sync_diagnostics/sync_recovery_coordinator.dart`) determined,
+  /// through `SyncHealthEvaluator`'s own read-only classification, that a
+  /// known, existing, safe resume/retry path exists and should be nudged
+  /// again. Fired only for a state that coordinator has already classified
+  /// as safe to auto-resume -- never for `SyncHealthState.disabled` or
+  /// `SyncHealthState.recoveryRequired`. From the same fire-and-forget,
+  /// error-contained shape [explicitAssociation]/[explicitDeletion] already
+  /// use -- never awaited to full pipeline completion by the caller, and
+  /// never special-cased by any retry/account/bootstrap/epoch/coalescing
+  /// decision, exactly like every other trigger (see
+  /// `test/sync_runtime/sync_runtime_layering_test.dart`'s structural proof
+  /// for [localMutation]/[explicitAssociation], which applies identically
+  /// here). `SyncRecoveryCoordinator` never calls [requestSync] directly --
+  /// see its own doc comment for why; only its caller-supplied
+  /// `triggerRecoverySync` callback, composed in
+  /// `lib/services/app_services.dart`, does.
+  diagnosticsRecovery,
+
   /// A trigger arrived while a pass was already active and was coalesced
   /// into the single guaranteed follow-up pass -- see [requestSync].
   coalescedFollowUp,

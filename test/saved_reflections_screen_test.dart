@@ -154,7 +154,7 @@ void main() {
     // No time advanced past the autosave debounce -- back out right away,
     // exactly like the real-device repro (leave/back before the debounce
     // interval expires).
-    await tester.pageBack();
+    await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await tester.pumpAndSettle();
 
     expect(find.byType(SavedReflectionsScreen), findsOneWidget);
@@ -330,7 +330,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Keeper'), findsOneWidget);
-    expect(find.text('Unlimited Reflections'), findsOneWidget);
+    expect(find.text('Reflect without limit.'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('reflection-writing-area')),
       findsNothing,
@@ -673,7 +673,7 @@ void main() {
           reason: 'isKeeper=$isKeeper',
         );
 
-        await tester.pageBack();
+        await tester.tap(find.byKey(const ValueKey('east-back-button')));
         await tester.pumpAndSettle();
       }
     });
@@ -816,7 +816,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ReturnScreen), findsOneWidget);
 
-      await tester.pageBack();
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
       await tester.pumpAndSettle();
 
       final afterItems = await service.load();
@@ -999,9 +999,10 @@ void main() {
     });
 
     testWidgets(
-        'real-device repair: Kept -> Journal uses a quiet fade -- a '
-        'FadeTransition ancestor and no horizontal SlideTransition, and '
-        'back navigation still returns cleanly to Kept', (tester) async {
+        'real-device repair: Kept -> Journal uses the standard '
+        'MaterialPageRoute (native platform transition, native iOS '
+        'edge-swipe-back eligible), and back navigation still returns '
+        'cleanly to Kept', (tester) async {
       final item = await keep(
         service,
         text: 'A kept wisdom',
@@ -1020,46 +1021,13 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('kept-journal-action')));
-      // Mid-transition -- exactly where a horizontal slide would show
-      // both screens side-by-side.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      final journalFinder = find.byType(JournalScreen);
-      expect(journalFinder, findsOneWidget);
-      expect(
-        find.ancestor(
-          of: journalFinder,
-          matching: find.byType(FadeTransition),
-        ),
-        findsWidgets,
-        reason: 'Kept -> Journal must cross-fade in.',
-      );
-      expect(
-        find.ancestor(
-          of: journalFinder,
-          matching: find.byType(SlideTransition),
-        ),
-        findsNothing,
-        reason: 'Kept -> Journal must never slide horizontally.',
-      );
-
       await tester.pumpAndSettle();
+
       expect(find.byType(JournalScreen), findsOneWidget);
       expect(find.byType(SavedReflectionsScreen), findsNothing);
 
-      // Back returns cleanly, also via the fade, never a slide.
-      await tester.pageBack();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(
-        find.ancestor(
-          of: find.byType(JournalScreen),
-          matching: find.byType(SlideTransition),
-        ),
-        findsNothing,
-      );
-
+      // Back returns cleanly via the platform-default pop.
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
       await tester.pumpAndSettle();
       expect(find.byType(JournalScreen), findsNothing);
       expect(find.byType(SavedReflectionsScreen), findsOneWidget);

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -10,6 +11,8 @@ import '../services/purchase_service.dart';
 import '../services/return_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../theme/muted_text_color.dart';
+import '../utils/kept_diagnostics.dart';
+import '../widgets/east_back_button.dart';
 import 'journal_screen.dart';
 import 'keeper_screen.dart';
 import 'reflection_screen.dart';
@@ -212,15 +215,22 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       );
   }
 
+  // Real-device diagnostic pass: a permanent, low-volume, content-free
+  // outcome/failure trace (see the matching note in
+  // `reflection_screen.dart`) -- no wisdom/reflection text, only stage
+  // names and counts.
   Future<void> _reload() async {
+    keptDiagnostic('kept-screen: reload-begin');
     try {
       final loaded = await _service.load();
       if (!mounted) return;
       setState(() {
         _items = loaded;
       });
+      keptDiagnostic('kept-screen: reload-end itemCount=${loaded.length}');
       unawaited(_refreshReturn());
     } catch (_) {
+      keptDiagnostic('kept-screen: reload-failed');
       _showMessage('Kept wisdoms could not be refreshed.');
     }
   }
@@ -255,6 +265,20 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       );
       if (!mounted) return;
       await _reload();
+      // Real-device diagnostic pass: a permanent, low-volume, content-free
+      // outcome check -- whether the exact occurrence just opened for
+      // reflection is present in the freshly-reloaded list, and whether it
+      // now carries a reflection. Never affects reload/navigation
+      // behavior; a swallowed lookup failure here is diagnostic-only.
+      if (kDebugMode) {
+        final match = _items.where((i) => i.id == item.id).toList();
+        final found = match.isNotEmpty;
+        final hasReflection = found && match.first.hasReflection;
+        keptDiagnostic(
+          'kept-screen: post-reflection-reload matchingRecordFound=$found '
+          'matchingRecordHasReflection=$hasReflection',
+        );
+      }
     } finally {
       _navigationInProgress = false;
     }
@@ -322,7 +346,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     try {
       await Navigator.push<void>(
         context,
-        _journalFadeRoute(
+        MaterialPageRoute<void>(
           builder: (context) =>
               JournalScreen(items: _items, isKeeper: _isKeeper),
         ),
@@ -330,27 +354,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     } finally {
       _navigationInProgress = false;
     }
-  }
-
-  /// Real-device repair: Kept <-> Journal specifically (and only this
-  /// path) uses a quiet dissolve instead of the platform's default
-  /// horizontal push/pop, which on iOS visibly showed both screens
-  /// side-by-side mid-transition -- a "split" frame that does not fit
-  /// EAST. Scoped to this one call site; every other route in the app
-  /// keeps its existing platform-default transition untouched. Route
-  /// result/back-navigation semantics are otherwise identical to a plain
-  /// [MaterialPageRoute].
-  static Route<void> _journalFadeRoute({
-    required WidgetBuilder builder,
-  }) {
-    return PageRouteBuilder<void>(
-      pageBuilder: (context, animation, secondaryAnimation) => builder(context),
-      transitionDuration: const Duration(milliseconds: 220),
-      reverseTransitionDuration: const Duration(milliseconds: 220),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-    );
   }
 
   Future<void> _deleteItem(FavoriteItem item) async {
@@ -465,6 +468,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
+        leading: Navigator.canPop(context) ? const EastBackButton() : null,
         title: Text('Kept', style: _style(24)),
       ),
       body: Column(
@@ -524,13 +528,13 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   /// inside the Journal screen itself, next to its export action).
   Widget _keptUtilityRow() {
     final supportingCopy = _returnVisibleSupportingCopy();
-    // Approved Kept direction: the archive begins a deliberate 56pt beneath
-    // the Return / Journal row when there is no supporting line to carry
-    // (the common case, now that pre-eligibility copy no longer appears
-    // here) -- no dead zone, but a real, intentional gap rather than the
-    // old tight spacing.
+    // Approved Kept direction: the archive begins a deliberate, but no
+    // longer excessive, gap beneath the Return / Journal row when there is
+    // no supporting line to carry (the common case, now that
+    // pre-eligibility copy no longer appears here) -- no dead zone, but a
+    // real, intentional gap rather than the old tight spacing.
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 6, 24, supportingCopy.isEmpty ? 56 : 18),
+      padding: EdgeInsets.fromLTRB(24, 6, 24, supportingCopy.isEmpty ? 32 : 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -599,7 +603,21 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             constraints: const BoxConstraints(minHeight: 44),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(label, style: _style(17, color: eastMutedTextColor)),
+              // Visual polish: a hairline underline tied to each word's own
+              // width (Flutter's text decoration, not a separate divider
+              // widget) -- thin and muted rather than a bright hyperlink
+              // underline, so "Return"/"Journal" read as quiet editorial
+              // labels, not web links or buttons.
+              child: Text(
+                label,
+                style: _style(18.5, color: eastMutedTextColor).copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor:
+                          eastMutedTextColor.withValues(alpha: 0.45),
+                      decorationThickness: 0.6,
+                      decorationStyle: TextDecorationStyle.solid,
+                    ),
+              ),
             ),
           ),
         ),
