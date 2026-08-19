@@ -25,7 +25,8 @@ void main() {
     expect(AnalyticsEvent.values, hasLength(6));
   });
 
-  test('each public method emits exactly its own allow-listed event, with '
+  test(
+      'each public method emits exactly its own allow-listed event, with '
       'no others firing as a side effect', () {
     service.ritualCompleted();
     expect(transport.tracked, [AnalyticsEvent.ritualCompleted]);
@@ -51,7 +52,8 @@ void main() {
     expect(transport.tracked, [AnalyticsEvent.keeperRestoreCompleted]);
   });
 
-  test('AnalyticsTransport.track takes only an AnalyticsEvent -- there is no '
+  test(
+      'AnalyticsTransport.track takes only an AnalyticsEvent -- there is no '
       'parameter for private content or identifiers to travel through', () {
     // Structural proof: the only public surface a transport receives is one
     // closed-enum value. Verified here by exhaustively covering every enum

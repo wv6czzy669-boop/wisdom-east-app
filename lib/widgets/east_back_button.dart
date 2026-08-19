@@ -42,8 +42,7 @@ class EastBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveOnPressed =
-        onPressed ?? () => Navigator.maybePop(context);
+    final effectiveOnPressed = onPressed ?? () => Navigator.maybePop(context);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

@@ -69,9 +69,9 @@ void main() {
     final launchText = tester.widget<Text>(
       find.descendant(of: markFinder, matching: find.text('EAST.')),
     );
-    expect(launchText.style?.fontFamily, 'CormorantGaramond');
+    expect(launchText.style?.fontFamily, 'EBGaramond');
     expect(launchText.style?.fontSize, 21.5);
-    expect(launchText.style?.color, const Color(0xFFF4F0E8));
+    expect(launchText.style?.color, const Color(0xFF2C2924));
 
     await tester.pump(const Duration(milliseconds: 300));
     expect(_ritualOpacity(tester), 1.0);
@@ -265,7 +265,7 @@ void main() {
       await _tapCenter(tester);
       await tester.pump(const Duration(milliseconds: 1250));
 
-      expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
       expect(find.semantics.byLabel('Ask from your heart.'), findsNothing);
 
       await tester.pump(const Duration(milliseconds: 550));
@@ -435,7 +435,7 @@ void main() {
     await _finishOpeningIntro(tester);
     expect(
       tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
-      const Color(0xFF040404),
+      const Color(0xFFE2E0D9),
     );
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
     expect(find.byKey(const ValueKey('settings-menu-control')), findsNothing);
@@ -506,8 +506,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets(
-      'black-silence interruption keeps pending wisdom without daily lock',
+  testWidgets('Ask reveals wisdom directly without a visible silence beat',
       (tester) async {
     final dailyGraph = DailyAccessTestGraph();
     await tester.pumpWidget(
@@ -518,37 +517,14 @@ void main() {
 
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump();
 
-    final pendingDuringBlackSilence =
-        await dailyGraph.repository.loadPendingDailyWisdomReveal();
-    final persistedDuringBlackSilence =
+    final persistedAfterAsk =
         await dailyGraph.repository.loadDailyWisdomRecord();
 
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-    expect(pendingDuringBlackSilence, isNotNull);
-    expect(persistedDuringBlackSilence, isNull);
-    final selectedWisdom = pendingDuringBlackSilence!.text;
-
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(
-      await dailyGraph.repository.loadDailyWisdomRecord(),
-      isNull,
-    );
-
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
-    await tester.pump();
-
-    final committed = await dailyGraph.repository.loadDailyWisdomRecord();
-
-    expect(committed, isNotNull);
-    expect(committed!.text, selectedWisdom);
-    expect(find.text(selectedWisdom), findsOneWidget);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
+    expect(persistedAfterAsk, isNotNull);
+    expect(find.text(persistedAfterAsk!.text), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 950));
     await tester.pump(const Duration(milliseconds: 600));
@@ -579,28 +555,17 @@ void main() {
     expect(askTextFinder, findsOneWidget);
     expect(_askFadeValue(tester), lessThan(1.0));
     expect(_askFadeValue(tester), greaterThan(0.0));
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     final prefsDuringPendingSave = await SharedPreferences.getInstance();
     expect(prefsDuringPendingSave.containsKey('daily_wisdom_access'), isFalse);
 
     dailyGraph.releasePendingSave();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 949));
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 549));
-    final pendingBeforeReveal =
-        await dailyGraph.repository.loadPendingDailyWisdomReveal();
-    expect(pendingBeforeReveal, isNotNull);
-    expect(
-      pendingBeforeReveal!.phase,
-      PendingDailyWisdomRevealPhase.prepared,
-    );
-    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
-    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     await tester.pump();
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
 
@@ -628,13 +593,13 @@ void main() {
     expect(_askFadeValue(tester), greaterThan(0.0));
 
     await tester.pump(const Duration(milliseconds: 1200));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     await tester.pump(const Duration(milliseconds: 550));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     await tester.pump(const Duration(milliseconds: 101));
 
     expect(find.byKey(const ValueKey('ritual-ask-text')), findsOneWidget);
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     final prefsAfterPrepareTimeout = await SharedPreferences.getInstance();
     expect(
         prefsAfterPrepareTimeout.containsKey('daily_wisdom_access'), isFalse);
@@ -671,7 +636,7 @@ void main() {
     await tester.pump();
     await _pumpUntilCondition(tester, () => dailyGraph.dailyWriteStarted);
 
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
     expect(dailyGraph.dailyWriteStarted, isTrue);
     await tester.pump(const Duration(milliseconds: 101));
@@ -709,12 +674,12 @@ void main() {
     await _advanceToQuestion(tester);
 
     await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1249));
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
 
     clockNow = delayedCallbackTime;
-    await tester.pump(const Duration(milliseconds: 550));
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pump();
     await tester.pump();
     await tester.pump();
@@ -915,7 +880,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('home-save-control-kept')),
-        matching: find.text('●'),
+        matching: find.byKey(const ValueKey('home-save-circle-paint')),
       ),
       findsOneWidget,
     );
@@ -1442,10 +1407,7 @@ void main() {
     expect(haptics, hasLength(4));
 
     await tester.pump(const Duration(milliseconds: 1250));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-    expect(haptics, hasLength(4));
-
-    await tester.pump(const Duration(milliseconds: 550));
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     await tester.pump();
     expect(haptics, hasLength(5));
     expect(haptics.last, 'HapticFeedbackType.selectionClick');
@@ -1754,8 +1716,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1300));
     expect(find.text('Pause.'), findsOneWidget);
     expect(find.text('Feel.'), findsOneWidget);
-    expect(tester.widget<Text>(find.text('Pause.')).style?.fontSize, 46);
-    expect(tester.widget<Text>(find.text('Feel.')).style?.fontSize, 46);
+    expect(tester.widget<Text>(find.text('Pause.')).style?.fontSize, 60);
+    expect(tester.widget<Text>(find.text('Feel.')).style?.fontSize, 60);
 
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 1250));
@@ -1811,41 +1773,25 @@ void main() {
     expect(askStyleDuringFade?.height, askStyleBeforeFade?.height);
     expect(askFade.opacity.value, greaterThan(0.0));
     expect(askFade.opacity.value, lessThan(1.0));
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
 
-    // Still pre-reveal (fading toward black silence) — chrome stays absent.
+    // The final millisecond of the Ask fade still keeps chrome absent.
     await tester.pump(const Duration(milliseconds: 949));
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
     expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
     expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
-    expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
+    expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
-    expect(
-      tester
-          .widget<ColoredBox>(
-            find.byKey(const ValueKey('black-silence')),
-          )
-          .color,
-      Colors.black,
-    );
+    expect(find.text('Reveal.'), findsNothing);
 
-    await _tapCenter(tester);
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 548));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
-
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(find.byKey(const ValueKey('black-silence')), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(find.byKey(const ValueKey('black-silence')), findsNothing);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
 
     expect(find.text(removedRevealPrompt), findsNothing);
     final revealFadeFinder = find.byKey(
@@ -1906,24 +1852,16 @@ void main() {
     expect(find.byKey(const ValueKey('east-back-button')), findsNothing);
     expect(find.byKey(const ValueKey('home-save-control-unsaved')),
         findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('home-save-control-unsaved')),
-        matching: find.text('○'),
-      ),
-      findsOneWidget,
+    final unkeptCircle = find.descendant(
+      of: find.byKey(const ValueKey('home-save-control-unsaved')),
+      matching: find.byKey(const ValueKey('home-save-circle-paint')),
     );
+    expect(unkeptCircle, findsOneWidget);
+    expect(tester.getSize(unkeptCircle), const Size.square(31));
     expect(
-      tester
-          .widget<Text>(
-            find.descendant(
-              of: find.byKey(const ValueKey('home-save-control-unsaved')),
-              matching: find.text('○'),
-            ),
-          )
-          .style
-          ?.fontSize,
-      31,
+      (tester.widget<CustomPaint>(unkeptCircle).painter as dynamic)
+          .visibleDiameter,
+      18.5,
     );
 
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
@@ -1933,7 +1871,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('home-save-control-kept')),
-        matching: find.text('●'),
+        matching: find.byKey(const ValueKey('home-save-circle-paint')),
       ),
       findsOneWidget,
     );
@@ -2303,7 +2241,8 @@ void main() {
       await _pumpInSteps(tester, const Duration(seconds: 10));
       await tester.pump();
       // Keep every ritual's wisdom so the next day's reveal starts clean.
-      if (find.byKey(const ValueKey('home-save-control-unsaved'))
+      if (find
+          .byKey(const ValueKey('home-save-control-unsaved'))
           .evaluate()
           .isNotEmpty) {
         await tester.tap(
@@ -2738,10 +2677,26 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('home-save-control-unsaved')),
-        matching: find.text('○'),
+        matching: find.byKey(const ValueKey('home-save-circle-paint')),
       ),
       findsOneWidget,
     );
+    final unsavedCircleSize = tester.getSize(
+      find.descendant(
+        of: find.byKey(const ValueKey('home-save-control-unsaved')),
+        matching: find.byKey(const ValueKey('home-save-circle-paint')),
+      ),
+    );
+    final dynamic unsavedPainter = tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byKey(const ValueKey('home-save-control-unsaved')),
+            matching: find.byKey(const ValueKey('home-save-circle-paint')),
+          ),
+        )
+        .painter;
+    expect(unsavedPainter.filled, isFalse);
+    expect(unsavedPainter.visibleDiameter, 18.5);
     final unsavedSize =
         tester.getSize(find.byKey(const ValueKey('home-save-control-unsaved')));
 
@@ -2812,7 +2767,7 @@ void main() {
     // own `IconTheme` foreground color to `ThemeData.disabledColor` (a
     // dimmed grey) — it must resolve to the same intended kept-ring token
     // the glyph itself already hardcodes.
-    const keptRingColor = Color(0xFFF4F0E8);
+    const keptRingColor = Color(0xFF2C2924);
     final savedForegroundColor = savedStyle!.foregroundColor;
     expect(savedForegroundColor, isNotNull);
     final resolvedSavedForegroundColor = savedForegroundColor!;
@@ -2826,21 +2781,18 @@ void main() {
       ),
       keptRingColor,
     );
-    // The definitive proof, independent of `IconTheme` resolution entirely:
-    // the actual rendered glyph is a `Text` with its own explicit color, so
-    // this is what a user actually sees regardless of IconButton's own
-    // disabled-state theming.
-    final savedGlyph = tester.widget<Text>(
+    final savedCircle = tester.widget<CustomPaint>(
       find.descendant(
         of: find.byKey(const ValueKey('home-save-control-kept')),
-        matching: find.text('●'),
+        matching: find.byKey(const ValueKey('home-save-circle-paint')),
       ),
     );
-    expect(savedGlyph.style?.color, keptRingColor);
+    final dynamic savedPainter = savedCircle.painter;
+    expect(savedPainter.filled, isTrue);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('home-save-control-kept')),
-        matching: find.text('●'),
+        matching: find.byKey(const ValueKey('home-save-circle-paint')),
       ),
       findsOneWidget,
     );
@@ -2851,6 +2803,21 @@ void main() {
           'IconButton construction as the unsaved state, so its rendered '
           'size matches by construction rather than by an assumed pixel '
           'value.',
+    );
+    expect(
+      tester.getSize(
+        find.descendant(
+          of: find.byKey(const ValueKey('home-save-control-kept')),
+          matching: find.byKey(const ValueKey('home-save-circle-paint')),
+        ),
+      ),
+      unsavedCircleSize,
+      reason: 'The save control layout is identical in both states.',
+    );
+    expect(
+      savedPainter.visibleDiameter,
+      unsavedPainter.visibleDiameter,
+      reason: 'The painted outer diameter is identical in both states.',
     );
 
     // Item 4: the save ring is one-way. Tapping the already-filled ring
@@ -2949,8 +2916,7 @@ void main() {
     }
   });
 
-  testWidgets('reduce motion freezes continuous grain movement',
-      (tester) async {
+  testWidgets('reduce motion preserves the flat ritual field', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -2986,10 +2952,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 850));
 
-    expect(_grainPainter(tester).movement, 0.0);
-    expect(_grainPainter(tester).intensity, 0.01235);
+    expect(_grainPainters(tester), isEmpty);
     await tester.pump(const Duration(milliseconds: 600));
-    expect(_grainPainter(tester).movement, 0.0);
+    expect(_grainPainters(tester), isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -3367,8 +3332,8 @@ void main() {
     // and the ring's breathing both remain, calmly, the whole time.
     await _pumpInSteps(tester, const Duration(seconds: 20));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
-    expect(
-        find.byKey(const ValueKey('home-save-control-unsaved')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
+        findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
     await tester.pump(const Duration(milliseconds: 50));
@@ -4570,9 +4535,9 @@ void main() {
         tester, () => _keptGuard(tester).ignoring == false);
 
     // Correction: `pumpAndSettle()` never returns here — HomeScreen's
-    // ritual screen keeps perpetual ambient animation (grain, breathing,
-    // glow) continuously scheduling new frames for as long as this screen
-    // is mounted, so "settled" (no pending frames) never actually occurs.
+    // ritual screen can continue scheduling its own animation frames for as
+    // long as this screen is mounted, so "settled" (no pending frames) never
+    // actually occurs.
     // A bounded, real-duration pump sequence is used instead: one pump to
     // let the tap's callback and the in-memory repository Future resolve,
     // then a further 300ms to let the dialog's own (short, one-shot)
@@ -5510,10 +5475,6 @@ IgnorePointer _keptGuard(WidgetTester tester) {
   );
 }
 
-GrainPainter _grainPainter(WidgetTester tester) {
-  return _grainPainters(tester).single;
-}
-
 Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
   return tester
       .widgetList<CustomPaint>(find.byType(CustomPaint))
@@ -5613,7 +5574,6 @@ Future<void> _completeFreshRitual(WidgetTester tester) async {
   await _advanceToQuestion(tester);
   await _tapCenter(tester);
   await tester.pump(const Duration(milliseconds: 1250));
-  await tester.pump(const Duration(milliseconds: 550));
   await tester.pump();
   await _pumpUntilWisdomFullyAppeared(tester);
 }

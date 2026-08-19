@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'east_design.dart';
+
 /// A single muted, low-contrast tone reserved for a specific, explicitly
 /// approved set of secondary labels (Home countdown, Kept metadata,
 /// Reflection actions, Keeper copy, Settings tagline).
@@ -8,4 +10,4 @@ import 'package:flutter/material.dart';
 /// color and must not be applied to new call sites without the same
 /// explicit approval that introduced it. See EAST_ARCHITECTURE_V1.md for
 /// the broader design-system baseline.
-const Color eastMutedTextColor = Color(0xFFA29B8C);
+const Color eastMutedTextColor = EastColors.secondary;

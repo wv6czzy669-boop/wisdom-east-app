@@ -99,7 +99,7 @@ class _CrashInjectingSyncPersistenceStore implements SyncPersistenceStore {
       throw const SyncPersistenceStoreException(
         'test-injected-crash',
         'Simulated crash inside the post-cleanup verification read, '
-        'immediately before the final clearDeletionTransaction call.',
+            'immediately before the final clearDeletionTransaction call.',
       );
     }
     return _delegate.loadAccountState(accountFingerprint);
@@ -222,7 +222,8 @@ class _CrashInjectingSyncPersistenceStore implements SyncPersistenceStore {
   Future<BeginDeletionTransactionResult> beginDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.beginDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.beginDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
     required String accountFingerprint,
@@ -386,7 +387,8 @@ class _MutationForbiddenSyncPersistenceStore implements SyncPersistenceStore {
   Future<BeginDeletionTransactionResult> beginDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.beginDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.beginDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
     required String accountFingerprint,
@@ -536,7 +538,8 @@ class _IneffectiveAccountStateClearStore implements SyncPersistenceStore {
   Future<BeginDeletionTransactionResult> beginDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.beginDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.beginDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
     required String accountFingerprint,
@@ -552,7 +555,8 @@ class _IneffectiveAccountStateClearStore implements SyncPersistenceStore {
   Future<void> clearDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.clearDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.clearDeletionTransaction(
+          accountFingerprint: accountFingerprint);
 }
 
 /// A [SyncPersistenceStore] decorator whose
@@ -654,7 +658,8 @@ class _IneffectiveMarkerClearStore implements SyncPersistenceStore {
   Future<BeginDeletionTransactionResult> beginDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.beginDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.beginDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
     required String accountFingerprint,
@@ -670,7 +675,8 @@ class _IneffectiveMarkerClearStore implements SyncPersistenceStore {
   Future<void> clearDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.clearDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.clearDeletionTransaction(
+          accountFingerprint: accountFingerprint);
 }
 
 /// A [LocalSyncIntentStore] decorator whose [removeIntent] call succeeds
@@ -736,8 +742,7 @@ class _ClearDeletionTransactionObservingStore implements SyncPersistenceStore {
     markerAlreadyGoneAtCallTime =
         await _delegate.loadAssociatedAccountFingerprint() !=
             accountFingerprint;
-    intentsAlreadyGoneAtCallTime =
-        (await _intentStore.loadIntents()).isEmpty;
+    intentsAlreadyGoneAtCallTime = (await _intentStore.loadIntents()).isEmpty;
     return _delegate.clearDeletionTransaction(
       accountFingerprint: accountFingerprint,
     );
@@ -828,7 +833,8 @@ class _ClearDeletionTransactionObservingStore implements SyncPersistenceStore {
   Future<BeginDeletionTransactionResult> beginDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.beginDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.beginDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
     required String accountFingerprint,
@@ -848,9 +854,11 @@ void main() {
       final store = InMemorySyncPersistenceStore();
       final intentStore = InMemoryLocalSyncIntentStore();
       await intentStore.enqueueIntent(_keepIntent());
-      store.seedAccount(_fingerprint(1), AccountSyncState.empty(
-        DataEpoch.generate(),
-      ));
+      store.seedAccount(
+          _fingerprint(1),
+          AccountSyncState.empty(
+            DataEpoch.generate(),
+          ));
       store.seedAssociatedAccountFingerprint(_fingerprint(1));
       final finalizer = LocalDeletionFinalizer(
         syncPersistenceStore: store,
@@ -902,8 +910,7 @@ void main() {
         );
         expect(await intentStore.loadIntents(), hasLength(1));
         expect(await store.loadAccountState(_fingerprint(1)), isNotNull);
-        expect(
-            await store.loadAssociatedAccountFingerprint(), _fingerprint(1));
+        expect(await store.loadAssociatedAccountFingerprint(), _fingerprint(1));
         expect(await store.loadPendingDeletionTransaction(), isNotNull);
       }
     });
@@ -1285,7 +1292,8 @@ void main() {
 
       final firstResult = await finalizer.finalize();
 
-      expect(firstResult.outcome, LocalDeletionFinalizeOutcome.verificationFailed,
+      expect(
+          firstResult.outcome, LocalDeletionFinalizeOutcome.verificationFailed,
           reason: 'REPAIR 2: a verification-read exception must be caught '
               'and converted into a typed, fail-closed result -- never left '
               'to propagate as an ambient uncaught exception with unclear '
@@ -1601,8 +1609,7 @@ void main() {
     });
   });
 
-  group('points 4-8, 25: never touches user content or unrelated state',
-      () {
+  group('points 4-8, 25: never touches user content or unrelated state', () {
     test(
         '4-8, 25: LocalDeletionFinalizer has zero dependency on any '
         'Kept/Reflection/daily-access/Keeper-entitlement type -- structural '
@@ -1710,7 +1717,8 @@ class _TransactionPresenceObservingStore implements SyncPersistenceStore {
   Future<void> clearDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.clearDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.clearDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AccountSyncState?> loadAccountState(String accountFingerprint) =>
       _delegate.loadAccountState(accountFingerprint);
@@ -1785,7 +1793,8 @@ class _TransactionPresenceObservingStore implements SyncPersistenceStore {
   Future<BeginDeletionTransactionResult> beginDeletionTransaction({
     required String accountFingerprint,
   }) =>
-      _delegate.beginDeletionTransaction(accountFingerprint: accountFingerprint);
+      _delegate.beginDeletionTransaction(
+          accountFingerprint: accountFingerprint);
   @override
   Future<AdvanceDeletionTransactionResult> advanceDeletionTransactionStage({
     required String accountFingerprint,

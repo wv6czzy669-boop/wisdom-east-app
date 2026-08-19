@@ -42,7 +42,8 @@ void main() {
     expect(document.txtBytes, isNotEmpty);
   });
 
-  test('deterministic filenames use the EAST-Data-YYYY-MM-DD shape, with '
+  test(
+      'deterministic filenames use the EAST-Data-YYYY-MM-DD shape, with '
       'no owner name in either', () {
     final document = builder.build(
       items: const [],
@@ -88,7 +89,8 @@ void main() {
       expect(text.split('\n').length, greaterThan(1));
     });
 
-    test('journalOwnerName is included when present, and never invented '
+    test(
+        'journalOwnerName is included when present, and never invented '
         'when absent', () {
       final withName = decodeJson(
         builder.build(
@@ -110,7 +112,8 @@ void main() {
       expect(withoutName.containsKey('journalOwnerName'), isTrue);
     });
 
-    test('active Kept occurrences are exported with exactly the expected '
+    test(
+        'active Kept occurrences are exported with exactly the expected '
         'fields -- revealId, wisdom text, and keptAt only', () {
       final document = builder.build(
         items: [
@@ -135,7 +138,8 @@ void main() {
       expect(entry['keptAt'], DateTime.utc(2026, 1, 1).toIso8601String());
     });
 
-    test('active Reflections are exported, associated only through '
+    test(
+        'active Reflections are exported, associated only through '
         'revealId identity -- never by wisdom text', () {
       const sharedText = 'The exact same wisdom text twice';
       final document = builder.build(
@@ -180,7 +184,8 @@ void main() {
       );
     });
 
-    test('duplicate wisdom text with different revealIds remains two '
+    test(
+        'duplicate wisdom text with different revealIds remains two '
         'distinct Kept occurrences', () {
       const sharedText = 'Identical text, different occurrences';
       final document = builder.build(
@@ -205,17 +210,16 @@ void main() {
       final kept = decoded['kept'] as List<Object?>;
 
       expect(kept, hasLength(2));
-      final revealIds = kept
-          .cast<Map<String, Object?>>()
-          .map((e) => e['revealId'])
-          .toSet();
+      final revealIds =
+          kept.cast<Map<String, Object?>>().map((e) => e['revealId']).toSet();
       expect(revealIds, {
         'a5f3c111-1111-4111-8111-000000000001',
         'a5f3c111-1111-4111-8111-000000000002',
       });
     });
 
-    test('an item with no revealId (no stable identity) is never '
+    test(
+        'an item with no revealId (no stable identity) is never '
         'exported', () {
       const noIdentity = FavoriteItem(
         id: 'legacy-1',
@@ -266,7 +270,8 @@ void main() {
       expect(texts, ['Oldest', 'Middle', 'Newest']);
     });
 
-    test('no CloudKit/sync/purchase/analytics/operational field ever '
+    test(
+        'no CloudKit/sync/purchase/analytics/operational field ever '
         'appears anywhere in the document', () {
       final document = builder.build(
         items: [
@@ -311,7 +316,8 @@ void main() {
   });
 
   group('TXT structure', () {
-    test('is valid, readable UTF-8 and contains the expected header/'
+    test(
+        'is valid, readable UTF-8 and contains the expected header/'
         'structure', () {
       final document = builder.build(
         items: const [],
@@ -327,71 +333,65 @@ void main() {
 
     test('owner name appears when present, never invented when absent', () {
       final withName = utf8.decode(
-        builder
-            .build(
-              items: const [],
-              journalOwnerName: 'Doğukan Işık',
-              exportedAt: exportedAt,
-            )
-            .txtBytes,
+        builder.build(
+          items: const [],
+          journalOwnerName: 'Doğukan Işık',
+          exportedAt: exportedAt,
+        ).txtBytes,
       );
       expect(withName, contains('Doğukan Işık'));
 
       final withoutName = utf8.decode(
-        builder
-            .build(
-              items: const [],
-              journalOwnerName: null,
-              exportedAt: exportedAt,
-            )
-            .txtBytes,
+        builder.build(
+          items: const [],
+          journalOwnerName: null,
+          exportedAt: exportedAt,
+        ).txtBytes,
       );
       expect(withoutName, isNot(contains('For:')));
     });
 
-    test('an occurrence with no Reflection shows the wisdom/date cleanly, '
+    test(
+        'an occurrence with no Reflection shows the wisdom/date cleanly, '
         'with no invented empty Reflection section', () {
       final text = utf8.decode(
-        builder
-            .build(
-              items: [
-                item(
-                  id: '1',
-                  revealId: 'a5f3c111-1111-4111-8111-000000000001',
-                  text: 'A wisdom with no reflection',
-                  keptAt: DateTime.utc(2026, 1, 1),
-                ),
-              ],
-              journalOwnerName: null,
-              exportedAt: exportedAt,
-            )
-            .txtBytes,
+        builder.build(
+          items: [
+            item(
+              id: '1',
+              revealId: 'a5f3c111-1111-4111-8111-000000000001',
+              text: 'A wisdom with no reflection',
+              keptAt: DateTime.utc(2026, 1, 1),
+            ),
+          ],
+          journalOwnerName: null,
+          exportedAt: exportedAt,
+        ).txtBytes,
       );
 
       expect(text, contains('A wisdom with no reflection'));
       expect(text, isNot(contains('Reflection:')));
     });
 
-    test('an occurrence with a Reflection includes it under an unobtrusive '
+    test(
+        'an occurrence with a Reflection includes it under an unobtrusive '
         '"Reflection:" label, with revealId present only as unobtrusive '
         'reference metadata', () {
       final text = utf8.decode(
-        builder
-            .build(
-              items: [
-                item(
-                  id: '1',
-                  revealId: 'a5f3c111-1111-4111-8111-000000000001',
-                  text: 'A wisdom with a reflection',
-                  keptAt: DateTime.utc(2026, 1, 1),
-                  reflection: 'My own private words about it.',
-                  reflectedAt: DateTime.utc(2026, 1, 2),
-                ),
-              ],
-              journalOwnerName: null,
-              exportedAt: exportedAt,
-            )
-            .txtBytes,
+        builder.build(
+          items: [
+            item(
+              id: '1',
+              revealId: 'a5f3c111-1111-4111-8111-000000000001',
+              text: 'A wisdom with a reflection',
+              keptAt: DateTime.utc(2026, 1, 1),
+              reflection: 'My own private words about it.',
+              reflectedAt: DateTime.utc(2026, 1, 2),
+            ),
+          ],
+          journalOwnerName: null,
+          exportedAt: exportedAt,
+        ).txtBytes,
       );
 
       expect(text, contains('A wisdom with a reflection'));

@@ -184,7 +184,8 @@ class _FaultInjectingStore implements SyncPersistenceStore {
     if (failNextLoadPendingDeletionTransaction) {
       failNextLoadPendingDeletionTransaction = false;
       throw const SyncPersistenceStoreException(
-        'test-fault', 'synthetic corrupted read',
+        'test-fault',
+        'synthetic corrupted read',
       );
     }
     return _inner.loadPendingDeletionTransaction();
@@ -195,7 +196,8 @@ class _FaultInjectingStore implements SyncPersistenceStore {
     if (failNextLoadAccountState) {
       failNextLoadAccountState = false;
       throw const SyncPersistenceStoreException(
-        'test-fault', 'synthetic corrupted read',
+        'test-fault',
+        'synthetic corrupted read',
       );
     }
     return _inner.loadAccountState(accountFingerprint);
@@ -213,8 +215,8 @@ class _FaultInjectingStore implements SyncPersistenceStore {
   @override
   Future<void> applyMutationOutcomes(String accountFingerprint,
           {Set<String> acknowledgedMutationIds = const {},
-          Map<String, PersistedOutboxMutationStatus>
-              updatedStatusByMutationId = const {}}) =>
+          Map<String, PersistedOutboxMutationStatus> updatedStatusByMutationId =
+              const {}}) =>
       _inner.applyMutationOutcomes(accountFingerprint,
           acknowledgedMutationIds: acknowledgedMutationIds,
           updatedStatusByMutationId: updatedStatusByMutationId);
@@ -225,8 +227,8 @@ class _FaultInjectingStore implements SyncPersistenceStore {
       _inner.readPendingMutations(accountFingerprint);
 
   @override
-  Future<void> replaceRecordSystemFields(String accountFingerprint,
-          String recordName, String systemFields) =>
+  Future<void> replaceRecordSystemFields(
+          String accountFingerprint, String recordName, String systemFields) =>
       _inner.replaceRecordSystemFields(
           accountFingerprint, recordName, systemFields);
 
@@ -264,16 +266,17 @@ class _FaultInjectingStore implements SyncPersistenceStore {
   @override
   Future<CommitAssociatedAccountFingerprintResult>
       commitAssociatedAccountFingerprint(
-          {required String fingerprint, required String? expectedCurrent}) =>
-      _inner.commitAssociatedAccountFingerprint(
-          fingerprint: fingerprint, expectedCurrent: expectedCurrent);
+              {required String fingerprint,
+              required String? expectedCurrent}) =>
+          _inner.commitAssociatedAccountFingerprint(
+              fingerprint: fingerprint, expectedCurrent: expectedCurrent);
 
   @override
   Future<ClearAssociatedAccountFingerprintResult>
       clearAssociatedAccountFingerprintIfCurrent(
-          {required String expectedCurrent}) =>
-      _inner.clearAssociatedAccountFingerprintIfCurrent(
-          expectedCurrent: expectedCurrent);
+              {required String expectedCurrent}) =>
+          _inner.clearAssociatedAccountFingerprintIfCurrent(
+              expectedCurrent: expectedCurrent);
 
   @override
   Future<List<String>> loadMeaningfulAccountFingerprints() =>
@@ -327,14 +330,16 @@ void main() {
         outbox: outbox,
       );
 
-  test('1. sync disabled (no association marker) -> disabled, no CloudKit '
+  test(
+      '1. sync disabled (no association marker) -> disabled, no CloudKit '
       'work initiated', () async {
     final snapshot = await evaluator.evaluate();
     expect(snapshot.state, SyncHealthState.disabled);
     expect(snapshot.syncEnabled, isFalse);
   });
 
-  test('2. enabled + valid account + fully converged durable state -> '
+  test(
+      '2. enabled + valid account + fully converged durable state -> '
       'healthy', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedAccount(_fingerprintA, completeBucket());
@@ -344,8 +349,7 @@ void main() {
     expect(snapshot.outboxPendingCount, 0);
   });
 
-  test('3. enabled + pending local mutation -> pending, not healthy',
-      () async {
+  test('3. enabled + pending local mutation -> pending, not healthy', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedAccount(
       _fingerprintA,
@@ -360,7 +364,8 @@ void main() {
     expect(snapshot.hasUnresolvedOutboxEntries, isFalse);
   });
 
-  test('4. pending tombstone (delete) with no failure -> pending, not '
+  test(
+      '4. pending tombstone (delete) with no failure -> pending, not '
       'healthy; a conflicted tombstone -> recoveryRequired, not healthy',
       () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
@@ -390,7 +395,8 @@ void main() {
     expect(snapshot.hasUnresolvedOutboxEntries, isTrue);
   });
 
-  test('5. account unavailable -> iCloudUnavailable; local durable state '
+  test(
+      '5. account unavailable -> iCloudUnavailable; local durable state '
       'untouched', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedAccount(_fingerprintA, completeBucket());
@@ -426,7 +432,8 @@ void main() {
     expect(snapshot.state, SyncHealthState.temporaryFailure);
   });
 
-  test('7. interrupted bootstrap -> pending (resumable safely), not '
+  test(
+      '7. interrupted bootstrap -> pending (resumable safely), not '
       'healthy and not recoveryRequired', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedAccount(
@@ -441,7 +448,8 @@ void main() {
     expect(snapshot.state, SyncHealthState.pending);
   });
 
-  test('8. account-change/re-association required -> recoveryRequired, '
+  test(
+      '8. account-change/re-association required -> recoveryRequired, '
       'never falsely healthy', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedAccount(_fingerprintA, completeBucket());
@@ -458,7 +466,8 @@ void main() {
     expect(snapshot.state, SyncHealthState.recoveryRequired);
   });
 
-  test('9. pending Remove-from-iCloud deletion wins over an otherwise '
+  test(
+      '9. pending Remove-from-iCloud deletion wins over an otherwise '
       'healthy-looking bucket', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedAccount(_fingerprintA, completeBucket());
@@ -479,7 +488,8 @@ void main() {
         DeletionTransactionStage.cloudPurgePending);
   });
 
-  test('10. localFinalizePending deletion stage still resolves through the '
+  test(
+      '10. localFinalizePending deletion stage still resolves through the '
       'recovery path, not normal sync', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     innerStore.seedPendingDeletionTransaction(
@@ -498,7 +508,8 @@ void main() {
         DeletionTransactionStage.localFinalizePending);
   });
 
-  test('a deletion transaction whose most recent runtime pass reported a '
+  test(
+      'a deletion transaction whose most recent runtime pass reported a '
       'terminal failure (e.g. account mismatch/epoch conflict) -> '
       'recoveryRequired, not recovering', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
@@ -523,7 +534,8 @@ void main() {
     expect(snapshot.state, SyncHealthState.recoveryRequired);
   });
 
-  test('a deletion-state read that throws (corrupted record) -> '
+  test(
+      'a deletion-state read that throws (corrupted record) -> '
       'recoveryRequired, before any other read is trusted', () async {
     store.failNextLoadPendingDeletionTransaction = true;
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
@@ -533,7 +545,8 @@ void main() {
     expect(snapshot.state, SyncHealthState.recoveryRequired);
   });
 
-  test('an unreadable account bucket -> recoveryRequired, not a blind '
+  test(
+      'an unreadable account bucket -> recoveryRequired, not a blind '
       'retry-eligible state', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
     store.failNextLoadAccountState = true;
@@ -542,7 +555,8 @@ void main() {
     expect(snapshot.state, SyncHealthState.recoveryRequired);
   });
 
-  test('11/14. evaluate() always reflects the current durable state fresh '
+  test(
+      '11/14. evaluate() always reflects the current durable state fresh '
       '-- never caches a stale prior read, exactly as a fresh process would '
       'observe after a kill/relaunch', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
@@ -566,10 +580,12 @@ void main() {
       bridge: bridge,
       readRuntimeStatus: () => _emptyRuntimeStatus,
     );
-    expect((await relaunchedEvaluator.evaluate()).state, SyncHealthState.pending);
+    expect(
+        (await relaunchedEvaluator.evaluate()).state, SyncHealthState.pending);
   });
 
-  test('19. a terminal runtime failure always overrides an otherwise clean '
+  test(
+      '19. a terminal runtime failure always overrides an otherwise clean '
       'durable baseline -- healthy is never reported while a critical '
       'recovery condition is live', () async {
     innerStore.seedAssociatedAccountFingerprint(_fingerprintA);
@@ -639,8 +655,8 @@ void main() {
       'serverToken',
       _fingerprintA,
     ];
-    final rendered = '${summary.toString()} ${snapshot.toString()}'
-        .toLowerCase();
+    final rendered =
+        '${summary.toString()} ${snapshot.toString()}'.toLowerCase();
     for (final term in forbidden) {
       expect(rendered.contains(term.toLowerCase()), isFalse,
           reason: 'toLogSafeSummary/toString leaked "$term"');

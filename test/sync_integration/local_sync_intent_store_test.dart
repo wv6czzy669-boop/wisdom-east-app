@@ -809,7 +809,8 @@ void main() {
     // on the Dart VM's own coarser host-test clock. Deliberately NOT run
     // through `canonicalizeKeptTimestamp` here, to reproduce the pre-fix
     // caller shape against the store's real, unmodified verification logic.
-    final uncanonicalizedClockRead = DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
+    final uncanonicalizedClockRead =
+        DateTime.utc(2026, 8, 9, 12, 0, 0, 123, 456);
 
     final intent = activeIntent(
       intentId: intentId1,

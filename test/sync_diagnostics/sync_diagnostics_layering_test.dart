@@ -102,8 +102,7 @@ void main() {
         .toList();
   });
 
-  test('1. every file scanned is a real, non-empty pure-Dart source file',
-      () {
+  test('1. every file scanned is a real, non-empty pure-Dart source file', () {
     expect(diagnosticsFiles, isNotEmpty);
     for (final file in diagnosticsFiles) {
       expect(file.readAsStringSync().trim(), isNotEmpty);
@@ -133,11 +132,10 @@ void main() {
         final match = RegExp(r'''['"]([^'"]+)['"]''').firstMatch(trimmed);
         if (match == null) continue;
         final target = match.group(1)!;
-        final isApprovedRelative =
-            target.startsWith('../sync_persistence/') ||
-                target.startsWith('../sync_platform/') ||
-                target.startsWith('../sync_runtime/') ||
-                !target.contains('/'); // same-directory sibling import
+        final isApprovedRelative = target.startsWith('../sync_persistence/') ||
+            target.startsWith('../sync_platform/') ||
+            target.startsWith('../sync_runtime/') ||
+            !target.contains('/'); // same-directory sibling import
         final isApprovedPackage = allowedPrefixes.any(target.startsWith);
         if (!isApprovedRelative && !isApprovedPackage) {
           violations.add('${file.path}: "$trimmed"');
@@ -220,8 +218,7 @@ void main() {
       'comment for why); only lib/main.dart, '
       'lib/sync_runtime/cloud_kit_sync_runtime_coordinator.dart, and '
       'lib/services/app_services.dart may ever call ".requestSync(", per '
-      'test/sync_runtime/sync_runtime_layering_test.dart\'s own allowlist',
-      () {
+      'test/sync_runtime/sync_runtime_layering_test.dart\'s own allowlist', () {
     final violations = <String>[];
     for (final file in diagnosticsFiles) {
       final codeOnly = _stripComments(file.readAsStringSync());

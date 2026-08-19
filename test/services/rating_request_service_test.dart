@@ -72,7 +72,8 @@ void main() {
     expect(platform.requestCount, 1);
   });
 
-  test('a fresh service instance backed by the same persisted state never '
+  test(
+      'a fresh service instance backed by the same persisted state never '
       're-requests (survives process restart)', () async {
     for (var i = 0; i < 4; i++) {
       await service.recordCompletedRitual();
@@ -86,7 +87,8 @@ void main() {
     expect(platform.requestCount, 1);
   });
 
-  test('a native request failure is contained and never rethrown, and never '
+  test(
+      'a native request failure is contained and never rethrown, and never '
       'causes a retry', () async {
     platform.shouldThrow = true;
     for (var i = 0; i < 4; i++) {

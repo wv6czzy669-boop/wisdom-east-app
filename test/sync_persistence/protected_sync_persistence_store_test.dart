@@ -1773,7 +1773,8 @@ void main() {
   // for the full contract this group exercises against the real,
   // file-backed store.
   // ---------------------------------------------------------------------
-  group('deletion transaction (loadPendingDeletionTransaction / '
+  group(
+      'deletion transaction (loadPendingDeletionTransaction / '
       'beginDeletionTransaction / advanceDeletionTransactionStage / '
       'clearDeletionTransaction)', () {
     test('1. absent transaction loads as null', () async {
@@ -2030,7 +2031,8 @@ void main() {
       expect(await store.loadPendingDeletionTransaction(), isNull);
     });
 
-    test('14. clearDeletionTransaction with no transaction at all is a safe '
+    test(
+        '14. clearDeletionTransaction with no transaction at all is a safe '
         'no-op', () async {
       final store = buildStore();
       await store.clearDeletionTransaction(accountFingerprint: fingerprintA);
@@ -2079,8 +2081,8 @@ void main() {
         accountFingerprint: fingerprintA,
       );
       expect(begin.toString().contains(fingerprintA), isFalse);
-      expect(begin.toLogSafeSummary().toString().contains(fingerprintA),
-          isFalse);
+      expect(
+          begin.toLogSafeSummary().toString().contains(fingerprintA), isFalse);
       expect(begin.toString().contains(otherEpoch.value), isFalse);
 
       final advance = await store.advanceDeletionTransactionStage(
@@ -2166,8 +2168,7 @@ void main() {
       expect(pending.single.change.enqueuedAt, canonicalEnqueuedAt);
       expect(pending.single.change.enqueuedAt.microsecond, 0);
       expect(
-        pending.single.change.enqueuedAt
-            .isAtSameMomentAs(canonicalEnqueuedAt),
+        pending.single.change.enqueuedAt.isAtSameMomentAs(canonicalEnqueuedAt),
         isTrue,
       );
 

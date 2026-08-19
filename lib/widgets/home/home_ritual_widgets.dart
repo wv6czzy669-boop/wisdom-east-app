@@ -2,131 +2,33 @@ part of '../../screens/home_screen.dart';
 
 TextStyle _homeWisdomStyle(
   double size, {
-  Color color = const Color(0xFFF4F0E8),
+  Color color = EastColors.ink,
   bool glow = false,
   double height = 1.28,
+  FontStyle fontStyle = FontStyle.normal,
 }) {
   return TextStyle(
     color: color,
     fontSize: size,
-    fontWeight: FontWeight.w300,
-    fontFamily: 'CormorantGaramond',
+    fontWeight: FontWeight.w400,
+    fontFamily: EastTypography.fontFamily,
+    fontFamilyFallback: EastTypography.fontFamilyFallback,
+    fontStyle: fontStyle,
     height: height,
     letterSpacing: 0.5,
     shadows: glow
         ? [
             Shadow(
-              color: const Color(0xFFF4F0E8).withValues(alpha: 0.12),
+              color: EastColors.ink.withValues(alpha: 0.12),
               blurRadius: 14,
             ),
             Shadow(
-              color: const Color(0xFFD9B86F).withValues(alpha: 0.045),
+              color: EastColors.accent.withValues(alpha: 0.045),
               blurRadius: 24,
             ),
           ]
         : null,
   );
-}
-
-class _HomeBackgroundDepth extends StatelessWidget {
-  const _HomeBackgroundDepth({
-    required this.depth,
-  });
-
-  final double depth;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 1000),
-      curve: Curves.easeInOutCubic,
-      color: Color.lerp(
-        const Color(0xFF040404),
-        const Color(0xFF000000),
-        depth,
-      ),
-    );
-  }
-}
-
-class _HomeGrainLayer extends StatelessWidget {
-  const _HomeGrainLayer({
-    required this.pulseController,
-    required this.reduceMotion,
-    required this.wisdomRevealed,
-  });
-
-  final AnimationController pulseController;
-  final bool reduceMotion;
-  final bool wisdomRevealed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: ExcludeSemantics(
-        child: IgnorePointer(
-          child: RepaintBoundary(
-            child: AnimatedBuilder(
-              animation: pulseController,
-              builder: (context, child) {
-                final pulse = pulseController.value;
-
-                return CustomPaint(
-                  painter: GrainPainter(
-                    movement: reduceMotion ? 0.0 : pulse,
-                    intensity: wisdomRevealed ? 0.01625 : 0.01235,
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeRevealGlow extends StatelessWidget {
-  const _HomeRevealGlow({
-    required this.opacity,
-  });
-
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: ExcludeSemantics(
-        child: IgnorePointer(
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 1400),
-            opacity: opacity,
-            child: Center(
-              child: Container(
-                width: 285,
-                height: 285,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFD9B86F).withValues(alpha: 0.085),
-                      blurRadius: 85,
-                      spreadRadius: 1,
-                    ),
-                    BoxShadow(
-                      color: const Color(0xFFF4F0E8).withValues(alpha: 0.035),
-                      blurRadius: 55,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _HomeMainRitualGesture extends StatelessWidget {
@@ -264,13 +166,13 @@ class _HomeRitualContent extends StatelessWidget {
             : onLockedCountdown
                 ? 22.0
                 : onPauseScreen
-                    ? 46.0
+                    ? 60.0
                     : onHeartScreen
-                        ? 46.0
+                        ? 60.0
                         : 34.0;
 
-    final finalColor = const Color(0xFFF4F0E8);
-    final darkColor = const Color(0xFF111111);
+    final finalColor = EastColors.ink;
+    final darkColor = EastColors.surface;
 
     final animatedTextColor = Color.lerp(
       darkColor,
@@ -365,8 +267,8 @@ class _HomeRitualContent extends StatelessWidget {
                                     textAlign: TextAlign.center,
                                     style: _homeWisdomStyle(
                                       textSize,
-                                      color: finalColor,
-                                      glow: true,
+                                      color: EastColors.ink,
+                                      height: 1.18,
                                     ),
                                   ),
                                   Text(
@@ -374,8 +276,8 @@ class _HomeRitualContent extends StatelessWidget {
                                     textAlign: TextAlign.center,
                                     style: _homeWisdomStyle(
                                       textSize,
-                                      color: finalColor,
-                                      glow: true,
+                                      color: EastColors.ink,
+                                      height: 1.18,
                                     ),
                                   ),
                                 ],
@@ -451,7 +353,7 @@ class _HomeLaunchMark extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: const Color(0xFFF4F0E8).withValues(alpha: 0.70),
+                  color: EastColors.ink.withValues(alpha: 0.70),
                   width: 0.85,
                 ),
               ),
@@ -463,7 +365,7 @@ class _HomeLaunchMark extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(
                     21.5,
-                    color: const Color(0xFFF4F0E8),
+                    color: EastColors.ink,
                   ),
                 ),
               ),
@@ -730,7 +632,7 @@ class _KeptTopNavBreath extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: const Color(0xFFF4F0E8),
+                  color: EastColors.ink,
                   width: TopNavRingGeometry.strokeWidth,
                 ),
               ),
@@ -791,6 +693,40 @@ class _HomeSettingsMenuControl extends StatelessWidget {
   }
 }
 
+class _HomeSaveCirclePainter extends CustomPainter {
+  const _HomeSaveCirclePainter({required this.filled});
+
+  static const double _strokeWidth = 1.0;
+  // The previous text glyph occupied a smaller visual area than its 31px
+  // layout box. Preserve that quiet visual scale while retaining the target.
+  static const double _visibleDiameter = 18.5;
+
+  final bool filled;
+
+  double get visibleDiameter => _visibleDiameter;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final outerRadius = _visibleDiameter / 2;
+    final paint = Paint()
+      ..color = EastColors.ink
+      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth;
+
+    canvas.drawCircle(
+      center,
+      filled ? outerRadius : outerRadius - (_strokeWidth / 2),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomeSaveCirclePainter oldDelegate) {
+    return oldDelegate.filled != filled;
+  }
+}
+
 class _HomeSaveControl extends StatelessWidget {
   const _HomeSaveControl({
     required this.opacity,
@@ -824,14 +760,11 @@ class _HomeSaveControl extends StatelessWidget {
     final value = isCurrentFavorite ? 'Kept' : 'Not kept';
     final hint = isCurrentFavorite ? null : 'Double tap to keep this wisdom';
 
-    final glyph = Text(
-      isCurrentFavorite ? '●' : '○',
-      style: const TextStyle(
-        color: Color(0xFFF4F0E8),
-        fontSize: 31,
-        fontWeight: FontWeight.w300,
-        fontFamily: 'CormorantGaramond',
-        height: 1,
+    final glyph = SizedBox.square(
+      dimension: 31,
+      child: CustomPaint(
+        key: const ValueKey('home-save-circle-paint'),
+        painter: _HomeSaveCirclePainter(filled: isCurrentFavorite),
       ),
     );
 
@@ -865,8 +798,8 @@ class _HomeSaveControl extends StatelessWidget {
     // that keeps this correct even if the glyph is ever changed to an
     // `Icon`.
     final iconButtonStyle = IconButton.styleFrom(
-      foregroundColor: const Color(0xFFF4F0E8),
-      disabledForegroundColor: const Color(0xFFF4F0E8),
+      foregroundColor: EastColors.ink,
+      disabledForegroundColor: EastColors.ink,
       backgroundColor: Colors.transparent,
       overlayColor: Colors.transparent,
       splashFactory: NoSplash.splashFactory,
@@ -974,7 +907,7 @@ class _SaveRingBreath extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: const Color(0xFFF4F0E8),
+                  color: EastColors.ink,
                   width: 0.8,
                 ),
               ),
@@ -1034,8 +967,9 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
                 style: TextStyle(
                   color: eastMutedTextColor.withValues(alpha: 0.70),
                   fontSize: 14.5,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
+                  fontWeight: FontWeight.w400,
+                  fontFamily: EastTypography.fontFamily,
+                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   height: 1.3,
                   letterSpacing: 0.4,
                 ),

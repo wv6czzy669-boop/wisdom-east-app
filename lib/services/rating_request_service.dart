@@ -66,9 +66,8 @@ class RatingRequestService {
     if (_requestAttemptedInMemory) return null;
     try {
       if (await _hasAttemptedRequest()) return null;
-      final count = await _preferencesAdapter
-              .getInt(completedRitualCountKey) ??
-          0;
+      final count =
+          await _preferencesAdapter.getInt(completedRitualCountKey) ?? 0;
       final next = count + 1;
       await _preferencesAdapter.setInt(completedRitualCountKey, next);
       return next;

@@ -1215,9 +1215,8 @@ void main() {
         isKeeper: false,
       );
 
-      final intent = (await harness.intentStore.loadIntents())
-          .firstWhere((i) => i.payload.operation ==
-              LocalSyncIntentOperation.reflectionSave);
+      final intent = (await harness.intentStore.loadIntents()).firstWhere((i) =>
+          i.payload.operation == LocalSyncIntentOperation.reflectionSave);
       expect(intent.enqueuedAt.microsecond, 0);
       expect(intent.enqueuedAt, expectedCanonicalEnqueuedAt);
     });
@@ -1242,9 +1241,8 @@ void main() {
 
       await harness.coordinator.recordReflectionDelete(itemId: itemId);
 
-      final intent = (await harness.intentStore.loadIntents())
-          .firstWhere((i) => i.payload.operation ==
-              LocalSyncIntentOperation.reflectionDelete);
+      final intent = (await harness.intentStore.loadIntents()).firstWhere((i) =>
+          i.payload.operation == LocalSyncIntentOperation.reflectionDelete);
       expect(intent.enqueuedAt.microsecond, 0);
       expect(intent.enqueuedAt, expectedCanonicalEnqueuedAt);
     });

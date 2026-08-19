@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/data/objects_catalog.dart';
 import 'package:wisdom_app/screens/objects_screen.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 import 'package:wisdom_app/widgets/objects/tshirt_color_selector.dart';
 
@@ -317,7 +318,7 @@ void main() {
         matching: find.text('DISCOVER THE OBJECTS'),
       ),
     );
-    expect(ctaText.style?.color, eastMutedTextColor);
+    expect(ctaText.style?.color, EastColors.utilityInk);
 
     // No enclosing box: the CTA's only ancestors up to the discover key are
     // plain layout widgets, never a decorated Container/Card/Material box.

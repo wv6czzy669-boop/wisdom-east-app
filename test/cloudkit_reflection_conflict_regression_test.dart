@@ -156,7 +156,8 @@ void main() {
     return records.single;
   }
 
-  group('CASE 1 -- primary hypothesis: stale remote after a fresh local '
+  group(
+      'CASE 1 -- primary hypothesis: stale remote after a fresh local '
       'Reflection save', () {
     test(
         'a stale remote record (no reflection, older updatedAt) for the '
@@ -249,8 +250,8 @@ void main() {
         mutationId: '99999999-0000-4000-8000-000000000002',
       );
 
-      final result = await incoming
-          .applyIncomingBatch(batchWith(olderDifferentRemote));
+      final result =
+          await incoming.applyIncomingBatch(batchWith(olderDifferentRemote));
       expect(result.status, IncomingApplyStatus.applied);
 
       final afterIncoming = await soleRecord();
@@ -288,8 +289,8 @@ void main() {
         mutationId: '99999999-0000-4000-8000-000000000003',
       );
 
-      final result = await incoming
-          .applyIncomingBatch(batchWith(genuinelyNewerRemote));
+      final result =
+          await incoming.applyIncomingBatch(batchWith(genuinelyNewerRemote));
       expect(result.status, IncomingApplyStatus.applied);
 
       final afterIncoming = await soleRecord();
@@ -389,7 +390,8 @@ void main() {
     });
   });
 
-  group('CASE 6 -- reflection still pending in the outbox when stale '
+  group(
+      'CASE 6 -- reflection still pending in the outbox when stale '
       'incoming arrives', () {
     test(
         'the LOCAL mutation, still only present as a pending outbox entry '

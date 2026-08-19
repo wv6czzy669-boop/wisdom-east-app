@@ -123,7 +123,8 @@ void main() {
     // A stray notification after disposal must be silently ignored --
     // FlutterError would fail this test if a disposed State's setState was
     // ever reached.
-    expect(() => app_services.keptStateRevisionNotifier.notify(), returnsNormally);
+    expect(
+        () => app_services.keptStateRevisionNotifier.notify(), returnsNormally);
     await tester.pumpAndSettle();
   });
 }

@@ -50,7 +50,8 @@ void main() {
     );
   }
 
-  test('a successful export shares both a JSON and a TXT file, built from '
+  test(
+      'a successful export shares both a JSON and a TXT file, built from '
       'the real active Kept/Reflection content', () async {
     final graph = KeptRepositoryTestGraph();
     graph.seed([
@@ -86,8 +87,7 @@ void main() {
     ]);
 
     final jsonBytes = await captured!.files!.first.readAsBytes();
-    final decoded =
-        jsonDecode(utf8.decode(jsonBytes)) as Map<String, Object?>;
+    final decoded = jsonDecode(utf8.decode(jsonBytes)) as Map<String, Object?>;
     final kept = decoded['kept'] as List<Object?>;
     expect(kept, hasLength(1));
     final reflections = decoded['reflections'] as List<Object?>;
@@ -118,8 +118,7 @@ void main() {
     await service.exportAndShare();
 
     final jsonBytes = await captured!.files!.first.readAsBytes();
-    final decoded =
-        jsonDecode(utf8.decode(jsonBytes)) as Map<String, Object?>;
+    final decoded = jsonDecode(utf8.decode(jsonBytes)) as Map<String, Object?>;
     expect(decoded['journalOwnerName'], 'Doğukan Işık');
   });
 
@@ -185,7 +184,8 @@ void main() {
     expect(transport.tracked, isEmpty);
   });
 
-  test('a share/generation failure returns false and leaves Kept/'
+  test(
+      'a share/generation failure returns false and leaves Kept/'
       'Reflection state untouched -- the app remains usable', () async {
     final graph = KeptRepositoryTestGraph();
     graph.seed([
@@ -210,7 +210,8 @@ void main() {
     expect(graph.store.envelope, envelopeBefore);
   });
 
-  test('neither the builder nor the service *codes against* CloudKit/'
+  test(
+      'neither the builder nor the service *codes against* CloudKit/'
       'sync-internal types -- structural proof by source inspection (doc-'
       'comment prose describing this guarantee is expected and excluded) '
       'that no network/iCloud read is required to export', () {

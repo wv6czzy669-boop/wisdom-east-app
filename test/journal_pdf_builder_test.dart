@@ -80,7 +80,8 @@ void main() {
     }
   });
 
-  test('physical page count is exactly cover(1) + title(1) + body-groups + '
+  test(
+      'physical page count is exactly cover(1) + title(1) + body-groups + '
       'final(1)', () async {
     final planner = const JournalLayoutPlanner();
     final items = List.generate(
@@ -90,9 +91,8 @@ void main() {
         revealId: 'r-$i',
         text: 'A kept wisdom line, entry number $i in this run.',
         keptAt: now.subtract(Duration(days: 300 - i * 7)),
-        reflection: i.isEven
-            ? 'A reflection of modest length for entry $i.'
-            : null,
+        reflection:
+            i.isEven ? 'A reflection of modest length for entry $i.' : null,
       ),
     );
     final expectedBodyGroups = planner.plan(items).length;
@@ -109,7 +109,8 @@ void main() {
     );
   });
 
-  test('an empty item list still produces a valid cover + title + final-'
+  test(
+      'an empty item list still produces a valid cover + title + final-'
       'only document -- no meaningless body pages', () async {
     final bytes = await JournalPdfBuilder().build(
       items: const [],
@@ -139,7 +140,8 @@ void main() {
     expect(_physicalPageCount(bytes), 3);
   });
 
-  test('adding more content produces at least as many physical pages, and '
+  test(
+      'adding more content produces at least as many physical pages, and '
       'strictly more once content genuinely no longer fits', () async {
     final few = [
       item(
@@ -178,7 +180,8 @@ void main() {
     );
   });
 
-  test('a single genuinely oversized reflection generates extra pages '
+  test(
+      'a single genuinely oversized reflection generates extra pages '
       'rather than crashing, being clipped, or collapsing to zero content',
       () async {
     final hugeReflection = List.generate(
@@ -207,7 +210,8 @@ void main() {
     expect(bytes, isNotEmpty);
   });
 
-  test('Unicode/non-ASCII wisdom, Reflection, and owner name generate '
+  test(
+      'Unicode/non-ASCII wisdom, Reflection, and owner name generate '
       'successfully with no crash and non-trivial output', () async {
     final items = [
       item(
@@ -230,7 +234,8 @@ void main() {
     expect(_physicalPageCount(bytes), 4); // cover + title + 1 body + final
   });
 
-  test('generation is purely a function of its arguments -- '
+  test(
+      'generation is purely a function of its arguments -- '
       'JournalPdfBuilder holds no reference to any Kept/Reflection/daily-'
       'access/Return service, so it structurally cannot mutate any of '
       'them', () async {

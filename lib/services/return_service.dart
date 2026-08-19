@@ -186,8 +186,9 @@ class ReturnService {
         return anniversaryItem;
       }
 
-      final pinnedItem =
-          state.currentRevealId == null ? null : byRevealId[state.currentRevealId];
+      final pinnedItem = state.currentRevealId == null
+          ? null
+          : byRevealId[state.currentRevealId];
       final pinnedStillWithinCadence = state.currentSelectedAt != null &&
           now.isBefore(state.currentSelectedAt!.add(newSelectionCadence));
 

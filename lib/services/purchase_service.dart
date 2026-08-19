@@ -664,7 +664,8 @@ class PurchaseService extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
         final transactionKey = _transactionKey(purchase);
-        final alreadyPersisted = _persistedTransactions.contains(transactionKey);
+        final alreadyPersisted =
+            _persistedTransactions.contains(transactionKey);
         var persisted = alreadyPersisted;
         if (!persisted) {
           persisted = await _persistKeeperEntitlement();

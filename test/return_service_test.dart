@@ -38,7 +38,10 @@ void main() {
     test('no Return is selected when nothing is at least 14 days old',
         () async {
       final items = [
-        item(revealId: revealA, text: 'Too new', keptAt: now.subtract(const Duration(days: 13))),
+        item(
+            revealId: revealA,
+            text: 'Too new',
+            keptAt: now.subtract(const Duration(days: 13))),
       ];
 
       final resolved = await service().resolveCurrentReturn(items);
@@ -52,7 +55,8 @@ void main() {
         item(
           revealId: revealA,
           text: 'Just under',
-          keptAt: now.subtract(const Duration(days: 14) - const Duration(seconds: 1)),
+          keptAt: now
+              .subtract(const Duration(days: 14) - const Duration(seconds: 1)),
         ),
       ];
       expect(await service().resolveCurrentReturn(justUnder), isNull);
@@ -70,7 +74,8 @@ void main() {
   });
 
   group('identity (revealId, never wisdom text)', () {
-    test('selection is keyed by revealId, and duplicate wisdom text across '
+    test(
+        'selection is keyed by revealId, and duplicate wisdom text across '
         'different revealIds remains independently eligible', () async {
       const sharedText = 'The exact same wisdom text twice';
       final items = [
@@ -97,11 +102,15 @@ void main() {
   });
 
   group('7-day new-selection cadence', () {
-    test('a second resolve within 7 days returns the same occurrence, even '
+    test(
+        'a second resolve within 7 days returns the same occurrence, even '
         'when a newer eligible occurrence has since appeared', () async {
       final svc = service();
       final initialItems = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
       final first = await svc.resolveCurrentReturn(initialItems);
       expect(first?.revealId, revealA);
@@ -109,19 +118,29 @@ void main() {
       now = now.add(const Duration(days: 3));
       final laterItems = [
         ...initialItems,
-        item(revealId: revealB, text: 'Second, also eligible now', keptAt: now.subtract(const Duration(days: 15))),
+        item(
+            revealId: revealB,
+            text: 'Second, also eligible now',
+            keptAt: now.subtract(const Duration(days: 15))),
       ];
       final second = await svc.resolveCurrentReturn(laterItems);
 
       expect(second?.revealId, revealA);
     });
 
-    test('reopening repeatedly during the same window always reopens the '
+    test(
+        'reopening repeatedly during the same window always reopens the '
         'same selected occurrence', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
-        item(revealId: revealB, text: 'Second', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealB,
+            text: 'Second',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
       final first = await svc.resolveCurrentReturn(items);
 
@@ -131,12 +150,19 @@ void main() {
       }
     });
 
-    test('rebuild/relaunch/background/resume never rerolls -- a fresh '
+    test(
+        'rebuild/relaunch/background/resume never rerolls -- a fresh '
         'ReturnService instance backed by the same persisted store resolves '
         'to the exact same pinned occurrence', () async {
       final items = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
-        item(revealId: revealB, text: 'Second', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealB,
+            text: 'Second',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
       final first = await service().resolveCurrentReturn(items);
 
@@ -151,7 +177,10 @@ void main() {
     test('a new Return may be selected once 7 days have elapsed', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
       final first = await svc.resolveCurrentReturn(items);
       expect(first?.revealId, revealA);
@@ -159,7 +188,10 @@ void main() {
       now = now.add(const Duration(days: 7));
       final laterItems = [
         ...items,
-        item(revealId: revealB, text: 'Second', keptAt: now.subtract(const Duration(days: 15))),
+        item(
+            revealId: revealB,
+            text: 'Second',
+            keptAt: now.subtract(const Duration(days: 15))),
       ];
       final second = await svc.resolveCurrentReturn(laterItems);
 
@@ -170,11 +202,15 @@ void main() {
   });
 
   group('selection priority', () {
-    test('never-returned eligible occurrences are preferred over '
+    test(
+        'never-returned eligible occurrences are preferred over '
         'previously-returned ones', () async {
       final svc = service();
       final firstRoundItems = [
-        item(revealId: revealA, text: 'Already returned', keptAt: now.subtract(const Duration(days: 40))),
+        item(
+            revealId: revealA,
+            text: 'Already returned',
+            keptAt: now.subtract(const Duration(days: 40))),
       ];
       final firstSelection = await svc.resolveCurrentReturn(firstRoundItems);
       expect(firstSelection?.revealId, revealA);
@@ -182,7 +218,10 @@ void main() {
       now = now.add(const Duration(days: 7));
       final secondRoundItems = [
         ...firstRoundItems,
-        item(revealId: revealB, text: 'Never returned', keptAt: now.subtract(const Duration(days: 14))),
+        item(
+            revealId: revealB,
+            text: 'Never returned',
+            keptAt: now.subtract(const Duration(days: 14))),
       ];
       final secondSelection = await svc.resolveCurrentReturn(secondRoundItems);
 
@@ -195,7 +234,10 @@ void main() {
         () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'Only candidate', keptAt: now.subtract(const Duration(days: 100))),
+        item(
+            revealId: revealA,
+            text: 'Only candidate',
+            keptAt: now.subtract(const Duration(days: 100))),
       ];
       final first = await svc.resolveCurrentReturn(items);
       expect(first?.revealId, revealA);
@@ -213,11 +255,15 @@ void main() {
       expect(third?.revealId, revealA);
     });
 
-    test('once 90 days have passed, the same occurrence may be selected '
+    test(
+        'once 90 days have passed, the same occurrence may be selected '
         'again', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'Only candidate', keptAt: now.subtract(const Duration(days: 100))),
+        item(
+            revealId: revealA,
+            text: 'Only candidate',
+            keptAt: now.subtract(const Duration(days: 100))),
       ];
       await svc.resolveCurrentReturn(items);
 
@@ -230,13 +276,20 @@ void main() {
       expect(resolved?.revealId, revealA);
     });
 
-    test('if the 7-day cadence elapsed but every eligible candidate is '
+    test(
+        'if the 7-day cadence elapsed but every eligible candidate is '
         'still within its own 90-day gap, the 90-day protection is not '
         'bypassed and no repeat is manufactured', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'A', keptAt: now.subtract(const Duration(days: 100))),
-        item(revealId: revealB, text: 'B', keptAt: now.subtract(const Duration(days: 100))),
+        item(
+            revealId: revealA,
+            text: 'A',
+            keptAt: now.subtract(const Duration(days: 100))),
+        item(
+            revealId: revealB,
+            text: 'B',
+            keptAt: now.subtract(const Duration(days: 100))),
       ];
       final first = await svc.resolveCurrentReturn(items);
       final firstRevealId = first!.revealId;
@@ -265,11 +318,15 @@ void main() {
       expect(resolved, isNull);
     });
 
-    test('reports the full 7-day cadence immediately after a fresh '
+    test(
+        'reports the full 7-day cadence immediately after a fresh '
         'selection', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
       await svc.resolveCurrentReturn(items);
 
@@ -280,7 +337,10 @@ void main() {
     test('decreases as time passes without any resolve call', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
       await svc.resolveCurrentReturn(items);
 
@@ -289,11 +349,15 @@ void main() {
       expect(remaining, const Duration(days: 5));
     });
 
-    test('never negative -- reports Duration.zero once the cadence window '
+    test(
+        'never negative -- reports Duration.zero once the cadence window '
         'has fully elapsed', () async {
       final svc = service();
       final items = [
-        item(revealId: revealA, text: 'Only candidate', keptAt: now.subtract(const Duration(days: 100))),
+        item(
+            revealId: revealA,
+            text: 'Only candidate',
+            keptAt: now.subtract(const Duration(days: 100))),
       ];
       await svc.resolveCurrentReturn(items);
 
@@ -307,13 +371,17 @@ void main() {
       expect(remaining!.isNegative, isFalse);
     });
 
-    test('never mutates or influences selection -- resolveCurrentReturn '
+    test(
+        'never mutates or influences selection -- resolveCurrentReturn '
         'behaves identically whether or not cadenceRemaining was ever '
         'called in between', () async {
       final withoutQuery = service();
       final withQuery = service();
       final items = [
-        item(revealId: revealA, text: 'First', keptAt: now.subtract(const Duration(days: 20))),
+        item(
+            revealId: revealA,
+            text: 'First',
+            keptAt: now.subtract(const Duration(days: 20))),
       ];
 
       final first = await withoutQuery.resolveCurrentReturn(items);
@@ -335,7 +403,8 @@ void main() {
   // comparisons are never at the mercy of the test machine's timezone
   // offset relative to a fixed UTC instant.
   group('anniversary priority', () {
-    test('a genuine one-year-earlier same month/day occurrence is '
+    test(
+        'a genuine one-year-earlier same month/day occurrence is '
         'recognized and selected as the anniversary candidate', () async {
       final svc = service();
       now = DateTime(2026, 8, 16, 12);
@@ -377,8 +446,7 @@ void main() {
       expect(resolved, isNull);
     });
 
-    test('an occurrence from multiple years earlier also qualifies',
-        () async {
+    test('an occurrence from multiple years earlier also qualifies', () async {
       final svc = service();
       now = DateTime(2026, 8, 16, 12);
       final items = [
@@ -395,7 +463,8 @@ void main() {
       expect(await svc.cadenceRemaining(), isNull);
     });
 
-    test('identical wisdom text across different revealIds remains '
+    test(
+        'identical wisdom text across different revealIds remains '
         'independently identifiable -- only the matching revealId '
         'occurrence is selected', () async {
       now = DateTime(2026, 8, 16, 12);
@@ -421,7 +490,8 @@ void main() {
       expect(resolved?.text, sharedText);
     });
 
-    test('a legacy occurrence with no trustworthy original date (no '
+    test(
+        'a legacy occurrence with no trustworthy original date (no '
         'keptAt) is never guessed into an anniversary', () async {
       now = DateTime(2026, 8, 16, 12);
       final items = [
@@ -440,7 +510,8 @@ void main() {
       expect(resolved, isNull);
     });
 
-    test('anniversary priority can surface even when the normal 7-day '
+    test(
+        'anniversary priority can surface even when the normal 7-day '
         'cadence has not elapsed, and does not reset or consume that '
         'cadence', () async {
       final svc = service();
@@ -474,7 +545,8 @@ void main() {
       expect(cadenceAfter, const Duration(days: 5));
     });
 
-    test('the existing normal current Return is preserved underneath an '
+    test(
+        'the existing normal current Return is preserved underneath an '
         'anniversary priority, and remains correctly available once the '
         'anniversary date passes', () async {
       final svc = service();
@@ -505,7 +577,8 @@ void main() {
       expect(afterAnniversary?.revealId, revealB);
     });
 
-    test('an anniversary occurrence already returned within the last 90 '
+    test(
+        'an anniversary occurrence already returned within the last 90 '
         'days is never forced -- normal Return behavior selects a '
         'different, never-returned occurrence instead', () async {
       final svc = service();
@@ -515,8 +588,7 @@ void main() {
         text: 'Selected 30 days before its own anniversary',
         keptAt: DateTime(2025, 8, 16, 9),
       );
-      final firstSelection =
-          await svc.resolveCurrentReturn([anniversaryItem]);
+      final firstSelection = await svc.resolveCurrentReturn([anniversaryItem]);
       expect(firstSelection?.revealId, revealA);
 
       // 30 days later: today is genuinely revealA's anniversary, but it
@@ -528,8 +600,8 @@ void main() {
         text: 'A different, never-returned occurrence',
         keptAt: DateTime(2026, 1, 1, 9),
       );
-      final resolved = await svc
-          .resolveCurrentReturn([anniversaryItem, freshCandidate]);
+      final resolved =
+          await svc.resolveCurrentReturn([anniversaryItem, freshCandidate]);
 
       // The anniversary is blocked by the 90-day rule -- ordinary Return
       // behavior takes over, and the fresh never-returned candidate wins,
@@ -537,7 +609,8 @@ void main() {
       expect(resolved?.revealId, revealB);
     });
 
-    test('multiple anniversary candidates deterministically prefer the '
+    test(
+        'multiple anniversary candidates deterministically prefer the '
         'most recent original year', () async {
       now = DateTime(2026, 8, 16, 12);
       final older = item(
@@ -583,7 +656,8 @@ void main() {
       expect(afterRelaunch?.revealId, first?.revealId);
     });
 
-    test('a February 29 occurrence maps to February 28 in a non-leap '
+    test(
+        'a February 29 occurrence maps to February 28 in a non-leap '
         'anniversary year', () async {
       final svc = service();
       now = DateTime(2025, 2, 28, 12); // 2025 is not a leap year.
@@ -604,7 +678,8 @@ void main() {
       expect(await svc.cadenceRemaining(), isNull);
     });
 
-    test('February 29 handling never also produces a duplicate March 1 '
+    test(
+        'February 29 handling never also produces a duplicate March 1 '
         'anniversary -- the occurrence is old enough to be an ordinary '
         'eligible Return regardless, but must only ever be selected via '
         'normal rotation, never forced as an anniversary', () async {
@@ -629,7 +704,8 @@ void main() {
       expect(cadenceRemaining, const Duration(days: 7));
     });
 
-    test('a February 29 occurrence matches exactly on February 29 again '
+    test(
+        'a February 29 occurrence matches exactly on February 29 again '
         'in a later leap year', () async {
       final svc = service();
       now = DateTime(2028, 2, 29, 12); // 2028 is a leap year.

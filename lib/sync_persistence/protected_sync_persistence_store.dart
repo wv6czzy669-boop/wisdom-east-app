@@ -724,8 +724,7 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
       clearAssociatedAccountFingerprintIfCurrent({
     required String expectedCurrent,
   }) {
-    return _coordinator
-        .runExclusive<ClearAssociatedAccountFingerprintResult>(
+    return _coordinator.runExclusive<ClearAssociatedAccountFingerprintResult>(
       resourceKey: resourceKey,
       operation: () async {
         final envelope = await _loadEnvelope();
@@ -916,7 +915,8 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
       operation: () async {
         final envelope = await _loadEnvelope();
         final current = envelope.pendingDeletionTransaction;
-        if (current == null || current.accountFingerprint != accountFingerprint) {
+        if (current == null ||
+            current.accountFingerprint != accountFingerprint) {
           return;
         }
         await _replaceEnvelope(

@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 
 abstract interface class WisdomShareHandler {
@@ -71,9 +72,9 @@ class WisdomShareCardRenderer {
 
   static const int pixelWidth = 1080;
   static const int pixelHeight = 1920;
-  static const Color backgroundColor = Color(0xFF030303);
-  static const Color foregroundColor = Color(0xFFF4F0E8);
-  static const String fontFamily = 'CormorantGaramond';
+  static const Color backgroundColor = EastColors.background;
+  static const Color foregroundColor = EastColors.ink;
+  static const String fontFamily = 'EBGaramond';
 
   static const double wisdomOpticalCenterY = 900;
 
@@ -190,7 +191,7 @@ class WisdomShareCardRenderer {
           color: foregroundColor,
           fontFamily: fontFamily,
           fontSize: 46,
-          fontWeight: FontWeight.w300,
+          fontWeight: FontWeight.w400,
           letterSpacing: 2.4,
           height: 1,
         ),
@@ -275,7 +276,7 @@ class WisdomShareCardRenderer {
           color: foregroundColor,
           fontFamily: fontFamily,
           fontSize: fontSize,
-          fontWeight: FontWeight.w300,
+          fontWeight: FontWeight.w400,
           letterSpacing: 0.8,
           height: lineHeight,
         ),

@@ -72,7 +72,8 @@ void main() {
     SyncHealthState.recovering,
     SyncHealthState.temporaryFailure,
   ]) {
-    test('${recoverable.name} -> resumeTriggered, resume called exactly '
+    test(
+        '${recoverable.name} -> resumeTriggered, resume called exactly '
         'once', () async {
       nextState = recoverable;
       final result = await coordinator.attemptRecovery();
@@ -82,7 +83,8 @@ void main() {
     });
   }
 
-  test('12. repeated recovery invocation is idempotent -- each call '
+  test(
+      '12. repeated recovery invocation is idempotent -- each call '
       're-evaluates fresh and triggers the existing pipeline again, never '
       'more than once per call, and never throws', () async {
     nextState = SyncHealthState.pending;
@@ -94,7 +96,8 @@ void main() {
     expect(triggerCallCount, 2);
   });
 
-  test('a not-safe-to-recover state followed by a resolved healthy state '
+  test(
+      'a not-safe-to-recover state followed by a resolved healthy state '
       'never leaves a stale trigger call behind', () async {
     nextState = SyncHealthState.recoveryRequired;
     await coordinator.attemptRecovery();

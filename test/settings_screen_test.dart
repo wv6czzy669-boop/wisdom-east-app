@@ -661,7 +661,8 @@ void main() {
 
   // EAST. Data Ownership / Export -- "Export My Data" Settings row.
   group('Export My Data', () {
-    testWidgets('exactly one Export My Data row exists, using the existing '
+    testWidgets(
+        'exactly one Export My Data row exists, using the existing '
         'Settings visual language and no Keeper badge', (tester) async {
       await pumpSettings(tester);
 
@@ -702,7 +703,8 @@ void main() {
         'entitlement state -- structural proof by source inspection: '
         'unlike Restore Purchases/Keeper, this row never reads '
         'PurchaseService/isKeeper', (tester) async {
-      final source = File('lib/screens/settings_screen.dart').readAsStringSync();
+      final source =
+          File('lib/screens/settings_screen.dart').readAsStringSync();
 
       // Two separate, precisely bounded export-only sections (this file's
       // unrelated existing rows sit *between* them, so a single combined
@@ -714,7 +716,8 @@ void main() {
         final start = source.indexOf(startMarker);
         final end = source.indexOf(endMarker);
         expect(start, greaterThan(-1), reason: 'missing "$startMarker"');
-        expect(end, greaterThan(start), reason: 'missing "$endMarker" after "$startMarker"');
+        expect(end, greaterThan(start),
+            reason: 'missing "$endMarker" after "$startMarker"');
         return source.substring(start, end);
       }
 
@@ -734,7 +737,8 @@ void main() {
       }
     });
 
-    testWidgets('a generation/share failure shows one quiet message and '
+    testWidgets(
+        'a generation/share failure shows one quiet message and '
         'leaves the screen fully usable -- no stack trace, no file path, '
         'no CloudKit terminology', (tester) async {
       final failingExportService = _RecordingDataExportService(
@@ -755,7 +759,8 @@ void main() {
       expect(find.text('Export My Data'), findsOneWidget);
     });
 
-    testWidgets('a second tap while export is already in progress is a '
+    testWidgets(
+        'a second tap while export is already in progress is a '
         'no-op -- never a second concurrent export/share invocation',
         (tester) async {
       final gate = Completer<void>();

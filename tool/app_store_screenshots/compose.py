@@ -18,15 +18,15 @@ RAW_DIR = SCREENSHOT_ROOT / "raw"
 FINAL_DIR = SCREENSHOT_ROOT / "final"
 REVIEW_DIR = SCREENSHOT_ROOT / "review"
 PREVIEW_DIR = REVIEW_DIR / "preview"
-FONT_PATH = REPO_ROOT / "assets/fonts/CormorantGaramond-Light.ttf"
+FONT_PATH = REPO_ROOT / "assets/fonts/EBGaramond-Variable.ttf"
 WISDOM_SOURCE = REPO_ROOT / "lib/data/wisdoms.dart"
 
 CANVAS_SIZE = (1320, 2868)
-BACKGROUND = (1, 1, 1)
-APP_BACKGROUND = (4, 4, 4)
-IVORY = (244, 240, 232)
-MUTED_IVORY = (170, 165, 156)
-BOUNDARY = (45, 42, 35)
+BACKGROUND = (226, 224, 217)
+APP_BACKGROUND = (226, 224, 217)
+IVORY = (44, 41, 36)
+MUTED_IVORY = (98, 93, 84)
+BOUNDARY = (195, 189, 178)
 HEADLINE_TOP = 132
 HEADLINE_FONT_SIZE = 104
 HEADLINE_SPACING = 2
@@ -39,8 +39,19 @@ BRAND_TOP = 397
 
 SCREENSHOTS = [
     {
-        "filename": "01_one_quiet_moment.png",
-        "raw": "01_wisdom_reveal_raw.png",
+        "filename": "01_ask_from_your_heart.png",
+        "raw": "01_ask_raw.png",
+        "headline": "Ask from your heart.",
+        "display_headline": "Ask from your heart.",
+        "source_screen": "Home ritual",
+        "source_state": "Authentic stable ask-from-your-heart ritual frame",
+        "source_wisdom_text": None,
+        "source_crop": (60, 650, 1260, 1750),
+        "show_brand": False,
+    },
+    {
+        "filename": "02_one_wisdom_each_day.png",
+        "raw": "02_wisdom_reveal_raw.png",
         "headline": "One quiet moment. One wisdom each day.",
         "display_headline": "One quiet moment.\nOne wisdom each day.",
         "source_screen": "Home",
@@ -48,17 +59,6 @@ SCREENSHOTS = [
         "source_wisdom_text": "Some answers arrive only after silence.",
         "source_crop": (60, 100, 1260, 2050),
         "show_brand": True,
-    },
-    {
-        "filename": "02_pause_feel_ask.png",
-        "raw": "02_pause_raw.png",
-        "headline": "Pause. Feel. Ask from your heart.",
-        "display_headline": "Pause. Feel. Ask from\nyour heart.",
-        "source_screen": "Home ritual",
-        "source_state": "Authentic stable Pause. ritual frame",
-        "source_wisdom_text": None,
-        "source_crop": (60, 100, 1260, 2200),
-        "show_brand": False,
     },
     {
         "filename": "03_keep_what_stays.png",
@@ -87,14 +87,14 @@ SCREENSHOTS = [
         "show_brand": False,
     },
     {
-        "filename": "05_presence_not_scrolling.png",
-        "raw": "05_opening_raw.png",
-        "headline": "Made for presence, not scrolling.",
-        "display_headline": "Made for presence,\nnot scrolling.",
-        "source_screen": "Home",
-        "source_state": "Authentic EAST. opening ritual mark",
+        "filename": "05_a_publication_of_what_you_kept.png",
+        "raw": "05_journal_raw.png",
+        "headline": "A quiet publication of what you kept.",
+        "display_headline": "A quiet publication\nof what you kept.",
+        "source_screen": "Journal",
+        "source_state": "Authentic generated Journal preview, cover mark and export action",
         "source_wisdom_text": None,
-        "source_crop": (60, 140, 1260, 2380),
+        "source_crop": (60, 1000, 1260, 2650),
         "show_brand": False,
     },
 ]
@@ -245,7 +245,7 @@ def _write_contact_sheet(final_paths: list[Path], profile: bytes) -> Path:
             margin * 2 + thumb_width * len(final_paths) + gap * (len(final_paths) - 1),
             margin * 2 + thumb_height,
         ),
-        (18, 18, 18),
+        BACKGROUND,
     )
     for index, path in enumerate(final_paths):
         with Image.open(path) as source:

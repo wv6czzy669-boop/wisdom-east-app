@@ -46,7 +46,8 @@ void main() {
       expect(args['unlockAtMillis'], unlockAt.millisecondsSinceEpoch);
     });
 
-    test('a local (non-UTC) unlockAt is converted to UTC millis before '
+    test(
+        'a local (non-UTC) unlockAt is converted to UTC millis before '
         'crossing the channel', () async {
       MethodCall? captured;
       setMethodHandler((call) async {

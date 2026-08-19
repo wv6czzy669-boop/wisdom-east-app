@@ -15,7 +15,8 @@ void main() {
     expect(await service.hasHandledNamePrompt(), isFalse);
   });
 
-  test('saveName trims surrounding whitespace, persists it, and marks the '
+  test(
+      'saveName trims surrounding whitespace, persists it, and marks the '
       'prompt handled', () async {
     final service = JournalOwnerService();
 
@@ -25,7 +26,8 @@ void main() {
     expect(await service.hasHandledNamePrompt(), isTrue);
   });
 
-  test('saveName with a blank/whitespace-only name behaves exactly like '
+  test(
+      'saveName with a blank/whitespace-only name behaves exactly like '
       'skip -- no name is ever stored', () async {
     final service = JournalOwnerService();
 
@@ -44,7 +46,8 @@ void main() {
     expect(await service.hasHandledNamePrompt(), isTrue);
   });
 
-  test('clearName removes a saved name without affecting whether the '
+  test(
+      'clearName removes a saved name without affecting whether the '
       'prompt has been handled', () async {
     final service = JournalOwnerService();
     await service.saveName('A Name');
@@ -55,7 +58,8 @@ void main() {
     expect(await service.hasHandledNamePrompt(), isTrue);
   });
 
-  test('a fresh instance backed by the same persisted store sees the same '
+  test(
+      'a fresh instance backed by the same persisted store sees the same '
       'state -- survives relaunch', () async {
     final first = JournalOwnerService();
     await first.saveName('Persisted Name');
@@ -66,7 +70,8 @@ void main() {
     expect(await relaunched.hasHandledNamePrompt(), isTrue);
   });
 
-  test('the name is never CloudKit-synced or analytics-tracked -- it is '
+  test(
+      'the name is never CloudKit-synced or analytics-tracked -- it is '
       'stored under its own device-local preferences key only, reachable '
       'exclusively through StoragePreferencesAdapter', () async {
     final service = JournalOwnerService();
@@ -78,7 +83,8 @@ void main() {
   });
 
   group('persistence failures never throw', () {
-    test('loadName/hasHandledNamePrompt/saveName/skip/clearName all fail '
+    test(
+        'loadName/hasHandledNamePrompt/saveName/skip/clearName all fail '
         'safe on a throwing adapter', () async {
       final service = JournalOwnerService(
         preferencesAdapter: _ThrowingPreferencesAdapter(),

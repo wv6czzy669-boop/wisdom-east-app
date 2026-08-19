@@ -3,22 +3,25 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
+import 'package:wisdom_app/screens/journal_screen.dart';
 import 'package:wisdom_app/screens/reflection_screen.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
+import 'package:wisdom_app/services/journal_owner_service.dart';
 import 'package:wisdom_app/services/kept_discovery_hint_service.dart';
 import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 
 import '../test/persistence_test_helpers.dart';
 
-const _warmBlack = Color(0xFF040404);
-const _ivory = Color(0xFFF4F0E8);
+const _stone = Color(0xFFE2E0D9);
+const _ink = Color(0xFF2C2924);
 const _revealId = 'a5f3c111-1111-4111-8111-111111111111';
 const _reflection = 'Today, I want to move without rushing.';
 const _heroWisdom = 'Some answers arrive only after silence.';
@@ -32,19 +35,20 @@ void main() {
       await binding.convertFlutterSurfaceToImage();
     }
 
+    await _captureAskFromHeart(tester, binding);
+
     await _captureExistingWisdom(
       tester,
       binding,
-      screenshotName: '01_wisdom_reveal_raw',
+      screenshotName: '02_wisdom_reveal_raw',
       wisdom: _heroWisdom,
       now: DateTime.utc(2026, 8, 4, 9, 41),
       remaining: const Duration(hours: 19, minutes: 24),
     );
 
-    await _captureRitualCandidates(tester, binding);
     await _captureKept(tester, binding);
     await _captureReflection(tester, binding);
-    await _captureOpening(tester, binding);
+    await _captureJournal(tester, binding);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -52,14 +56,14 @@ void main() {
 
 ThemeData _eastTheme() {
   return ThemeData(
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: _warmBlack,
-    colorScheme: const ColorScheme.dark(
-      surface: _warmBlack,
-      onSurface: _ivory,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: _stone,
+    colorScheme: const ColorScheme.light(
+      surface: _stone,
+      onSurface: _ink,
     ),
-    textTheme: ThemeData.dark().textTheme.apply(
-          fontFamily: 'CormorantGaramond',
+    textTheme: ThemeData.light().textTheme.apply(
+          fontFamily: 'EBGaramond',
         ),
   );
 }
@@ -132,7 +136,7 @@ Future<void> _captureExistingWisdom(
   await binding.takeScreenshot(screenshotName);
 }
 
-Future<void> _captureRitualCandidates(
+Future<void> _captureAskFromHeart(
   WidgetTester tester,
   IntegrationTestWidgetsFlutterBinding binding,
 ) async {
@@ -152,14 +156,14 @@ Future<void> _captureRitualCandidates(
     (state) => state.mainRitualActionSemanticsEnabled as bool,
   );
 
+  // Pause.
   await _tapCenter(tester);
   await _waitForHomeState(
     tester,
     (state) => state.screenStep == 1 && !(state.transitionInProgress as bool),
   );
-  expect(find.text('Pause.'), findsOneWidget);
-  await binding.takeScreenshot('02_pause_raw');
 
+  // Pause. Feel.
   await _tapCenter(tester);
   await _waitForHomeState(
     tester,
@@ -167,37 +171,75 @@ Future<void> _captureRitualCandidates(
         (state.pauseFeelOpacity as double) >= 1.0 &&
         !(state.transitionInProgress as bool),
   );
-  await _pumpFrames(tester, const Duration(milliseconds: 400));
 
-  expect(find.text('Pause.'), findsOneWidget);
-  expect(find.text('Feel.'), findsOneWidget);
-  await binding.takeScreenshot('02_pause_feel_raw');
+  // Ask from your heart.
+  await _tapCenter(tester);
+  await _waitForHomeState(
+    tester,
+    (state) => state.screenStep == 2 && !(state.transitionInProgress as bool),
+  );
+  await _pumpFrames(tester, const Duration(milliseconds: 500));
+  expect(find.text('Ask from'), findsOneWidget);
+  expect(find.text('your heart.'), findsOneWidget);
+  await binding.takeScreenshot('01_ask_raw');
 }
 
-Future<void> _captureOpening(
+Future<void> _captureJournal(
   WidgetTester tester,
   IntegrationTestWidgetsFlutterBinding binding,
 ) async {
   await _clearCaptureSurface(tester);
-  await _resetPreferences();
-  final now = DateTime.utc(2026, 8, 4, 9, 41);
+  SharedPreferences.setMockInitialValues({
+    JournalOwnerService.promptHandledKey: true,
+  });
+  final items = <FavoriteItem>[
+    FavoriteItem(
+      id: 'journal-1',
+      revealId: '00000000-0000-4000-8000-000000000005',
+      date: 'August 1, 2026',
+      text: _presenceWisdom,
+      keptAt: DateTime.utc(2026, 8, 1).toIso8601String(),
+    ),
+    FavoriteItem(
+      id: 'journal-2',
+      revealId: '00000000-0000-4000-8000-000000000006',
+      date: 'August 2, 2026',
+      text: 'Clarity often arrives after stillness.',
+      reflection: _reflection,
+      reflectedAt: '2026-08-02T09:41:00.000Z',
+      keptAt: DateTime.utc(2026, 8, 2).toIso8601String(),
+    ),
+    FavoriteItem(
+      id: 'journal-3',
+      revealId: '00000000-0000-4000-8000-000000000007',
+      date: 'August 3, 2026',
+      text: _heroWisdom,
+      keptAt: DateTime.utc(2026, 8, 3).toIso8601String(),
+    ),
+  ];
+
   await tester.pumpWidget(
-    _homeApp(
-      dailyGraph: DailyAccessTestGraph(
-        adapter: _MemoryStoragePreferencesAdapter(),
-        clock: () => now,
+    _materialScreen(
+      JournalScreen(
+        items: items,
+        isKeeper: true,
       ),
-      clock: () => now,
     ),
   );
-  await _waitForHomeState(
-    tester,
-    (state) => state.mainRitualActionSemanticsEnabled as bool,
-  );
-  await _pumpFrames(tester, const Duration(milliseconds: 500));
-  expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
-  expect(find.text('EAST.'), findsOneWidget);
-  await binding.takeScreenshot('05_opening_raw');
+
+  var found = false;
+  for (var attempt = 0; attempt < 200; attempt += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (find.byType(PdfPreview).evaluate().isNotEmpty) {
+      found = true;
+      break;
+    }
+  }
+  expect(found, isTrue, reason: 'Journal preview did not render in time.');
+  await _pumpFrames(tester, const Duration(milliseconds: 900));
+  expect(find.text('Journal'), findsOneWidget);
+
+  await binding.takeScreenshot('05_journal_raw');
 }
 
 Future<void> _captureKept(

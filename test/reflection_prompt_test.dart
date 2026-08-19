@@ -2,8 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/utils/reflection_prompt.dart';
 
 void main() {
-  test('there are exactly the six approved prompts, in the approved order',
-      () {
+  test('there are exactly the six approved prompts, in the approved order', () {
     expect(reflectionPrompts, [
       'What remains?',
       'What stayed with you?',
@@ -38,7 +37,8 @@ void main() {
     }
   });
 
-  test('the mapping is pinned to fixed, known values -- proving it does not '
+  test(
+      'the mapping is pinned to fixed, known values -- proving it does not '
       'depend on String.hashCode (whose value is only guaranteed stable '
       'within a single Dart run, never across relaunches or versions)', () {
     // If this ever depended on `String.hashCode`, these exact assertions
@@ -56,8 +56,7 @@ void main() {
     );
   });
 
-  test('different keys can resolve independently (not forced to collide)',
-      () {
+  test('different keys can resolve independently (not forced to collide)', () {
     final resolved = {
       for (final key in [
         'a5f3c111-1111-4111-8111-111111111111',

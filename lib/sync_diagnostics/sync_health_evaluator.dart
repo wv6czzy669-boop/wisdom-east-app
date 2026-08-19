@@ -177,10 +177,10 @@ final class SyncHealthEvaluator {
     }
 
     final accountSnapshot = await _readAccountSnapshot();
-    final accountUsable = accountSnapshot.availability ==
-            CloudKitAccountAvailability.available &&
-        accountSnapshot.isPrivateDatabaseUsable &&
-        accountSnapshot.fingerprintResolved;
+    final accountUsable =
+        accountSnapshot.availability == CloudKitAccountAvailability.available &&
+            accountSnapshot.isPrivateDatabaseUsable &&
+            accountSnapshot.fingerprintResolved;
 
     if (deletionStateCorrupted) {
       return SyncHealthSnapshot(
@@ -250,8 +250,8 @@ final class SyncHealthEvaluator {
 
     final baseline = _deriveBaselineForAssociatedAccount(
       accountUsable: accountUsable,
-      accountFingerprintMatches: accountUsable &&
-          accountSnapshot.accountFingerprint == fingerprint,
+      accountFingerprintMatches:
+          accountUsable && accountSnapshot.accountFingerprint == fingerprint,
       bucketReadFailed: bucketReadFailed,
       bucket: bucket,
       hasUnresolvedOutboxEntries: hasUnresolvedOutboxEntries,
@@ -303,7 +303,8 @@ final class SyncHealthEvaluator {
     // `deletionStateCorrupted`/`terminalFailure` outcome from either
     // `CloudKitRemoteDeletionRunner` or `LocalDeletionFinalizer`'s own
     // `accountMismatch` case never advances the durable stage at all).
-    if (runtimeStatus.lastOutcome == SyncRuntimeOutcome.deletionStateCorrupted ||
+    if (runtimeStatus.lastOutcome ==
+            SyncRuntimeOutcome.deletionStateCorrupted ||
         runtimeStatus.lastOutcome == SyncRuntimeOutcome.terminalFailure) {
       return SyncHealthState.recoveryRequired;
     }

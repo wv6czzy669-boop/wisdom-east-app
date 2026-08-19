@@ -1215,7 +1215,8 @@ void main() {
     ]);
   });
 
-  test('keeper_purchase_started never fires when a purchase attempt is '
+  test(
+      'keeper_purchase_started never fires when a purchase attempt is '
       'blocked before it genuinely begins (already Keeper)', () async {
     service.dispose();
     final transport = _FakeAnalyticsTransport();
@@ -1238,7 +1239,8 @@ void main() {
     expect(transport.tracked, isEmpty);
   });
 
-  test('keeper_purchase_completed never fires for a canceled or failed '
+  test(
+      'keeper_purchase_completed never fires for a canceled or failed '
       'purchase', () async {
     service.dispose();
     final transport = _FakeAnalyticsTransport();
@@ -1255,7 +1257,8 @@ void main() {
     expect(transport.tracked, [AnalyticsEvent.keeperPurchaseStarted]);
   });
 
-  test('keeper_purchase_completed never fires twice for a redelivered '
+  test(
+      'keeper_purchase_completed never fires twice for a redelivered '
       'duplicate transaction', () async {
     service.dispose();
     final transport = _FakeAnalyticsTransport();
@@ -1271,7 +1274,8 @@ void main() {
     );
     await _flushEvents();
     expect(
-      transport.tracked.where((e) => e == AnalyticsEvent.keeperPurchaseCompleted),
+      transport.tracked
+          .where((e) => e == AnalyticsEvent.keeperPurchaseCompleted),
       hasLength(1),
     );
 
@@ -1284,7 +1288,8 @@ void main() {
     await _flushEvents();
 
     expect(
-      transport.tracked.where((e) => e == AnalyticsEvent.keeperPurchaseCompleted),
+      transport.tracked
+          .where((e) => e == AnalyticsEvent.keeperPurchaseCompleted),
       hasLength(1),
     );
   });
@@ -1318,7 +1323,8 @@ void main() {
     expect(transport.tracked, [AnalyticsEvent.keeperRestoreCompleted]);
   });
 
-  test('a failing analytics transport never affects a real purchase or '
+  test(
+      'a failing analytics transport never affects a real purchase or '
       'restore completing', () async {
     service.dispose();
     final transport = _FakeAnalyticsTransport()..shouldThrow = true;

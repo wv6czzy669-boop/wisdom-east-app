@@ -33,6 +33,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Generated App Store screenshot captures are local upload artifacts.
+/artifacts/
+
 # Symbolication related
 app.*.symbols
 

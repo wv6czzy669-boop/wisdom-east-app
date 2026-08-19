@@ -1981,7 +1981,8 @@ void main() {
       expect(notifyCount, 1);
     });
 
-    test('an incoming tombstone removing an existing record notifies exactly '
+    test(
+        'an incoming tombstone removing an existing record notifies exactly '
         'once', () async {
       await keptRepository.replaceAllRecords([
         buildRecord(id: 'local-1', revealId: revealIdA),

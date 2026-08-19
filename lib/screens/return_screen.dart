@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/favorite_item.dart';
+import '../theme/east_design.dart';
 import '../widgets/east_back_button.dart';
 
 /// EAST. Phase 9 — Return's own dedicated, read-only display screen.
@@ -25,15 +26,16 @@ class ReturnScreen extends StatelessWidget {
 
   TextStyle _style(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
     double height = 1.4,
     double letterSpacing = 0.35,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -43,10 +45,10 @@ class ReturnScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentItem = item;
     return Scaffold(
-      backgroundColor: const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF040404),
-        foregroundColor: const Color(0xFFF4F0E8),
+        backgroundColor: EastColors.background,
+        foregroundColor: EastColors.ink,
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
@@ -80,7 +82,7 @@ class ReturnScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: _style(
                       20,
-                      color: const Color(0xE6FFFFFF),
+                      color: EastColors.ink,
                       height: 1.5,
                     ),
                   ),
@@ -96,7 +98,7 @@ class ReturnScreen extends StatelessWidget {
                       key: const ValueKey('return-original-date'),
                       style: _style(
                         15,
-                        color: const Color(0xB3FFFFFF),
+                        color: EastColors.secondary,
                         letterSpacing: 0.9,
                       ),
                     ),
@@ -113,7 +115,7 @@ class ReturnScreen extends StatelessWidget {
                         key: const ValueKey('return-original-reflection'),
                         style: _style(
                           20,
-                          color: const Color(0xE6FFFFFF),
+                          color: EastColors.ink,
                           height: 1.45,
                         ),
                       ),

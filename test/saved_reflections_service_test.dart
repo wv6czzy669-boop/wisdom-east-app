@@ -769,7 +769,8 @@ void main() {
       expect(transport.tracked, isEmpty);
     });
 
-    test('no event ever carries wisdom or reflection text, revealId, or '
+    test(
+        'no event ever carries wisdom or reflection text, revealId, or '
         'itemId -- the transport receives only a closed AnalyticsEvent enum '
         'value', () async {
       final kept = await analyticsService.toggle(

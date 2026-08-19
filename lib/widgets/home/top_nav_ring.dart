@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/east_design.dart';
+
 /// Shared geometry for the Home top-navigation ring controls (Objects,
 /// Kept).
 ///
@@ -23,7 +25,7 @@ class TopNavRingGeometry {
   /// ring of a double-ring control.
   static const double innerRingInset = 6.0;
 
-  static const Color color = Colors.white70;
+  static const Color color = EastColors.ink;
 
   static double get innerDiameter => outerDiameter - (innerRingInset * 2);
 }

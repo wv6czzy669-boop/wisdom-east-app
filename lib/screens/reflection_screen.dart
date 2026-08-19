@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/saved_reflections_service.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
 import '../utils/reflection_prompt.dart';
@@ -87,15 +88,16 @@ class _ReflectionScreenState extends State<ReflectionScreen>
 
   TextStyle _style(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
     double height = 1.38,
     double letterSpacing = 0.35,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -157,7 +159,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: const Color(0xFF111111),
+          backgroundColor: EastColors.surface,
           content: Text(message, style: _style(17)),
         ),
       );
@@ -422,8 +424,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
+                  fontWeight: FontWeight.w400,
+                  fontFamily: EastTypography.fontFamily,
+                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -446,7 +449,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
           opacity: _confirmingDelete ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('reflection-delete-decision'),
-            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            color: EastColors.overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -463,7 +466,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                   textAlign: TextAlign.center,
                   style: _style(
                     15,
-                    color: const Color(0xB3FFFFFF),
+                    color: EastColors.secondary,
                     height: 1.45,
                     letterSpacing: 0.4,
                   ),
@@ -475,7 +478,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                     _deleteDecisionLabel(
                       'CANCEL',
                       onTap: _deleteInProgress ? null : _cancelDelete,
-                      color: const Color(0xB3FFFFFF),
+                      color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _deleteDecisionLabel(
@@ -483,7 +486,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                       onTap: _deleteInProgress
                           ? null
                           : () => unawaited(_confirmDelete()),
-                      color: const Color(0xFFF4F0E8),
+                      color: EastColors.ink,
                     ),
                   ],
                 ),
@@ -534,10 +537,10 @@ class _ReflectionScreenState extends State<ReflectionScreen>
         unawaited(_handlePopAttempt());
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF040404),
+        backgroundColor: EastColors.background,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF040404),
-          foregroundColor: const Color(0xFFF4F0E8),
+          backgroundColor: EastColors.background,
+          foregroundColor: EastColors.ink,
           surfaceTintColor: Colors.transparent,
           shadowColor: Colors.transparent,
           elevation: 0,
@@ -598,12 +601,12 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                           ),
                         ],
                         style: _style(20, height: 1.45),
-                        cursorColor: const Color(0xFFF4F0E8),
+                        cursorColor: EastColors.ink,
                         decoration: InputDecoration(
                           hintText: _prompt,
                           hintStyle: _style(
                             20,
-                            color: const Color(0x66FFFFFF),
+                            color: EastColors.hint,
                             height: 1.45,
                           ),
                           counter: characterCount >= counterThreshold
@@ -612,7 +615,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                                   '${SavedReflectionsService.maximumReflectionLength}',
                                   style: _style(
                                     13,
-                                    color: const Color(0x91FFFFFF),
+                                    color: EastColors.secondary,
                                   ),
                                 )
                               : const SizedBox.shrink(),

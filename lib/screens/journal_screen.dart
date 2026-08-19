@@ -9,6 +9,7 @@ import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/journal_owner_service.dart';
 import '../services/journal_pdf_builder.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
 import 'keeper_screen.dart';
@@ -103,15 +104,16 @@ class _JournalScreenState extends State<JournalScreen> {
 
   TextStyle _style(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
     double height = 1.4,
     double letterSpacing = 0.35,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -319,8 +321,9 @@ class _JournalScreenState extends State<JournalScreen> {
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
+                  fontWeight: FontWeight.w400,
+                  fontFamily: EastTypography.fontFamily,
+                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -345,7 +348,7 @@ class _JournalScreenState extends State<JournalScreen> {
     return Positioned.fill(
       child: Container(
         key: const ValueKey('journal-name-decision'),
-        color: const Color(0xFF040404).withValues(alpha: 0.94),
+        color: EastColors.overlay,
         child: SafeArea(
           // Real-device repair: `Center` used to position this composition
           // relative to the *available* body height, which changes when
@@ -377,11 +380,11 @@ class _JournalScreenState extends State<JournalScreen> {
                   autofocus: true,
                   textAlign: TextAlign.center,
                   style: _style(26),
-                  cursorColor: const Color(0xFFF4F0E8),
+                  cursorColor: EastColors.ink,
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Your name',
-                    hintStyle: _style(26, color: const Color(0x66FFFFFF)),
+                    hintStyle: _style(26, color: EastColors.hint),
                     enabledBorder: const UnderlineInputBorder(
                       borderSide:
                           BorderSide(color: eastMutedTextColor, width: 0.5),
@@ -400,20 +403,20 @@ class _JournalScreenState extends State<JournalScreen> {
                       _nameDecisionLabel(
                         'REMOVE',
                         onTap: () => unawaited(_removeNameEdit()),
-                        color: const Color(0xB3FFFFFF),
+                        color: EastColors.secondary,
                       ),
                       const SizedBox(width: 40),
                     ],
                     _nameDecisionLabel(
                       'CANCEL',
                       onTap: _cancelNameEdit,
-                      color: const Color(0xB3FFFFFF),
+                      color: EastColors.secondary,
                     ),
                     const SizedBox(width: 40),
                     _nameDecisionLabel(
                       'SAVE',
                       onTap: () => unawaited(_saveNameEdit()),
-                      color: const Color(0xFFF4F0E8),
+                      color: EastColors.ink,
                     ),
                   ],
                 ),
@@ -428,7 +431,7 @@ class _JournalScreenState extends State<JournalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       // Real-device repair: without this, the keyboard's appearance behind
       // the name-decision overlay shrinks this Scaffold's own body height,
       // which reflows *everything* inside it -- both the overlay (see
@@ -440,8 +443,8 @@ class _JournalScreenState extends State<JournalScreen> {
       // `_buildNamePrompt`.
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF040404),
-        foregroundColor: const Color(0xFFF4F0E8),
+        backgroundColor: EastColors.background,
+        foregroundColor: EastColors.ink,
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
@@ -538,12 +541,12 @@ class _JournalScreenState extends State<JournalScreen> {
   // card -- meant for its light default theme, never overridden by this
   // screen's own `scrollViewDecoration` (which only paints the *scroll
   // background* behind pages, not each page itself). Since every actual
-  // page in the generated PDF is already full-bleed black (see
+  // page in the generated PDF is already full-bleed stone (see
   // `JournalPdfBuilder`), that white card is never the publication's own
   // content -- it is a full A4-sized white rectangle that only ever
   // appears for the one frame before the page's rasterized image has
   // decoded. This `pagesBuilder` replaces that page chrome with the
-  // screen's own black, shadowless surface (so that one frame is
+  // screen's own stone, shadowless surface (so that one frame is
   // indistinguishable from the surrounding screen) and renders each page's
   // `Image` with `gaplessPlayback: true` -- when a regeneration replaces a
   // page's `ImageProvider` with a new one, the previously decoded frame
@@ -557,7 +560,7 @@ class _JournalScreenState extends State<JournalScreen> {
         final page = pages[index];
         return Container(
           margin: _previewPageMargin,
-          color: const Color(0xFF040404),
+          color: EastColors.background,
           child: AspectRatio(
             aspectRatio: page.aspectRatio,
             child: Image(
@@ -588,7 +591,7 @@ class _JournalScreenState extends State<JournalScreen> {
         // (`useActions: false` removes the entire action bar): the single
         // intentional export entry is "Take it with you." below, never
         // this preview. While the PDF is still generating, this reserved
-        // area stays visually quiet (the screen's own black, nothing
+        // area stays visually quiet (the screen's own stone, nothing
         // else) rather than showing any progress/loading treatment --
         // `loadingWidget` is also pinned to the same quiet emptiness so
         // the `printing` package's own default spinner never appears
@@ -617,7 +620,7 @@ class _JournalScreenState extends State<JournalScreen> {
                   useActions: false,
                   pdfFileName: 'Journal.pdf',
                   scrollViewDecoration:
-                      const BoxDecoration(color: Color(0xFF040404)),
+                      const BoxDecoration(color: EastColors.background),
                   loadingWidget: const SizedBox.shrink(),
                   pagesBuilder: _pagesBuilder,
                 )
@@ -665,8 +668,8 @@ class _JournalScreenState extends State<JournalScreen> {
                   style: _style(
                     22,
                     color: isKeeper
-                        ? const Color(0xFFF4F0E8)
-                        : const Color(0xFFF4F0E8).withValues(alpha: 0.52),
+                        ? EastColors.ink
+                        : EastColors.ink.withValues(alpha: 0.52),
                   ),
                 ),
               ),
@@ -713,10 +716,10 @@ class _JournalScreenState extends State<JournalScreen> {
             controller: _nameController,
             autofocus: false,
             style: _style(20),
-            cursorColor: const Color(0xFFF4F0E8),
+            cursorColor: EastColors.ink,
             decoration: InputDecoration(
               hintText: 'Your name',
-              hintStyle: _style(20, color: const Color(0x66FFFFFF)),
+              hintStyle: _style(20, color: EastColors.hint),
               enabledBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: eastMutedTextColor, width: 0.5),
               ),

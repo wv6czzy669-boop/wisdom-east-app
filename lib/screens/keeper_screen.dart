@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
 
@@ -53,7 +54,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
           ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: const Color(0xFF111111),
+              backgroundColor: EastColors.surface,
               content: Text(
                 "Keeper access could not be saved. Please try Restore Purchases.",
                 style: keeperStyle(17),
@@ -73,13 +74,14 @@ class _KeeperScreenState extends State<KeeperScreen> {
 
   TextStyle keeperStyle(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: 1.32,
       letterSpacing: 0.45,
     );
@@ -102,7 +104,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: const Color(0xFF111111),
+          backgroundColor: EastColors.surface,
           content: Text(
             _purchaseService.purchaseNeedsRecovery
                 ? "Purchase status is still updating. Please use Restore Purchases in Settings."
@@ -123,12 +125,12 @@ class _KeeperScreenState extends State<KeeperScreen> {
     final purchaseEnabled =
         !isKeeper && purchaseAvailable && !_purchaseService.isLoading;
     return Scaffold(
-      backgroundColor: const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF040404),
-        foregroundColor: const Color(0xFFF4F0E8),
+        backgroundColor: EastColors.background,
+        foregroundColor: EastColors.ink,
         iconTheme: const IconThemeData(
-          color: Color(0xFFF4F0E8),
+          color: EastColors.ink,
           size: 22,
           weight: 300,
         ),
@@ -189,22 +191,21 @@ class _KeeperScreenState extends State<KeeperScreen> {
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: const Color(0xFFF4F0E8)
-                                    .withValues(alpha: 0.012),
+                                color: EastColors.ink.withValues(alpha: 0.012),
                                 border: Border.all(
                                   color: eastMutedTextColor,
                                   width: 0.7,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFD9B86F)
+                                    color: EastColors.accent
                                         .withValues(alpha: 0.05),
                                     blurRadius: 122,
                                     spreadRadius: 5,
                                   ),
                                   BoxShadow(
-                                    color: const Color(0xFFF4F0E8)
-                                        .withValues(alpha: 0.02),
+                                    color:
+                                        EastColors.ink.withValues(alpha: 0.02),
                                     blurRadius: 78,
                                     spreadRadius: 2,
                                   ),

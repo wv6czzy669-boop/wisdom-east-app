@@ -10,6 +10,7 @@ import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../services/return_service.dart';
 import '../services/saved_reflections_service.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
 import '../widgets/east_back_button.dart';
@@ -72,15 +73,16 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   TextStyle _style(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
     double height = 1.35,
     double letterSpacing = 0.3,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -209,7 +211,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: const Color(0xFF111111),
+          backgroundColor: EastColors.surface,
           content: Text(message, style: _style(17)),
         ),
       );
@@ -456,12 +458,12 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
     return Scaffold(
       key: const ValueKey('kept-screen-root'),
-      backgroundColor: const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF040404),
-        foregroundColor: const Color(0xFFF4F0E8),
+        backgroundColor: EastColors.background,
+        foregroundColor: EastColors.ink,
         iconTheme: const IconThemeData(
-          color: Color(0xFFF4F0E8),
+          color: EastColors.ink,
           size: 22,
           weight: 300,
         ),
@@ -502,7 +504,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 18),
                         child: Divider(
-                          color: Colors.white24,
+                          color: EastColors.divider,
                           thickness: 0.5,
                         ),
                       );
@@ -559,7 +561,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                   height: 15,
                   width: 0.5,
                   margin: const EdgeInsets.symmetric(horizontal: 18),
-                  color: Colors.white24,
+                  color: EastColors.divider,
                 ),
                 _utilityAction(
                   key: const ValueKey('kept-journal-action'),
@@ -603,20 +605,9 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             constraints: const BoxConstraints(minHeight: 44),
             child: Align(
               alignment: Alignment.centerLeft,
-              // Visual polish: a hairline underline tied to each word's own
-              // width (Flutter's text decoration, not a separate divider
-              // widget) -- thin and muted rather than a bright hyperlink
-              // underline, so "Return"/"Journal" read as quiet editorial
-              // labels, not web links or buttons.
               child: Text(
                 label,
-                style: _style(18.5, color: eastMutedTextColor).copyWith(
-                      decoration: TextDecoration.underline,
-                      decorationColor:
-                          eastMutedTextColor.withValues(alpha: 0.45),
-                      decorationThickness: 0.6,
-                      decorationStyle: TextDecorationStyle.solid,
-                    ),
+                style: _style(18.5, color: EastColors.utilityInk),
               ),
             ),
           ),
@@ -737,7 +728,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
                 onTap: widget.onDelete,
                 child: Container(
                   alignment: Alignment.center,
-                  color: const Color(0xFF040404),
+                  color: EastColors.background,
                   child: Text('DELETE', style: widget.deleteLabelStyle),
                 ),
               ),
@@ -764,7 +755,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
             child: SizedBox(
               width: double.infinity,
               child: ColoredBox(
-                color: const Color(0xFF040404),
+                color: EastColors.background,
                 child: widget.child,
               ),
             ),

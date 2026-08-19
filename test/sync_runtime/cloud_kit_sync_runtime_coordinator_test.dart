@@ -184,8 +184,8 @@ void main() {
 
       await coordinator.requestSync(SyncRuntimeTrigger.startup);
 
-      expect(coordinator.status.lastOutcome,
-          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+          coordinator.status.lastOutcome, SyncRuntimeOutcome.deletionCompleted);
       expect(
         await harness.syncPersistenceStore.loadPendingDeletionTransaction(),
         isNull,
@@ -218,8 +218,8 @@ void main() {
 
       await coordinator.requestSync(SyncRuntimeTrigger.startup);
 
-      expect(coordinator.status.lastOutcome,
-          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+          coordinator.status.lastOutcome, SyncRuntimeOutcome.deletionCompleted);
       expect(
         await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
         isNull,
@@ -391,8 +391,8 @@ void main() {
               'snapshot as its very first step -- this call proves the '
               'workflow genuinely ran, not merely that a typed outcome '
               'happened to be returned from an unreached code path.');
-      expect(coordinator.status.lastOutcome,
-          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+          coordinator.status.lastOutcome, SyncRuntimeOutcome.deletionCompleted);
     });
 
     test(
@@ -471,8 +471,7 @@ void main() {
         'finalize', () async {
       final harness = _RuntimeHarness();
       harness.bridge.currentFingerprint = _fingerprint(1);
-      final began =
-          await harness.syncPersistenceStore.beginDeletionTransaction(
+      final began = await harness.syncPersistenceStore.beginDeletionTransaction(
         accountFingerprint: _fingerprint(1),
       );
       // Directly drive the durable transaction to localFinalizePending
@@ -487,8 +486,8 @@ void main() {
         DeletionTransactionStage.verificationPending,
         DeletionTransactionStage.localFinalizePending,
       ]) {
-        final advanced = await harness.syncPersistenceStore
-            .advanceDeletionTransactionStage(
+        final advanced =
+            await harness.syncPersistenceStore.advanceDeletionTransactionStage(
           accountFingerprint: _fingerprint(1),
           expectedCurrentStage: stage,
           nextStage: next,
@@ -527,8 +526,8 @@ void main() {
 
       await coordinator.requestSync(SyncRuntimeTrigger.startup);
 
-      expect(coordinator.status.lastOutcome,
-          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+          coordinator.status.lastOutcome, SyncRuntimeOutcome.deletionCompleted);
       expect(await harness.keptRepository.loadAllRecords(), isEmpty,
           reason: 'If this pass had fallen through to Step 1 after '
               'finalize, a fresh, never-associated device would have '
@@ -553,8 +552,8 @@ void main() {
       addTearDown(coordinator.dispose);
 
       await coordinator.requestSync(SyncRuntimeTrigger.startup);
-      expect(coordinator.status.lastOutcome,
-          SyncRuntimeOutcome.deletionCompleted);
+      expect(
+          coordinator.status.lastOutcome, SyncRuntimeOutcome.deletionCompleted);
       expect(
         await harness.syncPersistenceStore.loadAssociatedAccountFingerprint(),
         isNull,

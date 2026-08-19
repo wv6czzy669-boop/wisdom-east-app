@@ -130,8 +130,8 @@ class KeptDiscoveryHintService {
   Future<bool> isCentralDiscoveryPending() async {
     if (_centralPendingInMemory == true) return true;
     try {
-      final stored = await _storage.getBool(centralDiscoveryPendingKey) ??
-          false;
+      final stored =
+          await _storage.getBool(centralDiscoveryPendingKey) ?? false;
       _centralPendingInMemory ??= stored;
       return stored;
     } catch (_) {
@@ -169,8 +169,8 @@ class KeptDiscoveryHintService {
   Future<bool> isNavDiscoveryPending() async {
     if (_navPendingInMemory == true) return true;
     try {
-      final stored = await _storage.getBool(keptNavDiscoveryPendingKey) ??
-          false;
+      final stored =
+          await _storage.getBool(keptNavDiscoveryPendingKey) ?? false;
       _navPendingInMemory ??= stored;
       return stored;
     } catch (_) {

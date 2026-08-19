@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/objects_catalog.dart';
+import '../../theme/east_design.dart';
 
 /// Two small, restrained circular controls for choosing the EAST. T-Shirt
 /// color. No visible color-name text is ever shown; the uploaded swatch
@@ -73,7 +74,7 @@ class _ColorCircle extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFFF4F0E8).withValues(alpha: 0.65)
+                        ? EastColors.ink.withValues(alpha: 0.65)
                         : Colors.transparent,
                     width: 1,
                   ),

@@ -20,10 +20,10 @@ import '../services/widget_snapshot_service.dart';
 import '../services/wisdom_notification_service.dart';
 import '../services/wisdom_selector.dart';
 import '../services/wisdom_share_service.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/countdown_formatter.dart';
 import '../utils/date_formatter.dart';
-import '../widgets/grain_painter.dart';
 import '../widgets/home/top_nav_ring.dart';
 import 'keeper_screen.dart';
 import 'objects_screen.dart';
@@ -77,8 +77,6 @@ class _HomeScreenState extends State<HomeScreen>
   double saveControlOpacity = 0.0;
   double postRevealMessageOpacity = 0.0;
   double textScale = 1.0;
-  double revealGlowOpacity = 0.0;
-  double backgroundDepth = 0.0;
   double pauseFeelOpacity = 0.0;
 
   bool transitionInProgress = false;
@@ -87,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool navigationInProgress = false;
   bool saveInteractionEnabled = false;
   bool _reduceMotion = false;
-  bool _isInBlackSilence = false;
+  bool _isInRitualSilence = false;
   bool _dailyStatusResolved = false;
   bool _dailyLockActive = false;
   bool _showingLockedWisdom = false;
@@ -220,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen>
     unawaited(audioService.stop());
     transitionInProgress = false;
     _transitionLock = false;
-    _isInBlackSilence = false;
+    _isInRitualSilence = false;
     // Item 6: any meaningful Home navigation dismisses the discovery hint
     // immediately, without altering the navigation action itself.
     _dismissKeptDiscoveryHint();
@@ -237,15 +235,9 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       transitionInProgress = false;
       _transitionLock = false;
-      _isInBlackSilence = false;
+      _isInRitualSilence = false;
       textOpacity = 1.0;
       textScale = 1.0;
-
-      if (screenStep == 0) {
-        backgroundDepth = 0.0;
-      } else {
-        backgroundDepth = wisdomRevealed ? 0.30 : 0.0;
-      }
 
       if (!onPauseScreen) {
         pauseFeelOpacity = 0.0;
@@ -254,12 +246,10 @@ class _HomeScreenState extends State<HomeScreen>
       if (wisdomRevealed) {
         saveControlOpacity = 1.0;
         postRevealMessageOpacity = 1.0;
-        revealGlowOpacity = 0.10;
       } else {
         saveControlOpacity = 0.0;
         saveInteractionEnabled = false;
         postRevealMessageOpacity = 0.0;
-        revealGlowOpacity = 0.0;
       }
     });
   }
@@ -469,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   bool get hideMainRitualContentSemantics {
-    return _isInBlackSilence || textOpacity <= 0.01;
+    return _isInRitualSilence || textOpacity <= 0.01;
   }
 
   String? get mainRitualSemanticLabel {
@@ -638,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen>
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: EastColors.surface,
         duration: const Duration(milliseconds: 1400),
         content: Text(
           message,
@@ -810,9 +800,6 @@ class _HomeScreenState extends State<HomeScreen>
         saveControlOpacity = 0.0;
         saveInteractionEnabled = false;
         postRevealMessageOpacity = 0.0;
-        revealGlowOpacity = 0.0;
-        backgroundDepth =
-            ritualFlowController.transitionBackgroundDepth(nextStep);
         textScale = 1.0;
       });
 
@@ -881,7 +868,6 @@ class _HomeScreenState extends State<HomeScreen>
         saveControlOpacity = 0.0;
         saveInteractionEnabled = false;
         postRevealMessageOpacity = 0.0;
-        revealGlowOpacity = 0.0;
         textScale = 1.0;
       });
 
@@ -902,8 +888,6 @@ class _HomeScreenState extends State<HomeScreen>
         _showingLockedWisdom = true;
         textOpacity = 1.0;
         textScale = 1.0;
-        backgroundDepth = 0.30;
-        revealGlowOpacity = 0.10;
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -971,7 +955,6 @@ class _HomeScreenState extends State<HomeScreen>
             currentRevealedAt = null;
             textOpacity = 1.0;
             textScale = 1.0;
-            backgroundDepth = 0.0;
           }
         });
       }
@@ -1187,7 +1170,7 @@ class _HomeScreenState extends State<HomeScreen>
           !wisdomRevealed ||
           transitionInProgress ||
           navigationInProgress ||
-          _isInBlackSilence) {
+          _isInRitualSilence) {
         return;
       }
       // P13 (locked contract): an explicit, closed three-way switch on the
@@ -1263,7 +1246,7 @@ class _HomeScreenState extends State<HomeScreen>
   // `_resumePendingDiscoveryIfNeeded`).
   Future<void> _beginFirstUseKeepDiscovery() async {
     if (!mounted || !wisdomRevealed) return;
-    if (transitionInProgress || _transitionLock || _isInBlackSilence) return;
+    if (transitionInProgress || _transitionLock || _isInRitualSilence) return;
     if (_revealPersistenceNeedsRetry) return;
     if (navigationInProgress) return;
     if (_shareInProgress || _saveOperationInProgress) return;
@@ -1319,7 +1302,7 @@ class _HomeScreenState extends State<HomeScreen>
         !navigationInProgress &&
         _firstUseKeepDiscoveryActive &&
         wisdomRevealed &&
-        !_isInBlackSilence &&
+        !_isInRitualSilence &&
         !isCurrentFavorite() &&
         _keptDiscoveryHintOpacity <= 0.0) {
       final session = ++_keptDiscoverySessionId;
@@ -1536,7 +1519,7 @@ class _HomeScreenState extends State<HomeScreen>
         !wisdomRevealed ||
         transitionInProgress ||
         _transitionLock ||
-        _isInBlackSilence ||
+        _isInRitualSilence ||
         _revealPersistenceNeedsRetry ||
         wisdomRevealController.value < 1.0 ||
         currentText.trim().isEmpty) {
@@ -1579,7 +1562,7 @@ class _HomeScreenState extends State<HomeScreen>
     askFadeController.value = 1.0;
 
     setState(() {
-      _isInBlackSilence = false;
+      _isInRitualSilence = false;
       currentText = "Ask from your heart.";
       screenStep = 2;
       _showingLockedWisdom = false;
@@ -1590,8 +1573,6 @@ class _HomeScreenState extends State<HomeScreen>
       saveInteractionEnabled = false;
       postRevealMessageOpacity = 0.0;
       pauseFeelOpacity = 0.0;
-      revealGlowOpacity = 0.0;
-      backgroundDepth = 0.0;
       textScale = 1.0;
     });
   }
@@ -1649,8 +1630,6 @@ class _HomeScreenState extends State<HomeScreen>
         saveInteractionEnabled = false;
         postRevealMessageOpacity = 0.0;
         pauseFeelOpacity = 0.0;
-        revealGlowOpacity = 0.0;
-        backgroundDepth = 1.0;
         textScale = 1.0;
         _revealPersistenceNeedsRetry = false;
         _pendingRevealBoundaryForRetry = null;
@@ -1665,7 +1644,7 @@ class _HomeScreenState extends State<HomeScreen>
       });
 
       final silenceComplete =
-          Future<void>.delayed(const Duration(milliseconds: 1800));
+          Future<void>.delayed(const Duration(milliseconds: 1250));
       final askFadeComplete =
           Future<void>.delayed(const Duration(milliseconds: 1250));
 
@@ -1674,7 +1653,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
-        _isInBlackSilence = true;
+        _isInRitualSilence = true;
       });
 
       await silenceComplete;
@@ -1728,7 +1707,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       setState(() {
-        _isInBlackSilence = false;
+        _isInRitualSilence = false;
         currentText = revealedAccess.text;
         currentRevealId = revealedAccess.revealId;
         currentRevealedAt = revealedAccess.revealedAt;
@@ -1736,8 +1715,6 @@ class _HomeScreenState extends State<HomeScreen>
         _showingLockedWisdom = !revealedAccess.isNew;
         textOpacity = 1.0;
         textScale = 1.0;
-        backgroundDepth = 0.30;
-        revealGlowOpacity = 0.16;
       });
 
       // Correction: the notification-offer "scheduled" guard
@@ -1783,7 +1760,6 @@ class _HomeScreenState extends State<HomeScreen>
           saveControlOpacity = 0.0;
           saveInteractionEnabled = false;
           postRevealMessageOpacity = 0.0;
-          revealGlowOpacity = 0.10;
         });
         unawaited(
           commitFuture.then(
@@ -1799,7 +1775,6 @@ class _HomeScreenState extends State<HomeScreen>
                 saveControlOpacity = 1.0;
                 saveInteractionEnabled = true;
                 postRevealMessageOpacity = 1.0;
-                revealGlowOpacity = 0.10;
               });
             },
             onError: (_) {
@@ -1821,7 +1796,6 @@ class _HomeScreenState extends State<HomeScreen>
           saveControlOpacity = 0.0;
           saveInteractionEnabled = false;
           postRevealMessageOpacity = 0.0;
-          revealGlowOpacity = 0.10;
         });
         return;
       }
@@ -1843,7 +1817,6 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _revealPersistenceNeedsRetry = false;
         saveControlOpacity = 1.0;
-        revealGlowOpacity = 0.10;
       });
 
       await Future.delayed(const Duration(milliseconds: 520));
@@ -1900,7 +1873,6 @@ class _HomeScreenState extends State<HomeScreen>
         currentRevealId = committedAccess.revealId;
         currentRevealedAt = committedAccess.revealedAt;
         saveControlOpacity = 1.0;
-        revealGlowOpacity = 0.10;
       });
     } on TimeoutException {
       if (!mounted || currentFlow != flowSessionId) return;
@@ -1924,7 +1896,6 @@ class _HomeScreenState extends State<HomeScreen>
               saveControlOpacity = 1.0;
               saveInteractionEnabled = true;
               postRevealMessageOpacity = 1.0;
-              revealGlowOpacity = 0.10;
             });
           },
           onError: (_) {
@@ -2099,8 +2070,9 @@ class _HomeScreenState extends State<HomeScreen>
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
+                  fontWeight: FontWeight.w400,
+                  fontFamily: EastTypography.fontFamily,
+                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -2133,7 +2105,7 @@ class _HomeScreenState extends State<HomeScreen>
           opacity: _favoriteLimitOverlayVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('home-favorite-limit-overlay'),
-            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            color: EastColors.overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -2150,7 +2122,7 @@ class _HomeScreenState extends State<HomeScreen>
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(
                     15,
-                    color: const Color(0xB3FFFFFF),
+                    color: EastColors.secondary,
                   ),
                 ),
                 const SizedBox(height: 44),
@@ -2160,13 +2132,13 @@ class _HomeScreenState extends State<HomeScreen>
                     _favoriteLimitDecisionLabel(
                       'CANCEL',
                       onTap: _dismissFavoriteLimitOverlay,
-                      color: const Color(0xB3FFFFFF),
+                      color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _favoriteLimitDecisionLabel(
                       'BECOME A KEEPER',
                       onTap: _becomeKeeperFromLimitOverlay,
-                      color: const Color(0xFFF4F0E8),
+                      color: EastColors.ink,
                     ),
                   ],
                 ),
@@ -2335,7 +2307,7 @@ class _HomeScreenState extends State<HomeScreen>
   //
   // Deliberately more restrictive than `openFavorites()`'s own guard: the
   // gesture must stay silent during Pause/Feel/Ask-from-your-heart, active
-  // transitions, black silence, a pending persistence retry, the native
+  // transitions, ritual silence, a pending persistence retry, the native
   // notification-permission offer, and an in-flight save/share, in addition
   // to reusing the exact same navigation guards `openFavorites()` already
   // checks. Restricted to the three states item 5 names: the initial
@@ -2346,7 +2318,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (navigationInProgress || transitionInProgress || _transitionLock) {
       return false;
     }
-    if (_isInBlackSilence) return false;
+    if (_isInRitualSilence) return false;
     if (_revealPersistenceNeedsRetry) return false;
     if (_notificationPermissionOfferShowing) return false;
     if (_saveOperationInProgress || _shareInProgress) return false;
@@ -2389,22 +2361,14 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          _isInBlackSilence ? Colors.black : const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       body: SafeArea(
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            _HomeBackgroundDepth(depth: backgroundDepth),
-            if (screenStep != 0)
-              _HomeGrainLayer(
-                pulseController: pulseController,
-                reduceMotion: _reduceMotion,
-                wisdomRevealed: wisdomRevealed,
-              ),
-            if (wisdomRevealed || onPauseScreen || _transitionLock)
-              _HomeRevealGlow(
-                opacity: onPauseScreen ? 0.045 : revealGlowOpacity,
-              ),
+            const Positioned.fill(
+              child: ColoredBox(color: EastColors.background),
+            ),
             Positioned.fill(
               child: _HomeMainRitualGesture(
                 navigationDisabled: navigationInProgress || _transitionLock,
@@ -2433,7 +2397,7 @@ class _HomeScreenState extends State<HomeScreen>
                   wisdomShareEnabled: wisdomRevealed &&
                       !transitionInProgress &&
                       !_transitionLock &&
-                      !_isInBlackSilence &&
+                      !_isInRitualSilence &&
                       !_revealPersistenceNeedsRetry &&
                       wisdomRevealController.value >= 1.0,
                   wisdomShareOriginKey: _wisdomShareOriginKey,
@@ -2441,13 +2405,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            if (_isInBlackSilence)
-              const Positioned.fill(
-                child: ColoredBox(
-                  key: ValueKey('black-silence'),
-                  color: Colors.black,
-                ),
-              ),
             if (_chromeVisible) ...[
               _HomeSettingsMenuControl(onPressed: openSettings),
               _HomeTopNavigation(

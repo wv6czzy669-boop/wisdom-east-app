@@ -8,6 +8,7 @@ import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/data_export_service.dart';
 import '../services/purchase_service.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
 import 'keeper_screen.dart';
@@ -140,20 +141,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   TextStyle eastStyle(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: 1.35,
       letterSpacing: 0.4,
     );
   }
 
   // Shared by every actionable Settings row so the pressed/hover/focus
-  // state never paints a grey overlay: the row background stays black in
+  // state never paints a grey overlay: the row background stays stone in
   // every interaction state (idle, pressed, focused, hovered, disabled,
   // in-flight). Defined once rather than repeated per row.
   static const WidgetStateProperty<Color?> _noOverlayColor =
@@ -214,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             subtitle,
                             style: eastStyle(
                               15,
-                              color: const Color(0x91FFFFFF),
+                              color: EastColors.secondary,
                             ),
                           ),
                         ],
@@ -248,8 +250,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: const TextStyle(
             color: eastMutedTextColor,
             fontSize: 11,
-            fontWeight: FontWeight.w300,
-            fontFamily: 'CormorantGaramond',
+            fontWeight: FontWeight.w400,
+            fontFamily: EastTypography.fontFamily,
+            fontFamilyFallback: EastTypography.fontFamilyFallback,
             letterSpacing: 2.0,
           ),
         ),
@@ -282,7 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: EastColors.surface,
         duration: const Duration(milliseconds: 1600),
         content: Text(
           message,
@@ -484,7 +487,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           opacity: _restoreResultVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('settings-restore-result'),
-            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            color: EastColors.overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -499,7 +502,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: eastStyle(15, color: const Color(0xB3FFFFFF)),
+                  style: eastStyle(15, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 44),
                 Semantics(
@@ -519,10 +522,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Text(
                             'CLOSE',
                             style: TextStyle(
-                              color: Color(0xFFF4F0E8),
+                              color: EastColors.ink,
                               fontSize: 11,
-                              fontWeight: FontWeight.w300,
-                              fontFamily: 'CormorantGaramond',
+                              fontWeight: FontWeight.w400,
+                              fontFamily: EastTypography.fontFamily,
+                              fontFamilyFallback:
+                                  EastTypography.fontFamilyFallback,
                               letterSpacing: 3.0,
                             ),
                           ),
@@ -559,8 +564,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
+                  fontWeight: FontWeight.w400,
+                  fontFamily: EastTypography.fontFamily,
+                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -597,7 +603,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           opacity: _removeFromICloudConfirmVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('settings-remove-from-icloud-confirm'),
-            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            color: EastColors.overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -613,14 +619,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   "Your Kept wisdoms and Reflections will remain on this "
                   "iPhone.",
                   textAlign: TextAlign.center,
-                  style: eastStyle(15, color: const Color(0xB3FFFFFF)),
+                  style: eastStyle(15, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   "Their iCloud copies will be removed, and iCloud Sync "
                   "will turn off.",
                   textAlign: TextAlign.center,
-                  style: eastStyle(14, color: const Color(0x91FFFFFF)),
+                  style: eastStyle(14, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 44),
                 Row(
@@ -629,13 +635,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _removeFromICloudDecisionLabel(
                       'CANCEL',
                       onTap: _cancelRemoveFromICloud,
-                      color: const Color(0xB3FFFFFF),
+                      color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _removeFromICloudDecisionLabel(
                       'REMOVE',
                       onTap: _confirmRemoveFromICloud,
-                      color: const Color(0xFFF4F0E8),
+                      color: EastColors.ink,
                     ),
                   ],
                 ),
@@ -667,8 +673,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(
                   color: color,
                   fontSize: 11,
-                  fontWeight: FontWeight.w300,
-                  fontFamily: 'CormorantGaramond',
+                  fontWeight: FontWeight.w400,
+                  fontFamily: EastTypography.fontFamily,
+                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -703,7 +710,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           opacity: _enableSyncOverlayVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('settings-enable-sync-confirm'),
-            color: const Color(0xFF040404).withValues(alpha: 0.94),
+            color: EastColors.overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -720,13 +727,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   "private iCloud database and kept in sync across your "
                   "devices.",
                   textAlign: TextAlign.center,
-                  style: eastStyle(15, color: const Color(0xB3FFFFFF)),
+                  style: eastStyle(15, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   "Your daily ritual timing stays on this device.",
                   textAlign: TextAlign.center,
-                  style: eastStyle(14, color: const Color(0x91FFFFFF)),
+                  style: eastStyle(14, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 44),
                 Row(
@@ -735,13 +742,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _enableSyncDecisionLabel(
                       'CANCEL',
                       onTap: _cancelEnableSync,
-                      color: const Color(0xB3FFFFFF),
+                      color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _enableSyncDecisionLabel(
                       'ENABLE',
                       onTap: _confirmEnableSync,
-                      color: const Color(0xFFF4F0E8),
+                      color: EastColors.ink,
                     ),
                   ],
                 ),
@@ -1117,12 +1124,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF040404),
-        foregroundColor: const Color(0xFFF4F0E8),
+        backgroundColor: EastColors.background,
+        foregroundColor: EastColors.ink,
         iconTheme: const IconThemeData(
-          color: Color(0xFFF4F0E8),
+          color: EastColors.ink,
           size: 22,
           weight: 300,
         ),
@@ -1150,132 +1157,130 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _settingsBody(BuildContext context) {
     return SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              key: const ValueKey('settings-scroll'),
-              physics: const ClampingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 36,
-                ),
-                child: Align(
-                  key: const ValueKey('settings-content'),
-                  alignment: Alignment.topCenter,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'EAST.',
-                        textAlign: TextAlign.center,
-                        style: eastStyle(27),
+      top: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            key: const ValueKey('settings-scroll'),
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 36,
+              ),
+              child: Align(
+                key: const ValueKey('settings-content'),
+                alignment: Alignment.topCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'EAST.',
+                      textAlign: TextAlign.center,
+                      style: eastStyle(27),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Where silence speaks.',
+                      textAlign: TextAlign.center,
+                      style: eastStyle(
+                        17,
+                        color: eastMutedTextColor,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Where silence speaks.',
-                        textAlign: TextAlign.center,
-                        style: eastStyle(
-                          17,
-                          color: eastMutedTextColor,
-                        ),
-                      ),
-                      const SizedBox(height: 40),
+                    ),
+                    const SizedBox(height: 40),
 
-                      // Group 1 — what you can own: Keeper, with Restore
-                      // Purchases sitting directly beneath it as a
-                      // subordinate, findable row (never a full-weight row
-                      // of its own).
-                      settingsItem(
-                        rowKey: const ValueKey('settings-keeper-row'),
-                        title: "Keeper",
-                        subtitle: "Support the circle, keep what stays.",
-                        onTap: _openKeeper,
-                      ),
-                      const SizedBox(height: 6),
-                      settingsItem(
-                        rowKey:
-                            const ValueKey('settings-restore-purchases-row'),
-                        title: "Restore Purchases",
-                        subtitle: "Restore what belongs with you.",
-                        semanticLabel: restoreSemanticLabel,
-                        onTap: restoreAction,
-                        titleSize: 15,
-                      ),
+                    // Group 1 — what you can own: Keeper, with Restore
+                    // Purchases sitting directly beneath it as a
+                    // subordinate, findable row (never a full-weight row
+                    // of its own).
+                    settingsItem(
+                      rowKey: const ValueKey('settings-keeper-row'),
+                      title: "Keeper",
+                      subtitle: "Support the circle, keep what stays.",
+                      onTap: _openKeeper,
+                    ),
+                    const SizedBox(height: 6),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-restore-purchases-row'),
+                      title: "Restore Purchases",
+                      subtitle: "Restore what belongs with you.",
+                      semanticLabel: restoreSemanticLabel,
+                      onTap: restoreAction,
+                      titleSize: 15,
+                    ),
 
-                      _settingsGroupDivider(),
+                    _settingsGroupDivider(),
 
-                      // Group 2 — what holds your data: iCloud Sync's own
-                      // state reads as a trailing ledger entry rather than a
-                      // second subtitle line.
-                      settingsItem(
-                        rowKey: const ValueKey('settings-icloud-sync-row'),
-                        title: "iCloud Sync",
-                        subtitle: _cloudKitSyncSubtitle,
-                        showSubtitle: false,
-                        semanticLabel: _cloudKitSyncSemanticLabel,
-                        onTap: cloudKitSyncAction,
-                        trailing: _settingsTrailingState(_cloudKitSyncSubtitle),
-                      ),
-                      const SizedBox(height: 24),
-                      settingsItem(
-                        rowKey:
-                            const ValueKey('settings-remove-from-icloud-row'),
-                        title: "Remove from iCloud",
-                        subtitle: _icloudRemovalSubtitle,
-                        semanticLabel: _icloudRemovalSemanticLabel,
-                        onTap: icloudRemovalAction,
-                      ),
-                      const SizedBox(height: 24),
-                      settingsItem(
-                        rowKey: const ValueKey('settings-export-data-row'),
-                        title: "Export My Data",
-                        subtitle: _dataExportInProgress
-                            ? "Preparing…"
-                            : "Take your Kept wisdoms and Reflections with "
-                                "you.",
-                        semanticLabel: dataExportSemanticLabel,
-                        onTap: dataExportAction,
-                      ),
+                    // Group 2 — what holds your data: iCloud Sync's own
+                    // state reads as a trailing ledger entry rather than a
+                    // second subtitle line.
+                    settingsItem(
+                      rowKey: const ValueKey('settings-icloud-sync-row'),
+                      title: "iCloud Sync",
+                      subtitle: _cloudKitSyncSubtitle,
+                      showSubtitle: false,
+                      semanticLabel: _cloudKitSyncSemanticLabel,
+                      onTap: cloudKitSyncAction,
+                      trailing: _settingsTrailingState(_cloudKitSyncSubtitle),
+                    ),
+                    const SizedBox(height: 24),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-remove-from-icloud-row'),
+                      title: "Remove from iCloud",
+                      subtitle: _icloudRemovalSubtitle,
+                      semanticLabel: _icloudRemovalSemanticLabel,
+                      onTap: icloudRemovalAction,
+                    ),
+                    const SizedBox(height: 24),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-export-data-row'),
+                      title: "Export My Data",
+                      subtitle: _dataExportInProgress
+                          ? "Preparing…"
+                          : "Take your Kept wisdoms and Reflections with "
+                              "you.",
+                      semanticLabel: dataExportSemanticLabel,
+                      onTap: dataExportAction,
+                    ),
 
-                      _settingsGroupDivider(),
+                    _settingsGroupDivider(),
 
-                      // Group 3 — the world outside: a tight cluster, one
-                      // tier quieter, of everything that leaves EAST.
-                      settingsItem(
-                        rowKey: const ValueKey('settings-east-productions-row'),
-                        title: "EAST. Productions",
-                        subtitle: "The world beyond the ritual.",
-                        semanticLabel: eastProductionsSemanticLabel,
-                        onTap: eastProductionsAction,
-                        titleSize: 17,
-                      ),
-                      const SizedBox(height: 10),
-                      settingsItem(
-                        rowKey: const ValueKey('settings-privacy-policy-row'),
-                        title: "Privacy Policy",
-                        subtitle: "What stays private.",
-                        semanticLabel: privacyPolicySemanticLabel,
-                        onTap: privacyPolicyAction,
-                        titleSize: 17,
-                      ),
-                      const SizedBox(height: 10),
-                      settingsItem(
-                        rowKey: const ValueKey('settings-reach-out-row'),
-                        title: "Reach Out",
-                        subtitle: "For thoughts and questions.",
-                        semanticLabel: reachOutSemanticLabel,
-                        onTap: reachOutAction,
-                        titleSize: 17,
-                      ),
-                    ],
-                  ),
+                    // Group 3 — the world outside: a tight cluster, one
+                    // tier quieter, of everything that leaves EAST.
+                    settingsItem(
+                      rowKey: const ValueKey('settings-east-productions-row'),
+                      title: "EAST. Productions",
+                      subtitle: "The world beyond the ritual.",
+                      semanticLabel: eastProductionsSemanticLabel,
+                      onTap: eastProductionsAction,
+                      titleSize: 17,
+                    ),
+                    const SizedBox(height: 10),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-privacy-policy-row'),
+                      title: "Privacy Policy",
+                      subtitle: "What stays private.",
+                      semanticLabel: privacyPolicySemanticLabel,
+                      onTap: privacyPolicyAction,
+                      titleSize: 17,
+                    ),
+                    const SizedBox(height: 10),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-reach-out-row'),
+                      title: "Reach Out",
+                      subtitle: "For thoughts and questions.",
+                      semanticLabel: reachOutSemanticLabel,
+                      onTap: reachOutAction,
+                      titleSize: 17,
+                    ),
+                  ],
                 ),
               ),
-            );
-          },
-        ),
-      );
+            ),
+          );
+        },
+      ),
+    );
   }
 }

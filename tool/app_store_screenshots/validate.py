@@ -17,18 +17,18 @@ SCREENSHOT_ROOT = (
 FINAL_DIR = SCREENSHOT_ROOT / "final"
 MANIFEST_PATH = SCREENSHOT_ROOT / "manifest.json"
 EXPECTED_FILENAMES = [
-    "01_one_quiet_moment.png",
-    "02_pause_feel_ask.png",
+    "01_ask_from_your_heart.png",
+    "02_one_wisdom_each_day.png",
     "03_keep_what_stays.png",
     "04_write_what_remains.png",
-    "05_presence_not_scrolling.png",
+    "05_a_publication_of_what_you_kept.png",
 ]
 EXPECTED_HEADLINES = [
+    "Ask from your heart.",
     "One quiet moment. One wisdom each day.",
-    "Pause. Feel. Ask from your heart.",
     "Keep what stays.",
     "Write what remains.",
-    "Made for presence, not scrolling.",
+    "A quiet publication of what you kept.",
 ]
 
 

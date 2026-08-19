@@ -8,8 +8,7 @@ import 'package:wisdom_app/sync_persistence/pending_deletion_transaction.dart';
 void main() {
   const fingerprintA =
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  final originalEpoch =
-      DataEpoch.parse('11111111-1111-4111-8111-111111111111');
+  final originalEpoch = DataEpoch.parse('11111111-1111-4111-8111-111111111111');
   final replacementEpoch =
       DataEpoch.parse('22222222-2222-4222-8222-222222222222');
 
@@ -44,7 +43,8 @@ void main() {
   }
 
   group('structural invariants', () {
-    test('rejects a fingerprint that does not look like an opaque account '
+    test(
+        'rejects a fingerprint that does not look like an opaque account '
         'fingerprint', () {
       expect(
         () => PendingDeletionTransaction(
@@ -59,8 +59,7 @@ void main() {
 
     test(
         'rejects a replacementDataEpoch equal to originalDataEpoch -- a '
-        'deletion transaction always establishes a genuinely fresh epoch',
-        () {
+        'deletion transaction always establishes a genuinely fresh epoch', () {
       expect(
         () => PendingDeletionTransaction(
           accountFingerprint: fingerprintA,
@@ -160,8 +159,7 @@ void main() {
   });
 
   group('copyWithStage', () {
-    test('changes only the stage; accountFingerprint/epochs are unchanged',
-        () {
+    test('changes only the stage; accountFingerprint/epochs are unchanged', () {
       final t = transaction();
       final advanced =
           t.copyWithStage(DeletionTransactionStage.epochBarrierPending);
@@ -206,7 +204,8 @@ void main() {
       );
     });
 
-    test('every stage is a valid no-op transition to itself (idempotent '
+    test(
+        'every stage is a valid no-op transition to itself (idempotent '
         'retry)', () {
       for (final stage in DeletionTransactionStage.values) {
         expect(isValidDeletionTransactionTransition(stage, stage), isTrue);
@@ -249,7 +248,8 @@ void main() {
   });
 
   group('privacy', () {
-    test('toLogSafeSummary/toString never expose accountFingerprint or an '
+    test(
+        'toLogSafeSummary/toString never expose accountFingerprint or an '
         'epoch value', () {
       final t = transaction();
       final summary = t.toLogSafeSummary();

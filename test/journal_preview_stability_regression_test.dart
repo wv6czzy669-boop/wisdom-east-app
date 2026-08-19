@@ -327,8 +327,7 @@ void main() {
 
   testWidgets(
       'CASE 1 -- first entry never exposes a spinner or default loading '
-      'widget while the very first publication is generating',
-      (tester) async {
+      'widget while the very first publication is generating', (tester) async {
     final builder = _SequencedPdfBuilder();
     final ownerService = JournalOwnerService();
     await ownerService.skip();

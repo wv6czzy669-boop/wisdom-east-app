@@ -47,7 +47,8 @@ void main() {
     expect(callCount, 1, reason: 'removed listener must not be called again');
   });
 
-  test('a listener that throws never prevents remaining listeners from '
+  test(
+      'a listener that throws never prevents remaining listeners from '
       'running, and never propagates out of notify()', () {
     var secondCallCount = 0;
     notifier.addListener(() => throw StateError('boom'));

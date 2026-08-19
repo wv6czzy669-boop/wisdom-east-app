@@ -56,7 +56,7 @@ void main() {
       format: ui.ImageByteFormat.rawRgba,
     );
     expect(pixels, isNotNull);
-    expect(_rgbAt(pixels!, x: 0, y: 0), [3, 3, 3]);
+    expect(_rgbAt(pixels!, x: 0, y: 0), [226, 224, 217]);
 
     // Update 3B: the bottom ritual circle is gone entirely — nothing but
     // the plain background color remains at and around its former
@@ -70,7 +70,7 @@ void main() {
         x: WisdomShareCardRenderer.pixelWidth ~/ 2,
         y: formerCircleCenterY,
       ),
-      [3, 3, 3],
+      [226, 224, 217],
     );
     expect(
       _rgbAt(
@@ -78,7 +78,7 @@ void main() {
         x: WisdomShareCardRenderer.pixelWidth ~/ 2 + formerCircleRadius,
         y: formerCircleCenterY,
       ),
-      [3, 3, 3],
+      [226, 224, 217],
       reason: 'The former circle stroke location must now be plain '
           'background — no outline, no placeholder.',
     );
@@ -100,13 +100,13 @@ void main() {
     );
     expect(pixels, isNotNull);
 
-    // eastMutedTextColor = 0xFFA29B8C, used at full opacity (no additional
+    // eastMutedTextColor = 0xFF625D54, used at full opacity (no additional
     // alpha reduction), matching the in-app "Return when the silence opens
     // again." style exactly. The exact TextPainter height of "EAST." is not
     // hardcoded here (it depends on font metrics this sandbox cannot
     // independently recompute) — instead this scans the region just below
     // the wordmark for the thin, pixel-snapped line the renderer draws.
-    const expectedLineRgb = [0xA2, 0x9B, 0x8C];
+    const expectedLineRgb = [0x62, 0x5D, 0x54];
     final centerX = WisdomShareCardRenderer.pixelWidth ~/ 2;
     final matchingRows = <int>[];
     for (var y = 168; y < 168 + 150; y++) {
@@ -158,9 +158,9 @@ void main() {
     for (var y = 168; y < lineY; y++) {
       for (var x = 0; x < WisdomShareCardRenderer.pixelWidth; x++) {
         final rgb = _rgbAt(pixels, x: x, y: y);
-        // Matches `foregroundColor` (0xFFF4F0E8) closely enough to count
+        // Matches `foregroundColor` (0xFF2C2924) closely enough to count
         // as wordmark glyph, not background or anti-aliasing fringe.
-        if (rgb[0] > 200 && rgb[1] > 200 && rgb[2] > 200) {
+        if (rgb[0] < 100 && rgb[1] < 100 && rgb[2] < 100) {
           if (x < wordmarkLeft) wordmarkLeft = x;
           if (x > wordmarkRight) wordmarkRight = x;
         }

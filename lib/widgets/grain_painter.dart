@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../theme/east_design.dart';
+
 class GrainPainter extends CustomPainter {
   const GrainPainter({
     required this.movement,
@@ -54,14 +56,14 @@ class GrainPainter extends CustomPainter {
       PointMode.points,
       thinPoints,
       Paint()
-        ..color = Colors.white.withValues(alpha: alpha)
+        ..color = EastColors.ink.withValues(alpha: alpha)
         ..strokeWidth = 0.55,
     );
     canvas.drawPoints(
       PointMode.points,
       thickPoints,
       Paint()
-        ..color = Colors.white.withValues(alpha: alpha)
+        ..color = EastColors.ink.withValues(alpha: alpha)
         ..strokeWidth = 0.85,
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 import 'services/saved_reflections_service.dart';
+import 'theme/east_design.dart';
 
 class WisdomApp extends StatelessWidget {
   const WisdomApp({super.key, this.savedReflectionsService});
@@ -26,13 +27,7 @@ class WisdomApp extends StatelessWidget {
     return MaterialApp(
       title: 'Daily Wisdom: EAST.',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF040404),
-        textTheme: ThemeData.dark().textTheme.apply(
-              fontFamily: 'CormorantGaramond',
-            ),
-      ),
+      theme: eastTheme(),
       home: HomeScreen(savedReflectionsService: savedReflectionsService),
     );
   }

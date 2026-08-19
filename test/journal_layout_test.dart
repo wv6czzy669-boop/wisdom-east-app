@@ -75,7 +75,8 @@ void main() {
       expect(ids, ['has-reveal']);
     });
 
-    test('duplicate wisdom text with distinct revealIds both remain, '
+    test(
+        'duplicate wisdom text with distinct revealIds both remain, '
         'ordered independently by their own keptAt', () {
       const planner = JournalLayoutPlanner();
       const sharedText = 'The exact same wisdom, twice.';
@@ -147,7 +148,8 @@ void main() {
       expect(groups.single.entries, hasLength(3));
     });
 
-    test('a genuinely oversized single entry is flagged isOverflowing and '
+    test(
+        'a genuinely oversized single entry is flagged isOverflowing and '
         'placed alone, never bundled with a neighbor', () {
       const planner = JournalLayoutPlanner(pageContentHeightPt: 400);
       final hugeReflection = List.filled(400, 'word').join(' ');
@@ -181,14 +183,17 @@ void main() {
       expect(hugeGroup.isOverflowing, isTrue);
       // Its neighbors are not swallowed into the oversized entry's group.
       expect(
-        groups.where((g) => !g.isOverflowing).expand((g) => g.entries).map((e) => e.id),
+        groups
+            .where((g) => !g.isOverflowing)
+            .expand((g) => g.entries)
+            .map((e) => e.id),
         containsAll(['before', 'after']),
       );
     });
 
-    test('every item with a revealId appears in exactly one group -- '
-        'nothing is ever silently dropped, regardless of content length',
-        () {
+    test(
+        'every item with a revealId appears in exactly one group -- '
+        'nothing is ever silently dropped, regardless of content length', () {
       const planner = JournalLayoutPlanner(pageContentHeightPt: 300);
       final items = [
         for (var i = 0; i < 12; i++)
@@ -197,9 +202,8 @@ void main() {
             revealId: 'r-$i',
             text: 'Wisdom number $i, of moderate length for this test.',
             keptAt: now.subtract(Duration(days: 200 - i * 3)),
-            reflection: i.isOdd
-                ? List.filled(30 + i * 20, 'x').join(' ')
-                : null,
+            reflection:
+                i.isOdd ? List.filled(30 + i * 20, 'x').join(' ') : null,
           ),
       ];
 
@@ -209,7 +213,8 @@ void main() {
       expect(ids, items.map((i) => i.id).toSet());
     });
 
-    test('planning the same input twice yields identical, deterministic '
+    test(
+        'planning the same input twice yields identical, deterministic '
         'grouping', () {
       const planner = JournalLayoutPlanner();
       final items = List.generate(
@@ -232,7 +237,8 @@ void main() {
       expect(first, second);
     });
 
-    test('reflection-less entries take less estimated space than reflected '
+    test(
+        'reflection-less entries take less estimated space than reflected '
         'ones', () {
       const planner = JournalLayoutPlanner();
       final bare = item(

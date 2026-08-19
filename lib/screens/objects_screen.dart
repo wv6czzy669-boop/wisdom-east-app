@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/objects_catalog.dart';
+import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
 import '../widgets/objects/looping_product_gallery.dart';
@@ -35,15 +36,16 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
 
   TextStyle _style(
     double size, {
-    Color color = const Color(0xFFF4F0E8),
+    Color color = EastColors.ink,
     double height = 1.35,
     double letterSpacing = 0.4,
   }) {
     return TextStyle(
       color: color,
       fontSize: size,
-      fontWeight: FontWeight.w300,
-      fontFamily: 'CormorantGaramond',
+      fontWeight: FontWeight.w400,
+      fontFamily: EastTypography.fontFamily,
+      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -55,7 +57,7 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: const Color(0xFF111111),
+          backgroundColor: EastColors.surface,
           content: Text(message, style: _style(17)),
         ),
       );
@@ -113,12 +115,12 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
 
     return Scaffold(
       key: const ValueKey('objects-screen-root'),
-      backgroundColor: const Color(0xFF040404),
+      backgroundColor: EastColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF040404),
-        foregroundColor: const Color(0xFFF4F0E8),
+        backgroundColor: EastColors.background,
+        foregroundColor: EastColors.ink,
         iconTheme: const IconThemeData(
-          color: Color(0xFFF4F0E8),
+          color: EastColors.ink,
           size: 22,
           weight: 300,
         ),
@@ -196,7 +198,7 @@ class _ObjectsScreenState extends State<ObjectsScreen> {
                           textAlign: TextAlign.center,
                           style: _style(
                             15.5,
-                            color: eastMutedTextColor,
+                            color: EastColors.utilityInk,
                             letterSpacing: 2.2,
                           ),
                         ),

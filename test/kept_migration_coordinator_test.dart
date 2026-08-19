@@ -990,8 +990,7 @@ void main() {
       expect(keptStateStore.envelope!.activeRecords, isEmpty);
     });
 
-    test('complete state with changed record order no longer blocks',
-        () async {
+    test('complete state with changed record order no longer blocks', () async {
       final itemA = FavoriteItem(
         id: 'order-a',
         date: '2026-01-01T09:00:00.000Z',

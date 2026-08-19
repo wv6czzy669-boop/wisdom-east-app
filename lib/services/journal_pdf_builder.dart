@@ -29,25 +29,22 @@ class JournalPdfBuilder {
 
   final JournalLayoutPlanner _planner;
 
-  // EAST. app visual system — see lib/theme/muted_text_color.dart and the
-  // black/warm-white constants already used throughout every screen.
-  static const PdfColor _black = PdfColor.fromInt(0xFF040404);
-  static const PdfColor _warmWhite = PdfColor.fromInt(0xFFF4F0E8);
+  // EAST.'s printed-page visual system, matching the Flutter surfaces.
+  static const PdfColor _background = PdfColor.fromInt(0xFFE2E0D9);
+  static const PdfColor _ink = PdfColor.fromInt(0xFF2C2924);
 
   // Design's own muted hierarchy (Journal rules #10, #12): date/metadata is
   // the dimmest tier; the title page's month and owner sit in their own two
   // quiet tiers; reflection sits mid-muted beneath the wisdom's full
-  // warm-white. Fixed, pre-blended-against-black tones (never alpha) so the
-  // share/print pipeline never has to composite transparency.
-  static const PdfColor _dateMuted = PdfColor.fromInt(0xFF7C7770);
-  static const PdfColor _monthMuted = PdfColor.fromInt(0xFF8F8983);
-  static const PdfColor _ownerMuted = PdfColor.fromInt(0xFF9C968E);
-  static const PdfColor _reflectionTone = PdfColor.fromInt(0xFF938F89);
-  // The cover ring is a hairline at ~42% of warm-white; the final page's
-  // ring and the body folio number are the same family reduced further, to
-  // ~34% -- "the same mark that opened the cover, reduced."
-  static const PdfColor _coverRingTone = PdfColor.fromInt(0xFF666561);
-  static const PdfColor _faintTone = PdfColor.fromInt(0xFF53524F);
+  // ink. Fixed tones (never alpha) keep the printed result predictable.
+  static const PdfColor _dateMuted = PdfColor.fromInt(0xFF625D54);
+  static const PdfColor _monthMuted = PdfColor.fromInt(0xFF777167);
+  static const PdfColor _ownerMuted = PdfColor.fromInt(0xFF807A70);
+  static const PdfColor _reflectionTone = PdfColor.fromInt(0xFF5D584F);
+  // The cover ring is a quiet hairline; the final ring and body folio are
+  // gentler still, echoing the opening mark.
+  static const PdfColor _coverRingTone = PdfColor.fromInt(0xFF9C9589);
+  static const PdfColor _faintTone = PdfColor.fromInt(0xFFB5AFA4);
 
   // ---- Cover (physical page 1) ----
   static const double _coverRingDiameter = 154.07;
@@ -158,7 +155,7 @@ class JournalPdfBuilder {
   }) async {
     final generatedAt = now ?? DateTime.now();
     final fontData = await rootBundle.load(
-      'assets/fonts/CormorantGaramond-Light.ttf',
+      'assets/fonts/EBGaramond-Variable.ttf',
     );
     final font = pw.Font.ttf(fontData);
 
@@ -186,7 +183,7 @@ class JournalPdfBuilder {
   // ---------------------------------------------------------------------
   // Physical page 1 — cover. The EAST mark alone, at the Design's own
   // ring scale and optical center (46% down the page, not dead center),
-  // with a dimmed 42%-tone ring rather than a solid warm-white one.
+  // with a dimmed 42%-tone ring rather than a solid ink one.
   // ---------------------------------------------------------------------
   pw.Page _buildCoverPage(pw.Font font) {
     return pw.Page(
@@ -194,7 +191,7 @@ class JournalPdfBuilder {
       margin: pw.EdgeInsets.zero,
       build: (context) {
         return pw.Container(
-          color: _black,
+          color: _background,
           width: double.infinity,
           height: double.infinity,
           alignment: pw.FractionalOffset(0.5, _coverRingCenterYFraction),
@@ -227,7 +224,7 @@ class JournalPdfBuilder {
                 style: pw.TextStyle(
                   font: font,
                   fontSize: _coverEastFontSize,
-                  color: _warmWhite,
+                  color: _ink,
                   letterSpacing: _coverEastLetterSpacing,
                 ),
               ),
@@ -259,7 +256,7 @@ class JournalPdfBuilder {
       margin: pw.EdgeInsets.zero,
       build: (context) {
         return pw.Container(
-          color: _black,
+          color: _background,
           width: double.infinity,
           height: double.infinity,
           child: pw.Stack(
@@ -274,7 +271,7 @@ class JournalPdfBuilder {
                   style: pw.TextStyle(
                     font: font,
                     fontSize: _titleFontSize,
-                    color: _warmWhite,
+                    color: _ink,
                   ),
                 ),
               ),
@@ -333,11 +330,11 @@ class JournalPdfBuilder {
           _bodyMarginBottom,
         ),
         theme: pw.ThemeData.withFont(base: font, bold: font, italic: font),
-        // The entire PDF is dark -- every body page's own black background,
+        // The entire PDF uses the warm-stone field -- every body page's own stone background,
         // painted full-bleed behind the margin area too, exactly like the
         // cover/title/final pages.
-        buildBackground: (context) =>
-            pw.FullPage(ignoreMargins: true, child: pw.Container(color: _black)),
+        buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true, child: pw.Container(color: _background)),
       ),
       maxPages: 20000,
       footer: (context) => _buildFooter(font, context),
@@ -359,7 +356,8 @@ class JournalPdfBuilder {
       // block) so the Reflection text itself -- a spanning widget in the
       // `pdf` layout engine -- can continue naturally onto further pages.
       // Nothing is clipped or truncated.
-      return _buildEntryWidgets(font, group.entries.single, keepTogether: false);
+      return _buildEntryWidgets(font, group.entries.single,
+          keepTogether: false);
     }
 
     final widgets = <pw.Widget>[];
@@ -373,7 +371,7 @@ class JournalPdfBuilder {
   }
 
   /// One occurrence: a tracked, dimmed date on its own line, the wisdom
-  /// beneath it at full warm-white (the Design's "primary published
+  /// beneath it at full ink (the Design's "primary published
   /// text"), then -- if present -- its Reflection, indented and dimmed
   /// beneath its own line. No "Wisdom"/"Reflection" label anywhere;
   /// hierarchy is entirely typographic (size/tone/indent), matching
@@ -405,7 +403,7 @@ class JournalPdfBuilder {
             style: pw.TextStyle(
               font: font,
               fontSize: _wisdomFontSize,
-              color: _warmWhite,
+              color: _ink,
               height: 1.5,
             ),
           ),
@@ -417,7 +415,9 @@ class JournalPdfBuilder {
     final hasReflection = reflection != null && reflection.trim().isNotEmpty;
 
     if (!hasReflection) {
-      return [keepTogether ? pw.Column(children: [header]) : header];
+      return [
+        keepTogether ? pw.Column(children: [header]) : header
+      ];
     }
 
     final reflectionStyle = pw.TextStyle(
@@ -507,7 +507,7 @@ class JournalPdfBuilder {
       margin: pw.EdgeInsets.zero,
       build: (context) {
         return pw.Container(
-          color: _black,
+          color: _background,
           width: double.infinity,
           height: double.infinity,
           alignment: pw.FractionalOffset(0.5, _finalRingCenterYFraction),
@@ -516,8 +516,7 @@ class JournalPdfBuilder {
             height: _finalRingDiameter,
             decoration: pw.BoxDecoration(
               shape: pw.BoxShape.circle,
-              border:
-                  pw.Border.all(color: _faintTone, width: _finalRingBorder),
+              border: pw.Border.all(color: _faintTone, width: _finalRingBorder),
             ),
           ),
         );
