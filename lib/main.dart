@@ -6,6 +6,7 @@ import 'app.dart';
 import 'controllers/locale_preference_controller.dart';
 import 'services/app_services.dart';
 import 'sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
+import 'utils/date_formatter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,7 @@ Future<void> main() async {
   // introducing a second startup delay or recreating any EAST. services.
   final localePreferenceController = LocalePreferenceController();
   final localePreferenceLoad = localePreferenceController.load();
+  final dateFormattingLoad = initializeEastDateFormatting();
 
   // Build 26 production cutover: the protected Kept repository (and the
   // migration attempt it depends on) must be fully bootstrapped before the
@@ -26,6 +28,7 @@ Future<void> main() async {
   // silently forever, and it must never race app startup.
   await initializeKeptStorage();
   await localePreferenceLoad;
+  await dateFormattingLoad;
 
   runApp(WisdomApp(localePreferenceController: localePreferenceController));
 

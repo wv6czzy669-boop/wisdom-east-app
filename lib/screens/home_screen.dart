@@ -17,6 +17,7 @@ import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
 import '../services/kept_discovery_hint_service.dart';
 import '../services/rating_request_service.dart';
+import '../services/ritual_audio_policy.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/storage_service.dart';
 import '../services/widget_snapshot_service.dart';
@@ -703,7 +704,7 @@ class _HomeScreenState extends State<HomeScreen>
           if (!mounted) return;
           if (callbackSession != delayedCallbackSession) return;
           if (callbackFlowSession != flowSessionId) return;
-          audioService.playPauseSound();
+          _playVoiceCue(audioService.playPauseSound);
         },
       );
 
@@ -728,7 +729,7 @@ class _HomeScreenState extends State<HomeScreen>
             if (!mounted) return;
             if (callbackSession != delayedCallbackSession) return;
             if (callbackFlowSession != flowSessionId) return;
-            audioService.playFeelSound();
+            _playVoiceCue(audioService.playFeelSound);
           },
         );
         await revealFeelBesidePause();
@@ -742,7 +743,7 @@ class _HomeScreenState extends State<HomeScreen>
             if (!mounted) return;
             if (callbackSession != delayedCallbackSession) return;
             if (callbackFlowSession != flowSessionId) return;
-            audioService.playHeartSound();
+            _playVoiceCue(audioService.playHeartSound);
           },
         );
         await transitionToText(
@@ -763,6 +764,14 @@ class _HomeScreenState extends State<HomeScreen>
       await retryRevealedWisdomCommit();
       return;
     }
+  }
+
+  void _playVoiceCue(Future<void> Function() play) {
+    if (!RitualAudioPolicy.forLocale(Localizations.localeOf(context))
+        .playsVoiceCues) {
+      return;
+    }
+    unawaited(play());
   }
 
   Future<void> revealFeelBesidePause() async {
@@ -1757,7 +1766,10 @@ class _HomeScreenState extends State<HomeScreen>
         );
       }
 
-      unawaited(audioService.playRevealSound());
+      if (RitualAudioPolicy.forLocale(Localizations.localeOf(context))
+          .playsRevealSound) {
+        unawaited(audioService.playRevealSound());
+      }
       HapticFeedback.selectionClick();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!isCurrentFlow(currentFlow) || !wisdomRevealed) return;

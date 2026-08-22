@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,7 +8,21 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/favorite_item.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
+import '../localization/east_locale_registry.dart';
+import '../localization/east_typography_resolver.dart';
 import 'journal_layout.dart';
+
+/// Explicit future presentation input for PDF generation. It deliberately
+/// carries no app state and never changes Journal pagination or source data.
+class JournalPdfPresentation {
+  const JournalPdfPresentation({
+    this.locale = const Locale('en'),
+    this.textDirection = TextDirection.ltr,
+  });
+
+  final Locale locale;
+  final TextDirection textDirection;
+}
 
 /// EAST. Phase 10 — builds the on-device A4 Journal PDF.
 ///
@@ -28,11 +43,14 @@ class JournalPdfBuilder {
   JournalPdfBuilder({
     JournalLayoutPlanner? planner,
     AppLocalizations? localizations,
+    JournalPdfPresentation presentation = const JournalPdfPresentation(),
   })  : _planner = planner ?? const JournalLayoutPlanner(),
-        _localizations = localizations ?? AppLocalizationsEn();
+        _localizations = localizations ?? AppLocalizationsEn(),
+        _presentation = presentation;
 
   final JournalLayoutPlanner _planner;
   final AppLocalizations _localizations;
+  final JournalPdfPresentation _presentation;
 
   /// The quiet title-page date is intentionally only the publication year.
   static String headerYear(DateTime generatedAt) => '${generatedAt.year}';
@@ -100,9 +118,15 @@ class JournalPdfBuilder {
     bool compress = true,
   }) async {
     final generatedAt = now ?? DateTime.now();
-    final fontData = await rootBundle.load(
-      'assets/fonts/EBGaramond-Variable.ttf',
-    );
+    final typography = EastTypographyResolver.forLocale(_presentation.locale);
+    final fontAsset = typography.pdfFontAsset;
+    if (fontAsset == null) {
+      throw UnsupportedError(
+        'No embedded ${EastLocaleRegistry.canonicalTag(_presentation.locale)} '
+        'PDF font is bundled yet.',
+      );
+    }
+    final fontData = await rootBundle.load(fontAsset);
     final font = pw.Font.ttf(fontData);
 
     final document = pw.Document(

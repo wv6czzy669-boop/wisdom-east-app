@@ -256,7 +256,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       return ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         child: Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(l10n.keptUpper, style: _statusStyle),
         ),
       );
@@ -272,7 +272,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: Text(l10n.reflectedUpper, style: _statusStyle),
             ),
           ),
@@ -319,7 +319,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                       constraints:
                           const BoxConstraints(minWidth: 44, minHeight: 44),
                       child: Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(
                           eastLocalizations(context).addReflectionUpper,
                           style: _statusStyle,

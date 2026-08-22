@@ -254,7 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       constraints: const BoxConstraints(maxWidth: 96),
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        alignment: Alignment.centerRight,
+        alignment: AlignmentDirectional.centerEnd,
         child: Text(
           value,
           style: const TextStyle(

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
+import '../localization/east_locale_registry.dart';
 
 abstract interface class WisdomShareHandler {
   Future<void> shareWisdom({
@@ -32,6 +33,19 @@ class WisdomShareService implements WisdomShareHandler {
     required Rect sharePositionOrigin,
   }) async {
     final bytes = await _renderer.render(wisdom);
+    await _share(bytes, sharePositionOrigin);
+  }
+
+  Future<void> shareWisdomForLocale({
+    required String wisdom,
+    required Rect sharePositionOrigin,
+    required Locale locale,
+  }) async {
+    final bytes = await _renderer.renderForLocale(wisdom, locale: locale);
+    await _share(bytes, sharePositionOrigin);
+  }
+
+  Future<void> _share(Uint8List bytes, Rect sharePositionOrigin) async {
     await _shareLauncher(
       ShareParams(
         files: [
@@ -162,7 +176,13 @@ class WisdomShareCardRenderer {
     );
   }
 
-  Future<Uint8List> render(String wisdom) async {
+  Future<Uint8List> render(String wisdom) =>
+      renderForLocale(wisdom, locale: const Locale('en'));
+
+  Future<Uint8List> renderForLocale(
+    String wisdom, {
+    required Locale locale,
+  }) async {
     final trimmedWisdom = wisdom.trim();
     if (trimmedWisdom.isEmpty) {
       throw ArgumentError.value(wisdom, 'wisdom', 'Wisdom cannot be empty.');
@@ -235,6 +255,7 @@ class WisdomShareCardRenderer {
       trimmedWisdom,
       fontSize: layout.fontSize,
       lineHeight: layout.lineHeight,
+      direction: EastLocaleRegistry.textDirectionFor(locale),
     )..layout(maxWidth: layout.textBoxWidth);
     wisdomPainter.paint(
       canvas,
@@ -268,6 +289,7 @@ class WisdomShareCardRenderer {
     String wisdom, {
     required double fontSize,
     required double lineHeight,
+    TextDirection direction = TextDirection.ltr,
   }) {
     return TextPainter(
       text: TextSpan(
@@ -281,7 +303,7 @@ class WisdomShareCardRenderer {
           height: lineHeight,
         ),
       ),
-      textDirection: TextDirection.ltr,
+      textDirection: direction,
       textAlign: TextAlign.center,
       maxLines: 14,
     );
