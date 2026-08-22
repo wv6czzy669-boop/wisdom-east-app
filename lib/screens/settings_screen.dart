@@ -5,6 +5,7 @@ import '../l10n/east_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/icloud_removal_controller.dart';
+import '../controllers/locale_preference_controller.dart';
 import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/data_export_service.dart';
@@ -13,6 +14,7 @@ import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
 import 'keeper_screen.dart';
+import 'language_selection_screen.dart';
 
 typedef SettingsUrlLauncher = Future<bool> Function(
   Uri uri, {
@@ -27,11 +29,13 @@ class SettingsScreen extends StatefulWidget {
     this.cloudKitAssociationController,
     this.icloudRemovalController,
     this.dataExportService,
+    this.localePreferenceController,
   });
 
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
   final DataExportService? dataExportService;
+  final LocalePreferenceController? localePreferenceController;
 
   /// Build 26 Phase 4G: injectable only for tests -- production always uses
   /// the single [app_services.cloudKitAssociationController] instance (see
@@ -55,6 +59,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  late final LocalePreferenceController _fallbackLocalePreferenceController =
+      LocalePreferenceController();
   bool _keeperNavigationInProgress = false;
   bool _privacyPolicyLaunchInProgress = false;
   bool _reachOutLaunchInProgress = false;
@@ -123,6 +129,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// see [_refreshICloudRemovalStatus] and [_beginICloudRemoval].
   ICloudRemovalController? get _icloudRemovalController =>
       widget.icloudRemovalController ?? app_services.icloudRemovalController;
+
+  LocalePreferenceController get _localePreferenceController =>
+      widget.localePreferenceController ?? _fallbackLocalePreferenceController;
 
   // Shared by every Settings divider (see requirement: "all Settings
   // dividers use one shared value"). Derived from the approved muted-text
@@ -825,6 +834,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openLanguage() async {
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LanguageSelectionScreen(
+          localePreferenceController: _localePreferenceController,
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
   // -----------------------------------------------------------------------
   // Build 26 Phase 4G: explicit one-time iCloud association.
   //
@@ -1247,7 +1269,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     _settingsGroupDivider(),
 
-                    // Group 3 — the world outside: a tight cluster, one
+                    // Group 3 — language stays inside the main Settings
+                    // area, before links that leave EAST.
+                    settingsItem(
+                      rowKey: const ValueKey('settings-language-row'),
+                      title: l10n.language,
+                      subtitle: _localePreferenceController.isSystemDefault
+                          ? l10n.systemDefault
+                          : l10n.english,
+                      showSubtitle: false,
+                      semanticLabel: l10n.languageSettingSemantics(
+                        _localePreferenceController.isSystemDefault
+                            ? l10n.systemDefault
+                            : l10n.english,
+                      ),
+                      onTap: _openLanguage,
+                      trailing: _settingsTrailingState(
+                        _localePreferenceController.isSystemDefault
+                            ? l10n.systemDefault
+                            : l10n.english,
+                      ),
+                    ),
+
+                    // The world outside: a tight cluster, one
                     // tier quieter, of everything that leaves EAST.
                     settingsItem(
                       rowKey: const ValueKey('settings-east-productions-row'),

@@ -166,6 +166,36 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settings;
 
+  /// No description provided for @language.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get language;
+
+  /// No description provided for @systemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System Default'**
+  String get systemDefault;
+
+  /// No description provided for @english.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get english;
+
+  /// No description provided for @languageSettingSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Language. Current selection: {value}.'**
+  String languageSettingSemantics(Object value);
+
+  /// No description provided for @languageOptionSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{language}'**
+  String languageOptionSemantics(Object language);
+
   /// No description provided for @back.
   ///
   /// In en, this message translates to:

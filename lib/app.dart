@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'controllers/locale_preference_controller.dart';
 import 'l10n/app_localizations.dart';
 import 'l10n/app_localizations_en.dart';
 import 'screens/home_screen.dart';
 import 'services/saved_reflections_service.dart';
 import 'theme/east_design.dart';
 
-class WisdomApp extends StatelessWidget {
-  const WisdomApp({super.key, this.savedReflectionsService});
+class WisdomApp extends StatefulWidget {
+  const WisdomApp({
+    super.key,
+    this.savedReflectionsService,
+    this.localePreferenceController,
+  });
 
   /// Test-only injection seam. Always `null` in the real app (`main.dart`
   /// never passes this) — `HomeScreen`'s own existing fallback
@@ -24,17 +31,57 @@ class WisdomApp extends StatelessWidget {
   /// instance `HomeScreen` receives, nothing about when or how it is built.
   final SavedReflectionsService? savedReflectionsService;
 
+  /// Production supplies one controller loaded before `runApp`, while
+  /// isolated widget hosts may safely use the screen-local fallback.
+  final LocalePreferenceController? localePreferenceController;
+
+  @override
+  State<WisdomApp> createState() => _WisdomAppState();
+}
+
+class _WisdomAppState extends State<WisdomApp> {
+  late final LocalePreferenceController _localePreferenceController =
+      widget.localePreferenceController ?? LocalePreferenceController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.localePreferenceController == null) {
+      unawaited(_localePreferenceController.load());
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.localePreferenceController == null) {
+      _localePreferenceController.dispose();
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: AppLocalizationsEn().appTitle,
-      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
-      debugShowCheckedModeBanner: false,
-      theme: eastTheme(),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      localeResolutionCallback: (_, __) => const Locale('en'),
-      home: HomeScreen(savedReflectionsService: savedReflectionsService),
+    return AnimatedBuilder(
+      animation: _localePreferenceController,
+      builder: (context, _) => MaterialApp(
+        title: AppLocalizationsEn().appTitle,
+        onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+        debugShowCheckedModeBanner: false,
+        theme: eastTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: _localePreferenceController.explicitLocale,
+        localeResolutionCallback: (deviceLocale, supportedLocales) {
+          return LocalePreferenceController.resolveSystemLocale(
+            deviceLocale,
+            supportedLocales,
+          );
+        },
+        home: HomeScreen(
+          savedReflectionsService: widget.savedReflectionsService,
+          localePreferenceController: _localePreferenceController,
+        ),
+      ),
     );
   }
 }

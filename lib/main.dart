@@ -3,11 +3,18 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import 'app.dart';
+import 'controllers/locale_preference_controller.dart';
 import 'services/app_services.dart';
 import 'sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Loading this tiny preference alongside the existing mandatory bootstrap
+  // ensures MaterialApp has its final locale before the first frame, without
+  // introducing a second startup delay or recreating any EAST. services.
+  final localePreferenceController = LocalePreferenceController();
+  final localePreferenceLoad = localePreferenceController.load();
 
   // Build 26 production cutover: the protected Kept repository (and the
   // migration attempt it depends on) must be fully bootstrapped before the
@@ -18,8 +25,9 @@ Future<void> main() async {
   // `KeptBootstrapResult` (see `initializeKeptStorage`), it never hangs
   // silently forever, and it must never race app startup.
   await initializeKeptStorage();
+  await localePreferenceLoad;
 
-  runApp(const WisdomApp());
+  runApp(WisdomApp(localePreferenceController: localePreferenceController));
 
   Future.microtask(() async {
     try {

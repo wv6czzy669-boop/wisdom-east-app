@@ -45,6 +45,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settings => 'Settings';
 
   @override
+  String get language => 'Language';
+
+  @override
+  String get systemDefault => 'System Default';
+
+  @override
+  String get english => 'English';
+
+  @override
+  String languageSettingSemantics(Object value) {
+    return 'Language. Current selection: $value.';
+  }
+
+  @override
+  String languageOptionSemantics(Object language) {
+    return '$language';
+  }
+
+  @override
   String get back => 'Back';
 
   @override

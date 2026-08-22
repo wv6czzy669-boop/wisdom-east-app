@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../controllers/latest_request_guard.dart';
+import '../controllers/locale_preference_controller.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
 import '../models/daily_wisdom_selection.dart';
@@ -46,6 +47,7 @@ class HomeScreen extends StatefulWidget {
     this.ratingRequestService,
     this.analyticsService,
     this.widgetSnapshotService,
+    this.localePreferenceController,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
     this.dailyWisdomStatusTimeout =
         DailyWisdomAccessService.defaultStatusTimeout,
@@ -61,6 +63,7 @@ class HomeScreen extends StatefulWidget {
   final RatingRequestService? ratingRequestService;
   final AnalyticsService? analyticsService;
   final WidgetSnapshotService? widgetSnapshotService;
+  final LocalePreferenceController? localePreferenceController;
   final Duration dailyWisdomOperationTimeout;
   final Duration dailyWisdomStatusTimeout;
 
@@ -1985,7 +1988,9 @@ class _HomeScreenState extends State<HomeScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const SettingsScreen(),
+          builder: (context) => SettingsScreen(
+            localePreferenceController: widget.localePreferenceController,
+          ),
         ),
       );
 
