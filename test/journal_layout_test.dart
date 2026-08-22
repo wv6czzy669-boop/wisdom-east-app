@@ -1,9 +1,20 @@
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/services/journal_layout.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   final now = DateTime.utc(2026, 8, 16);
+  late pw.Font font;
+
+  setUpAll(() async {
+    font = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/EBGaramond-Variable.ttf'),
+    );
+  });
 
   FavoriteItem item({
     required String id,
@@ -46,7 +57,7 @@ void main() {
         ),
       ];
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
       final ordered = groups.expand((g) => g.entries).map((e) => e.id).toList();
 
       expect(ordered, ['a', 'm', 'z']);
@@ -69,7 +80,7 @@ void main() {
         ),
       ];
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
       final ids = groups.expand((g) => g.entries).map((e) => e.id).toList();
 
       expect(ids, ['has-reveal']);
@@ -95,7 +106,7 @@ void main() {
         ),
       ];
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
       final entries = groups.expand((g) => g.entries).toList();
 
       expect(entries, hasLength(2));
@@ -109,7 +120,7 @@ void main() {
     test('no group ever exceeds the configured max entries per page', () {
       const planner = JournalLayoutPlanner(
         maxEntriesPerPage: 3,
-        pageContentHeightPt: 10000, // effectively unlimited height budget
+        pageContentHeightOverridePt: 10000,
       );
       final items = List.generate(
         10,
@@ -121,7 +132,7 @@ void main() {
         ),
       );
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
 
       for (final group in groups) {
         expect(group.entries.length, lessThanOrEqualTo(3));
@@ -142,16 +153,101 @@ void main() {
         ),
       );
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
 
       expect(groups, hasLength(1));
       expect(groups.single.entries, hasLength(3));
     });
 
+    test('moves the third complete entry to the next page when it will not fit',
+        () {
+      const measuringPlanner = JournalLayoutPlanner();
+      final items = List.generate(
+        3,
+        (i) => item(
+          id: 'id-$i',
+          revealId: 'r-$i',
+          text: 'A measured editorial entry with enough text to wrap once.',
+          keptAt: now.add(Duration(days: i)),
+        ),
+      );
+      final entryHeight =
+          measuringPlanner.measureEntry(items.first, font: font);
+      final pageHeight =
+          3 * entryHeight + 2 * JournalBodyLayout.entryGap - 0.01;
+      final planner = JournalLayoutPlanner(
+        pageContentHeightOverridePt: pageHeight,
+      );
+
+      final groups = planner.plan(items, font: font);
+
+      expect(groups, hasLength(2));
+      expect(groups.first.entries, hasLength(2));
+      expect(groups.last.entries.map((entry) => entry.id), ['id-2']);
+    });
+
+    test(
+        'keeps two long complete entries together when their rendered heights fit',
+        () {
+      const measuringPlanner = JournalLayoutPlanner();
+      final items = List.generate(
+        2,
+        (i) => item(
+          id: 'long-$i',
+          revealId: 'r-long-$i',
+          text: 'A wisdom that has a reflective companion.',
+          reflection: List.filled(18, 'Measured reflection text').join(' '),
+          keptAt: now.add(Duration(days: i)),
+        ),
+      );
+      final entryHeight =
+          measuringPlanner.measureEntry(items.first, font: font);
+      final planner = JournalLayoutPlanner(
+        pageContentHeightOverridePt:
+            2 * entryHeight + JournalBodyLayout.entryGap + 0.01,
+      );
+
+      final groups = planner.plan(items, font: font);
+
+      expect(groups, hasLength(1));
+      expect(groups.single.entries, hasLength(2));
+      expect(groups.single.isOverflowing, isFalse);
+    });
+
+    test('uses real glyph wrapping rather than a character-count threshold',
+        () {
+      const measuringPlanner = JournalLayoutPlanner();
+      final narrow = item(
+        id: 'narrow',
+        revealId: 'r-narrow',
+        text: List.filled(40, 'i').join(' '),
+        keptAt: now,
+      );
+      final wide = item(
+        id: 'wide',
+        revealId: 'r-wide',
+        text: List.filled(40, 'W').join(' '),
+        keptAt: now.add(const Duration(days: 1)),
+      );
+      final narrowHeight = measuringPlanner.measureEntry(narrow, font: font);
+      final wideHeight = measuringPlanner.measureEntry(wide, font: font);
+      final planner = JournalLayoutPlanner(
+        pageContentHeightOverridePt:
+            2 * narrowHeight + JournalBodyLayout.entryGap + 0.01,
+      );
+
+      expect(wide.text.length, narrow.text.length);
+      expect(wideHeight, greaterThan(narrowHeight));
+      expect(planner.plan([narrow, narrow], font: font).single.entries,
+          hasLength(2));
+      expect(
+          planner.plan([narrow, wide], font: font).first.entries, hasLength(1));
+    });
+
     test(
         'a genuinely oversized single entry is flagged isOverflowing and '
         'placed alone, never bundled with a neighbor', () {
-      const planner = JournalLayoutPlanner(pageContentHeightPt: 400);
+      const planner = JournalLayoutPlanner(pageContentHeightOverridePt: 400);
       final hugeReflection = List.filled(400, 'word').join(' ');
       final items = [
         item(
@@ -175,7 +271,7 @@ void main() {
         ),
       ];
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
       final hugeGroup =
           groups.firstWhere((g) => g.entries.any((e) => e.id == 'huge'));
 
@@ -194,7 +290,7 @@ void main() {
     test(
         'every item with a revealId appears in exactly one group -- '
         'nothing is ever silently dropped, regardless of content length', () {
-      const planner = JournalLayoutPlanner(pageContentHeightPt: 300);
+      const planner = JournalLayoutPlanner(pageContentHeightOverridePt: 300);
       final items = [
         for (var i = 0; i < 12; i++)
           item(
@@ -207,7 +303,7 @@ void main() {
           ),
       ];
 
-      final groups = planner.plan(items);
+      final groups = planner.plan(items, font: font);
       final ids = groups.expand((g) => g.entries).map((e) => e.id).toSet();
 
       expect(ids, items.map((i) => i.id).toSet());
@@ -231,8 +327,8 @@ void main() {
       List<List<String>> shapeOf(List<JournalPageGroup> groups) =>
           groups.map((g) => g.entries.map((e) => e.id).toList()).toList();
 
-      final first = shapeOf(planner.plan(items));
-      final second = shapeOf(planner.plan(List.of(items)));
+      final first = shapeOf(planner.plan(items, font: font));
+      final second = shapeOf(planner.plan(List.of(items), font: font));
 
       expect(first, second);
     });
@@ -256,8 +352,8 @@ void main() {
       );
 
       expect(
-        planner.estimateEntryHeight(bare),
-        lessThan(planner.estimateEntryHeight(reflected)),
+        planner.measureEntry(bare, font: font),
+        lessThan(planner.measureEntry(reflected, font: font)),
       );
     });
   });

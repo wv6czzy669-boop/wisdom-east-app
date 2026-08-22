@@ -26,7 +26,6 @@ import '../utils/countdown_formatter.dart';
 import '../utils/date_formatter.dart';
 import '../widgets/home/top_nav_ring.dart';
 import 'keeper_screen.dart';
-import 'objects_screen.dart';
 import 'saved_reflections_screen.dart';
 import 'settings_screen.dart';
 
@@ -443,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
   bool get onLockedCountdown => screenStep == 5;
 
-  // Approved Ritual direction: the hamburger + two-circle chrome is absent
+  // Approved Ritual direction: the hamburger + Kept chrome is absent
   // for every ritual beat (entrance through the ask) and returns only once
   // the wisdom is revealed (or the locked countdown, which is the same
   // settled, already-resolved state as the wisdom having been revealed
@@ -1953,27 +1952,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> openObjects() async {
-    if (navigationInProgress || transitionInProgress || _transitionLock) return;
-
-    navigationInProgress = true;
-    interruptRitualForNavigation();
-
-    try {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const ObjectsScreen(),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        navigationInProgress = false;
-        _resumePendingDiscoveryIfNeeded();
-      }
-    }
-  }
-
   Future<void> openSettings() async {
     if (navigationInProgress || transitionInProgress || _transitionLock) return;
 
@@ -2408,7 +2386,6 @@ class _HomeScreenState extends State<HomeScreen>
             if (_chromeVisible) ...[
               _HomeSettingsMenuControl(onPressed: openSettings),
               _HomeTopNavigation(
-                onObjectsPressed: openObjects,
                 onKeptPressed: openFavorites,
                 keptEmphasized: _keptIconEmphasized,
               ),

@@ -41,7 +41,6 @@ flutter:
 
   assets:
     - assets/sounds/
-    - assets/objects/
 
   fonts:
     - family: EBGaramond

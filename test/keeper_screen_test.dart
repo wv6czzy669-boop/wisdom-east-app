@@ -49,7 +49,6 @@ void main() {
       'Enter the Circle',
       'Keep without limit.',
       'Reflect without limit.',
-      'Return to what stayed.',
       'Take your Journal with you.',
       'Keep EAST. alive.',
     ];
@@ -88,10 +87,6 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.text('Reflect without limit.')).style?.color,
-      isNot(eastMutedTextColor),
-    );
-    expect(
-      tester.widget<Text>(find.text('Return to what stayed.')).style?.color,
       isNot(eastMutedTextColor),
     );
     expect(
@@ -244,7 +239,6 @@ void main() {
     expect(find.text(removedThreeRevealCopy), findsNothing);
     expect(find.text('Keep without limit.'), findsOneWidget);
     expect(find.text('Reflect without limit.'), findsOneWidget);
-    expect(find.text('Return to what stayed.'), findsOneWidget);
     expect(find.text('Take your Journal with you.'), findsOneWidget);
     expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Keep EAST. alive.'), findsOneWidget);

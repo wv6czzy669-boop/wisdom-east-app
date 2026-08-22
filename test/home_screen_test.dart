@@ -239,11 +239,10 @@ void main() {
 
       expect(find.semantics.byLabel('EAST.'), findsNothing);
 
-      // Approved Ritual direction: the hamburger + two-circle chrome is
+      // Approved Ritual direction: the hamburger + Kept chrome is
       // absent for every ritual beat (entrance through the ask) — still
       // true here, mid-Pause.
       expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
-      expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
       expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
 
       await _tapCenter(tester);
@@ -292,14 +291,6 @@ void main() {
         settingsNode.getSemanticsData().hasAction(SemanticsAction.tap),
         isTrue,
       );
-      expect(
-          find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
-      final objectsNode = tester
-          .getSemantics(find.byKey(const ValueKey('home-objects-control')));
-      expect(
-        objectsNode.getSemanticsData().hasAction(SemanticsAction.tap),
-        isTrue,
-      );
       expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
       final keptNode =
           tester.getSemantics(find.byKey(const ValueKey('home-kept-control')));
@@ -315,7 +306,7 @@ void main() {
   });
 
   testWidgets(
-      'top navigation opens Settings, Objects, and Kept from their respective controls',
+      'top navigation opens Settings and Kept from their respective controls',
       (tester) async {
     final now = DateTime.now();
     const wisdom = 'A wisdom used to verify top navigation destinations';
@@ -330,11 +321,8 @@ void main() {
     // Deterministic proof of push counts, independent of route-content
     // mount timing — see `_HomePushCountingNavigatorObserver`.
     final pushObserver = _HomePushCountingNavigatorObserver();
-    // This test exercises Settings -> pop -> Objects -> pop -> Kept, which
-    // means `openSettings()`'s post-pop `finally` (gated on
-    // `synchronizeUnlockNotification()`) must resolve before the Objects
-    // tap's guard check can be expected to let a push through. A fresh,
-    // per-test `WisdomNotificationService` (wrapping the existing
+    // This test exercises Settings -> pop -> Kept. A fresh, per-test
+    // `WisdomNotificationService` (wrapping the existing
     // `_HomeNotificationPlatform` fake already used elsewhere in this file)
     // keeps that resolution deterministic and test-local, rather than
     // depending on the shared process-wide `app_services
@@ -351,7 +339,6 @@ void main() {
     await _openExistingWisdom(tester);
 
     expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
 
     // The far-left three-line control opens Settings directly (no drawer,
@@ -374,42 +361,6 @@ void main() {
       tester,
       settingsDuration,
       poppedRouteFinder: find.byKey(const ValueKey('settings-scroll')),
-    );
-    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
-
-    // The repurposed left circle now opens Objects — not Settings. This is
-    // the exact tap that failed intermittently on real Mac validation
-    // ("Found 0 widgets with key objects-screen-root") whenever this test
-    // ran after other tests in the suite: if the Settings pop's guard
-    // (`navigationInProgress`) had not actually reset yet, this tap would
-    // be silently swallowed by `openObjects()`'s own guard check and no
-    // push would happen at all. Proving both the guard state and the push
-    // count directly (rather than only inferring them from mount timing)
-    // is what makes this assertion meaningful.
-    expect(
-      _homeNavigationInProgress(tester),
-      isFalse,
-      reason: 'navigationInProgress must have reset after the Settings pop '
-          'before the Objects tap can be expected to push anything.',
-    );
-    final pushesBeforeObjects = pushObserver.pushCount;
-    await tester.tap(find.byKey(const ValueKey('home-objects-control')));
-    final objectsDuration = await _settleRoutePush(
-      tester,
-      find.byKey(const ValueKey('objects-screen-root')),
-    );
-    expect(
-      pushObserver.pushCount,
-      pushesBeforeObjects + 1,
-      reason: 'Objects tap must produce exactly one didPush.',
-    );
-    expect(find.text('Objects'), findsOneWidget);
-    expect(find.text('Where silence speaks.'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('east-back-button')));
-    await _settleRoutePop(
-      tester,
-      objectsDuration,
-      poppedRouteFinder: find.byKey(const ValueKey('objects-screen-root')),
     );
     expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
 
@@ -864,7 +815,6 @@ void main() {
     expect(find.text('Feel.'), findsNothing);
     expect(find.text('Ask from your heart.'), findsNothing);
     expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
     // Item 2 (3D-C correction, Section 4): a locked `DailyWisdomStatus`
     // reopened from disk retains its authoritative revealId/revealedAt on
@@ -1416,8 +1366,8 @@ void main() {
   });
 
   testWidgets(
-      'top navigation uses deliberate ring/bar geometry: Objects is a single '
-      'ring, Kept is a concentric double ring, no Unicode circle glyphs '
+      'top navigation uses deliberate ring/bar geometry: Kept is a '
+      'concentric double ring, no Unicode circle glyphs '
       'remain, and tap targets/destinations/semantics are unchanged',
       (tester) async {
     final now = DateTime.now();
@@ -1430,8 +1380,7 @@ void main() {
       ).encode(),
     });
 
-    // Fresh, per-test notification service. This test doesn't pop Settings
-    // before its own Objects/Kept taps, but it still mounts a HomeScreen
+    // Fresh, per-test notification service. This test still mounts a HomeScreen
     // whose `initState` unconditionally calls `synchronizeUnlockNotification()`
     // — an injected instance keeps that call test-local instead of
     // depending on the shared `app_services.wisdomNotificationService`
@@ -1463,73 +1412,39 @@ void main() {
       findsNothing,
     );
 
-    // Objects renders exactly one ring; Kept renders exactly two. Each ring
-    // `CustomPaint` is located directly by its own stable key (asserted
-    // unique before being read), not by walking up from a tooltip/ancestor.
-    final objectsPainter =
-        _topNavRingPainterByKey(tester, 'objects-top-nav-ring');
-    expect(objectsPainter.ringCount, 1);
-
     final keptPainter = _topNavRingPainterByKey(tester, 'kept-top-nav-ring');
-    expect(keptPainter.ringCount, 2);
-
-    // Objects and Kept share the exact same outer diameter, stroke width,
-    // and color by construction (both read the one shared geometry token),
-    // and identical outer bounding boxes / tap targets / vertical centers.
-    expect(objectsPainter.ringCount == keptPainter.ringCount, isFalse);
+    expect(keptPainter.color, TopNavRingGeometry.color);
     expect(TopNavRingGeometry.outerDiameter, greaterThan(0));
-    expect(
-      tester.getSize(find.byType(SingleRingIcon)),
-      const Size.square(TopNavRingGeometry.outerDiameter),
-    );
     expect(
       tester.getSize(find.byType(DoubleRingIcon)),
       const Size.square(TopNavRingGeometry.outerDiameter),
-    );
-    expect(
-      tester.getSize(find.byKey(const ValueKey('home-objects-control'))),
-      tester.getSize(find.byKey(const ValueKey('home-kept-control'))),
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('home-settings-control'))),
       tester.getSize(find.byKey(const ValueKey('home-kept-control'))),
     );
     expect(
-      tester.getCenter(find.byKey(const ValueKey('home-objects-control'))).dy,
-      tester.getCenter(find.byKey(const ValueKey('home-kept-control'))).dy,
-    );
-    expect(
       tester.getCenter(find.byKey(const ValueKey('home-settings-control'))).dy,
       tester.getCenter(find.byKey(const ValueKey('home-kept-control'))).dy,
     );
-    // Objects sits immediately to the left of Kept, which stays the
-    // far-right control; the hamburger stays on the far left.
+    // Kept remains the far-right control; the hamburger stays on the far left.
     expect(
       tester.getCenter(find.byKey(const ValueKey('home-settings-control'))).dx,
       lessThan(
-        tester.getCenter(find.byKey(const ValueKey('home-objects-control'))).dx,
-      ),
-    );
-    expect(
-      tester.getCenter(find.byKey(const ValueKey('home-objects-control'))).dx,
-      lessThan(
-        tester.getCenter(find.byKey(const ValueKey('home-kept-control'))).dx,
-      ),
+          tester.getCenter(find.byKey(const ValueKey('home-kept-control'))).dx),
     );
 
     // Semantics/destinations remain correct.
     expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
     expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
 
-    // No grey background/ripple/halo on any of the three controls. Each key
+    // No grey background/ripple/halo on either control. Each key
     // is on the actual `IconButton` itself now (the `Tooltip` wrapper that
     // used to sit between the tooltip finder and the button is gone), so
     // `tester.widget<IconButton>` reads it directly rather than via an
     // ancestor walk.
     for (final controlKey in [
       'home-settings-control',
-      'home-objects-control',
       'home-kept-control',
     ]) {
       final button =
@@ -1539,20 +1454,6 @@ void main() {
       expect(style.overlayColor?.resolve({}), Colors.transparent);
     }
 
-    await tester.tap(find.byKey(const ValueKey('home-objects-control')));
-    final objectsDuration = await _settleRoutePush(
-      tester,
-      find.byKey(const ValueKey('objects-screen-root')),
-    );
-    expect(find.text('Objects'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('east-back-button')));
-    await _settleRoutePop(
-      tester,
-      objectsDuration,
-      poppedRouteFinder: find.byKey(const ValueKey('objects-screen-root')),
-    );
-    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
-
     await tester.tap(find.byKey(const ValueKey('home-kept-control')));
     await _settleRoutePush(
         tester, find.byKey(const ValueKey('kept-screen-root')));
@@ -1560,7 +1461,7 @@ void main() {
   });
 
   testWidgets(
-      'Settings, Objects, and Kept all push as plain (right-origin) '
+      'Settings and Kept push as plain (right-origin) '
       'MaterialPageRoutes with native interactive edge-swipe-back',
       (tester) async {
     final now = DateTime.now();
@@ -1574,10 +1475,8 @@ void main() {
     });
 
     final pushObserver = _HomePushCountingNavigatorObserver();
-    // Fresh, per-test notification service — see the identical rationale in
-    // "top navigation opens Settings, Objects, and Kept…" above. This test
-    // pops Settings then taps Objects, so it depends on the same post-pop
-    // guard-reset timing.
+    // Fresh, per-test notification service keeps this navigation test
+    // independent of the shared process-wide notification singleton.
     final notificationPlatform = _HomeNotificationPlatform(enabled: true);
     final notificationService =
         WisdomNotificationService(platform: notificationPlatform);
@@ -1599,8 +1498,8 @@ void main() {
     final settingsRoute = ModalRoute.of(
       tester.element(find.byKey(const ValueKey('settings-scroll'))),
     );
-    // Item 3: Settings now uses exactly the same route type as Objects and
-    // Kept — a plain `MaterialPageRoute`, not a custom directional route.
+    // Settings uses the same route type as Kept — a plain
+    // `MaterialPageRoute`, not a custom directional route.
     expect(settingsRoute, isA<MaterialPageRoute>());
     // The route's own transitionDuration is exactly what was just used to
     // settle its push above — this is the canonical, single-sourced
@@ -1612,37 +1511,6 @@ void main() {
       tester,
       settingsDuration,
       poppedRouteFinder: find.byKey(const ValueKey('settings-scroll')),
-    );
-    expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
-
-    // This is the tap that failed intermittently on real Mac validation
-    // when this test ran as part of a larger suite: proving
-    // `navigationInProgress` is false and asserting the exact push count
-    // (rather than only inferring success from mount timing) turns "did
-    // the tap get silently swallowed by a still-active guard" into a
-    // directly observable fact.
-    expect(
-      _homeNavigationInProgress(tester),
-      isFalse,
-      reason: 'navigationInProgress must have reset after the Settings pop '
-          'before the Objects tap can be expected to push anything.',
-    );
-    final pushesBeforeObjects = pushObserver.pushCount;
-    await tester.tap(find.byKey(const ValueKey('home-objects-control')));
-    final objectsDuration = await _settleRoutePush(
-      tester,
-      find.byKey(const ValueKey('objects-screen-root')),
-    );
-    expect(pushObserver.pushCount, pushesBeforeObjects + 1);
-    final objectsRoute = ModalRoute.of(
-      tester.element(find.byKey(const ValueKey('objects-screen-root'))),
-    );
-    expect(objectsRoute, isA<MaterialPageRoute>());
-    await tester.tap(find.byKey(const ValueKey('east-back-button')));
-    await _settleRoutePop(
-      tester,
-      objectsDuration,
-      poppedRouteFinder: find.byKey(const ValueKey('objects-screen-root')),
     );
     expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
 
@@ -1660,17 +1528,11 @@ void main() {
     expect(keptRoute, isA<MaterialPageRoute>());
     expect(keptDuration, keptRoute!.transitionDuration);
 
-    // Settings, Objects, and Kept all resolve to the exact same
+    // Settings and Kept resolve to the exact same
     // `MaterialPageRoute` forward transition duration — checked by direct
     // cross-comparison rather than an assumed absolute value, since the
     // underlying default is Flutter's own and not something this app
     // re-declares anywhere.
-    expect(
-      objectsDuration,
-      settingsDuration,
-      reason: 'Objects must use the same route transition duration as '
-          'Settings.',
-    );
     expect(
       keptDuration,
       settingsDuration,
@@ -1700,14 +1562,13 @@ void main() {
     await _tapCenter(tester);
     await tester.pump(const Duration(milliseconds: 850));
 
-    // Approved Ritual direction: the hamburger + two-circle chrome is
+    // Approved Ritual direction: the hamburger + Kept chrome is
     // absent for every ritual beat (entrance through the ask) — still true
     // here, mid-Pause. The ring-count/tap-size geometry of these controls
     // is proved once chrome is actually mounted, in "top navigation uses
     // deliberate ring/bar geometry" above.
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
     expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
     expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 850));
@@ -1732,7 +1593,6 @@ void main() {
     await _tapCenter(tester);
     await tester.pump();
     expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
     expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(askTextFinder, findsOneWidget);
@@ -1779,13 +1639,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 949));
     expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     expect(find.byKey(const ValueKey('home-settings-control')), findsNothing);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
     expect(find.byKey(const ValueKey('home-kept-control')), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1));
     expect(find.byKey(const ValueKey('ritual-silence')), findsNothing);
     expect(find.byKey(const ValueKey('home-settings-control')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-objects-control')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-objects-control')), findsNothing);
     expect(find.byKey(const ValueKey('home-kept-control')), findsOneWidget);
     expect(find.text(removedRevealPrompt), findsNothing);
     expect(find.text('Reveal.'), findsNothing);
@@ -2961,9 +2820,9 @@ void main() {
   // Correction: the `Tooltip`/`RawTooltip` wrapper has been removed entirely
   // from `_HomeSettingsMenuControl` and `_HomeTopNavigation` — it was never
   // the real hit-testable control, and `find.byTooltip(...)` no longer
-  // resolves to anything for these three controls. Each control now carries
+  // resolves to anything for these two controls. Each control now carries
   // its own stable key directly on the actual hit-testable `IconButton`
-  // (`home-settings-control`, `home-objects-control`, `home-kept-control`),
+  // (`home-settings-control`, `home-kept-control`),
   // and this data table drives one loop iteration per control, each against
   // its own fresh Home instance so a destination-tap check for one control
   // can never leak navigation state into the next control's checks.
@@ -2974,13 +2833,6 @@ void main() {
       semanticsLabel: 'Settings',
       semanticsHint: null,
       destinationKey: 'settings-scroll',
-    ),
-    (
-      key: 'home-objects-control',
-      overlayLabel: 'Objects',
-      semanticsLabel: 'Objects',
-      semanticsHint: null,
-      destinationKey: 'objects-screen-root',
     ),
     (
       key: 'home-kept-control',
@@ -3015,9 +2867,8 @@ void main() {
 
       // Correction: verify the behavioral contract directly (a real
       // long-press produces no visible overlay) instead of finding or
-      // casting any tooltip widget — there is none. None of these three
-      // controls have any other on-screen `Text` reading "Settings" /
-      // "Objects" / "Kept" at this point (they are icon-only), so
+      // casting any tooltip widget — there is none. Neither control has any
+      // other on-screen `Text` reading "Settings" / "Kept" at this point,
       // `find.text(...)` finding nothing, before and well past the former
       // tooltip show delay, is a direct behavioral proof no overlay ever
       // appears.
@@ -3869,13 +3720,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-save-control-kept')));
     await tester.pump(const Duration(milliseconds: 100));
 
-    // No navigation was triggered (the main ritual's `Kept`/`Settings`/
-    // `Objects` routes never opened) and no ritual-flow change occurred —
+    // No navigation was triggered (the main ritual's `Kept`/`Settings`
+    // routes never opened) and no ritual-flow change occurred —
     // i.e. the ancestor full-screen ritual GestureDetector's own tap
     // handler never fired.
     expect(find.byKey(const ValueKey('kept-screen-root')), findsNothing);
     expect(find.byKey(const ValueKey('settings-scroll')), findsNothing);
-    expect(find.byKey(const ValueKey('objects-screen-root')), findsNothing);
     expect(_homeScreenStep(tester), screenStepBefore);
     expect(_homeNavigationInProgress(tester), navigationBefore);
     expect(find.text(wisdom), findsOneWidget);
@@ -5483,7 +5333,7 @@ Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
 }
 
 /// Locates a top-nav ring `CustomPaint` directly by its own stable key
-/// (`objects-top-nav-ring` / `kept-top-nav-ring`, set in `top_nav_ring.dart`)
+/// (`kept-top-nav-ring`, set in `top_nav_ring.dart`)
 /// rather than by walking up from a tooltip/ancestor — that ancestry-based
 /// approach broke once the `Tooltip` wrapper was removed entirely from
 /// `_HomeTopNavigation`. The key is asserted to resolve to exactly one
@@ -5650,7 +5500,7 @@ Future<Duration> _settleRoutePush(
 /// name — it is a perfectly ordinary public member and can be read via a
 /// `dynamic` reference to the `State` object returned by `tester.state`.
 ///
-/// `openSettings()`/`openObjects()`/`openKeeperScreen()` only flip this
+/// `openSettings()`/`openKeeperScreen()` only flip this
 /// guard back to `false` inside a `finally` block that runs *after*
 /// `await Navigator.push(...)` resolves — and for `openSettings()`
 /// specifically, that `finally` also waits on

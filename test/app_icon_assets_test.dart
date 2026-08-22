@@ -6,9 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Update 4 — iOS app icon replacement.
 ///
-/// These are asset/file-based checks (not app runtime behavior), matching
-/// the existing convention in `objects_assets_test.dart`: plain `dart:io`
-/// existence checks plus, where a claim is about actual pixel content
+/// These are asset/file-based checks (not app runtime behavior): plain
+/// `dart:io` existence checks plus, where a claim is about actual pixel content
 /// (opacity, black canvas, centered ring), real PNG decoding via
 /// `dart:ui.instantiateImageCodec` — the same mechanism
 /// `wisdom_share_service_test.dart` already uses to inspect rendered

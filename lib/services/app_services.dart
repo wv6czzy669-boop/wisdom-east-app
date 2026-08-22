@@ -31,7 +31,6 @@ import 'kept_state_revision_notifier.dart';
 import 'kept_storage_bootstrap.dart';
 import 'purchase_service.dart';
 import 'rating_request_service.dart';
-import 'return_service.dart';
 import 'saved_reflections_service.dart';
 import 'storage_service.dart';
 import 'widget_snapshot_service.dart';
@@ -48,7 +47,6 @@ final WisdomNotificationService wisdomNotificationService =
     WisdomNotificationService();
 final RatingRequestService ratingRequestService = RatingRequestService();
 final WidgetSnapshotService widgetSnapshotService = WidgetSnapshotService();
-final ReturnService returnService = ReturnService();
 final JournalOwnerService journalOwnerService = JournalOwnerService();
 
 /// Free-for-everyone user data export. `savedReflectionsServiceProvider` is

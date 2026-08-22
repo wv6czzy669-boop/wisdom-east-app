@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wisdom_app/app.dart';
-import 'package:wisdom_app/data/objects_catalog.dart';
 import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
@@ -262,8 +261,8 @@ void main() {
   });
 
   testWidgets(
-      'EAST. Productions row exposes one combined actionable '
-      'semantic node distinct from Objects', (tester) async {
+      'EAST. Productions row exposes one combined actionable semantic node',
+      (tester) async {
     final semantics = tester.ensureSemantics();
     try {
       await tester.pumpWidget(
@@ -283,15 +282,6 @@ void main() {
     } finally {
       semantics.dispose();
     }
-  });
-
-  testWidgets(
-      'the Objects-screen link still targets /objects, distinct from the '
-      'Settings row targeting the root domain', (tester) async {
-    expect(
-      ObjectsCatalog.discoverObjectsUrl,
-      'https://east.productions/objects',
-    );
   });
 
   testWidgets('Kept displays the full stored date with year', (tester) async {

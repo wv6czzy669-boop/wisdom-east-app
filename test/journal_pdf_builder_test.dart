@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/services/journal_layout.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
@@ -31,6 +33,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final now = DateTime.utc(2026, 8, 16);
+  late pw.Font font;
+
+  setUpAll(() async {
+    font = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/EBGaramond-Variable.ttf'),
+    );
+  });
 
   FavoriteItem item({
     required String id,
@@ -48,6 +57,15 @@ void main() {
       keptAt: keptAt.toIso8601String(),
     );
   }
+
+  test('title-page header uses only the Journal generation year', () {
+    expect(JournalPdfBuilder.headerYear(DateTime.utc(2026, 8, 16)), '2026');
+    expect(JournalPdfBuilder.headerYear(DateTime.utc(2031, 1, 1)), '2031');
+  });
+
+  test('every Journal body folio uses the fixed bottom-right alignment', () {
+    expect(JournalBodyLayout.folioAlignment, pw.Alignment.centerRight);
+  });
 
   test('every physical page is exactly A4 portrait (210 × 297 mm in points)',
       () async {
@@ -95,7 +113,7 @@ void main() {
             i.isEven ? 'A reflection of modest length for entry $i.' : null,
       ),
     );
-    final expectedBodyGroups = planner.plan(items).length;
+    final expectedBodyGroups = planner.plan(items, font: font).length;
 
     final bytes = await JournalPdfBuilder(planner: planner).build(
       items: items,
@@ -237,7 +255,7 @@ void main() {
   test(
       'generation is purely a function of its arguments -- '
       'JournalPdfBuilder holds no reference to any Kept/Reflection/daily-'
-      'access/Return service, so it structurally cannot mutate any of '
+      'access service, so it structurally cannot mutate any of '
       'them', () async {
     // No service of any kind is ever passed to the constructor or to
     // build() -- only plain FavoriteItem values, a name, and a clock. This

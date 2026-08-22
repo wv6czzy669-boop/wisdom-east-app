@@ -441,12 +441,10 @@ class _HomePauseFeelText extends StatelessWidget {
 
 class _HomeTopNavigation extends StatelessWidget {
   const _HomeTopNavigation({
-    required this.onObjectsPressed,
     required this.onKeptPressed,
     this.keptEmphasized = false,
   });
 
-  final VoidCallback onObjectsPressed;
   final VoidCallback onKeptPressed;
 
   /// Item 6: briefly true right after a successful save so the Kept icon
@@ -466,91 +464,33 @@ class _HomeTopNavigation extends StatelessWidget {
       key: const ValueKey('top-navigation'),
       top: 0,
       right: 8,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox.square(
-            dimension: 48,
-            // Correction: the `Tooltip` wrapper is removed entirely — it
-            // was never the real hit-testable control (tests long-pressing
-            // it were exercising the tooltip's own internal machinery, not
-            // this button), and accessibility already does not depend on
-            // it: the explicit, stable `Semantics` node below is the
-            // source of truth for VoiceOver. `home-objects-control` is a
-            // stable key directly on the actual `IconButton`.
-            //
-            // Correction: `Tooltip` used to also absorb a long-press
-            // (winning the gesture arena over the button's own tap
-            // recognizer) even in manual trigger mode, so long-pressing
-            // this control was always a real no-op. With `Tooltip` gone,
-            // an unclaimed long-press falls through to `IconButton`'s own
-            // `TapGestureRecognizer` as an ordinary slow tap-and-release —
-            // `TapGestureRecognizer` has no maximum hold duration — which
-            // fired real navigation mid long-press-suppression test. A
-            // no-op `onLongPress` here is a *different* gesture family
-            // (long-press, not tap) and claims the long-press outright, so
-            // it no longer reaches the button's tap recognizer at all,
-            // while a normal, quick tap is entirely unaffected.
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPress: () {},
-              // Correction: `GestureDetector` auto-injects its own
-              // `Semantics` annotation exposing a `longPress` action for
-              // whatever gesture callbacks it's given, unless told not
-              // to. Without this, the no-op `onLongPress` above would
-              // have leaked a spurious "long press" accessibility action
-              // onto this control's merged semantics node, alongside the
-              // explicit outer `Semantics(onTap: ...)` below — which is
-              // meant to be the single, sole source of truth here.
-              excludeFromSemantics: true,
-              child: Semantics(
-                label: 'Objects',
-                button: true,
-                onTap: onObjectsPressed,
-                child: ExcludeSemantics(
-                  child: IconButton(
-                    key: const ValueKey('home-objects-control'),
-                    style: _noHaloStyle,
-                    icon: const SingleRingIcon(),
-                    onPressed: onObjectsPressed,
-                  ),
+      child: SizedBox.square(
+        dimension: 48,
+        // The explicit Semantics node is the single accessibility source of
+        // truth. The no-op long press preserves the control's long-press-is-
+        // a-no-op behavior without affecting a normal tap.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPress: () {},
+          excludeFromSemantics: true,
+          child: Semantics(
+            label: 'Kept wisdoms',
+            hint: 'Double tap to view wisdoms you have kept',
+            button: true,
+            onTap: onKeptPressed,
+            child: ExcludeSemantics(
+              child: IconButton(
+                key: const ValueKey('home-kept-control'),
+                style: _noHaloStyle,
+                icon: _KeptIconEmphasis(
+                  active: keptEmphasized,
+                  child: const DoubleRingIcon(),
                 ),
+                onPressed: onKeptPressed,
               ),
             ),
           ),
-          SizedBox.square(
-            dimension: 48,
-            // See the matching Objects correction above: this no-op
-            // `onLongPress` restores the long-press-is-a-no-op contract
-            // that `Tooltip` used to provide implicitly.
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPress: () {},
-              // See the matching Objects correction above: exclude this
-              // GestureDetector's own auto-injected `longPress` semantics
-              // action so the explicit outer `Semantics(onTap: ...)`
-              // below remains the sole accessibility source of truth.
-              excludeFromSemantics: true,
-              child: Semantics(
-                label: 'Kept wisdoms',
-                hint: 'Double tap to view wisdoms you have kept',
-                button: true,
-                onTap: onKeptPressed,
-                child: ExcludeSemantics(
-                  child: IconButton(
-                    key: const ValueKey('home-kept-control'),
-                    style: _noHaloStyle,
-                    icon: _KeptIconEmphasis(
-                      active: keptEmphasized,
-                      child: const DoubleRingIcon(),
-                    ),
-                    onPressed: onKeptPressed,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -659,18 +599,16 @@ class _HomeSettingsMenuControl extends StatelessWidget {
       left: 8,
       child: SizedBox.square(
         dimension: 48,
-        // Correction: the `Tooltip` wrapper is removed entirely (see the
-        // matching note on Objects/Kept above) — explicit, stable
-        // `Semantics` is the source of truth for VoiceOver here, and
+        // Correction: the `Tooltip` wrapper is removed entirely — explicit,
+        // stable `Semantics` is the source of truth for VoiceOver here, and
         // `home-settings-control` is a stable key directly on the actual
         // `IconButton`. The no-op `onLongPress` below restores the
         // long-press-is-a-no-op contract `Tooltip` used to provide
-        // implicitly (see the matching note on Objects/Kept).
+        // implicitly.
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onLongPress: () {},
-          // See the matching Objects correction above: exclude this
-          // GestureDetector's own auto-injected `longPress` semantics
+          // Exclude this GestureDetector's own auto-injected `longPress` semantics
           // action so the explicit outer `Semantics(onTap: ...)` below
           // remains the sole accessibility source of truth.
           excludeFromSemantics: true,

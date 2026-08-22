@@ -11,8 +11,7 @@ import 'journal_layout.dart';
 ///
 /// Entirely local: no network call, no server, no upload of Kept or
 /// Reflection content anywhere. Read-only over [FavoriteItem] data — never
-/// mutates a Kept record, a Reflection, daily-access state, or Return
-/// state, and never touches CloudKit.
+/// mutates a Kept record, a Reflection, daily-access state, or CloudKit.
 ///
 /// Visual fidelity repair: every constant below is derived from
 /// "EAST Journal - Direction.dc.html" → the "The publication" section
@@ -29,20 +28,19 @@ class JournalPdfBuilder {
 
   final JournalLayoutPlanner _planner;
 
+  /// The quiet title-page date is intentionally only the publication year.
+  static String headerYear(DateTime generatedAt) => '${generatedAt.year}';
+
   // EAST.'s printed-page visual system, matching the Flutter surfaces.
   static const PdfColor _background = PdfColor.fromInt(0xFFE2E0D9);
   static const PdfColor _ink = PdfColor.fromInt(0xFF2C2924);
 
-  // Design's own muted hierarchy (Journal rules #10, #12): date/metadata is
-  // the dimmest tier; the title page's month and owner sit in their own two
-  // quiet tiers; reflection sits mid-muted beneath the wisdom's full
-  // ink. Fixed tones (never alpha) keep the printed result predictable.
-  static const PdfColor _dateMuted = PdfColor.fromInt(0xFF625D54);
-  static const PdfColor _monthMuted = PdfColor.fromInt(0xFF777167);
+  // Design's own muted hierarchy: the title-page year and owner sit in
+  // quiet secondary tiers. Body tones live in [JournalBodyLayout] so their
+  // measurement and rendering cannot diverge.
+  static const PdfColor _yearMuted = PdfColor.fromInt(0xFF777167);
   static const PdfColor _ownerMuted = PdfColor.fromInt(0xFF807A70);
-  static const PdfColor _reflectionTone = PdfColor.fromInt(0xFF5D584F);
-  // The cover ring is a quiet hairline; the final ring and body folio are
-  // gentler still, echoing the opening mark.
+  // The cover ring is a quiet hairline; the final ring is gentler still.
   static const PdfColor _coverRingTone = PdfColor.fromInt(0xFF9C9589);
   static const PdfColor _faintTone = PdfColor.fromInt(0xFFB5AFA4);
 
@@ -65,81 +63,23 @@ class JournalPdfBuilder {
   static const double _titleMargin = 70.03;
   static const double _titleFontSize = 59.53;
   static const double _titleTopFraction = 183 / 481;
-  static const double _monthFontSize = 17.51;
-  static const double _monthLetterSpacing = 5.95;
-  static const double _monthTopFraction = 243 / 481;
+  static const double _yearFontSize = 17.51;
+  static const double _yearLetterSpacing = 5.95;
+  static const double _yearTopFraction = 243 / 481;
   static const double _ownerFontSize = 24.51;
   static const double _ownerTopFraction = 279 / 481;
-
-  // ---- Body (physical page 3 onward) ----
-  static const double _bodyMarginLeft = 70.03;
-  static const double _bodyMarginRight = 70.03;
-  static const double _bodyMarginTop = 98.05;
-  static const double _bodyMarginBottom = 78.0;
-  static const double _entryGap = 59.53;
-  static const double _entryLineGap = 17.51;
-  static const double _reflectionIndent = 38.52;
-  static const double _dateFontSize = 14.01;
-  static const double _dateLetterSpacing = 3.64;
-  static const double _wisdomFontSize = 26.26;
-  static const double _reflectionFontSize = 21.01;
-  static const double _folioFontSize = 15.76;
-  static const double _folioLetterSpacing = 3.78;
 
   // ---- Final page ----
   static const double _finalRingDiameter = 70.03;
   static const double _finalRingBorder = 0.9;
   static const double _finalRingCenterYFraction = 221 / 481; // same as cover
 
-  static const List<String> _months = [
-    'JANUARY',
-    'FEBRUARY',
-    'MARCH',
-    'APRIL',
-    'MAY',
-    'JUNE',
-    'JULY',
-    'AUGUST',
-    'SEPTEMBER',
-    'OCTOBER',
-    'NOVEMBER',
-    'DECEMBER',
-  ];
-
-  static const List<String> _shortMonths = [
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
-  ];
-
-  /// A quiet, compact marginal-date treatment -- "2 JAN 2026" -- derived
-  /// from [FavoriteItem.keptAt] when available (a real instant, never
-  /// re-parsed from the lossy, human-formatted [FavoriteItem.date]).
-  /// Falls back to the already-formatted [FavoriteItem.date] verbatim for
-  /// the rare pre-Phase-9 record with no [FavoriteItem.keptAt].
-  String _marginalDate(FavoriteItem item) {
-    final raw = item.keptAt;
-    final parsed = raw == null ? null : DateTime.tryParse(raw);
-    if (parsed == null) return item.date.toUpperCase();
-    final local = parsed.toLocal();
-    return '${local.day} ${_shortMonths[local.month - 1]} ${local.year}';
-  }
-
   /// Builds the full Journal PDF for [items] (any order; sorted internally
   /// oldest → newest by [FavoriteItem.keptAt], never by wisdom text) and
   /// returns the encoded bytes. [ownerName], if non-null and non-blank,
   /// appears once, on the title page only.
   ///
-  /// [now] determines the "MONTH YEAR" printed on the title page — the
+  /// [now] determines the year printed on the title page — the
   /// Journal's own generation moment, never a content filter over which
   /// occurrences are included. Injectable for deterministic tests;
   /// production always uses the real current time.
@@ -170,7 +110,7 @@ class JournalPdfBuilder {
       _buildTitlePage(font, ownerName: ownerName, generatedAt: generatedAt),
     );
 
-    final groups = _planner.plan(items);
+    final groups = _planner.plan(items, font: font);
     if (groups.isNotEmpty) {
       document.addPage(_buildBody(font, groups));
     }
@@ -236,7 +176,7 @@ class JournalPdfBuilder {
   }
 
   // ---------------------------------------------------------------------
-  // Physical page 2 — title page. "Journal.", the generation MONTH YEAR,
+  // Physical page 2 — title page. "Journal.", the generation year,
   // and the optional owner name -- three tiers anchored from the top at
   // the Design's own fractional offsets (title at 38% of page height),
   // never a loosely centered block, so the composition holds identically
@@ -247,7 +187,7 @@ class JournalPdfBuilder {
     required String? ownerName,
     required DateTime generatedAt,
   }) {
-    final monthYear = '${_months[generatedAt.month - 1]} ${generatedAt.year}';
+    final year = headerYear(generatedAt);
     final trimmedOwnerName = ownerName?.trim();
     final pageHeight = PdfPageFormat.a4.height;
 
@@ -276,17 +216,17 @@ class JournalPdfBuilder {
                 ),
               ),
               pw.Positioned(
-                top: _monthTopFraction * pageHeight,
+                top: _yearTopFraction * pageHeight,
                 left: _titleMargin,
                 right: _titleMargin,
                 child: pw.Text(
-                  monthYear,
+                  year,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
                     font: font,
-                    fontSize: _monthFontSize,
-                    color: _monthMuted,
-                    letterSpacing: _monthLetterSpacing,
+                    fontSize: _yearFontSize,
+                    color: _yearMuted,
+                    letterSpacing: _yearLetterSpacing,
                   ),
                 ),
               ),
@@ -314,20 +254,19 @@ class JournalPdfBuilder {
 
   // ---------------------------------------------------------------------
   // Physical pages 3+ — the Journal body. One `pw.MultiPage` so the `pdf`
-  // package's own layout engine places each occurrence, gracefully
-  // overflowing whatever does not fit to the next page -- see
-  // `JournalLayoutPlanner` for why grouping already keeps this adaptive
-  // and within the 1–3-per-page ceiling without squeezing content.
+  // package's own layout engine places each occurrence. The planner measures
+  // these exact widgets first, keeping one to three complete entries on each
+  // normal page without squeezing or splitting an entry.
   // ---------------------------------------------------------------------
   pw.Page _buildBody(pw.Font font, List<JournalPageGroup> groups) {
     return pw.MultiPage(
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(
-          _bodyMarginLeft,
-          _bodyMarginTop,
-          _bodyMarginRight,
-          _bodyMarginBottom,
+          JournalBodyLayout.marginLeft,
+          JournalBodyLayout.marginTop,
+          JournalBodyLayout.marginRight,
+          JournalBodyLayout.marginBottom,
         ),
         theme: pw.ThemeData.withFont(base: font, bold: font, italic: font),
         // The entire PDF uses the warm-stone field -- every body page's own stone background,
@@ -356,120 +295,20 @@ class JournalPdfBuilder {
       // block) so the Reflection text itself -- a spanning widget in the
       // `pdf` layout engine -- can continue naturally onto further pages.
       // Nothing is clipped or truncated.
-      return _buildEntryWidgets(font, group.entries.single,
-          keepTogether: false);
+      return JournalBodyLayout.buildOverflowingEntry(
+          font, group.entries.single);
     }
 
     final widgets = <pw.Widget>[];
     for (var i = 0; i < group.entries.length; i++) {
-      if (i > 0) widgets.add(pw.SizedBox(height: _entryGap));
-      widgets.addAll(
-        _buildEntryWidgets(font, group.entries[i], keepTogether: true),
-      );
+      if (i > 0) widgets.add(pw.SizedBox(height: JournalBodyLayout.entryGap));
+      widgets.add(JournalBodyLayout.buildEntry(font, group.entries[i]));
     }
     return widgets;
   }
 
-  /// One occurrence: a tracked, dimmed date on its own line, the wisdom
-  /// beneath it at full ink (the Design's "primary published
-  /// text"), then -- if present -- its Reflection, indented and dimmed
-  /// beneath its own line. No "Wisdom"/"Reflection" label anywhere;
-  /// hierarchy is entirely typographic (size/tone/indent), matching
-  /// "EAST Journal - Direction.dc.html" rule #10. When [keepTogether] is
-  /// true, the whole entry is one non-splitting unit (the ordinary case);
-  /// when false, only the date+wisdom stay paired and the Reflection is
-  /// free to flow across a page boundary.
-  List<pw.Widget> _buildEntryWidgets(
-    pw.Font font,
-    FavoriteItem item, {
-    required bool keepTogether,
-  }) {
-    final header = pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          _marginalDate(item),
-          style: pw.TextStyle(
-            font: font,
-            fontSize: _dateFontSize,
-            color: _dateMuted,
-            letterSpacing: _dateLetterSpacing,
-          ),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(top: _entryLineGap),
-          child: pw.Text(
-            item.text,
-            style: pw.TextStyle(
-              font: font,
-              fontSize: _wisdomFontSize,
-              color: _ink,
-              height: 1.5,
-            ),
-          ),
-        ),
-      ],
-    );
-
-    final reflection = item.reflection;
-    final hasReflection = reflection != null && reflection.trim().isNotEmpty;
-
-    if (!hasReflection) {
-      return [
-        keepTogether ? pw.Column(children: [header]) : header
-      ];
-    }
-
-    final reflectionStyle = pw.TextStyle(
-      font: font,
-      fontSize: _reflectionFontSize,
-      color: _reflectionTone,
-      height: 1.6,
-    );
-
-    if (!keepTogether) {
-      // The rare oversized-entry path: `pw.Text` only actually flows across
-      // page boundaries when `overflow: TextOverflow.span` is set (its
-      // `canSpan` getter is literally `overflow == TextOverflow.span` --
-      // otherwise `MultiPage` throws rather than split it) *and* it is a
-      // *direct* item in `MultiPage`'s widget list -- wrapping it in
-      // `Padding`/`Container` (as the ordinary indented case below does)
-      // hides that capability from the layout engine entirely. This is why
-      // the exceptional case's Reflection starts flush at the body margin
-      // rather than indented -- never clipped or truncated is the
-      // requirement that matters here, not pixel-perfect indentation.
-      return [
-        header,
-        pw.SizedBox(height: _entryLineGap),
-        pw.Text(
-          reflection,
-          style: reflectionStyle,
-          overflow: pw.TextOverflow.span,
-        ),
-      ];
-    }
-
-    return [
-      pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          header,
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(
-              top: _entryLineGap,
-              left: _reflectionIndent,
-            ),
-            child: pw.Text(reflection, style: reflectionStyle),
-          ),
-        ],
-      ),
-    ];
-  }
-
-  /// Folios alternate to the outer edge -- odd printed pages (recto) on the
-  /// right margin, even printed pages (verso) on the left -- exactly as
-  /// "EAST Journal - Direction.dc.html" specifies, so a printed spread
-  /// breathes correctly. `context.pageNumber` is 1-indexed across the
+  /// Folios remain at the bottom-right of every Journal body page.
+  /// `context.pageNumber` is 1-indexed across the
   /// *entire* `pw.Document` (cover + title page + this body) -- see the
   /// class doc comment on `JournalPdfBuilder.build` for why physical pages
   /// 1–2 always precede this MultiPage, making the offset exactly 2 for
@@ -478,21 +317,7 @@ class JournalPdfBuilder {
     final printedPageNumber = context.pageNumber - 2;
     if (printedPageNumber < 1) return pw.SizedBox();
 
-    return pw.Container(
-      alignment: printedPageNumber.isOdd
-          ? pw.Alignment.centerRight
-          : pw.Alignment.centerLeft,
-      margin: const pw.EdgeInsets.only(top: 14),
-      child: pw.Text(
-        '$printedPageNumber',
-        style: pw.TextStyle(
-          font: font,
-          fontSize: _folioFontSize,
-          color: _faintTone,
-          letterSpacing: _folioLetterSpacing,
-        ),
-      ),
-    );
+    return JournalBodyLayout.buildFolio(font, printedPageNumber);
   }
 
   // ---------------------------------------------------------------------

@@ -1,148 +1,278 @@
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
 import '../models/favorite_item.dart';
 
-/// EAST. Phase 10 — Journal's own adaptive editorial pagination planner.
-///
-/// Pure Dart, deliberately independent of the `pdf` package: this decides
-/// *which occurrences share a body page* (never how they are painted), so
-/// it can be reasoned about and tested as plain data — see
-/// [JournalPdfBuilder](journal_pdf_builder.dart) for the actual rendering
-/// that consumes a [plan].
-///
-/// Uses a lightweight character-count height *estimate*
-/// ([estimateEntryHeight]) — the `pdf` package's own real font metrics
-/// still govern final on-page wrapping at render time, so an imperfect
-/// estimate only ever affects how generously entries are grouped, never
-/// whether content is lost: a normal occurrence is always kept on one page
-/// as a single unbreakable block; only a genuinely oversized single
-/// occurrence is ever allowed to flow across page boundaries (see
-/// [JournalPageGroup.isOverflowing]).
+/// The Journal body's single source of truth for the dimensions, typography,
+/// and widgets used both to measure an entry and to paint it in the PDF.
+class JournalBodyLayout {
+  const JournalBodyLayout._();
+
+  static const double marginLeft = 70.03;
+  static const double marginRight = 70.03;
+  static const double marginTop = 98.05;
+  static const double marginBottom = 78.0;
+  static const double entryGap = 59.53;
+  static const double entryLineGap = 17.51;
+  static const double reflectionIndent = 38.52;
+  static const double dateFontSize = 14.01;
+  static const double dateLetterSpacing = 3.64;
+  static const double wisdomFontSize = 26.26;
+  static const double reflectionFontSize = 21.01;
+  static const double folioFontSize = 15.76;
+  static const double folioLetterSpacing = 3.78;
+  static const double folioTopGap = 14;
+
+  static const PdfColor dateMuted = PdfColor.fromInt(0xFF625D54);
+  static const PdfColor ink = PdfColor.fromInt(0xFF2C2924);
+  static const PdfColor reflectionTone = PdfColor.fromInt(0xFF5D584F);
+  static const PdfColor folioTone = PdfColor.fromInt(0xFFB5AFA4);
+
+  static const pw.Alignment folioAlignment = pw.Alignment.centerRight;
+
+  static const List<String> _shortMonths = [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ];
+
+  static double get contentWidth =>
+      PdfPageFormat.a4.width - marginLeft - marginRight;
+
+  static String marginalDate(FavoriteItem item) {
+    final raw = item.keptAt;
+    final parsed = raw == null ? null : DateTime.tryParse(raw);
+    if (parsed == null) return item.date.toUpperCase();
+    final local = parsed.toLocal();
+    return '${local.day} ${_shortMonths[local.month - 1]} ${local.year}';
+  }
+
+  /// The ordinary inseparable occurrence block. This exact widget is also
+  /// measured by [JournalLayoutPlanner], so pagination follows real PDF
+  /// wrapping rather than a text-length estimate.
+  static pw.Widget buildEntry(pw.Font font, FavoriteItem item) {
+    final header = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          marginalDate(item),
+          style: pw.TextStyle(
+            font: font,
+            fontSize: dateFontSize,
+            color: dateMuted,
+            letterSpacing: dateLetterSpacing,
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(top: entryLineGap),
+          child: pw.Text(
+            item.text,
+            style: pw.TextStyle(
+              font: font,
+              fontSize: wisdomFontSize,
+              color: ink,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final reflection = item.reflection;
+    if (reflection == null || reflection.trim().isEmpty) {
+      return pw.Column(children: [header]);
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        header,
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(
+            top: entryLineGap,
+            left: reflectionIndent,
+          ),
+          child: pw.Text(
+            reflection,
+            style: pw.TextStyle(
+              font: font,
+              fontSize: reflectionFontSize,
+              color: reflectionTone,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The safe exceptional rendering path for an entry taller than a normal
+  /// body page. The date and wisdom stay paired; the reflection can span
+  /// following pages rather than clipping or being discarded.
+  static List<pw.Widget> buildOverflowingEntry(
+    pw.Font font,
+    FavoriteItem item,
+  ) {
+    final header = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          marginalDate(item),
+          style: pw.TextStyle(
+            font: font,
+            fontSize: dateFontSize,
+            color: dateMuted,
+            letterSpacing: dateLetterSpacing,
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(top: entryLineGap),
+          child: pw.Text(
+            item.text,
+            style: pw.TextStyle(
+              font: font,
+              fontSize: wisdomFontSize,
+              color: ink,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+    final reflection = item.reflection;
+    if (reflection == null || reflection.trim().isEmpty) return [header];
+
+    return [
+      header,
+      pw.SizedBox(height: entryLineGap),
+      pw.Text(
+        reflection,
+        style: pw.TextStyle(
+          font: font,
+          fontSize: reflectionFontSize,
+          color: reflectionTone,
+          height: 1.6,
+        ),
+        overflow: pw.TextOverflow.span,
+      ),
+    ];
+  }
+
+  static pw.Widget buildFolio(pw.Font font, int pageNumber) {
+    return pw.Container(
+      alignment: folioAlignment,
+      margin: const pw.EdgeInsets.only(top: folioTopGap),
+      child: pw.Text(
+        '$pageNumber',
+        style: pw.TextStyle(
+          font: font,
+          fontSize: folioFontSize,
+          color: folioTone,
+          letterSpacing: folioLetterSpacing,
+        ),
+      ),
+    );
+  }
+}
+
+/// Plans Journal body pages from actual PDF layout measurements.
 class JournalLayoutPlanner {
   const JournalLayoutPlanner({
     this.maxEntriesPerPage = 3,
-    this.pageContentHeightPt = 666,
-    this.contentWidthPt = 417,
-    this.dateBlockHeightPt = 36,
-    this.entryGapPt = 59.53,
-    this.wisdomFontSizePt = 26.26,
-    this.wisdomLineHeightPt = 39.39,
-    this.reflectionGapPt = 17.51,
-    this.reflectionFontSizePt = 21.01,
-    this.reflectionLineHeightPt = 33.62,
-    this.averageCharWidthFactor = 0.46,
+    this.pageContentHeightOverridePt,
   });
 
-  /// Never more than this many occurrences ever share one physical body
-  /// page, regardless of how short they are.
   final int maxEntriesPerPage;
 
-  /// The estimated usable vertical space for entry content on one A4 body
-  /// page, in PDF points (margins/footer already excluded).
-  final double pageContentHeightPt;
+  /// Test-only deterministic override. Production always uses the measured
+  /// A4 body area, including reserved footer space.
+  final double? pageContentHeightOverridePt;
 
-  /// The estimated usable horizontal width for wisdom/Reflection text, in
-  /// PDF points (the marginal date column and gutters already excluded).
-  final double contentWidthPt;
-
-  final double dateBlockHeightPt;
-  final double entryGapPt;
-  final double wisdomFontSizePt;
-  final double wisdomLineHeightPt;
-  final double reflectionGapPt;
-  final double reflectionFontSizePt;
-  final double reflectionLineHeightPt;
-
-  /// A rough, font-agnostic average character advance width, expressed as
-  /// a fraction of font size -- deliberately approximate; see the class
-  /// doc comment for why precision here is not load-bearing.
-  final double averageCharWidthFactor;
-
-  /// Sorts [items] oldest → newest by [FavoriteItem.keptAt] (never by
-  /// wisdom text, never by list position alone) and groups them into
-  /// [JournalPageGroup]s, each destined for exactly one physical body
-  /// page. Items with no [FavoriteItem.revealId] (never a genuine Kept
-  /// occurrence) are excluded entirely.
-  List<JournalPageGroup> plan(List<FavoriteItem> items) {
+  List<JournalPageGroup> plan(
+    List<FavoriteItem> items, {
+    required pw.Font font,
+  }) {
+    final context = _measurementContext(font);
+    final availableHeight =
+        pageContentHeightOverridePt ?? _availableContentHeight(context, font);
     final ordered = _orderedOldestFirst(items);
     final groups = <JournalPageGroup>[];
 
     var index = 0;
     while (index < ordered.length) {
       final item = ordered[index];
-      final height = estimateEntryHeight(item);
+      final height = _measureEntry(item, font: font, context: context);
 
-      if (height > pageContentHeightPt) {
-        // Genuinely too long to share a page with anything, or even to fit
-        // alone -- gets its own group, flagged so the renderer lets its
-        // Reflection flow across as many pages as it genuinely needs
-        // rather than forcing it into one unbreakable block.
-        groups.add(
-          JournalPageGroup(entries: [item], isOverflowing: true),
-        );
+      if (height > availableHeight) {
+        groups.add(JournalPageGroup(entries: [item], isOverflowing: true));
         index += 1;
         continue;
       }
 
       final entries = <FavoriteItem>[item];
-      var used = height;
+      var usedHeight = height;
       index += 1;
 
       while (index < ordered.length && entries.length < maxEntriesPerPage) {
         final next = ordered[index];
-        final nextHeight = estimateEntryHeight(next);
-        if (nextHeight > pageContentHeightPt) break;
-        final withGap = used + entryGapPt + nextHeight;
-        if (withGap > pageContentHeightPt) break;
+        final nextHeight = _measureEntry(next, font: font, context: context);
+        if (nextHeight > availableHeight ||
+            usedHeight + JournalBodyLayout.entryGap + nextHeight >
+                availableHeight) {
+          break;
+        }
         entries.add(next);
-        used = withGap;
+        usedHeight += JournalBodyLayout.entryGap + nextHeight;
         index += 1;
       }
 
       groups.add(JournalPageGroup(entries: entries));
     }
-
     return groups;
   }
 
-  /// A conservative estimate of the vertical space one occurrence needs:
-  /// the marginal date, the wisdom (always present), and the Reflection
-  /// (only if present). Never used to clip or position final content --
-  /// see the class doc comment.
-  double estimateEntryHeight(FavoriteItem item) {
-    var height = dateBlockHeightPt;
-    height += _estimateTextHeight(
-      item.text,
-      fontSizePt: wisdomFontSizePt,
-      lineHeightPt: wisdomLineHeightPt,
-    );
-    final reflection = item.reflection;
-    if (reflection != null && reflection.trim().isNotEmpty) {
-      height += reflectionGapPt;
-      height += _estimateTextHeight(
-        reflection,
-        fontSizePt: reflectionFontSizePt,
-        lineHeightPt: reflectionLineHeightPt,
-      );
-    }
-    return height;
+  double measureEntry(FavoriteItem item, {required pw.Font font}) {
+    final context = _measurementContext(font);
+    return _measureEntry(item, font: font, context: context);
   }
 
-  double _estimateTextHeight(
-    String text, {
-    required double fontSizePt,
-    required double lineHeightPt,
-  }) {
-    final averageCharWidth = fontSizePt * averageCharWidthFactor;
-    final charsPerLine = (contentWidthPt / averageCharWidth).floor().clamp(
-          1,
-          1 << 30,
-        );
+  pw.Context _measurementContext(pw.Font font) {
+    return pw.Context(document: PdfDocument()).inheritFrom(
+      pw.ThemeData.withFont(base: font, bold: font, italic: font),
+    );
+  }
 
-    var lines = 0;
-    for (final paragraph in text.split('\n')) {
-      final length = paragraph.trim().length;
-      lines += length == 0 ? 1 : (length / charsPerLine).ceil();
-    }
-    return lines * lineHeightPt;
+  double _availableContentHeight(pw.Context context, pw.Font font) {
+    final footerHeight = pw.Widget.measure(
+      JournalBodyLayout.buildFolio(font, 1),
+      context: context,
+      constraints: pw.BoxConstraints(maxWidth: JournalBodyLayout.contentWidth),
+    ).y;
+    return PdfPageFormat.a4.height -
+        JournalBodyLayout.marginTop -
+        JournalBodyLayout.marginBottom -
+        footerHeight;
+  }
+
+  double _measureEntry(
+    FavoriteItem item, {
+    required pw.Font font,
+    required pw.Context context,
+  }) {
+    return pw.Widget.measure(
+      JournalBodyLayout.buildEntry(font, item),
+      context: context,
+      constraints: pw.BoxConstraints(maxWidth: JournalBodyLayout.contentWidth),
+    ).y;
   }
 
   List<FavoriteItem> _orderedOldestFirst(List<FavoriteItem> items) {
@@ -151,7 +281,6 @@ class JournalLayoutPlanner {
         .entries
         .where((entry) => entry.value.revealId != null)
         .toList(growable: false);
-
     withRevealId.sort((a, b) {
       final aKeptAt = _parseKeptAt(a.value);
       final bKeptAt = _parseKeptAt(b.value);
@@ -159,43 +288,28 @@ class JournalLayoutPlanner {
         final byKeptAt = aKeptAt.compareTo(bKeptAt);
         if (byKeptAt != 0) return byKeptAt;
       } else if (aKeptAt != bKeptAt) {
-        // A record with no known `keptAt` (pre-Phase-9 legacy data) sorts
-        // as older than any record whose `keptAt` is known.
         return aKeptAt == null ? -1 : 1;
       }
-      // Stable, deterministic tiebreak -- original list order, then
-      // revealId itself. Never wisdom text.
       final byOriginalOrder = a.key.compareTo(b.key);
       return byOriginalOrder != 0
           ? byOriginalOrder
           : a.value.revealId!.compareTo(b.value.revealId!);
     });
-
     return withRevealId.map((entry) => entry.value).toList(growable: false);
   }
 
   DateTime? _parseKeptAt(FavoriteItem item) {
     final raw = item.keptAt;
-    if (raw == null) return null;
-    return DateTime.tryParse(raw);
+    return raw == null ? null : DateTime.tryParse(raw);
   }
 }
 
-/// One physical A4 body page's worth of occurrences (1–3 in the ordinary
-/// case), oldest-first within the group.
 class JournalPageGroup {
   const JournalPageGroup({
     required this.entries,
     this.isOverflowing = false,
   });
 
-  /// Always exactly 1 when [isOverflowing] is true; 1–[maxEntriesPerPage]
-  /// otherwise.
   final List<FavoriteItem> entries;
-
-  /// True only for the rare occurrence whose own content is too long to
-  /// fit a single A4 page even alone -- the renderer must let its
-  /// Reflection flow/paginate naturally rather than forcing it onto one
-  /// page or clipping it.
   final bool isOverflowing;
 }

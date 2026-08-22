@@ -228,12 +228,9 @@ class _KeeperScreenState extends State<KeeperScreen> {
                     ),
                     // Lower composition: a quiet editorial close, not a
                     // feature list. Hierarchy comes entirely from spacing
-                    // rhythm -- no rules/labels/graphic dividers. Two
-                    // two-line groups (KEEPER CORE, then DEEPER KEEPER
-                    // VALUE -- concepts only, never rendered) each pair
-                    // tightly bound internally, separated from each other
-                    // by a wider pause, with the widest pause reserved for
-                    // the closing sentiment before it.
+                    // rhythm -- no rules, labels, or graphic dividers. The
+                    // core pair is tightly bound, with a wider pause before
+                    // the Journal benefit and the closing sentiment.
                     const SizedBox(height: 72),
                     Text(
                       "Keep without limit.",
@@ -247,12 +244,6 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 28),
-                    Text(
-                      "Return to what stayed.",
-                      textAlign: TextAlign.center,
-                      style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                    ),
-                    const SizedBox(height: 10),
                     Text(
                       "Take your Journal with you.",
                       textAlign: TextAlign.center,
