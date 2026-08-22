@@ -1,0 +1,318 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Turkish (`tr`).
+class AppLocalizationsTr extends AppLocalizations {
+  AppLocalizationsTr([String locale = 'tr']) : super(locale);
+
+  @override
+  String get appTitle => 'Günlük Bilgelik: EAST.';
+
+  @override
+  String get pause => 'Bekle.';
+
+  @override
+  String get feel => 'Hisset.';
+
+  @override
+  String get askFromYourHeart => 'Soruyu kalbinden sor.';
+
+  @override
+  String get east => 'EAST.';
+
+  @override
+  String get kept => 'Kalanlar';
+
+  @override
+  String get keptUpper => 'KALANLAR';
+
+  @override
+  String get reflectedUpper => 'YANSIMA';
+
+  @override
+  String get addReflectionUpper => 'YANSIMA EKLE';
+
+  @override
+  String get reflection => 'Yansıma';
+
+  @override
+  String get journal => 'Günlük';
+
+  @override
+  String get settings => 'Ayarlar';
+
+  @override
+  String get language => 'Dil';
+
+  @override
+  String get systemDefault => 'Sistem Varsayılanı';
+
+  @override
+  String get english => 'İngilizce';
+
+  @override
+  String languageSettingSemantics(Object value) {
+    return 'Dil. Geçerli seçim: $value.';
+  }
+
+  @override
+  String languageOptionSemantics(Object language) {
+    return '$language';
+  }
+
+  @override
+  String get back => 'Geri';
+
+  @override
+  String get delete => 'Sil';
+
+  @override
+  String get deleteUpper => 'SİL';
+
+  @override
+  String get cancel => 'İptal';
+
+  @override
+  String get close => 'Kapat';
+
+  @override
+  String get done => 'Bitti';
+
+  @override
+  String get retry => 'Yeniden Dene';
+
+  @override
+  String get skip => 'Atla';
+
+  @override
+  String get addName => 'İsim ekle';
+
+  @override
+  String get changeName => 'İsmi değiştir';
+
+  @override
+  String get keptWisdoms => 'Kalan bilgelikler';
+
+  @override
+  String get addReflection => 'Yansıma ekle';
+
+  @override
+  String get deleteReflection => 'Yansımayı sil';
+
+  @override
+  String get reflectedEditReflection => 'YANSIMA. Yansımayı düzenle.';
+
+  @override
+  String get journalSemantic => 'Günlük';
+
+  @override
+  String get keeper => 'Tutucu';
+
+  @override
+  String get restorePurchases => 'Satın Alımları Geri Yükle';
+
+  @override
+  String get icloudSync => 'iCloud Eşzamanlama';
+
+  @override
+  String get removeFromIcloud => 'iCloud’dan Kaldır';
+
+  @override
+  String get exportMyData => 'Verilerimi Dışa Aktar';
+
+  @override
+  String get privacyPolicy => 'Gizlilik Politikası';
+
+  @override
+  String get reachOut => 'Bize Ulaş';
+
+  @override
+  String get eastProductions => 'EAST. Productions';
+
+  @override
+  String get supportCircle => 'Çemberi destekle, kalanı tut.';
+
+  @override
+  String get restoreBelongs => 'Sana ait olanı geri getir.';
+
+  @override
+  String get worldBeyondRitual => 'Ritüelin ötesindeki dünya.';
+
+  @override
+  String get whatStaysPrivate => 'Gizli kalanlar.';
+
+  @override
+  String get thoughtsAndQuestions => 'Düşünceler ve sorular için.';
+
+  @override
+  String get keepThisWisdom => 'Bu sözler seninle kalsın.';
+
+  @override
+  String get wisdomCouldNotBeKept =>
+      'Bu bilgelik seninle kalamadı. Lütfen yeniden dene.';
+
+  @override
+  String get keptLimit => 'Kalanlar Sınırı';
+
+  @override
+  String get freeUsersKeepLimit =>
+      'Ücretsiz kullanıcılar en fazla 3 bilgeliği tutabilir.';
+
+  @override
+  String get becomeKeeper => 'TUTUCU OL';
+
+  @override
+  String get whoseJournal => 'Bu günlük kimin?';
+
+  @override
+  String get journalNameExplanation =>
+      'Günlüğünün başlık sayfasında bir isim sessizce yer alır.';
+
+  @override
+  String get notificationTitle => 'EAST.';
+
+  @override
+  String get notificationBody => 'Sessizlikte bir şey bekliyor.';
+
+  @override
+  String get journalPdfTitle => 'Günlük.';
+
+  @override
+  String get dailyWisdomReady => 'Yeni bir bilgelik hazır.';
+
+  @override
+  String get discoverTheObjects => 'NESNELERİ KEŞFET';
+
+  @override
+  String get enterTheCircle => 'Çembere katıl.';
+
+  @override
+  String get askFrom => 'Soruyu';
+
+  @override
+  String get yourHeart => 'kalbinden sor.';
+
+  @override
+  String get longPressToShareWisdom =>
+      'Bu bilgeliği paylaşmak için basılı tut.';
+
+  @override
+  String get nothingHasStayedYet => 'Henüz hiçbir şey kalmadı.';
+
+  @override
+  String get wisdomCouldNotBeRemoved =>
+      'Bu bilgelik kaldırılamadı. Lütfen yeniden dene.';
+
+  @override
+  String get reflectionPrompt => 'Şimdi ne fark ediyorsun?';
+
+  @override
+  String get deleteReflectionQuestion => 'Yansıma silinsin mi?';
+
+  @override
+  String get reflectionDeleteExplanation =>
+      'Yansıma bu bilgelikten kaldırılacak.';
+
+  @override
+  String get cancelUpper => 'İPTAL';
+
+  @override
+  String get continueAction => 'Devam Et';
+
+  @override
+  String get onlyKeptOnThisDevice => 'Yalnızca bu aygıtta tutuluyor.';
+
+  @override
+  String get yourName => 'Adın';
+
+  @override
+  String get journalCouldNotBePrepared =>
+      'Günlük hazırlanamadı. Lütfen yeniden dene.';
+
+  @override
+  String get takeItWithYou => 'Yanında götür.';
+
+  @override
+  String get takeItWithYouKeeper => 'Yanında götür. Tutucu ile kullanılabilir.';
+
+  @override
+  String get availableWithKeeper => 'Tutucu ile kullanılabilir.';
+
+  @override
+  String get nameUpper => 'İSİM';
+
+  @override
+  String get keeperPersistenceError =>
+      'Tutucu erişimi kaydedilemedi. Lütfen Satın Alımları Geri Yükle’yi dene.';
+
+  @override
+  String get purchaseUpdating =>
+      'Satın alma durumu hâlâ güncelleniyor. Lütfen Ayarlar’dan Satın Alımları Geri Yükle’yi kullan.';
+
+  @override
+  String get purchaseNotReady =>
+      'Satın alma henüz hazır değil. Lütfen kısa süre sonra yeniden dene.';
+
+  @override
+  String get restore => 'Geri Yükle';
+
+  @override
+  String get keepWhatStays => 'Kalanı tut.';
+
+  @override
+  String get addReflectionSemantics => 'Yansıma ekle';
+
+  @override
+  String get deleteSemantics => 'Sil';
+
+  @override
+  String get settingsClose => 'Kapat';
+
+  @override
+  String get notificationPermissionTitle => 'Sessiz bir dönüş';
+
+  @override
+  String get notificationPermissionBody =>
+      'Yeni bir bilgelik hazır olduğunda haberdar olmak ister misin?';
+
+  @override
+  String get whereSilenceSpeaks => 'Sessizliğin konuştuğu yer.';
+
+  @override
+  String get preparing => 'Hazırlanıyor…';
+
+  @override
+  String get exportKeptAndReflections =>
+      'Kalan bilgeliklerini ve Yansımalarını yanında götür.';
+
+  @override
+  String get keeperAccessActive => 'Tutucu erişimi etkin';
+
+  @override
+  String keeperPurchaseInProgress(Object price) {
+    return 'Çembere katıl, $price. Satın alma sürüyor.';
+  }
+
+  @override
+  String keeperPurchaseOffering(Object price) {
+    return 'Çembere katıl, tek seferlik $price';
+  }
+
+  @override
+  String get keeperUnavailable => 'Çembere katıl, geçici olarak kullanılamıyor';
+
+  @override
+  String get keepWithoutLimit => 'Sınırsız tut.';
+
+  @override
+  String get reflectWithoutLimit => 'Sınırsız Yansıma ekle.';
+
+  @override
+  String get takeJournalWithYou => 'Günlüğünü yanında götür.';
+
+  @override
+  String get keepEastAlive => 'EAST. yaşamaya devam etsin.';
+}

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'controllers/locale_preference_controller.dart';
 import 'l10n/app_localizations.dart';
 import 'l10n/app_localizations_en.dart';
+import 'localization/east_locale_registry.dart';
 import 'screens/home_screen.dart';
 import 'services/saved_reflections_service.dart';
 import 'theme/east_design.dart';
@@ -69,7 +70,11 @@ class _WisdomAppState extends State<WisdomApp> {
         debugShowCheckedModeBanner: false,
         theme: eastTheme(),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+        // Generated resources include the reviewed Phase 4C catalogs, but
+        // only the release-ready registry may participate in runtime locale
+        // resolution. The new catalogs remain hidden until wisdoms, fonts,
+        // PDFs, and layout regression are complete.
+        supportedLocales: EastLocaleRegistry.runtimeSupported,
         locale: _localePreferenceController.explicitLocale,
         localeResolutionCallback: (deviceLocale, supportedLocales) {
           return LocalePreferenceController.resolveSystemLocale(

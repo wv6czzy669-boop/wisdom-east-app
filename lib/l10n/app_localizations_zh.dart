@@ -1,0 +1,607 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Chinese (`zh`).
+class AppLocalizationsZh extends AppLocalizations {
+  AppLocalizationsZh([String locale = 'zh']) : super(locale);
+
+  @override
+  String get appTitle => '每日智慧：EAST.';
+
+  @override
+  String get pause => '停一停。';
+
+  @override
+  String get feel => '感受。';
+
+  @override
+  String get askFromYourHeart => '從心裡提問。';
+
+  @override
+  String get east => 'EAST.';
+
+  @override
+  String get kept => '留下的';
+
+  @override
+  String get keptUpper => '留下的';
+
+  @override
+  String get reflectedUpper => '已省思';
+
+  @override
+  String get addReflectionUpper => '新增省思';
+
+  @override
+  String get reflection => '省思';
+
+  @override
+  String get journal => '日記';
+
+  @override
+  String get settings => '設定';
+
+  @override
+  String get language => '語言';
+
+  @override
+  String get systemDefault => '系統預設';
+
+  @override
+  String get english => '英文';
+
+  @override
+  String languageSettingSemantics(Object value) {
+    return '語言。目前選擇：$value。';
+  }
+
+  @override
+  String languageOptionSemantics(Object language) {
+    return '$language';
+  }
+
+  @override
+  String get back => '返回';
+
+  @override
+  String get delete => '刪除';
+
+  @override
+  String get deleteUpper => '刪除';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get close => '關閉';
+
+  @override
+  String get done => '完成';
+
+  @override
+  String get retry => '再試一次';
+
+  @override
+  String get skip => '略過';
+
+  @override
+  String get addName => '新增名字';
+
+  @override
+  String get changeName => '更改名字';
+
+  @override
+  String get keptWisdoms => '留下的智慧';
+
+  @override
+  String get addReflection => '新增省思';
+
+  @override
+  String get deleteReflection => '刪除省思';
+
+  @override
+  String get reflectedEditReflection => '已省思。編輯省思。';
+
+  @override
+  String get journalSemantic => '日記';
+
+  @override
+  String get keeper => '留住';
+
+  @override
+  String get restorePurchases => '回復購買項目';
+
+  @override
+  String get icloudSync => 'iCloud 同步';
+
+  @override
+  String get removeFromIcloud => '從 iCloud 移除';
+
+  @override
+  String get exportMyData => '匯出我的資料';
+
+  @override
+  String get privacyPolicy => '隱私權政策';
+
+  @override
+  String get reachOut => '聯絡我們';
+
+  @override
+  String get eastProductions => 'EAST. Productions';
+
+  @override
+  String get supportCircle => '讓圓圈延續，留住留下的。';
+
+  @override
+  String get restoreBelongs => '找回屬於你的。';
+
+  @override
+  String get worldBeyondRitual => '儀式之外的世界。';
+
+  @override
+  String get whatStaysPrivate => '保持私密的部分。';
+
+  @override
+  String get thoughtsAndQuestions => '用於想法與提問。';
+
+  @override
+  String get keepThisWisdom => '留住這份智慧。';
+
+  @override
+  String get wisdomCouldNotBeKept => '無法留住這份智慧。請再試一次。';
+
+  @override
+  String get keptLimit => '留下的數量上限';
+
+  @override
+  String get freeUsersKeepLimit => '免費使用者最多可留住 3 則智慧。';
+
+  @override
+  String get becomeKeeper => '啟用留住';
+
+  @override
+  String get whoseJournal => '這是誰的日記？';
+
+  @override
+  String get journalNameExplanation => '名字會靜靜出現在日記的扉頁。';
+
+  @override
+  String get notificationTitle => 'EAST.';
+
+  @override
+  String get notificationBody => '有什麼在寂靜中等待。';
+
+  @override
+  String get journalPdfTitle => '日記。';
+
+  @override
+  String get dailyWisdomReady => '新的智慧已準備好。';
+
+  @override
+  String get discoverTheObjects => '探索物件';
+
+  @override
+  String get enterTheCircle => '走進圓圈。';
+
+  @override
+  String get askFrom => '從心裡';
+
+  @override
+  String get yourHeart => '提問。';
+
+  @override
+  String get longPressToShareWisdom => '長按即可分享這份智慧。';
+
+  @override
+  String get nothingHasStayedYet => '還沒有任何事物留下。';
+
+  @override
+  String get wisdomCouldNotBeRemoved => '無法移除這份智慧。請再試一次。';
+
+  @override
+  String get reflectionPrompt => '此刻，你注意到了什麼？';
+
+  @override
+  String get deleteReflectionQuestion => '刪除省思？';
+
+  @override
+  String get reflectionDeleteExplanation => '這則留下的智慧將移除其省思。';
+
+  @override
+  String get cancelUpper => '取消';
+
+  @override
+  String get continueAction => '繼續';
+
+  @override
+  String get onlyKeptOnThisDevice => '僅留存在此裝置上。';
+
+  @override
+  String get yourName => '你的名字';
+
+  @override
+  String get journalCouldNotBePrepared => '無法準備日記。請再試一次。';
+
+  @override
+  String get takeItWithYou => '隨身帶走。';
+
+  @override
+  String get takeItWithYouKeeper => '隨身帶走。可透過「留住」使用。';
+
+  @override
+  String get availableWithKeeper => '可透過「留住」使用。';
+
+  @override
+  String get nameUpper => '名字';
+
+  @override
+  String get keeperPersistenceError => '無法儲存「留住」的使用權。請嘗試回復購買項目。';
+
+  @override
+  String get purchaseUpdating => '購買狀態仍在更新。請在設定中使用回復購買項目。';
+
+  @override
+  String get purchaseNotReady => '尚未能進行購買。請稍後再試。';
+
+  @override
+  String get restore => '回復';
+
+  @override
+  String get keepWhatStays => '留住留下的。';
+
+  @override
+  String get addReflectionSemantics => '新增省思';
+
+  @override
+  String get deleteSemantics => '刪除';
+
+  @override
+  String get settingsClose => '關閉';
+
+  @override
+  String get notificationPermissionTitle => '一次寂靜的回返';
+
+  @override
+  String get notificationPermissionBody => '新的智慧準備好時，要通知你嗎？';
+
+  @override
+  String get whereSilenceSpeaks => '寂靜說話的地方。';
+
+  @override
+  String get preparing => '準備中…';
+
+  @override
+  String get exportKeptAndReflections => '帶走你留下的智慧與省思。';
+
+  @override
+  String get keeperAccessActive => '「留住」使用權已啟用';
+
+  @override
+  String keeperPurchaseInProgress(Object price) {
+    return '走進圓圈，$price。購買進行中。';
+  }
+
+  @override
+  String keeperPurchaseOffering(Object price) {
+    return '走進圓圈，$price，一次性費用';
+  }
+
+  @override
+  String get keeperUnavailable => '走進圓圈，暫時無法使用';
+
+  @override
+  String get keepWithoutLimit => '無限留住。';
+
+  @override
+  String get reflectWithoutLimit => '無限省思。';
+
+  @override
+  String get takeJournalWithYou => '帶走你的日記。';
+
+  @override
+  String get keepEastAlive => '讓 EAST. 延續。';
+}
+
+/// The translations for Chinese, using the Han script (`zh_Hant`).
+class AppLocalizationsZhHant extends AppLocalizationsZh {
+  AppLocalizationsZhHant() : super('zh_Hant');
+
+  @override
+  String get appTitle => '每日智慧：EAST.';
+
+  @override
+  String get pause => '停一停。';
+
+  @override
+  String get feel => '感受。';
+
+  @override
+  String get askFromYourHeart => '從心裡提問。';
+
+  @override
+  String get east => 'EAST.';
+
+  @override
+  String get kept => '留下的';
+
+  @override
+  String get keptUpper => '留下的';
+
+  @override
+  String get reflectedUpper => '已省思';
+
+  @override
+  String get addReflectionUpper => '新增省思';
+
+  @override
+  String get reflection => '省思';
+
+  @override
+  String get journal => '日記';
+
+  @override
+  String get settings => '設定';
+
+  @override
+  String get language => '語言';
+
+  @override
+  String get systemDefault => '系統預設';
+
+  @override
+  String get english => '英文';
+
+  @override
+  String languageSettingSemantics(Object value) {
+    return '語言。目前選擇：$value。';
+  }
+
+  @override
+  String languageOptionSemantics(Object language) {
+    return '$language';
+  }
+
+  @override
+  String get back => '返回';
+
+  @override
+  String get delete => '刪除';
+
+  @override
+  String get deleteUpper => '刪除';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get close => '關閉';
+
+  @override
+  String get done => '完成';
+
+  @override
+  String get retry => '再試一次';
+
+  @override
+  String get skip => '略過';
+
+  @override
+  String get addName => '新增名字';
+
+  @override
+  String get changeName => '更改名字';
+
+  @override
+  String get keptWisdoms => '留下的智慧';
+
+  @override
+  String get addReflection => '新增省思';
+
+  @override
+  String get deleteReflection => '刪除省思';
+
+  @override
+  String get reflectedEditReflection => '已省思。編輯省思。';
+
+  @override
+  String get journalSemantic => '日記';
+
+  @override
+  String get keeper => '留住';
+
+  @override
+  String get restorePurchases => '回復購買項目';
+
+  @override
+  String get icloudSync => 'iCloud 同步';
+
+  @override
+  String get removeFromIcloud => '從 iCloud 移除';
+
+  @override
+  String get exportMyData => '匯出我的資料';
+
+  @override
+  String get privacyPolicy => '隱私權政策';
+
+  @override
+  String get reachOut => '聯絡我們';
+
+  @override
+  String get eastProductions => 'EAST. Productions';
+
+  @override
+  String get supportCircle => '讓圓圈延續，留住留下的。';
+
+  @override
+  String get restoreBelongs => '找回屬於你的。';
+
+  @override
+  String get worldBeyondRitual => '儀式之外的世界。';
+
+  @override
+  String get whatStaysPrivate => '保持私密的部分。';
+
+  @override
+  String get thoughtsAndQuestions => '用於想法與提問。';
+
+  @override
+  String get keepThisWisdom => '留住這份智慧。';
+
+  @override
+  String get wisdomCouldNotBeKept => '無法留住這份智慧。請再試一次。';
+
+  @override
+  String get keptLimit => '留下的數量上限';
+
+  @override
+  String get freeUsersKeepLimit => '免費使用者最多可留住 3 則智慧。';
+
+  @override
+  String get becomeKeeper => '啟用留住';
+
+  @override
+  String get whoseJournal => '這是誰的日記？';
+
+  @override
+  String get journalNameExplanation => '名字會靜靜出現在日記的扉頁。';
+
+  @override
+  String get notificationTitle => 'EAST.';
+
+  @override
+  String get notificationBody => '有什麼在寂靜中等待。';
+
+  @override
+  String get journalPdfTitle => '日記。';
+
+  @override
+  String get dailyWisdomReady => '新的智慧已準備好。';
+
+  @override
+  String get discoverTheObjects => '探索物件';
+
+  @override
+  String get enterTheCircle => '走進圓圈。';
+
+  @override
+  String get askFrom => '從心裡';
+
+  @override
+  String get yourHeart => '提問。';
+
+  @override
+  String get longPressToShareWisdom => '長按即可分享這份智慧。';
+
+  @override
+  String get nothingHasStayedYet => '還沒有任何事物留下。';
+
+  @override
+  String get wisdomCouldNotBeRemoved => '無法移除這份智慧。請再試一次。';
+
+  @override
+  String get reflectionPrompt => '此刻，你注意到了什麼？';
+
+  @override
+  String get deleteReflectionQuestion => '刪除省思？';
+
+  @override
+  String get reflectionDeleteExplanation => '這則留下的智慧將移除其省思。';
+
+  @override
+  String get cancelUpper => '取消';
+
+  @override
+  String get continueAction => '繼續';
+
+  @override
+  String get onlyKeptOnThisDevice => '僅留存在此裝置上。';
+
+  @override
+  String get yourName => '你的名字';
+
+  @override
+  String get journalCouldNotBePrepared => '無法準備日記。請再試一次。';
+
+  @override
+  String get takeItWithYou => '隨身帶走。';
+
+  @override
+  String get takeItWithYouKeeper => '隨身帶走。可透過「留住」使用。';
+
+  @override
+  String get availableWithKeeper => '可透過「留住」使用。';
+
+  @override
+  String get nameUpper => '名字';
+
+  @override
+  String get keeperPersistenceError => '無法儲存「留住」的使用權。請嘗試回復購買項目。';
+
+  @override
+  String get purchaseUpdating => '購買狀態仍在更新。請在設定中使用回復購買項目。';
+
+  @override
+  String get purchaseNotReady => '尚未能進行購買。請稍後再試。';
+
+  @override
+  String get restore => '回復';
+
+  @override
+  String get keepWhatStays => '留住留下的。';
+
+  @override
+  String get addReflectionSemantics => '新增省思';
+
+  @override
+  String get deleteSemantics => '刪除';
+
+  @override
+  String get settingsClose => '關閉';
+
+  @override
+  String get notificationPermissionTitle => '一次寂靜的回返';
+
+  @override
+  String get notificationPermissionBody => '新的智慧準備好時，要通知你嗎？';
+
+  @override
+  String get whereSilenceSpeaks => '寂靜說話的地方。';
+
+  @override
+  String get preparing => '準備中…';
+
+  @override
+  String get exportKeptAndReflections => '帶走你留下的智慧與省思。';
+
+  @override
+  String get keeperAccessActive => '「留住」使用權已啟用';
+
+  @override
+  String keeperPurchaseInProgress(Object price) {
+    return '走進圓圈，$price。購買進行中。';
+  }
+
+  @override
+  String keeperPurchaseOffering(Object price) {
+    return '走進圓圈，$price，一次性費用';
+  }
+
+  @override
+  String get keeperUnavailable => '走進圓圈，暫時無法使用';
+
+  @override
+  String get keepWithoutLimit => '無限留住。';
+
+  @override
+  String get reflectWithoutLimit => '無限省思。';
+
+  @override
+  String get takeJournalWithYou => '帶走你的日記。';
+
+  @override
+  String get keepEastAlive => '讓 EAST. 延續。';
+}

@@ -6,6 +6,7 @@ import 'package:wisdom_app/app.dart';
 import 'package:wisdom_app/controllers/locale_preference_controller.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/l10n/app_localizations_en.dart';
+import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
@@ -33,7 +34,7 @@ void main() {
       MaterialApp(
         locale: const Locale('tr'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+        supportedLocales: EastLocaleRegistry.runtimeSupported,
         localeResolutionCallback: (_, __) => const Locale('en'),
         home: Builder(
           builder: (context) => Text(AppLocalizations.of(context)!.pause),
@@ -41,7 +42,7 @@ void main() {
       ),
     );
 
-    expect(AppLocalizations.supportedLocales, const [Locale('en')]);
+    expect(EastLocaleRegistry.runtimeSupported, const [Locale('en')]);
     expect(find.text('Pause.'), findsOneWidget);
   });
 

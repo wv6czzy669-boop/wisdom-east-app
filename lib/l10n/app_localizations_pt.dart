@@ -1,0 +1,633 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Portuguese (`pt`).
+class AppLocalizationsPt extends AppLocalizations {
+  AppLocalizationsPt([String locale = 'pt']) : super(locale);
+
+  @override
+  String get appTitle => 'Sabedoria diária: EAST.';
+
+  @override
+  String get pause => 'Pausa.';
+
+  @override
+  String get feel => 'Sinta.';
+
+  @override
+  String get askFromYourHeart => 'Pergunte com o coração.';
+
+  @override
+  String get east => 'EAST.';
+
+  @override
+  String get kept => 'O que ficou';
+
+  @override
+  String get keptUpper => 'O QUE FICOU';
+
+  @override
+  String get reflectedUpper => 'REFLEXÃO';
+
+  @override
+  String get addReflectionUpper => 'ADICIONAR REFLEXÃO';
+
+  @override
+  String get reflection => 'Reflexão';
+
+  @override
+  String get journal => 'Diário';
+
+  @override
+  String get settings => 'Ajustes';
+
+  @override
+  String get language => 'Idioma';
+
+  @override
+  String get systemDefault => 'Padrão do Sistema';
+
+  @override
+  String get english => 'Inglês';
+
+  @override
+  String languageSettingSemantics(Object value) {
+    return 'Idioma. Seleção atual: $value.';
+  }
+
+  @override
+  String languageOptionSemantics(Object language) {
+    return '$language';
+  }
+
+  @override
+  String get back => 'Voltar';
+
+  @override
+  String get delete => 'Excluir';
+
+  @override
+  String get deleteUpper => 'EXCLUIR';
+
+  @override
+  String get cancel => 'Cancelar';
+
+  @override
+  String get close => 'Fechar';
+
+  @override
+  String get done => 'Concluído';
+
+  @override
+  String get retry => 'Tentar novamente';
+
+  @override
+  String get skip => 'Pular';
+
+  @override
+  String get addName => 'Adicionar nome';
+
+  @override
+  String get changeName => 'Alterar nome';
+
+  @override
+  String get keptWisdoms => 'Sabedorias guardadas';
+
+  @override
+  String get addReflection => 'Adicionar reflexão';
+
+  @override
+  String get deleteReflection => 'Excluir reflexão';
+
+  @override
+  String get reflectedEditReflection => 'REFLEXÃO. Editar reflexão.';
+
+  @override
+  String get journalSemantic => 'Diário';
+
+  @override
+  String get keeper => 'Guardar';
+
+  @override
+  String get restorePurchases => 'Restaurar Compras';
+
+  @override
+  String get icloudSync => 'Sincronização do iCloud';
+
+  @override
+  String get removeFromIcloud => 'Remover do iCloud';
+
+  @override
+  String get exportMyData => 'Exportar Meus Dados';
+
+  @override
+  String get privacyPolicy => 'Política de Privacidade';
+
+  @override
+  String get reachOut => 'Fale Conosco';
+
+  @override
+  String get eastProductions => 'EAST. Productions';
+
+  @override
+  String get supportCircle => 'Apoie o círculo, guarde o que ficou.';
+
+  @override
+  String get restoreBelongs => 'Restaure o que pertence a você.';
+
+  @override
+  String get worldBeyondRitual => 'O mundo além do ritual.';
+
+  @override
+  String get whatStaysPrivate => 'O que permanece privado.';
+
+  @override
+  String get thoughtsAndQuestions => 'Para pensamentos e perguntas.';
+
+  @override
+  String get keepThisWisdom => 'Guarde esta sabedoria.';
+
+  @override
+  String get wisdomCouldNotBeKept =>
+      'Não foi possível guardar esta sabedoria. Tente novamente.';
+
+  @override
+  String get keptLimit => 'Limite de sabedorias guardadas';
+
+  @override
+  String get freeUsersKeepLimit =>
+      'Na versão gratuita, é possível guardar até 3 sabedorias.';
+
+  @override
+  String get becomeKeeper => 'ATIVAR GUARDAR';
+
+  @override
+  String get whoseJournal => 'De quem é este diário?';
+
+  @override
+  String get journalNameExplanation =>
+      'Um nome aparece discretamente na página de título do seu Diário.';
+
+  @override
+  String get notificationTitle => 'EAST.';
+
+  @override
+  String get notificationBody => 'Algo espera no silêncio.';
+
+  @override
+  String get journalPdfTitle => 'Diário.';
+
+  @override
+  String get dailyWisdomReady => 'Uma nova sabedoria está pronta.';
+
+  @override
+  String get discoverTheObjects => 'DESCUBRA OS OBJETOS';
+
+  @override
+  String get enterTheCircle => 'Entre no círculo.';
+
+  @override
+  String get askFrom => 'Pergunte com';
+
+  @override
+  String get yourHeart => 'o coração.';
+
+  @override
+  String get longPressToShareWisdom =>
+      'Mantenha pressionado para compartilhar esta sabedoria.';
+
+  @override
+  String get nothingHasStayedYet => 'Ainda não ficou nada.';
+
+  @override
+  String get wisdomCouldNotBeRemoved =>
+      'Não foi possível remover esta sabedoria. Tente novamente.';
+
+  @override
+  String get reflectionPrompt => 'O que você está percebendo agora?';
+
+  @override
+  String get deleteReflectionQuestion => 'Excluir reflexão?';
+
+  @override
+  String get reflectionDeleteExplanation =>
+      'A reflexão será removida desta sabedoria guardada.';
+
+  @override
+  String get cancelUpper => 'CANCELAR';
+
+  @override
+  String get continueAction => 'Continuar';
+
+  @override
+  String get onlyKeptOnThisDevice => 'Guardada somente neste dispositivo.';
+
+  @override
+  String get yourName => 'Seu nome';
+
+  @override
+  String get journalCouldNotBePrepared =>
+      'Não foi possível preparar o Diário. Tente novamente.';
+
+  @override
+  String get takeItWithYou => 'Leve com você.';
+
+  @override
+  String get takeItWithYouKeeper => 'Leve com você. Disponível com Guardar.';
+
+  @override
+  String get availableWithKeeper => 'Disponível com Guardar.';
+
+  @override
+  String get nameUpper => 'NOME';
+
+  @override
+  String get keeperPersistenceError =>
+      'Não foi possível salvar o acesso a Guardar. Tente Restaurar Compras.';
+
+  @override
+  String get purchaseUpdating =>
+      'O status da compra ainda está sendo atualizado. Use Restaurar Compras nos Ajustes.';
+
+  @override
+  String get purchaseNotReady =>
+      'A compra ainda não está pronta. Tente novamente em instantes.';
+
+  @override
+  String get restore => 'Restaurar';
+
+  @override
+  String get keepWhatStays => 'Guarde o que ficou.';
+
+  @override
+  String get addReflectionSemantics => 'Adicionar reflexão';
+
+  @override
+  String get deleteSemantics => 'Excluir';
+
+  @override
+  String get settingsClose => 'Fechar';
+
+  @override
+  String get notificationPermissionTitle => 'Um retorno silencioso';
+
+  @override
+  String get notificationPermissionBody =>
+      'Deseja saber quando uma nova sabedoria estiver pronta?';
+
+  @override
+  String get whereSilenceSpeaks => 'Onde o silêncio fala.';
+
+  @override
+  String get preparing => 'Preparando…';
+
+  @override
+  String get exportKeptAndReflections =>
+      'Leve com você suas sabedorias guardadas e suas Reflexões.';
+
+  @override
+  String get keeperAccessActive => 'Acesso a Guardar ativo';
+
+  @override
+  String keeperPurchaseInProgress(Object price) {
+    return 'Entre no círculo, $price. Compra em andamento.';
+  }
+
+  @override
+  String keeperPurchaseOffering(Object price) {
+    return 'Entre no círculo, $price, contribuição única';
+  }
+
+  @override
+  String get keeperUnavailable =>
+      'Entre no círculo, temporariamente indisponível';
+
+  @override
+  String get keepWithoutLimit => 'Guarde sem limites.';
+
+  @override
+  String get reflectWithoutLimit => 'Reflita sem limites.';
+
+  @override
+  String get takeJournalWithYou => 'Leve seu Diário com você.';
+
+  @override
+  String get keepEastAlive => 'Mantenha EAST. vivo.';
+}
+
+/// The translations for Portuguese, as used in Brazil (`pt_BR`).
+class AppLocalizationsPtBr extends AppLocalizationsPt {
+  AppLocalizationsPtBr() : super('pt_BR');
+
+  @override
+  String get appTitle => 'Sabedoria diária: EAST.';
+
+  @override
+  String get pause => 'Pausa.';
+
+  @override
+  String get feel => 'Sinta.';
+
+  @override
+  String get askFromYourHeart => 'Pergunte com o coração.';
+
+  @override
+  String get east => 'EAST.';
+
+  @override
+  String get kept => 'O que ficou';
+
+  @override
+  String get keptUpper => 'O QUE FICOU';
+
+  @override
+  String get reflectedUpper => 'REFLEXÃO';
+
+  @override
+  String get addReflectionUpper => 'ADICIONAR REFLEXÃO';
+
+  @override
+  String get reflection => 'Reflexão';
+
+  @override
+  String get journal => 'Diário';
+
+  @override
+  String get settings => 'Ajustes';
+
+  @override
+  String get language => 'Idioma';
+
+  @override
+  String get systemDefault => 'Padrão do Sistema';
+
+  @override
+  String get english => 'Inglês';
+
+  @override
+  String languageSettingSemantics(Object value) {
+    return 'Idioma. Seleção atual: $value.';
+  }
+
+  @override
+  String languageOptionSemantics(Object language) {
+    return '$language';
+  }
+
+  @override
+  String get back => 'Voltar';
+
+  @override
+  String get delete => 'Excluir';
+
+  @override
+  String get deleteUpper => 'EXCLUIR';
+
+  @override
+  String get cancel => 'Cancelar';
+
+  @override
+  String get close => 'Fechar';
+
+  @override
+  String get done => 'Concluído';
+
+  @override
+  String get retry => 'Tentar novamente';
+
+  @override
+  String get skip => 'Pular';
+
+  @override
+  String get addName => 'Adicionar nome';
+
+  @override
+  String get changeName => 'Alterar nome';
+
+  @override
+  String get keptWisdoms => 'Sabedorias guardadas';
+
+  @override
+  String get addReflection => 'Adicionar reflexão';
+
+  @override
+  String get deleteReflection => 'Excluir reflexão';
+
+  @override
+  String get reflectedEditReflection => 'REFLEXÃO. Editar reflexão.';
+
+  @override
+  String get journalSemantic => 'Diário';
+
+  @override
+  String get keeper => 'Guardar';
+
+  @override
+  String get restorePurchases => 'Restaurar Compras';
+
+  @override
+  String get icloudSync => 'Sincronização do iCloud';
+
+  @override
+  String get removeFromIcloud => 'Remover do iCloud';
+
+  @override
+  String get exportMyData => 'Exportar Meus Dados';
+
+  @override
+  String get privacyPolicy => 'Política de Privacidade';
+
+  @override
+  String get reachOut => 'Fale Conosco';
+
+  @override
+  String get eastProductions => 'EAST. Productions';
+
+  @override
+  String get supportCircle => 'Apoie o círculo, guarde o que ficou.';
+
+  @override
+  String get restoreBelongs => 'Restaure o que pertence a você.';
+
+  @override
+  String get worldBeyondRitual => 'O mundo além do ritual.';
+
+  @override
+  String get whatStaysPrivate => 'O que permanece privado.';
+
+  @override
+  String get thoughtsAndQuestions => 'Para pensamentos e perguntas.';
+
+  @override
+  String get keepThisWisdom => 'Guarde esta sabedoria.';
+
+  @override
+  String get wisdomCouldNotBeKept =>
+      'Não foi possível guardar esta sabedoria. Tente novamente.';
+
+  @override
+  String get keptLimit => 'Limite de sabedorias guardadas';
+
+  @override
+  String get freeUsersKeepLimit =>
+      'Na versão gratuita, é possível guardar até 3 sabedorias.';
+
+  @override
+  String get becomeKeeper => 'ATIVAR GUARDAR';
+
+  @override
+  String get whoseJournal => 'De quem é este diário?';
+
+  @override
+  String get journalNameExplanation =>
+      'Um nome aparece discretamente na página de título do seu Diário.';
+
+  @override
+  String get notificationTitle => 'EAST.';
+
+  @override
+  String get notificationBody => 'Algo espera no silêncio.';
+
+  @override
+  String get journalPdfTitle => 'Diário.';
+
+  @override
+  String get dailyWisdomReady => 'Uma nova sabedoria está pronta.';
+
+  @override
+  String get discoverTheObjects => 'DESCUBRA OS OBJETOS';
+
+  @override
+  String get enterTheCircle => 'Entre no círculo.';
+
+  @override
+  String get askFrom => 'Pergunte com';
+
+  @override
+  String get yourHeart => 'o coração.';
+
+  @override
+  String get longPressToShareWisdom =>
+      'Mantenha pressionado para compartilhar esta sabedoria.';
+
+  @override
+  String get nothingHasStayedYet => 'Ainda não ficou nada.';
+
+  @override
+  String get wisdomCouldNotBeRemoved =>
+      'Não foi possível remover esta sabedoria. Tente novamente.';
+
+  @override
+  String get reflectionPrompt => 'O que você está percebendo agora?';
+
+  @override
+  String get deleteReflectionQuestion => 'Excluir reflexão?';
+
+  @override
+  String get reflectionDeleteExplanation =>
+      'A reflexão será removida desta sabedoria guardada.';
+
+  @override
+  String get cancelUpper => 'CANCELAR';
+
+  @override
+  String get continueAction => 'Continuar';
+
+  @override
+  String get onlyKeptOnThisDevice => 'Guardada somente neste dispositivo.';
+
+  @override
+  String get yourName => 'Seu nome';
+
+  @override
+  String get journalCouldNotBePrepared =>
+      'Não foi possível preparar o Diário. Tente novamente.';
+
+  @override
+  String get takeItWithYou => 'Leve com você.';
+
+  @override
+  String get takeItWithYouKeeper => 'Leve com você. Disponível com Guardar.';
+
+  @override
+  String get availableWithKeeper => 'Disponível com Guardar.';
+
+  @override
+  String get nameUpper => 'NOME';
+
+  @override
+  String get keeperPersistenceError =>
+      'Não foi possível salvar o acesso a Guardar. Tente Restaurar Compras.';
+
+  @override
+  String get purchaseUpdating =>
+      'O status da compra ainda está sendo atualizado. Use Restaurar Compras nos Ajustes.';
+
+  @override
+  String get purchaseNotReady =>
+      'A compra ainda não está pronta. Tente novamente em instantes.';
+
+  @override
+  String get restore => 'Restaurar';
+
+  @override
+  String get keepWhatStays => 'Guarde o que ficou.';
+
+  @override
+  String get addReflectionSemantics => 'Adicionar reflexão';
+
+  @override
+  String get deleteSemantics => 'Excluir';
+
+  @override
+  String get settingsClose => 'Fechar';
+
+  @override
+  String get notificationPermissionTitle => 'Um retorno silencioso';
+
+  @override
+  String get notificationPermissionBody =>
+      'Deseja saber quando uma nova sabedoria estiver pronta?';
+
+  @override
+  String get whereSilenceSpeaks => 'Onde o silêncio fala.';
+
+  @override
+  String get preparing => 'Preparando…';
+
+  @override
+  String get exportKeptAndReflections =>
+      'Leve com você suas sabedorias guardadas e suas Reflexões.';
+
+  @override
+  String get keeperAccessActive => 'Acesso a Guardar ativo';
+
+  @override
+  String keeperPurchaseInProgress(Object price) {
+    return 'Entre no círculo, $price. Compra em andamento.';
+  }
+
+  @override
+  String keeperPurchaseOffering(Object price) {
+    return 'Entre no círculo, $price, contribuição única';
+  }
+
+  @override
+  String get keeperUnavailable =>
+      'Entre no círculo, temporariamente indisponível';
+
+  @override
+  String get keepWithoutLimit => 'Guarde sem limites.';
+
+  @override
+  String get reflectWithoutLimit => 'Reflita sem limites.';
+
+  @override
+  String get takeJournalWithYou => 'Leve seu Diário com você.';
+
+  @override
+  String get keepEastAlive => 'Mantenha EAST. vivo.';
+}
