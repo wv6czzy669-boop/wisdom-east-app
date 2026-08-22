@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../l10n/east_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/icloud_removal_controller.dart';
@@ -1156,6 +1157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _settingsBody(BuildContext context) {
+    final l10n = eastLocalizations(context);
     return SafeArea(
       top: false,
       child: LayoutBuilder(
@@ -1175,13 +1177,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'EAST.',
+                      l10n.east,
                       textAlign: TextAlign.center,
                       style: eastStyle(27),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Where silence speaks.',
+                      l10n.whereSilenceSpeaks,
                       textAlign: TextAlign.center,
                       style: eastStyle(
                         17,
@@ -1196,15 +1198,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // of its own).
                     settingsItem(
                       rowKey: const ValueKey('settings-keeper-row'),
-                      title: "Keeper",
-                      subtitle: "Support the circle, keep what stays.",
+                      title: l10n.keeper,
+                      subtitle: l10n.supportCircle,
                       onTap: _openKeeper,
                     ),
                     const SizedBox(height: 6),
                     settingsItem(
                       rowKey: const ValueKey('settings-restore-purchases-row'),
-                      title: "Restore Purchases",
-                      subtitle: "Restore what belongs with you.",
+                      title: l10n.restorePurchases,
+                      subtitle: l10n.restoreBelongs,
                       semanticLabel: restoreSemanticLabel,
                       onTap: restoreAction,
                       titleSize: 15,
@@ -1217,7 +1219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // second subtitle line.
                     settingsItem(
                       rowKey: const ValueKey('settings-icloud-sync-row'),
-                      title: "iCloud Sync",
+                      title: l10n.icloudSync,
                       subtitle: _cloudKitSyncSubtitle,
                       showSubtitle: false,
                       semanticLabel: _cloudKitSyncSemanticLabel,
@@ -1227,7 +1229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 24),
                     settingsItem(
                       rowKey: const ValueKey('settings-remove-from-icloud-row'),
-                      title: "Remove from iCloud",
+                      title: l10n.removeFromIcloud,
                       subtitle: _icloudRemovalSubtitle,
                       semanticLabel: _icloudRemovalSemanticLabel,
                       onTap: icloudRemovalAction,
@@ -1235,11 +1237,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 24),
                     settingsItem(
                       rowKey: const ValueKey('settings-export-data-row'),
-                      title: "Export My Data",
+                      title: l10n.exportMyData,
                       subtitle: _dataExportInProgress
-                          ? "Preparing…"
-                          : "Take your Kept wisdoms and Reflections with "
-                              "you.",
+                          ? l10n.preparing
+                          : l10n.exportKeptAndReflections,
                       semanticLabel: dataExportSemanticLabel,
                       onTap: dataExportAction,
                     ),
@@ -1250,8 +1251,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // tier quieter, of everything that leaves EAST.
                     settingsItem(
                       rowKey: const ValueKey('settings-east-productions-row'),
-                      title: "EAST. Productions",
-                      subtitle: "The world beyond the ritual.",
+                      title: l10n.eastProductions,
+                      subtitle: l10n.worldBeyondRitual,
                       semanticLabel: eastProductionsSemanticLabel,
                       onTap: eastProductionsAction,
                       titleSize: 17,
@@ -1259,8 +1260,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 10),
                     settingsItem(
                       rowKey: const ValueKey('settings-privacy-policy-row'),
-                      title: "Privacy Policy",
-                      subtitle: "What stays private.",
+                      title: l10n.privacyPolicy,
+                      subtitle: l10n.whatStaysPrivate,
                       semanticLabel: privacyPolicySemanticLabel,
                       onTap: privacyPolicyAction,
                       titleSize: 17,
@@ -1268,8 +1269,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 10),
                     settingsItem(
                       rowKey: const ValueKey('settings-reach-out-row'),
-                      title: "Reach Out",
-                      subtitle: "For thoughts and questions.",
+                      title: l10n.reachOut,
+                      subtitle: l10n.thoughtsAndQuestions,
                       semanticLabel: reachOutSemanticLabel,
                       onTap: reachOutAction,
                       titleSize: 17,

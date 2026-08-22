@@ -8,6 +8,7 @@ import '../controllers/latest_request_guard.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
 import '../models/daily_wisdom_selection.dart';
+import '../l10n/east_localizations.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
 import '../services/analytics_service.dart';
 import '../services/app_services.dart' as app_services;
@@ -2152,6 +2153,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> toggleFavorite() async {
     if (!wisdomRevealed || _saveOperationInProgress) return;
+    final wisdomCouldNotBeKept =
+        eastLocalizations(context).wisdomCouldNotBeKept;
 
     // Item 4: the Home save ring is one-way. Once the current wisdom is
     // already kept, tapping the filled ring must do nothing — no removal,
@@ -2168,7 +2171,7 @@ class _HomeScreenState extends State<HomeScreen>
     final revealId = currentRevealId;
     final revealedAt = currentRevealedAt;
     if (revealId == null || revealedAt == null) {
-      showEastSnack("Wisdom could not be kept. Please try again.");
+      showEastSnack(wisdomCouldNotBeKept);
       return;
     }
 
@@ -2201,7 +2204,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       await _onWisdomSuccessfullyKept();
     } catch (_) {
-      showEastSnack("Wisdom could not be kept. Please try again.");
+      showEastSnack(wisdomCouldNotBeKept);
     } finally {
       _saveOperationInProgress = false;
     }

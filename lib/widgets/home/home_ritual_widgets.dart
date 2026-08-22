@@ -263,7 +263,7 @@ class _HomeRitualContent extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'Ask from',
+                                    eastLocalizations(context).askFrom,
                                     textAlign: TextAlign.center,
                                     style: _homeWisdomStyle(
                                       textSize,
@@ -272,7 +272,7 @@ class _HomeRitualContent extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    'your heart.',
+                                    eastLocalizations(context).yourHeart,
                                     textAlign: TextAlign.center,
                                     style: _homeWisdomStyle(
                                       textSize,
@@ -301,7 +301,8 @@ class _HomeRitualContent extends StatelessWidget {
                                     container: true,
                                     excludeSemantics: true,
                                     label: currentText,
-                                    hint: 'Long press to share this wisdom.',
+                                    hint: eastLocalizations(context)
+                                        .longPressToShareWisdom,
                                     onLongPress: wisdomShareEnabled
                                         ? onWisdomLongPress
                                         : null,
@@ -344,7 +345,7 @@ class _HomeLaunchMark extends StatelessWidget {
         );
 
         return Semantics(
-          label: 'EAST.',
+          label: eastLocalizations(context).east,
           child: ExcludeSemantics(
             child: Container(
               key: const ValueKey('launch-ritual-mark'),
@@ -361,7 +362,7 @@ class _HomeLaunchMark extends StatelessWidget {
               child: Transform.translate(
                 offset: const Offset(0, -2.5),
                 child: Text(
-                  'EAST.',
+                  eastLocalizations(context).east,
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(
                     21.5,
@@ -405,7 +406,7 @@ class _HomePauseFeelText extends StatelessWidget {
             curve: Curves.easeOutCubic,
             opacity: 1.0 - (pauseFeelOpacity * 0.74),
             child: Text(
-              "Pause.",
+              eastLocalizations(context).pause,
               textAlign: TextAlign.center,
               style: _homeWisdomStyle(
                 textSize,
@@ -423,7 +424,7 @@ class _HomePauseFeelText extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(top: 34),
               child: Text(
-                "Feel.",
+                eastLocalizations(context).feel,
                 textAlign: TextAlign.center,
                 style: _homeWisdomStyle(
                   textSize,
@@ -474,7 +475,7 @@ class _HomeTopNavigation extends StatelessWidget {
           onLongPress: () {},
           excludeFromSemantics: true,
           child: Semantics(
-            label: 'Kept wisdoms',
+            label: eastLocalizations(context).keptWisdoms,
             hint: 'Double tap to view wisdoms you have kept',
             button: true,
             onTap: onKeptPressed,
@@ -613,7 +614,7 @@ class _HomeSettingsMenuControl extends StatelessWidget {
           // remains the sole accessibility source of truth.
           excludeFromSemantics: true,
           child: Semantics(
-            label: 'Settings',
+            label: eastLocalizations(context).settings,
             button: true,
             onTap: onPressed,
             child: ExcludeSemantics(

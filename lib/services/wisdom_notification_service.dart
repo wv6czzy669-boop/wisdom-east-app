@@ -7,6 +7,8 @@ import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart' as timezone;
 
 import '../persistence/storage_preferences_adapter.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/app_localizations_en.dart';
 import 'daily_wisdom_access_service.dart';
 
 enum WisdomNotificationAuthorization {
@@ -14,6 +16,21 @@ enum WisdomNotificationAuthorization {
   authorized,
   denied,
   unavailable,
+}
+
+/// Explicit, deterministic copy dependency for code that has no BuildContext.
+/// A later locale controller can supply a locale-specific [AppLocalizations]
+/// instance without coupling this service to widget state.
+class WisdomNotificationCopy {
+  const WisdomNotificationCopy(this.localizations);
+
+  factory WisdomNotificationCopy.english() =>
+      WisdomNotificationCopy(AppLocalizationsEn());
+
+  final AppLocalizations localizations;
+
+  String get title => localizations.notificationTitle;
+  String get body => localizations.notificationBody;
 }
 
 abstract interface class WisdomNotificationPlatform {
@@ -146,19 +163,20 @@ class WisdomNotificationService {
     WisdomNotificationPlatform? platform,
     StoragePreferencesAdapter? preferencesAdapter,
     DateTime Function()? clock,
+    WisdomNotificationCopy? copy,
   })  : _platform = platform ?? LocalWisdomNotificationPlatform(),
         _preferencesAdapter = preferencesAdapter ?? StoragePreferencesAdapter(),
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _copy = copy ?? WisdomNotificationCopy.english();
 
   static const int unlockNotificationId = 21001;
-  static const String notificationTitle = 'EAST.';
-  static const String notificationBody = 'Something waits in silence.';
   static const String permissionPromptHandledKey =
       'wisdom_unlock_notification_prompt_handled';
 
   final WisdomNotificationPlatform _platform;
   final StoragePreferencesAdapter _preferencesAdapter;
   final DateTime Function() _clock;
+  final WisdomNotificationCopy _copy;
 
   bool _promptHandledInMemory = false;
   Future<void>? _initialization;
@@ -307,8 +325,8 @@ class WisdomNotificationService {
     await _platform.cancel(unlockNotificationId);
     await _platform.schedule(
       id: unlockNotificationId,
-      title: notificationTitle,
-      body: notificationBody,
+      title: _copy.title,
+      body: _copy.body,
       unlockAt: unlockAt,
     );
   }

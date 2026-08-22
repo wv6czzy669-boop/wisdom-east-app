@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../theme/east_design.dart';
@@ -118,6 +119,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = eastLocalizations(context);
     final isKeeper = _purchaseService.isKeeper;
     final keeperProduct = _purchaseService.keeperProduct;
     final purchaseAvailable =
@@ -151,13 +153,13 @@ class _KeeperScreenState extends State<KeeperScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "Keeper",
+                      l10n.keeper,
                       textAlign: TextAlign.center,
                       style: keeperStyle(48).copyWith(letterSpacing: 0.8),
                     ),
                     const SizedBox(height: 34),
                     Text(
-                      "Keep what stays.",
+                      l10n.keepWhatStays,
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         25,
@@ -169,12 +171,16 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       button: !isKeeper,
                       enabled: purchaseEnabled,
                       label: isKeeper
-                          ? 'Keeper access active'
+                          ? l10n.keeperAccessActive
                           : _purchaseService.isLoading && purchaseAvailable
-                              ? 'Enter the Circle, ${keeperProduct.price}. Purchase in progress.'
+                              ? l10n.keeperPurchaseInProgress(
+                                  keeperProduct.price,
+                                )
                               : purchaseAvailable
-                                  ? 'Enter the Circle, ${keeperProduct.price}, one-time offering'
-                                  : 'Enter the Circle, temporarily unavailable',
+                                  ? l10n.keeperPurchaseOffering(
+                                      keeperProduct.price,
+                                    )
+                                  : l10n.keeperUnavailable,
                       onTap: purchaseEnabled ? buyKeeper : null,
                       child: ExcludeSemantics(
                         child: GestureDetector(
@@ -215,7 +221,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 22),
                                 child: Text(
-                                  "Enter the Circle",
+                                  l10n.enterTheCircle,
                                   textAlign: TextAlign.center,
                                   style: keeperStyle(22)
                                       .copyWith(letterSpacing: 0.85),
@@ -233,25 +239,25 @@ class _KeeperScreenState extends State<KeeperScreen> {
                     // the Journal benefit and the closing sentiment.
                     const SizedBox(height: 72),
                     Text(
-                      "Keep without limit.",
+                      l10n.keepWithoutLimit,
                       textAlign: TextAlign.center,
                       style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      "Reflect without limit.",
+                      l10n.reflectWithoutLimit,
                       textAlign: TextAlign.center,
                       style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 28),
                     Text(
-                      "Take your Journal with you.",
+                      l10n.takeJournalWithYou,
                       textAlign: TextAlign.center,
                       style: keeperStyle(16).copyWith(letterSpacing: 0.75),
                     ),
                     const SizedBox(height: 44),
                     Text(
-                      "Keep EAST. alive.",
+                      l10n.keepEastAlive,
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         14,

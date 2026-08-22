@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'l10n/app_localizations.dart';
+import 'l10n/app_localizations_en.dart';
 import 'screens/home_screen.dart';
 import 'services/saved_reflections_service.dart';
 import 'theme/east_design.dart';
@@ -25,9 +27,13 @@ class WisdomApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Daily Wisdom: EAST.',
+      title: AppLocalizationsEn().appTitle,
+      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       debugShowCheckedModeBanner: false,
       theme: eastTheme(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeResolutionCallback: (_, __) => const Locale('en'),
       home: HomeScreen(savedReflectionsService: savedReflectionsService),
     );
   }

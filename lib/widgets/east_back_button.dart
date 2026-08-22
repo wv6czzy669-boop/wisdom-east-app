@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/east_localizations.dart';
+
 /// EAST. app-wide back-navigation control.
 ///
 /// Real-device repair: replaces the implicit `AppBar` back button (which
@@ -49,7 +51,7 @@ class EastBackButton extends StatelessWidget {
       onLongPress: () {},
       excludeFromSemantics: true,
       child: Semantics(
-        label: 'Back',
+        label: eastLocalizations(context).back,
         button: true,
         onTap: effectiveOnPressed,
         child: ExcludeSemantics(

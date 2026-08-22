@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import '../models/favorite_item.dart';
+import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/journal_owner_service.dart';
 import '../services/journal_pdf_builder.dart';
@@ -430,6 +431,7 @@ class _JournalScreenState extends State<JournalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = eastLocalizations(context);
     return Scaffold(
       backgroundColor: EastColors.background,
       // Real-device repair: without this, the keyboard's appearance behind
@@ -451,18 +453,18 @@ class _JournalScreenState extends State<JournalScreen> {
         leading: Navigator.canPop(context) ? const EastBackButton() : null,
         // Real-device repair: the trailing period is dropped, matching
         // Return's own app-screen title correction.
-        title: Text('Journal', style: _style(24)),
+        title: Text(l10n.journal, style: _style(24)),
         actions: [
           if (_stage == _JournalStage.preview)
             Semantics(
               button: true,
-              label: _ownerName == null ? 'Add name' : 'Change name',
+              label: _ownerName == null ? l10n.addName : l10n.changeName,
               child: ExcludeSemantics(
                 child: TextButton(
                   key: const ValueKey('journal-name-action'),
                   onPressed: _openNameEditor,
                   child: Text(
-                    'NAME',
+                    l10n.nameUpper,
                     style: _style(
                       11,
                       color: eastMutedTextColor,
@@ -492,7 +494,7 @@ class _JournalScreenState extends State<JournalScreen> {
     if (widget.items.isEmpty) {
       return Center(
         child: Text(
-          'Nothing has stayed yet.',
+          eastLocalizations(context).nothingHasStayedYet,
           key: const ValueKey('journal-empty-state'),
           style: _style(21, color: eastMutedTextColor),
         ),
@@ -511,7 +513,7 @@ class _JournalScreenState extends State<JournalScreen> {
       case _JournalStage.error:
         return Center(
           child: Text(
-            'Journal could not be prepared. Please try again.',
+            eastLocalizations(context).journalCouldNotBePrepared,
             key: const ValueKey('journal-error-state'),
             textAlign: TextAlign.center,
             style: _style(19, color: eastMutedTextColor),
@@ -650,8 +652,8 @@ class _JournalScreenState extends State<JournalScreen> {
         Semantics(
           button: true,
           label: isKeeper
-              ? 'Take it with you.'
-              : 'Take it with you. Available with Keeper.',
+              ? eastLocalizations(context).takeItWithYou
+              : eastLocalizations(context).takeItWithYouKeeper,
           child: ExcludeSemantics(
             child: GestureDetector(
               key: const ValueKey('journal-take-action'),
@@ -660,7 +662,7 @@ class _JournalScreenState extends State<JournalScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 44),
                 child: Text(
-                  'Take it with you.',
+                  eastLocalizations(context).takeItWithYou,
                   // Approved "Free state — the gate" direction: touching
                   // this never opens a paywall -- the line itself simply
                   // recedes to ~52% and "Available with Keeper." answers
@@ -679,7 +681,7 @@ class _JournalScreenState extends State<JournalScreen> {
         if (!isKeeper) ...[
           const SizedBox(height: 6),
           Text(
-            'Available with Keeper.',
+            eastLocalizations(context).availableWithKeeper,
             key: const ValueKey('journal-keeper-note'),
             style: _style(15),
           ),
@@ -704,10 +706,13 @@ class _JournalScreenState extends State<JournalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Whose journal is this?', style: _style(24)),
+          Text(
+            eastLocalizations(context).whoseJournal,
+            style: _style(24),
+          ),
           const SizedBox(height: 10),
           Text(
-            'Only kept on this device.',
+            eastLocalizations(context).onlyKeptOnThisDevice,
             style: _style(16, color: eastMutedTextColor),
           ),
           const SizedBox(height: 34),
@@ -718,7 +723,7 @@ class _JournalScreenState extends State<JournalScreen> {
             style: _style(20),
             cursorColor: EastColors.ink,
             decoration: InputDecoration(
-              hintText: 'Your name',
+              hintText: eastLocalizations(context).yourName,
               hintStyle: _style(20, color: EastColors.hint),
               enabledBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: eastMutedTextColor, width: 0.5),
@@ -735,14 +740,14 @@ class _JournalScreenState extends State<JournalScreen> {
               TextButton(
                 key: const ValueKey('journal-name-skip'),
                 onPressed: () => unawaited(_skipNamePrompt()),
-                child: Text('Skip', style: _style(17)),
+                child: Text(eastLocalizations(context).skip, style: _style(17)),
               ),
               const SizedBox(width: 14),
               TextButton(
                 key: const ValueKey('journal-name-continue'),
                 onPressed: () => unawaited(_continueFromNamePrompt()),
                 child: Text(
-                  'Continue',
+                  eastLocalizations(context).continueAction,
                   style: _style(17, color: eastMutedTextColor),
                 ),
               ),

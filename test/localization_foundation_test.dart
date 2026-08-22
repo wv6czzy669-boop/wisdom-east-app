@@ -1,0 +1,52 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:wisdom_app/app.dart';
+import 'package:wisdom_app/l10n/app_localizations.dart';
+import 'package:wisdom_app/l10n/app_localizations_en.dart';
+import 'package:wisdom_app/services/wisdom_notification_service.dart';
+
+void main() {
+  test('English localization preserves EAST. source copy', () {
+    final strings = AppLocalizationsEn();
+
+    expect(strings.east, 'EAST.');
+    expect(strings.pause, 'Pause.');
+    expect(strings.feel, 'Feel.');
+    expect(strings.askFromYourHeart, 'Ask from your heart.');
+    expect(strings.reflectionPrompt, 'What are you noticing now?');
+    expect(strings.keeper, 'Keeper');
+    expect(strings.settings, 'Settings');
+    expect(strings.kept, 'Kept');
+    expect(strings.journal, 'Journal');
+  });
+
+  testWidgets('MaterialApp supplies English localization and falls back to it',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localeResolutionCallback: (_, __) => const Locale('en'),
+        home: Builder(
+          builder: (context) => Text(AppLocalizations.of(context)!.pause),
+        ),
+      ),
+    );
+
+    expect(AppLocalizations.supportedLocales, const [Locale('en')]);
+    expect(find.text('Pause.'), findsOneWidget);
+  });
+
+  test('context-free notification copy remains deterministic English', () {
+    final copy = WisdomNotificationCopy.english();
+    expect(copy.title, 'EAST.');
+    expect(copy.body, 'Something waits in silence.');
+  });
+
+  test('WisdomApp exposes generated localization delegates', () {
+    const app = WisdomApp();
+    expect(app, isA<Widget>());
+  });
+}

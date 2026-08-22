@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../controllers/latest_request_guard.dart';
+import '../l10n/east_localizations.dart';
 import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
@@ -243,24 +244,27 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         _items = removed.items;
       });
     } catch (_) {
-      _showMessage('This wisdom could not be removed. Please try again.');
+      _showMessage(
+        eastLocalizations(context).wisdomCouldNotBeRemoved,
+      );
     }
   }
 
   Widget _status(FavoriteItem item) {
+    final l10n = eastLocalizations(context);
     if (!item.hasReflection) {
       return ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Text('KEPT', style: _statusStyle),
+          child: Text(l10n.keptUpper, style: _statusStyle),
         ),
       );
     }
 
     return Semantics(
       button: true,
-      label: 'REFLECTED. Edit reflection.',
+      label: l10n.reflectedEditReflection,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -269,7 +273,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('REFLECTED', style: _statusStyle),
+              child: Text(l10n.reflectedUpper, style: _statusStyle),
             ),
           ),
         ),
@@ -280,7 +284,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   Widget _keptItem(FavoriteItem item) {
     return Semantics(
       customSemanticsActions: {
-        const CustomSemanticsAction(label: 'Delete'): () {
+        CustomSemanticsAction(label: eastLocalizations(context).delete): () {
           unawaited(_deleteItem(item));
         },
       },
@@ -306,7 +310,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
               const SizedBox(height: 12),
               Semantics(
                 button: true,
-                label: 'Add reflection',
+                label: eastLocalizations(context).addReflection,
                 child: ExcludeSemantics(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -316,7 +320,10 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                           const BoxConstraints(minWidth: 44, minHeight: 44),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Text('ADD REFLECTION', style: _statusStyle),
+                        child: Text(
+                          eastLocalizations(context).addReflectionUpper,
+                          style: _statusStyle,
+                        ),
                       ),
                     ),
                   ),
@@ -331,6 +338,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = eastLocalizations(context);
     final visibleItems = _items.reversed.toList(growable: false);
 
     return Scaffold(
@@ -349,16 +357,16 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         elevation: 0,
         leading: Navigator.canPop(context) ? const EastBackButton() : null,
         centerTitle: true,
-        title: Text('Kept', style: _style(24)),
+        title: Text(l10n.kept, style: _style(24)),
         actions: [
           Semantics(
             button: true,
-            label: 'Journal',
+            label: l10n.journal,
             onTap: () => unawaited(_openJournal()),
             child: ExcludeSemantics(
               child: IconButton(
                 key: const ValueKey('kept-journal-control'),
-                tooltip: 'Journal',
+                tooltip: l10n.journal,
                 onPressed: () => unawaited(_openJournal()),
                 icon: const Icon(Icons.menu_book_outlined),
               ),
@@ -369,7 +377,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       body: visibleItems.isEmpty
           ? Center(
               child: Text(
-                'Nothing has stayed yet.',
+                l10n.nothingHasStayedYet,
                 style: _style(
                   21,
                   color: eastMutedTextColor,

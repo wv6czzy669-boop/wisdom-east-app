@@ -5,6 +5,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/favorite_item.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/app_localizations_en.dart';
 import 'journal_layout.dart';
 
 /// EAST. Phase 10 — builds the on-device A4 Journal PDF.
@@ -23,10 +25,14 @@ import 'journal_layout.dart';
 /// by 595.27559/340 ≈ 1.7508 -- the ratio between the figure's width and a
 /// true A4 page's width -- onto real PDF points.
 class JournalPdfBuilder {
-  JournalPdfBuilder({JournalLayoutPlanner? planner})
-      : _planner = planner ?? const JournalLayoutPlanner();
+  JournalPdfBuilder({
+    JournalLayoutPlanner? planner,
+    AppLocalizations? localizations,
+  })  : _planner = planner ?? const JournalLayoutPlanner(),
+        _localizations = localizations ?? AppLocalizationsEn();
 
   final JournalLayoutPlanner _planner;
+  final AppLocalizations _localizations;
 
   /// The quiet title-page date is intentionally only the publication year.
   static String headerYear(DateTime generatedAt) => '${generatedAt.year}';
@@ -101,7 +107,7 @@ class JournalPdfBuilder {
 
     final document = pw.Document(
       compress: compress,
-      title: 'Journal.',
+      title: _localizations.journalPdfTitle,
       theme: pw.ThemeData.withFont(base: font, bold: font, italic: font),
     );
 
@@ -206,7 +212,7 @@ class JournalPdfBuilder {
                 left: _titleMargin,
                 right: _titleMargin,
                 child: pw.Text(
-                  'Journal.',
+                  _localizations.journalPdfTitle,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
                     font: font,

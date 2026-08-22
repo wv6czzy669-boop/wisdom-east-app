@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/favorite_item.dart';
+import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/saved_reflections_service.dart';
 import '../theme/east_design.dart';
@@ -438,6 +439,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   }
 
   Widget _deleteDecisionOverlay() {
+    final l10n = eastLocalizations(context);
     if (!_confirmingDelete) return const SizedBox.shrink();
 
     return Positioned.fill(
@@ -456,13 +458,13 @@ class _ReflectionScreenState extends State<ReflectionScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Delete Reflection?',
+                  l10n.deleteReflectionQuestion,
                   textAlign: TextAlign.center,
                   style: _style(28, height: 1.1),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'The reflection will be removed from this kept wisdom.',
+                  l10n.reflectionDeleteExplanation,
                   textAlign: TextAlign.center,
                   style: _style(
                     15,
@@ -476,13 +478,13 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _deleteDecisionLabel(
-                      'CANCEL',
+                      l10n.cancelUpper,
                       onTap: _deleteInProgress ? null : _cancelDelete,
                       color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _deleteDecisionLabel(
-                      'DELETE',
+                      l10n.deleteUpper,
                       onTap: _deleteInProgress
                           ? null
                           : () => unawaited(_confirmDelete()),
@@ -526,6 +528,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = eastLocalizations(context);
     final characterCount = _controller.text.characters.length;
     const counterThreshold = 220;
 
@@ -545,17 +548,17 @@ class _ReflectionScreenState extends State<ReflectionScreen>
           shadowColor: Colors.transparent,
           elevation: 0,
           leading: Navigator.canPop(context) ? const EastBackButton() : null,
-          title: Text('Reflection', style: _style(24)),
+          title: Text(l10n.reflection, style: _style(24)),
           actions: [
             if (widget.item.hasReflection)
               Semantics(
                 button: true,
                 enabled: !_deleteInProgress,
-                label: 'Delete reflection',
+                label: l10n.deleteReflection,
                 child: ExcludeSemantics(
                   child: TextButton(
                     onPressed: _deleteInProgress ? null : _delete,
-                    child: Text('Delete', style: _style(16)),
+                    child: Text(l10n.delete, style: _style(16)),
                   ),
                 ),
               ),
