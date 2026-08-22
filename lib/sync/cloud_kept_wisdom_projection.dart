@@ -1,4 +1,5 @@
 import '../models/kept_record.dart';
+import '../data/wisdoms.dart';
 import '../utils/canonical_uuid.dart';
 import '../utils/kept_timestamp_canonicalizer.dart';
 import 'data_epoch.dart';
@@ -27,6 +28,7 @@ final class CloudKeptWisdomProjection {
     required this.schemaVersion,
     this.revealId,
     this.wisdomText,
+    this.wisdomId,
     this.revealedAtMs,
     this.keptAtMs,
     this.reflectionText,
@@ -61,6 +63,7 @@ final class CloudKeptWisdomProjection {
 
   /// Present only on the active form.
   final String? wisdomText;
+  final String? wisdomId;
 
   /// Present only on the active form. Milliseconds since epoch, UTC,
   /// canonicalized to whole-millisecond precision.
@@ -119,6 +122,7 @@ final class CloudKeptWisdomProjection {
       isTombstone: false,
       revealId: record.revealId,
       wisdomText: record.wisdomText,
+      wisdomId: record.wisdomId,
       revealedAtMs:
           canonicalizeKeptTimestamp(record.revealedAt).millisecondsSinceEpoch,
       keptAtMs: canonicalizeKeptTimestamp(record.keptAt).millisecondsSinceEpoch,
@@ -197,6 +201,7 @@ final class CloudKeptWisdomProjection {
       const forbiddenOnTombstone = [
         'revealId',
         'wisdomText',
+        'wisdomId',
         'revealedAtMs',
         'keptAtMs',
         'reflectionText',
@@ -229,6 +234,11 @@ final class CloudKeptWisdomProjection {
         wisdomText.runes.length > maximumWisdomTextLength) {
       return null;
     }
+    final wisdomId = fields['wisdomId'];
+    if (wisdomId != null &&
+        (wisdomId is! String || !isCanonicalWisdomId(wisdomId))) {
+      return null;
+    }
 
     final revealedAtMs = fields['revealedAtMs'];
     if (revealedAtMs is! int) return null;
@@ -252,6 +262,7 @@ final class CloudKeptWisdomProjection {
       isTombstone: false,
       revealId: revealId,
       wisdomText: wisdomText,
+      wisdomId: wisdomId as String?,
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
       reflectionText: reflectionText as String?,

@@ -5,11 +5,13 @@ import 'package:uuid/uuid.dart';
 
 import '../models/daily_access_snapshot.dart';
 import '../models/daily_wisdom_record.dart';
+import '../models/daily_wisdom_selection.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/storage_preferences_adapter.dart';
 
 typedef WisdomSelector = String Function();
+typedef WisdomSelectionSelector = DailyWisdomSelection Function();
 
 class CorruptDailyWisdomRecordException implements Exception {
   const CorruptDailyWisdomRecordException([this.encodedRecord]);
@@ -117,6 +119,7 @@ class DailyAccessRepository {
 
   Future<PreparedDailyAccess> prepareReveal({
     required WisdomSelector selectWisdom,
+    WisdomSelectionSelector? selectWisdomWithIdentity,
     required DateTime preparedAt,
     required DateTime now,
   }) {
@@ -125,6 +128,7 @@ class DailyAccessRepository {
       operationKey: 'prepare',
       operation: () => _prepareReveal(
         selectWisdom: selectWisdom,
+        selectWisdomWithIdentity: selectWisdomWithIdentity,
         preparedAt: preparedAt,
         now: now,
       ),
@@ -321,6 +325,7 @@ class DailyAccessRepository {
 
   Future<PreparedDailyAccess> _prepareReveal({
     required WisdomSelector selectWisdom,
+    WisdomSelectionSelector? selectWisdomWithIdentity,
     required DateTime preparedAt,
     required DateTime now,
   }) async {
@@ -336,6 +341,7 @@ class DailyAccessRepository {
           // old, not-yet-backfilled Build 25 record.
           revealId: record.revealId,
           revealedAt: record.revealedAt,
+          wisdomId: record.wisdomId,
         );
       case DailyAccessPendingCommit(:final pending):
         return PreparedDailyAccess(
@@ -343,6 +349,7 @@ class DailyAccessRepository {
           hasAuthoritativeRecord: false,
           confirmedRevealBoundary: pending.confirmedRevealBoundary,
           phase: pending.phase,
+          wisdomId: pending.wisdomId,
         );
       case DailyAccessReady(:final pending):
         if (pending != null) {
@@ -351,10 +358,13 @@ class DailyAccessRepository {
             hasAuthoritativeRecord: false,
             confirmedRevealBoundary: pending.confirmedRevealBoundary,
             phase: pending.phase,
+            wisdomId: pending.wisdomId,
           );
         }
 
-        final text = selectWisdom();
+        final selection = selectWisdomWithIdentity?.call() ??
+            DailyWisdomSelection(text: selectWisdom());
+        final text = selection.text;
         if (text.trim().isEmpty) {
           throw StateError('Selected daily wisdom text cannot be empty.');
         }
@@ -362,11 +372,13 @@ class DailyAccessRepository {
         final nextPending = PendingDailyWisdomReveal(
           text: text,
           preparedAt: preparedAt,
+          wisdomId: selection.wisdomId,
         );
         await _savePendingDailyWisdomReveal(nextPending);
         return PreparedDailyAccess(
           text: text,
           hasAuthoritativeRecord: false,
+          wisdomId: selection.wisdomId,
         );
     }
   }
@@ -526,6 +538,7 @@ class DailyAccessRepository {
       revealedAt: confirmedBoundary,
       unlockAt: unlockAt,
       revealId: _generateRevealId(),
+      wisdomId: pendingReveal.wisdomId,
     );
 
     await _saveDailyWisdomRecord(nextRecord);

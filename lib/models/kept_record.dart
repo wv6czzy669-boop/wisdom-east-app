@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../utils/canonical_uuid.dart';
+import '../data/wisdoms.dart';
 
 /// An active, user-visible Kept wisdom (and its optional Reflection).
 ///
@@ -26,6 +27,7 @@ class KeptRecord {
     DateTime? reflectedAt,
     required DateTime updatedAt,
     required this.mutationId,
+    this.wisdomId,
   })  : revealedAt = revealedAt.toUtc(),
         keptAt = keptAt.toUtc(),
         reflectedAt = reflectedAt?.toUtc(),
@@ -39,6 +41,7 @@ class KeptRecord {
       reflectedAt: this.reflectedAt,
       updatedAt: this.updatedAt,
       mutationId: mutationId,
+      wisdomId: wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(wisdomText),
     );
   }
 
@@ -90,12 +93,14 @@ class KeptRecord {
   /// Deterministic tie-breaker only — never a record identity. Version 4
   /// for a normal mutation, version 5 for deterministic migration state.
   final String mutationId;
+  final String? wisdomId;
 
   Map<String, dynamic> encode() => {
         'schemaVersion': currentSchemaVersion,
         'id': id,
         'revealId': revealId,
         'wisdomText': wisdomText,
+        if (wisdomId != null) 'wisdomId': wisdomId,
         'revealedAtMs': revealedAt.millisecondsSinceEpoch,
         'keptAtMs': keptAt.millisecondsSinceEpoch,
         if (reflectionText != null) 'reflectionText': reflectionText,
@@ -116,6 +121,7 @@ class KeptRecord {
     final id = _readString(data, 'id');
     final revealId = _readString(data, 'revealId');
     final wisdomText = _readString(data, 'wisdomText');
+    final wisdomId = _readOptionalWisdomId(data, 'wisdomId');
     final revealedAtMs = _readInt(data, 'revealedAtMs');
     final keptAtMs = _readInt(data, 'keptAtMs');
     final reflectionText = _readOptionalString(data, 'reflectionText');
@@ -127,6 +133,7 @@ class KeptRecord {
       id: id,
       revealId: revealId,
       wisdomText: wisdomText,
+      wisdomId: wisdomId,
       revealedAt:
           DateTime.fromMillisecondsSinceEpoch(revealedAtMs, isUtc: true),
       keptAt: DateTime.fromMillisecondsSinceEpoch(keptAtMs, isUtc: true),
@@ -169,6 +176,7 @@ class KeptRecord {
       reflectedAt: clearReflection ? null : (reflectedAt ?? this.reflectedAt),
       updatedAt: updatedAt ?? this.updatedAt,
       mutationId: mutationId ?? this.mutationId,
+      wisdomId: wisdomId,
     );
   }
 
@@ -179,6 +187,7 @@ class KeptRecord {
         other.id == id &&
         other.revealId == revealId &&
         other.wisdomText == wisdomText &&
+        other.wisdomId == wisdomId &&
         other.revealedAt.isAtSameMomentAs(revealedAt) &&
         other.keptAt.isAtSameMomentAs(keptAt) &&
         other.reflectionText == reflectionText &&
@@ -195,6 +204,7 @@ class KeptRecord {
         id,
         revealId,
         wisdomText,
+        wisdomId,
         revealedAt.millisecondsSinceEpoch,
         keptAt.millisecondsSinceEpoch,
         reflectionText,
@@ -212,6 +222,7 @@ class KeptRecord {
     required DateTime? reflectedAt,
     required DateTime updatedAt,
     required String mutationId,
+    required String? wisdomId,
   }) {
     if (id.trim().isEmpty) {
       throw const FormatException('Kept record ID cannot be blank.');
@@ -224,6 +235,9 @@ class KeptRecord {
     }
     if (!_isCanonicalUuidV4OrV5(mutationId)) {
       throw const FormatException('Invalid kept record mutationId.');
+    }
+    if (wisdomId != null && !isCanonicalWisdomId(wisdomId)) {
+      throw const FormatException('Invalid kept record wisdomId.');
     }
 
     if (reflectionText != null) {
@@ -248,6 +262,13 @@ class KeptRecord {
         'Kept record updatedAt cannot be before keptAt.',
       );
     }
+  }
+
+  static String? _readOptionalWisdomId(Map<String, dynamic> data, String key) {
+    if (!data.containsKey(key)) return null;
+    final value = data[key];
+    if (value is String && isCanonicalWisdomId(value)) return value;
+    throw const FormatException('Invalid kept record wisdomId.');
   }
 
   static bool _isCanonicalUuidV4OrV5(String value) {

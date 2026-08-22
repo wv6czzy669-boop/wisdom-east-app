@@ -129,6 +129,7 @@ final class KeptSyncIntegrationCoordinator {
   Future<KeptRepositoryMutationResult> recordKeep({
     required String revealId,
     required String wisdomText,
+    String? wisdomId,
     required DateTime revealedAt,
     required bool isKeeper,
   }) {
@@ -143,6 +144,7 @@ final class KeptSyncIntegrationCoordinator {
         final result = await _keptRepository.keepOccurrence(
           revealId: revealId,
           wisdomText: wisdomText,
+          wisdomId: wisdomId,
           revealedAt: revealedAt,
           isKeeper: isKeeper,
           presetId: presetId,
@@ -390,6 +392,7 @@ final class KeptSyncIntegrationCoordinator {
       await _keptRepository.keepOccurrence(
         revealId: payload.revealId,
         wisdomText: payload.wisdomText!,
+        wisdomId: payload.wisdomId,
         revealedAt: DateTime.fromMillisecondsSinceEpoch(
           payload.revealedAtMs!,
           isUtc: true,
@@ -505,6 +508,7 @@ final class KeptSyncIntegrationCoordinator {
       id: payload.localId ?? payload.mutationId,
       revealId: payload.revealId,
       wisdomText: payload.wisdomText!,
+      wisdomId: payload.wisdomId,
       revealedAt: DateTime.fromMillisecondsSinceEpoch(
         payload.revealedAtMs!,
         isUtc: true,
@@ -558,6 +562,7 @@ final class KeptSyncIntegrationCoordinator {
       revealId: target.revealId,
       operation: operation,
       wisdomText: target.wisdomText,
+      wisdomId: target.wisdomId,
       revealedAtMs: target.revealedAt.millisecondsSinceEpoch,
       keptAtMs: target.keptAt.millisecondsSinceEpoch,
       updatedAtMs: target.updatedAt.millisecondsSinceEpoch,

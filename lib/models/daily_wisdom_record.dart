@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../utils/canonical_uuid.dart';
+import '../data/wisdoms.dart';
 
 class DailyWisdomRecord {
   const DailyWisdomRecord({
@@ -8,6 +9,7 @@ class DailyWisdomRecord {
     required this.revealedAt,
     required this.unlockAt,
     this.revealId,
+    this.wisdomId,
   });
 
   final String text;
@@ -37,13 +39,19 @@ class DailyWisdomRecord {
   /// on this record, never does. `revealId` is never analytics data.
   final String? revealId;
 
+  /// Optional canonical catalog identity. Older records retain their exact
+  /// text snapshot and decode without this field.
+  final String? wisdomId;
+
   static const Duration lockDuration = Duration(hours: 24);
 
-  DailyWisdomRecord copyWith({String? revealId}) => DailyWisdomRecord(
+  DailyWisdomRecord copyWith({String? revealId, String? wisdomId}) =>
+      DailyWisdomRecord(
         text: text,
         revealedAt: revealedAt,
         unlockAt: unlockAt,
         revealId: revealId ?? this.revealId,
+        wisdomId: wisdomId ?? this.wisdomId,
       );
 
   String encode() => jsonEncode({
@@ -51,6 +59,7 @@ class DailyWisdomRecord {
         'revealedAtMs': revealedAt.millisecondsSinceEpoch,
         'unlockAtMs': unlockAt.millisecondsSinceEpoch,
         if (revealId != null) 'revealId': revealId,
+        if (wisdomId != null) 'wisdomId': wisdomId,
       });
 
   static DailyWisdomRecord decode(String value) {
@@ -63,6 +72,7 @@ class DailyWisdomRecord {
     final revealedAtMs = _readInt(decoded, 'revealedAtMs');
     final unlockAtMs = _readInt(decoded, 'unlockAtMs');
     final revealId = _readOptionalRevealId(decoded, 'revealId');
+    final wisdomId = _readOptionalWisdomId(decoded, 'wisdomId');
 
     if (text.trim().isEmpty || revealedAtMs < 0 || unlockAtMs <= revealedAtMs) {
       throw const FormatException('Invalid daily wisdom record.');
@@ -79,6 +89,7 @@ class DailyWisdomRecord {
       revealedAt: revealedAt,
       unlockAt: unlockAt,
       revealId: revealId,
+      wisdomId: wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(text),
     );
   }
 
@@ -122,6 +133,13 @@ class DailyWisdomRecord {
   static int _readInt(Map<String, dynamic> data, String key) {
     final value = data[key];
     if (value is int) return value;
+    throw const FormatException('Invalid daily wisdom record.');
+  }
+
+  static String? _readOptionalWisdomId(Map<String, dynamic> data, String key) {
+    if (!data.containsKey(key)) return null;
+    final value = data[key];
+    if (value is String && isCanonicalWisdomId(value)) return value;
     throw const FormatException('Invalid daily wisdom record.');
   }
 

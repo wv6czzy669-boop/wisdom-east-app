@@ -2,10 +2,12 @@ import 'dart:async';
 
 import '../models/daily_access_snapshot.dart';
 import '../models/daily_wisdom_record.dart';
+import '../models/daily_wisdom_selection.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
 import '../repositories/daily_access_repository.dart' hide WisdomSelector;
 
 typedef WisdomSelector = String Function();
+typedef WisdomSelectionSelector = DailyWisdomSelection Function();
 typedef WisdomClock = DateTime Function();
 
 class DailyWisdomAccess {
@@ -15,6 +17,7 @@ class DailyWisdomAccess {
     this.unlockAt,
     this.revealId,
     this.revealedAt,
+    this.wisdomId,
   });
 
   final String text;
@@ -32,6 +35,7 @@ class DailyWisdomAccess {
   /// the same [DailyWisdomRecord]. Nullable for the same compatibility
   /// reason as [revealId].
   final DateTime? revealedAt;
+  final String? wisdomId;
 }
 
 class DailyWisdomStatus {
@@ -42,6 +46,7 @@ class DailyWisdomStatus {
     this.lockedText,
     this.revealId,
     this.revealedAt,
+    this.wisdomId,
   });
 
   final bool isReady;
@@ -58,6 +63,7 @@ class DailyWisdomStatus {
   /// When the authoritative reveal actually happened, populated under the
   /// same rule as [revealId].
   final DateTime? revealedAt;
+  final String? wisdomId;
 }
 
 class DailyWisdomPreparedReveal {
@@ -69,6 +75,7 @@ class DailyWisdomPreparedReveal {
     this.phase = PendingDailyWisdomRevealPhase.prepared,
     this.revealId,
     this.revealedAt,
+    this.wisdomId,
   });
 
   final String text;
@@ -84,6 +91,7 @@ class DailyWisdomPreparedReveal {
 
   /// Passed through verbatim from [PreparedDailyAccess.revealedAt].
   final DateTime? revealedAt;
+  final String? wisdomId;
 }
 
 class DailyWisdomStatusUnavailableException implements Exception {
@@ -118,8 +126,12 @@ class DailyWisdomAccessService {
 
   Future<DailyWisdomAccess> reveal({
     required WisdomSelector selectWisdom,
+    WisdomSelectionSelector? selectWisdomWithIdentity,
   }) async {
-    final prepared = await prepareReveal(selectWisdom: selectWisdom);
+    final prepared = await prepareReveal(
+      selectWisdom: selectWisdom,
+      selectWisdomWithIdentity: selectWisdomWithIdentity,
+    );
     if (prepared.hasAuthoritativeRecord) {
       return DailyWisdomAccess(
         text: prepared.text,
@@ -127,6 +139,7 @@ class DailyWisdomAccessService {
         unlockAt: prepared.unlockAt,
         revealId: prepared.revealId,
         revealedAt: prepared.revealedAt,
+        wisdomId: prepared.wisdomId,
       );
     }
 
@@ -138,10 +151,12 @@ class DailyWisdomAccessService {
 
   Future<DailyWisdomPreparedReveal> prepareReveal({
     required WisdomSelector selectWisdom,
+    WisdomSelectionSelector? selectWisdomWithIdentity,
   }) async {
     final now = _clock();
     final prepared = await _repository.prepareReveal(
       selectWisdom: selectWisdom,
+      selectWisdomWithIdentity: selectWisdomWithIdentity,
       preparedAt: now,
       now: now,
     );
@@ -153,6 +168,7 @@ class DailyWisdomAccessService {
       phase: prepared.phase,
       revealId: prepared.revealId,
       revealedAt: prepared.revealedAt,
+      wisdomId: prepared.wisdomId,
     );
   }
 
@@ -202,6 +218,7 @@ class DailyWisdomAccessService {
       unlockAt: record.unlockAt,
       revealId: record.revealId,
       revealedAt: record.revealedAt,
+      wisdomId: record.wisdomId,
     );
   }
 
@@ -221,6 +238,7 @@ class DailyWisdomAccessService {
       unlockAt: record.unlockAt,
       revealId: record.revealId,
       revealedAt: record.revealedAt,
+      wisdomId: record.wisdomId,
     );
   }
 
@@ -272,6 +290,7 @@ class DailyWisdomAccessService {
           remaining: Duration.zero,
           revealId: record.revealId,
           revealedAt: record.revealedAt,
+          wisdomId: record.wisdomId,
         );
       }
 
@@ -282,6 +301,7 @@ class DailyWisdomAccessService {
         lockedText: record.text,
         revealId: record.revealId,
         revealedAt: record.revealedAt,
+        wisdomId: record.wisdomId,
       );
     } on TimeoutException catch (error) {
       throw DailyWisdomStatusUnavailableException(error);

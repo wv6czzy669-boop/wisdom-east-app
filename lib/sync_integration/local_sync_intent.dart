@@ -94,6 +94,7 @@ final class LocalSyncIntentPayload {
     required this.mutationId,
     this.localId,
     this.wisdomText,
+    this.wisdomId,
     this.revealedAtMs,
     this.keptAtMs,
     this.reflectionText,
@@ -106,6 +107,7 @@ final class LocalSyncIntentPayload {
       isTombstone: isTombstone,
       operation: operation,
       wisdomText: wisdomText,
+      wisdomId: wisdomId,
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
       reflectionText: reflectionText,
@@ -135,6 +137,7 @@ final class LocalSyncIntentPayload {
     required String revealId,
     required LocalSyncIntentOperation operation,
     required String wisdomText,
+    String? wisdomId,
     required int revealedAtMs,
     required int keptAtMs,
     required int updatedAtMs,
@@ -148,6 +151,7 @@ final class LocalSyncIntentPayload {
       isTombstone: false,
       operation: operation,
       wisdomText: wisdomText,
+      wisdomId: wisdomId,
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
       reflectionText: reflectionText,
@@ -207,6 +211,7 @@ final class LocalSyncIntentPayload {
   final String? localId;
 
   final String? wisdomText;
+  final String? wisdomId;
   final int? revealedAtMs;
   final int? keptAtMs;
   final String? reflectionText;
@@ -229,6 +234,7 @@ final class LocalSyncIntentPayload {
         'operation': operation.name,
         if (localId != null) 'localId': localId,
         if (wisdomText != null) 'wisdomText': wisdomText,
+        if (wisdomId != null) 'wisdomId': wisdomId,
         if (revealedAtMs != null) 'revealedAtMs': revealedAtMs,
         if (keptAtMs != null) 'keptAtMs': keptAtMs,
         if (reflectionText != null) 'reflectionText': reflectionText,
@@ -248,6 +254,7 @@ final class LocalSyncIntentPayload {
       'operation',
       'localId',
       'wisdomText',
+      'wisdomId',
       'revealedAtMs',
       'keptAtMs',
       'reflectionText',
@@ -289,6 +296,11 @@ final class LocalSyncIntentPayload {
 
     final wisdomText = raw['wisdomText'];
     if (wisdomText != null && wisdomText is! String) return null;
+    final wisdomId = raw['wisdomId'];
+    if (wisdomId != null &&
+        (wisdomId is! String || !isCanonicalEastWisdomId(wisdomId))) {
+      return null;
+    }
 
     final revealedAtMs = raw['revealedAtMs'];
     if (revealedAtMs != null && revealedAtMs is! int) return null;
@@ -312,6 +324,7 @@ final class LocalSyncIntentPayload {
         operation: operation,
         localId: localId as String?,
         wisdomText: wisdomText as String?,
+        wisdomId: wisdomId as String?,
         revealedAtMs: revealedAtMs as int?,
         keptAtMs: keptAtMs as int?,
         reflectionText: reflectionText as String?,
@@ -331,6 +344,7 @@ final class LocalSyncIntentPayload {
     required bool isTombstone,
     required LocalSyncIntentOperation operation,
     required String? wisdomText,
+    required String? wisdomId,
     required int? revealedAtMs,
     required int? keptAtMs,
     required String? reflectionText,
@@ -394,6 +408,9 @@ final class LocalSyncIntentPayload {
         'wisdomText.',
       );
     }
+    if (wisdomId != null && !isCanonicalEastWisdomId(wisdomId)) {
+      throw const FormatException('Invalid local sync intent wisdomId.');
+    }
     if (wisdomText.runes.length >
         CloudKeptWisdomProjection.maximumWisdomTextLength) {
       throw const FormatException(
@@ -454,6 +471,7 @@ final class LocalSyncIntentPayload {
         other.operation == operation &&
         other.localId == localId &&
         other.wisdomText == wisdomText &&
+        other.wisdomId == wisdomId &&
         other.revealedAtMs == revealedAtMs &&
         other.keptAtMs == keptAtMs &&
         other.reflectionText == reflectionText &&
@@ -470,6 +488,7 @@ final class LocalSyncIntentPayload {
         operation,
         localId,
         wisdomText,
+        wisdomId,
         revealedAtMs,
         keptAtMs,
         reflectionText,

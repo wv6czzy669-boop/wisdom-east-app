@@ -101,6 +101,7 @@ class SavedReflectionsService {
     required bool isKeeper,
     required String revealId,
     required DateTime revealedAt,
+    String? wisdomId,
     String? existingId,
   }) async {
     if (existingId != null) {
@@ -112,6 +113,7 @@ class SavedReflectionsService {
     final result = await _syncCoordinator.recordKeep(
       revealId: revealId,
       wisdomText: text,
+      wisdomId: wisdomId,
       revealedAt: revealedAt,
       isKeeper: isKeeper,
     );

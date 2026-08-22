@@ -104,6 +104,7 @@ enum CloudKitRecordEnvelopeArgumentParser {
     guard let wisdomText = fields["wisdomText"] as? String else {
       return .failure(.missingRequiredField("wisdomText"))
     }
+    let wisdomId = fields["wisdomId"] as? String
     guard let revealedAtMs = asInt64(fields["revealedAtMs"]) else {
       return .failure(.missingRequiredField("revealedAtMs"))
     }
@@ -121,6 +122,7 @@ enum CloudKitRecordEnvelopeArgumentParser {
       let record = try CloudKitKeptWisdomCodec.encodeActive(
         revealId: revealId,
         wisdomText: wisdomText,
+        wisdomId: wisdomId,
         revealedAtMs: revealedAtMs,
         keptAtMs: keptAtMs,
         reflectionText: reflectionText,

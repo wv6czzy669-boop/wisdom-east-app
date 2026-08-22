@@ -5632,6 +5632,7 @@ class _RecordingSavedReflectionsService implements SavedReflectionsService {
     required bool isKeeper,
     required String revealId,
     required DateTime revealedAt,
+    String? wisdomId,
     String? existingId,
   }) {
     toggleCallCount += 1;

@@ -32,6 +32,7 @@ final class PreparedDailyAccess {
     this.phase = PendingDailyWisdomRevealPhase.prepared,
     this.revealId,
     this.revealedAt,
+    this.wisdomId,
   }) {
     _validate(
       hasAuthoritativeRecord: hasAuthoritativeRecord,
@@ -60,6 +61,7 @@ final class PreparedDailyAccess {
   /// [DailyWisdomRecord] carries a non-null `revealedAt`); always `null`
   /// otherwise.
   final DateTime? revealedAt;
+  final String? wisdomId;
 
   static void _validate({
     required bool hasAuthoritativeRecord,

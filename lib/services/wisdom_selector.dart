@@ -3,7 +3,7 @@ import 'dart:math';
 import '../data/wisdoms.dart';
 
 class WisdomSelectorService {
-  final List<String> _recentWisdoms = [];
+  final List<String> _recentWisdomIds = [];
   final List<String> _recentTags = [];
   final List<String> _recentTones = [];
 
@@ -13,18 +13,19 @@ class WisdomSelectorService {
     if (wisdoms.isEmpty) {
       return {
         "text": "Silence is still available.",
+        "id": null,
         "tags": ["silence"],
         "tone": "calm",
       };
     }
 
     final candidates = wisdoms.where((wisdom) {
-      final text = wisdom["text"] as String;
-      return !_recentWisdoms.contains(text);
+      final id = wisdom["id"] as String;
+      return !_recentWisdomIds.contains(id);
     }).toList();
 
     if (candidates.isEmpty) {
-      _recentWisdoms.clear();
+      _recentWisdomIds.clear();
       candidates.addAll(wisdoms);
     }
 
@@ -32,13 +33,13 @@ class WisdomSelectorService {
       int score = 100;
       final tags = List<String>.from(wisdom["tags"] ?? []);
       final tone = wisdom["tone"] as String? ?? "neutral";
-      final text = wisdom["text"] as String;
+      final id = wisdom["id"] as String;
 
       for (final tag in tags) {
         if (_recentTags.contains(tag)) score -= 18;
       }
       if (_recentTones.contains(tone)) score -= 25;
-      if (_recentWisdoms.contains(text)) score -= 50;
+      if (_recentWisdomIds.contains(id)) score -= 50;
 
       score += random.nextInt(35);
       if (score < 5) score = 5;
@@ -60,12 +61,14 @@ class WisdomSelectorService {
   }
 
   void _rememberPattern(Map<String, dynamic> selected) {
-    final text = selected["text"] as String;
+    final id = selected["id"] as String?;
     final tags = List<String>.from(selected["tags"] ?? []);
     final tone = selected["tone"] as String? ?? "neutral";
 
-    _recentWisdoms.add(text);
-    if (_recentWisdoms.length > 20) _recentWisdoms.removeAt(0);
+    if (id != null) {
+      _recentWisdomIds.add(id);
+      if (_recentWisdomIds.length > 20) _recentWisdomIds.removeAt(0);
+    }
 
     _recentTags.addAll(tags);
     while (_recentTags.length > 12) {

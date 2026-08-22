@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../controllers/latest_request_guard.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
+import '../models/daily_wisdom_selection.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
 import '../services/analytics_service.dart';
 import '../services/app_services.dart' as app_services;
@@ -106,11 +107,13 @@ class _HomeScreenState extends State<HomeScreen>
   // fresh reveal whose commit has not yet resolved), which is exactly the
   // condition `toggleFavorite()` and `currentFavorite()` gate on.
   String? currentRevealId;
+  String? currentWisdomId;
   DateTime? currentRevealedAt;
   // Mirrors `_lockedWisdomText`: the reveal identity of the locked wisdom a
   // tap on the locked countdown would re-display via
   // `transitionToExistingWisdom`.
   String? _lockedWisdomRevealId;
+  String? _lockedWisdomId;
   DateTime? _lockedWisdomRevealedAt;
 
   // Item 5 — Home left-swipe opens Kept. Cumulative drag offset for the
@@ -681,6 +684,7 @@ class _HomeScreenState extends State<HomeScreen>
             lockedWisdomText,
             revealId: _lockedWisdomRevealId,
             revealedAt: _lockedWisdomRevealedAt,
+            wisdomId: _lockedWisdomId,
           );
         }
         return;
@@ -853,6 +857,7 @@ class _HomeScreenState extends State<HomeScreen>
     String text, {
     String? revealId,
     DateTime? revealedAt,
+    String? wisdomId,
   }) async {
     if (transitionInProgress) return;
 
@@ -883,6 +888,7 @@ class _HomeScreenState extends State<HomeScreen>
         currentText = text;
         currentRevealId = revealId;
         currentRevealedAt = revealedAt;
+        currentWisdomId = wisdomId;
         screenStep = 4;
         _showingLockedWisdom = true;
         textOpacity = 1.0;
@@ -952,6 +958,7 @@ class _HomeScreenState extends State<HomeScreen>
             currentText = "EAST.";
             currentRevealId = null;
             currentRevealedAt = null;
+            currentWisdomId = null;
             textOpacity = 1.0;
             textScale = 1.0;
           }
@@ -963,6 +970,7 @@ class _HomeScreenState extends State<HomeScreen>
     String? lockedWisdomText;
     String? lockedRevealId;
     DateTime? lockedRevealedAt;
+    String? lockedWisdomId;
     final text = status.lockedText?.trim();
     if (text != null &&
         text.isNotEmpty &&
@@ -970,6 +978,7 @@ class _HomeScreenState extends State<HomeScreen>
       lockedWisdomText = status.lockedText;
       lockedRevealId = status.revealId;
       lockedRevealedAt = status.revealedAt;
+      lockedWisdomId = status.wisdomId;
     }
 
     final message = CountdownFormatter.silenceMessage(status.remaining!);
@@ -981,6 +990,7 @@ class _HomeScreenState extends State<HomeScreen>
         _lockedWisdomText = lockedWisdomText;
         _lockedWisdomRevealId = lockedRevealId;
         _lockedWisdomRevealedAt = lockedRevealedAt;
+        _lockedWisdomId = lockedWisdomId;
         nextWisdomMessage = message;
         if (onLockedCountdown) {
           currentText = message;
@@ -996,6 +1006,13 @@ class _HomeScreenState extends State<HomeScreen>
   Future<DailyWisdomPreparedReveal> prepareDailyWisdomReveal() {
     return dailyWisdomAccessService.prepareReveal(
       selectWisdom: () => wisdomSelector.select()["text"] as String,
+      selectWisdomWithIdentity: () {
+        final wisdom = wisdomSelector.select();
+        return DailyWisdomSelection(
+          text: wisdom['text'] as String,
+          wisdomId: wisdom['id'] as String?,
+        );
+      },
     );
   }
 
@@ -1692,6 +1709,7 @@ class _HomeScreenState extends State<HomeScreen>
               unlockAt: revealReady.unlockAt,
               revealId: revealReady.revealId,
               revealedAt: revealReady.revealedAt,
+              wisdomId: revealReady.wisdomId,
             )
           : DailyWisdomAccess(
               text: revealReady.text,
@@ -1710,6 +1728,7 @@ class _HomeScreenState extends State<HomeScreen>
         currentText = revealedAccess.text;
         currentRevealId = revealedAccess.revealId;
         currentRevealedAt = revealedAccess.revealedAt;
+        currentWisdomId = revealedAccess.wisdomId;
         screenStep = 4;
         _showingLockedWisdom = !revealedAccess.isNew;
         textOpacity = 1.0;
@@ -1771,6 +1790,7 @@ class _HomeScreenState extends State<HomeScreen>
                 _showingLockedWisdom = !lateAccess.isNew;
                 currentRevealId = lateAccess.revealId;
                 currentRevealedAt = lateAccess.revealedAt;
+                currentWisdomId = lateAccess.wisdomId;
                 saveControlOpacity = 1.0;
                 saveInteractionEnabled = true;
                 postRevealMessageOpacity = 1.0;
@@ -1807,6 +1827,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         currentRevealId = committedAccess.revealId;
         currentRevealedAt = committedAccess.revealedAt;
+        currentWisdomId = committedAccess.wisdomId;
       });
 
       await Future.delayed(const Duration(milliseconds: 900));
@@ -1871,6 +1892,7 @@ class _HomeScreenState extends State<HomeScreen>
         _showingLockedWisdom = !committedAccess.isNew;
         currentRevealId = committedAccess.revealId;
         currentRevealedAt = committedAccess.revealedAt;
+        currentWisdomId = committedAccess.wisdomId;
         saveControlOpacity = 1.0;
       });
     } on TimeoutException {
@@ -2164,6 +2186,7 @@ class _HomeScreenState extends State<HomeScreen>
         isKeeper: isKeeper,
         revealId: revealId,
         revealedAt: revealedAt,
+        wisdomId: currentWisdomId,
       );
 
       if (!mounted) return;

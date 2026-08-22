@@ -248,6 +248,7 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
       "isTombstone": false,
       "revealId": envelope.revealId,
       "wisdomText": envelope.wisdomText,
+      "wisdomId": envelope.wisdomId,
       "revealedAtMs": envelope.revealedAtMs,
       "keptAtMs": envelope.keptAtMs,
       "updatedAtMs": envelope.updatedAtMs,

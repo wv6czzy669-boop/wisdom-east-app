@@ -183,6 +183,7 @@ final class KeptRepository {
   Future<KeptRepositoryMutationResult> keepOccurrence({
     required String revealId,
     required String wisdomText,
+    String? wisdomId,
     required DateTime revealedAt,
     required bool isKeeper,
     String? presetId,
@@ -258,6 +259,7 @@ final class KeptRepository {
           id: id,
           revealId: revealId,
           wisdomText: wisdomText,
+          wisdomId: wisdomId,
           revealedAt: canonicalRevealedAt,
           keptAt: keptAt,
           updatedAt: keptAt,
@@ -773,6 +775,7 @@ final class KeptRepository {
       reflection: record.reflectionText,
       reflectedAt: record.reflectedAt?.toIso8601String(),
       keptAt: record.keptAt.toIso8601String(),
+      wisdomId: record.wisdomId,
     );
   }
 }

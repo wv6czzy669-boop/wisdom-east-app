@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../utils/canonical_uuid.dart';
+import '../data/wisdoms.dart';
 
 class FavoriteItem {
   final String id;
@@ -32,6 +33,7 @@ class FavoriteItem {
   /// field, exactly like [revealId] above — never backfilled or fabricated
   /// here.
   final String? keptAt;
+  final String? wisdomId;
 
   const FavoriteItem({
     required this.id,
@@ -41,6 +43,7 @@ class FavoriteItem {
     this.reflectedAt,
     this.revealId,
     this.keptAt,
+    this.wisdomId,
   });
 
   static const int currentSchemaVersion = 2;
@@ -55,6 +58,7 @@ class FavoriteItem {
     String? reflectedAt,
     String? revealId,
     String? keptAt,
+    String? wisdomId,
     bool clearReflection = false,
   }) {
     return FavoriteItem(
@@ -69,6 +73,7 @@ class FavoriteItem {
       // identity untouched.
       revealId: revealId ?? this.revealId,
       keptAt: keptAt ?? this.keptAt,
+      wisdomId: wisdomId ?? this.wisdomId,
     );
   }
 
@@ -81,6 +86,7 @@ class FavoriteItem {
       if (reflection != null) 'reflection': reflection,
       if (reflectedAt != null) 'reflectedAt': reflectedAt,
       if (revealId != null) 'revealId': revealId,
+      if (wisdomId != null) 'wisdomId': wisdomId,
     });
   }
 
@@ -128,6 +134,11 @@ class FavoriteItem {
       throw const FormatException('Invalid saved reflection revealId.');
     }
     final revealId = rawRevealId as String?;
+    final rawWisdomId = decoded['wisdomId'];
+    if (rawWisdomId != null &&
+        (rawWisdomId is! String || !isCanonicalWisdomId(rawWisdomId))) {
+      throw const FormatException('Invalid saved reflection wisdomId.');
+    }
 
     final id = switch (storedId) {
       final String value => value,
@@ -153,6 +164,8 @@ class FavoriteItem {
       reflection: normalizedReflection,
       reflectedAt: normalizedReflection == null ? null : normalizedReflectedAt,
       revealId: revealId,
+      wisdomId: (rawWisdomId as String?) ??
+          resolveUniqueWisdomIdForEnglishSnapshot(text),
     );
   }
 

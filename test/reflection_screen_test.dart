@@ -1045,6 +1045,7 @@ class _FlakyOnceSavedReflectionsService implements SavedReflectionsService {
     required bool isKeeper,
     required String revealId,
     required DateTime revealedAt,
+    String? wisdomId,
     String? existingId,
   }) =>
       _delegate.toggle(

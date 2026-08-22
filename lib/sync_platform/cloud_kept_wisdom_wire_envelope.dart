@@ -109,6 +109,7 @@ final class CloudKeptWisdomWireEnvelope {
     'isTombstone',
     'revealId',
     'wisdomText',
+    'wisdomId',
     'revealedAtMs',
     'keptAtMs',
     'reflectionText',
@@ -156,6 +157,7 @@ final class CloudKeptWisdomWireEnvelope {
       'isTombstone': false,
       'revealId': projection.revealId,
       'wisdomText': projection.wisdomText,
+      if (projection.wisdomId != null) 'wisdomId': projection.wisdomId,
       'revealedAtMs': projection.revealedAtMs,
       'keptAtMs': projection.keptAtMs,
       if (projection.reflectionText != null)

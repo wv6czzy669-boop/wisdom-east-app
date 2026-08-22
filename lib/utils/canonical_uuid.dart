@@ -65,3 +65,11 @@ bool isCanonicalUuidV4(String value) {
 bool isSupportedRevealId(String value) {
   return isCanonicalUuidV4OrV5(value);
 }
+
+/// Stable wisdom catalog IDs are validated without importing catalog content
+/// into persistence or sync layers.
+bool isCanonicalEastWisdomId(String value) {
+  return RegExp(
+    r'^east_wisdom_(?:0(?:0(?:0[1-9]|[1-9][0-9])|[1-5][0-9]{2})|060[0-3])$',
+  ).hasMatch(value);
+}

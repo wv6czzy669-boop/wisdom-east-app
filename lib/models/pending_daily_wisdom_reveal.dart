@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../data/wisdoms.dart';
 
 enum PendingDailyWisdomRevealPhase {
   prepared('prepared'),
@@ -22,12 +23,14 @@ class PendingDailyWisdomReveal {
     required this.preparedAt,
     this.confirmedRevealBoundary,
     this.phase = PendingDailyWisdomRevealPhase.prepared,
+    this.wisdomId,
   }) {
     _validate(
       text: text,
       preparedAt: preparedAt,
       confirmedRevealBoundary: confirmedRevealBoundary,
       phase: phase,
+      wisdomId: wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(text),
     );
   }
 
@@ -37,6 +40,7 @@ class PendingDailyWisdomReveal {
   final DateTime preparedAt;
   final DateTime? confirmedRevealBoundary;
   final PendingDailyWisdomRevealPhase phase;
+  final String? wisdomId;
 
   bool get isRevealedPendingCommit =>
       phase == PendingDailyWisdomRevealPhase.revealedPendingCommit;
@@ -46,6 +50,7 @@ class PendingDailyWisdomReveal {
         'text': text,
         'preparedAtMs': preparedAt.millisecondsSinceEpoch,
         'phase': phase.value,
+        if (wisdomId != null) 'wisdomId': wisdomId,
         if (confirmedRevealBoundary != null)
           'confirmedRevealBoundaryMs':
               confirmedRevealBoundary!.millisecondsSinceEpoch,
@@ -70,6 +75,7 @@ class PendingDailyWisdomReveal {
       decoded,
       'confirmedRevealBoundaryMs',
     );
+    final wisdomId = _readOptionalWisdomId(decoded, 'wisdomId');
     if (decoded.containsKey('reservedBoundaryMs')) {
       throw const FormatException(
           'Reserved reveal boundaries are unsupported.');
@@ -90,6 +96,7 @@ class PendingDailyWisdomReveal {
       preparedAt: preparedAt,
       confirmedRevealBoundary: confirmedRevealBoundary,
       phase: phase,
+      wisdomId: wisdomId,
     );
 
     return PendingDailyWisdomReveal(
@@ -105,6 +112,7 @@ class PendingDailyWisdomReveal {
     DateTime? preparedAt,
     DateTime? confirmedRevealBoundary,
     PendingDailyWisdomRevealPhase? phase,
+    String? wisdomId,
   }) {
     return PendingDailyWisdomReveal(
       text: text ?? this.text,
@@ -112,6 +120,7 @@ class PendingDailyWisdomReveal {
       confirmedRevealBoundary:
           confirmedRevealBoundary ?? this.confirmedRevealBoundary,
       phase: phase ?? this.phase,
+      wisdomId: wisdomId ?? this.wisdomId,
     );
   }
 
@@ -120,8 +129,12 @@ class PendingDailyWisdomReveal {
     required DateTime preparedAt,
     required DateTime? confirmedRevealBoundary,
     required PendingDailyWisdomRevealPhase phase,
+    required String? wisdomId,
   }) {
     if (text.trim().isEmpty || preparedAt.millisecondsSinceEpoch < 0) {
+      throw const FormatException('Invalid pending daily wisdom reveal.');
+    }
+    if (wisdomId != null && !isCanonicalWisdomId(wisdomId)) {
       throw const FormatException('Invalid pending daily wisdom reveal.');
     }
 
@@ -165,6 +178,13 @@ class PendingDailyWisdomReveal {
 
     final value = data[key];
     if (value is int) return value;
+    throw const FormatException('Invalid pending daily wisdom reveal.');
+  }
+
+  static String? _readOptionalWisdomId(Map<String, dynamic> data, String key) {
+    if (!data.containsKey(key)) return null;
+    final value = data[key];
+    if (value is String && isCanonicalWisdomId(value)) return value;
     throw const FormatException('Invalid pending daily wisdom reveal.');
   }
 

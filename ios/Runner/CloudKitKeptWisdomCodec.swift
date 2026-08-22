@@ -30,6 +30,7 @@ struct CloudKitKeptWisdomWireEnvelope: Equatable {
   // Active-form-only fields (§2.3). `nil` on a tombstone-form envelope.
   let revealId: String?
   let wisdomText: String?
+  let wisdomId: String?
   let revealedAtMs: Int64?
   let keptAtMs: Int64?
   let reflectionText: String?
@@ -101,6 +102,7 @@ enum CloudKitKeptWisdomCodec {
   static func encodeActive(
     revealId: String,
     wisdomText: String,
+    wisdomId: String?,
     revealedAtMs: Int64,
     keptAtMs: Int64,
     reflectionText: String?,
@@ -122,6 +124,7 @@ enum CloudKitKeptWisdomCodec {
 
     record[CloudKitRecordSchema.KeptWisdomField.revealId] = revealId as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.wisdomText] = wisdomText as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.wisdomId] = wisdomId as CKRecordValue?
     record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] = revealedAtMs as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.keptAtMs] = keptAtMs as CKRecordValue
     if let reflectionText = reflectionText {
@@ -339,6 +342,7 @@ enum CloudKitKeptWisdomCodec {
         isTombstone: true,
         revealId: nil,
         wisdomText: nil,
+        wisdomId: nil,
         revealedAtMs: nil,
         keptAtMs: nil,
         reflectionText: nil,
@@ -464,6 +468,7 @@ enum CloudKitKeptWisdomCodec {
           ? .missingRequiredField(CloudKitRecordSchema.KeptWisdomField.wisdomText)
           : .malformedField(CloudKitRecordSchema.KeptWisdomField.wisdomText))
     }
+    let wisdomId = record[CloudKitRecordSchema.KeptWisdomField.wisdomId] as? String
 
     guard let revealedAtMs = record[CloudKitRecordSchema.KeptWisdomField.revealedAtMs] as? Int64 else {
       return .failure(
@@ -505,6 +510,7 @@ enum CloudKitKeptWisdomCodec {
         isTombstone: false,
         revealId: revealId,
         wisdomText: wisdomText,
+        wisdomId: wisdomId,
         revealedAtMs: revealedAtMs,
         keptAtMs: keptAtMs,
         reflectionText: reflectionText,
