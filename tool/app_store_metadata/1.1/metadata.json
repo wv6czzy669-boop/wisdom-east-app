@@ -1,0 +1,756 @@
+{
+  "release": "1.1",
+  "product_locale_count": 15,
+  "limits": {
+    "app_name": {
+      "value": 30,
+      "unit": "characters"
+    },
+    "subtitle": {
+      "value": 30,
+      "unit": "characters"
+    },
+    "promotional_text": {
+      "value": 170,
+      "unit": "characters"
+    },
+    "description": {
+      "value": 4000,
+      "unit": "characters"
+    },
+    "keywords": {
+      "value": 100,
+      "unit": "bytes"
+    },
+    "whats_new": {
+      "value": 4000,
+      "unit": "characters"
+    },
+    "app_review_notes": {
+      "value": 4000,
+      "unit": "bytes"
+    }
+  },
+  "sources": {
+    "app_information": "https://developer.apple.com/help/app-store-connect/reference/app-information/app-information/",
+    "platform_version_information": "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
+    "live_catalog_lookup": "https://itunes.apple.com/lookup?bundleId=com.dogukan.dailywisdom&country=us"
+  },
+  "locales": [
+    {
+      "locale": "en",
+      "app_name": "EAST.",
+      "subtitle": "Where Silence Speaks",
+      "promotional_text": "One piece of wisdom. Then twenty-four hours of space—to keep, reflect, or simply let it pass.",
+      "description": "One quiet moment. Every day.\n\nPause.\nFeel.\nAsk from your heart.\n\nAfter a short moment, EAST. offers one piece of wisdom. Then it leaves twenty-four hours of space before another can appear. No feed. No streak. Nothing to scroll.\n\nKeep a wisdom when it stays with you. Add a private Reflection, revisit what you have Kept, and gather what remains in your Journal.\n\nEAST. is available in 15 languages.\n\nThe daily ritual is free. Keeper is an optional one-time purchase that removes limits on keeping and reflecting, enables Journal PDF export, and supports EAST. Keeper never unlocks another daily wisdom.",
+      "keywords": "daily wisdom,reflection,mindfulness,meditation,zen,tao,journal,quotes,philosophy,calm",
+      "whats_new": "EAST. is now available in 15 languages, with localized wisdoms, Journal and sharing, and right-to-left support for Arabic. This update also brings quiet refinements throughout the experience.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 20,
+          "bytes": 20,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 93,
+          "bytes": 95,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 603,
+          "bytes": 603,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 85,
+          "bytes": 85,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 191,
+          "bytes": 191,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "tr",
+      "app_name": "EAST.",
+      "subtitle": "Sessizliğin konuştuğu yer",
+      "promotional_text": "Tek bir bilgelik. Ardından yirmi dört saatlik bir alan—ister sakla, ister üzerine düşün, ister geçip gitmesine izin ver.",
+      "description": "Her gün sessiz bir an.\n\nBekle.\nHisset.\nSoruyu kalbinden sor.\n\nKısa bir bekleyişin ardından EAST. tek bir bilgelik sunar. Bir sonraki görünmeden önce yirmi dört saatlik bir alan bırakır. Akış yok. Gün serisi yok. Kaydıracak hiçbir şey yok.\n\nBir bilgelik sende kaldığında onu sakla. Özel bir Yansıma yaz, Kalanlar’a yeniden bak ve geride kalanları Günlük’te bir araya getir.\n\nEAST. 15 dilde kullanılabilir.\n\nGünlük ritüel ücretsizdir. Tutucu; saklama ve Yansıma yazma sınırlarını kaldıran, Günlük’ü PDF olarak dışa aktarmayı açan ve EAST.’i destekleyen isteğe bağlı, tek seferlik bir satın almadır. Tutucu hiçbir zaman yeni bir günlük bilgelik açmaz.",
+      "keywords": "bilgelik,yansıma,farkındalık,meditasyon,zen,tao,günlük,alıntı,felsefe,sakinlik",
+      "whats_new": "EAST. artık 15 dilde; yerelleştirilmiş bilgelikler, Günlük ve paylaşım deneyimiyle sunuluyor. Arapça için sağdan sola kullanım desteği ve deneyim genelinde incelikli iyileştirmeler de eklendi.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 25,
+          "bytes": 28,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 120,
+          "bytes": 129,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 648,
+          "bytes": 707,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 78,
+          "bytes": 85,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 192,
+          "bytes": 205,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "ja",
+      "app_name": "EAST.",
+      "subtitle": "静けさが語る場所",
+      "promotional_text": "一つの気づき。そのあとには24時間の余白。心に留めても、内省を記しても、ただ見送っても。",
+      "description": "毎日、静かなひとときを。\n\n立ち止まる。\n感じる。\n心から問いかける。\n\n短い間を置いて、EAST.は一つの気づきを届けます。次の気づきが現れるまで、そこには24時間の余白があります。フィードも、連続記録も、スクロールするものもありません。\n\n心に残った気づきは、そっと残しておけます。自分だけの内省を書き、残したものを読み返し、日記にまとめられます。\n\nEAST.は15の言語で利用できます。\n\n毎日の静かなひとときは無料です。「残す」は、気づきの保存と内省の記入にある制限をなくし、日記のPDF書き出しを利用できるようにしてEAST.を支える、任意の買い切りです。毎日の気づきが増えることはありません。",
+      "keywords": "人生の知恵,自己内省,マインドフルネス,瞑想習慣,禅の言葉,日記帳",
+      "whats_new": "EAST.が15言語に対応しました。気づき、日記、共有体験を各言語に合わせ、アラビア語の右から左への表示にも対応。全体の細かな仕上げも整えました。",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 8,
+          "bytes": 24,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 44,
+          "bytes": 128,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 303,
+          "bytes": 841,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 33,
+          "bytes": 89,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 73,
+          "bytes": 205,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "de",
+      "app_name": "EAST.",
+      "subtitle": "Wo die Stille spricht",
+      "promotional_text": "Ein Gedanke. Dann vierundzwanzig Stunden Raum – zum Bewahren, Reflektieren oder einfach Vorüberziehenlassen.",
+      "description": "Ein stiller Moment. Jeden Tag.\n\nInnehalten.\nSpüren.\nVon Herzen fragen.\n\nNach einem kurzen Augenblick zeigt EAST. einen Gedanken. Dann bleiben vierundzwanzig Stunden Raum, bevor der nächste erscheinen kann. Kein Feed. Keine Streaks. Nichts zum Scrollen.\n\nBewahre einen Gedanken, wenn er bei dir bleibt. Schreibe eine private Reflexion, lies Bewahrtes erneut und sammle, was bleibt, in deinem Tagebuch.\n\nEAST. ist in 15 Sprachen verfügbar.\n\nDas tägliche Ritual ist kostenlos. Bewahren ist ein optionaler Einmalkauf: Er hebt die Grenzen für das Bewahren und Reflektieren auf, ermöglicht den PDF-Export des Tagebuchs und unterstützt EAST. Eine weitere tägliche Weisheit wird dadurch nie freigeschaltet.",
+      "keywords": "weisheit,reflexion,achtsamkeit,meditation,zen,tao,tagebuch,zitate,philosophie,ruhe",
+      "whats_new": "EAST. ist jetzt in 15 Sprachen verfügbar – mit lokalisierten Weisheiten, Tagebuch und Teilen sowie Rechts-nach-links-Unterstützung für Arabisch. Dazu kommen feine Verbesserungen im gesamten Erlebnis.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 21,
+          "bytes": 21,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 108,
+          "bytes": 111,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 698,
+          "bytes": 706,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 82,
+          "bytes": 82,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 199,
+          "bytes": 204,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "fr",
+      "app_name": "EAST.",
+      "subtitle": "Là où parle le silence",
+      "promotional_text": "Une sagesse. Puis vingt-quatre heures d’espace — pour la garder, y réfléchir ou simplement la laisser passer.",
+      "description": "Un moment de calme. Chaque jour.\n\nPause.\nRessens.\nDemande avec le cœur.\n\nAprès un bref instant, EAST. présente une sagesse. Puis vingt-quatre heures d’espace s’ouvrent avant que la suivante puisse apparaître. Pas de fil. Pas de série de jours. Rien à faire défiler.\n\nGarde une sagesse lorsqu’elle reste avec toi. Écris une Réflexion privée, relis ce que tu as gardé et rassemble ce qui demeure dans ton Carnet.\n\nEAST. est disponible en 15 langues.\n\nLe rituel quotidien est gratuit. Garder est un achat unique facultatif qui supprime les limites de conservation et de Réflexion, permet l’export du Carnet en PDF et soutient EAST. Il ne donne jamais accès à une sagesse quotidienne supplémentaire.",
+      "keywords": "sagesse,réflexion,pleine conscience,méditation,zen,tao,carnet,citations,philosophie,calme",
+      "whats_new": "EAST. est désormais disponible en 15 langues, avec des sagesses, le Carnet et le partage localisés, ainsi que la prise en charge de l’arabe de droite à gauche. Cette version apporte aussi des ajustements discrets à toute l’expérience.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 22,
+          "bytes": 24,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 109,
+          "bytes": 115,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 695,
+          "bytes": 718,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 89,
+          "bytes": 91,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 234,
+          "bytes": 243,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "ko",
+      "app_name": "EAST.",
+      "subtitle": "고요가 말을 건네는 곳",
+      "promotional_text": "하나의 지혜. 그리고 스물네 시간의 여백. 간직하거나, 성찰을 적거나, 그저 흘려보내세요.",
+      "description": "매일, 고요한 한순간.\n\n잠시.\n느끼다.\n마음으로 묻다.\n\n짧은 여백 뒤에 EAST.가 하나의 지혜를 보여 줍니다. 다음 지혜가 나타나기까지 스물네 시간의 공간이 이어집니다. 피드도, 연속 기록도, 계속 넘겨 볼 것도 없습니다.\n\n마음에 남은 지혜를 간직하세요. 나만의 성찰을 쓰고, 남은 것을 다시 읽으며, 일기장에 차분히 모을 수 있습니다.\n\nEAST.는 15개 언어로 이용할 수 있습니다.\n\n매일의 고요한 시간은 무료입니다. 간직은 저장과 성찰의 제한을 없애고 일기장 PDF 내보내기를 열어 EAST.를 후원하는 선택형 일회성 구매입니다. 하루에 더 많은 지혜를 열어 주지는 않습니다.",
+      "keywords": "삶의지혜,자기성찰,마음챙김,명상습관,일기장,철학사상",
+      "whats_new": "EAST.가 이제 15개 언어를 지원합니다. 지혜, 일기장과 공유 경험을 각 언어에 맞게 제공하며 아랍어 오른쪽에서 왼쪽 방향 표시도 지원합니다. 전반의 세심한 다듬기도 함께 담았습니다.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 12,
+          "bytes": 30,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 50,
+          "bytes": 120,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 330,
+          "bytes": 752,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 28,
+          "bytes": 74,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 104,
+          "bytes": 244,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "zh-Hant",
+      "app_name": "EAST.",
+      "subtitle": "寂靜發聲之處",
+      "promotional_text": "一則智慧，接著留白二十四小時。可以珍藏、寫下反思，也可以讓它靜靜經過。",
+      "description": "每天，留一個安靜片刻。\n\n停一停。\n感受。\n由心而問。\n\n短暫停頓後，EAST.呈現一則智慧。下一則出現之前，留下二十四小時的空白。沒有動態牆，沒有連續紀錄，也沒有滑不完的內容。\n\n若一則智慧留在心裡，可以將它珍藏。寫下私密的反思，重讀珍藏的內容，並把留下的片段收進日記。\n\nEAST.支援15種語言。\n\n每日儀式可免費使用。「珍藏」是選購的一次性購買項目，可移除珍藏與反思的數量限制、啟用日記PDF匯出，並支持EAST.。它不會解鎖額外的每日智慧。",
+      "keywords": "生活智慧,自我反思,正念練習,冥想習慣,禪意生活,日記本",
+      "whats_new": "EAST.現已支援15種語言，包含在地化的智慧內容、日記與分享體驗，以及阿拉伯文由右至左顯示。本次更新也細緻調整了整體體驗。",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 6,
+          "bytes": 18,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 35,
+          "bytes": 105,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 225,
+          "bytes": 611,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 28,
+          "bytes": 74,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 62,
+          "bytes": 172,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "ar",
+      "app_name": "EAST.",
+      "subtitle": "حيث يتكلم الصمت",
+      "promotional_text": "حكمة واحدة، ثم أربع وعشرون ساعة من المساحة—لتحفظها، أو تتأملها، أو تتركها تمضي ببساطة.",
+      "description": "لحظة هادئة، كل يوم.\n\nتوقّف.\nاشعر.\nاسأل من قلبك.\n\nبعد لحظة قصيرة، تعرض EAST. حكمة واحدة. ثم تترك أربعًا وعشرين ساعة من المساحة قبل أن تظهر حكمة أخرى. لا موجز. لا سلسلة أيام. لا شيء للتمرير.\n\nاحتفظ بالحكمة إن بقيت معك. اكتب تأملًا خاصًا، وعُد إلى ما احتفظت به، واجمع ما بقي في يومياتك.\n\nتتوفر EAST. بخمس عشرة لغة.\n\nهذه الوقفة اليومية مجانية. «احتفظ» عملية شراء اختيارية لمرة واحدة تزيل حدود الاحتفاظ وكتابة التأملات، وتتيح تصدير اليوميات بصيغة PDF، وتدعم EAST. ولا تفتح أي حكمة يومية إضافية.",
+      "keywords": "حكمة,تأمل,يقظة,فلسفة زن,تاو,يوميات,اقتباسات,فلسفة,هدوء",
+      "whats_new": "أصبحت EAST. متاحة الآن بخمس عشرة لغة، مع حِكم ويوميات ومشاركة مترجمة، ودعم الكتابة من اليمين إلى اليسار للعربية. ويتضمن التحديث أيضًا تحسينات هادئة في أنحاء التجربة.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 15,
+          "bytes": 28,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 86,
+          "bytes": 159,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 489,
+          "bytes": 855,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 54,
+          "bytes": 99,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 165,
+          "bytes": 297,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "es",
+      "app_name": "EAST.",
+      "subtitle": "Donde habla el silencio",
+      "promotional_text": "Una sola sabiduría. Después, veinticuatro horas de espacio para guardarla, reflexionar o simplemente dejarla pasar.",
+      "description": "Un momento de calma. Cada día.\n\nPausa.\nSiente.\nPregunta desde el corazón.\n\nTras un breve instante, EAST. presenta una sola sabiduría. Después deja veinticuatro horas de espacio antes de que pueda aparecer la siguiente. Sin feed. Sin rachas. Nada que deslizar.\n\nGuarda una sabiduría cuando se quede contigo. Escribe una Reflexión privada, vuelve a leer Lo que queda y reúne lo que permanece en tu Diario.\n\nEAST. está disponible en 15 idiomas.\n\nEl ritual diario es gratuito. Guardar es una compra única y opcional que elimina los límites para guardar y escribir Reflexiones, permite exportar el Diario en PDF y apoya a EAST. Nunca desbloquea otra sabiduría diaria.",
+      "keywords": "sabiduría,reflexión,mindfulness,meditación,zen,tao,diario,frases,filosofía,calma",
+      "whats_new": "EAST. ya está disponible en 15 idiomas, con sabidurías, Diario y experiencia de compartir localizados, además de compatibilidad de derecha a izquierda en árabe. También incluye ajustes sutiles en toda la experiencia.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 23,
+          "bytes": 23,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 115,
+          "bytes": 117,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 662,
+          "bytes": 673,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 80,
+          "bytes": 84,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 216,
+          "bytes": 221,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "pt-BR",
+      "app_name": "EAST.",
+      "subtitle": "Onde o silêncio fala",
+      "promotional_text": "Uma sabedoria. Depois, vinte e quatro horas de espaço para guardar, refletir ou simplesmente deixar passar.",
+      "description": "Um momento de silêncio. Todos os dias.\n\nPausa.\nSinta.\nPergunte com o coração.\n\nDepois de um breve instante, EAST. apresenta uma sabedoria. Em seguida, deixa vinte e quatro horas de espaço antes que outra possa surgir. Sem feed. Sem sequência de dias. Nada para rolar.\n\nGuarde uma sabedoria quando ela ficar com você. Escreva uma Reflexão privada, releia O que ficou e reúna o que permanece no seu Diário.\n\nEAST. está disponível em 15 idiomas.\n\nO ritual diário é gratuito. Guardar é uma compra única e opcional que remove os limites para guardar e escrever Reflexões, permite exportar o Diário em PDF e apoia EAST. Nunca libera outra sabedoria diária.",
+      "keywords": "sabedoria,reflexão,atenção plena,meditação,zen,tao,diário,frases,filosofia,calma",
+      "whats_new": "EAST. agora está disponível em 15 idiomas, com sabedorias, Diário e compartilhamento localizados, além de suporte da direita para a esquerda em árabe. A atualização também traz refinamentos sutis em toda a experiência.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 20,
+          "bytes": 21,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 107,
+          "bytes": 108,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 650,
+          "bytes": 668,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 80,
+          "bytes": 86,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 218,
+          "bytes": 227,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "it",
+      "app_name": "EAST.",
+      "subtitle": "Dove parla il silenzio",
+      "promotional_text": "Una sola saggezza. Poi ventiquattro ore di spazio: per custodirla, riflettere o semplicemente lasciarla passare.",
+      "description": "Un momento di quiete. Ogni giorno.\n\nPausa.\nSenti.\nChiedi con il cuore.\n\nDopo una breve attesa, EAST. presenta una sola saggezza. Poi lascia ventiquattro ore di spazio prima che possa apparirne un’altra. Nessun feed. Nessuna serie di giorni. Niente da scorrere.\n\nCustodisci una saggezza quando resta con te. Scrivi una Riflessione privata, rileggi Ciò che resta e raccogli ciò che rimane nel tuo Diario.\n\nEAST. è disponibile in 15 lingue.\n\nIl rituale quotidiano è gratuito. Custodire è un acquisto unico e facoltativo che elimina i limiti di salvataggio e Riflessione, abilita l’esportazione del Diario in PDF e sostiene EAST. Non sblocca mai un’altra saggezza giornaliera.",
+      "keywords": "saggezza,riflessione,consapevolezza,meditazione,zen,tao,diario,citazioni,filosofia,calma",
+      "whats_new": "EAST. è ora disponibile in 15 lingue, con saggezze, Diario e condivisione localizzati e supporto da destra a sinistra per l’arabo. L’aggiornamento include anche piccoli perfezionamenti in tutta l’esperienza.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 22,
+          "bytes": 22,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 112,
+          "bytes": 112,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 672,
+          "bytes": 683,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 88,
+          "bytes": 88,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 207,
+          "bytes": 214,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "th",
+      "app_name": "EAST.",
+      "subtitle": "ที่ซึ่งความเงียบเอ่ยถ้อยคำ",
+      "promotional_text": "ข้อคิดหนึ่งบท แล้วเว้นพื้นที่ไว้ยี่สิบสี่ชั่วโมง จะเก็บไว้ เขียนทบทวน หรือปล่อยให้ผ่านไปก็ได้",
+      "description": "ช่วงเวลาเงียบสงบหนึ่งครั้งในแต่ละวัน\n\nหยุดสักครู่\nรู้สึก\nถามจากหัวใจ\n\nหลังจากเว้นจังหวะสั้น ๆ EAST. จะมอบข้อคิดหนึ่งบท แล้วปล่อยพื้นที่ว่างไว้ยี่สิบสี่ชั่วโมงก่อนข้อคิดถัดไปจะปรากฏ ไม่มีฟีด ไม่มีการนับวันต่อเนื่อง และไม่มีเนื้อหาให้เลื่อนไม่จบ\n\nเก็บข้อคิดที่ยังอยู่กับคุณไว้ เขียนการไตร่ตรองส่วนตัว กลับมาอ่านสิ่งที่เก็บไว้ และรวบรวมสิ่งที่ยังคงอยู่ลงในสมุดบันทึก\n\nEAST. พร้อมใช้งานใน 15 ภาษา\n\nช่วงเวลาประจำวันใช้งานได้ฟรี “คงไว้” เป็นการซื้อครั้งเดียวแบบไม่บังคับ ซึ่งยกเลิกข้อจำกัดในการเก็บและเขียนการไตร่ตรอง เปิดใช้การส่งออกสมุดบันทึกเป็น PDF และช่วยสนับสนุน EAST. โดยไม่ปลดล็อกข้อคิดประจำวันเพิ่มเติม",
+      "keywords": "ข้อคิด,ทบทวน,สติ,สมาธิ,เซน,บันทึก",
+      "whats_new": "EAST. พร้อมใช้งานใน 15 ภาษาแล้ว ทั้งข้อคิด สมุดบันทึก และการแชร์ที่แปลให้เข้ากับแต่ละภาษา พร้อมรองรับการแสดงผลภาษาอาหรับจากขวาไปซ้าย รวมถึงการปรับแต่งประสบการณ์โดยรวมอย่างละเมียดขึ้น",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 26,
+          "bytes": 78,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 93,
+          "bytes": 271,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 605,
+          "bytes": 1709,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 33,
+          "bytes": 89,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 182,
+          "bytes": 516,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "nl",
+      "app_name": "EAST.",
+      "subtitle": "Waar stilte spreekt",
+      "promotional_text": "Eén inzicht. Daarna vierentwintig uur ruimte om het te bewaren, erop te reflecteren of het gewoon voorbij te laten gaan.",
+      "description": "Eén stil moment. Elke dag.\n\nSta stil.\nVoel.\nVraag vanuit je hart.\n\nNa een korte stilte toont EAST. één inzicht. Daarna blijft er vierentwintig uur ruimte voordat het volgende kan verschijnen. Geen feed. Geen reeks om bij te houden. Niets om door te scrollen.\n\nBewaar een inzicht als het bij je blijft. Schrijf een persoonlijke Reflectie, lees Wat blijft opnieuw en verzamel wat overblijft in je Dagboek.\n\nEAST. is beschikbaar in 15 talen.\n\nHet dagelijkse ritueel is gratis. Bewaren is een optionele eenmalige aankoop die de limieten voor bewaren en reflecteren opheft, PDF-export van het Dagboek mogelijk maakt en EAST. ondersteunt. Het ontgrendelt nooit een extra dagelijks inzicht.",
+      "keywords": "wijsheid,reflectie,mindfulness,meditatie,zen,tao,dagboek,citaten,filosofie,rust",
+      "whats_new": "EAST. is nu beschikbaar in 15 talen, met gelokaliseerde inzichten, Dagboek en delen, plus ondersteuning voor Arabisch van rechts naar links. Deze update bevat ook subtiele verfijningen in de hele ervaring.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 19,
+          "bytes": 19,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 120,
+          "bytes": 121,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 683,
+          "bytes": 686,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 79,
+          "bytes": 79,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 205,
+          "bytes": 205,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "pl",
+      "app_name": "EAST.",
+      "subtitle": "Gdzie przemawia cisza",
+      "promotional_text": "Jedna myśl. Potem dwadzieścia cztery godziny przestrzeni, by ją zachować, przemyśleć albo po prostu pozwolić jej odejść.",
+      "description": "Jedna chwila ciszy. Każdego dnia.\n\nZatrzymaj się.\nPoczuj.\nZapytaj z głębi serca.\n\nPo krótkiej chwili EAST. pokazuje jedną myśl. Potem pozostawia dwadzieścia cztery godziny przestrzeni, zanim pojawi się następna. Bez kanału treści. Bez serii dni. Bez przewijania.\n\nZachowaj myśl, jeśli z tobą zostaje. Napisz prywatną Refleksję, wróć do Zachowanych i zbierz to, co pozostało, w Dzienniku.\n\nEAST. jest dostępna w 15 językach.\n\nCodzienny rytuał jest bezpłatny. Zachować to opcjonalny, jednorazowy zakup, który znosi limity zachowywania i pisania Refleksji, umożliwia eksport Dziennika do PDF i wspiera EAST. Nigdy nie odblokowuje kolejnej codziennej myśli.",
+      "keywords": "mądrość,refleksja,uważność,medytacja,zen,tao,dziennik,cytaty,filozofia,spokój",
+      "whats_new": "EAST. jest teraz dostępna w 15 językach: z lokalnymi wersjami mądrości, Dziennika i udostępniania oraz obsługą arabskiego od prawej do lewej. Aktualizacja wnosi też subtelne udoskonalenia całego doświadczenia.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 21,
+          "bytes": 21,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 120,
+          "bytes": 129,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 653,
+          "bytes": 681,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 77,
+          "bytes": 84,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 209,
+          "bytes": 219,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    },
+    {
+      "locale": "vi",
+      "app_name": "EAST.",
+      "subtitle": "Nơi tĩnh lặng cất lời",
+      "promotional_text": "Một lời chiêm nghiệm. Rồi hai mươi bốn giờ lặng để bạn lưu lại, suy ngẫm hoặc đơn giản để nó đi qua.",
+      "description": "Một khoảng lặng, mỗi ngày.\n\nDừng lại.\nCảm nhận.\nHỏi từ trái tim.\n\nSau một nhịp chờ ngắn, EAST. mở ra một lời chiêm nghiệm. Rồi để lại hai mươi bốn giờ khoảng trống trước khi lời tiếp theo có thể xuất hiện. Không bảng tin. Không chuỗi ngày. Không có gì để cuộn mãi.\n\nHãy giữ lại một lời khi nó còn ở bên bạn. Viết một Suy ngẫm riêng tư, đọc lại Điều còn lại và gom những gì vẫn còn vào Nhật ký.\n\nEAST. hiện có trong 15 ngôn ngữ.\n\nKhoảnh khắc mỗi ngày được dùng miễn phí. Giữ lại là tùy chọn mua một lần, giúp bỏ giới hạn lưu và viết Suy ngẫm, mở tính năng xuất Nhật ký thành PDF và hỗ trợ EAST. Tùy chọn này không bao giờ mở thêm lời chiêm nghiệm trong ngày.",
+      "keywords": "minh triết,suy ngẫm,chánh niệm,thiền,nhật ký,danh ngôn,triết học,bình tâm",
+      "whats_new": "EAST. hiện đã có trong 15 ngôn ngữ, với lời chiêm nghiệm, Nhật ký và trải nghiệm chia sẻ được bản địa hóa, cùng hỗ trợ tiếng Ả Rập từ phải sang trái. Bản cập nhật cũng tinh chỉnh nhẹ nhàng toàn bộ trải nghiệm.",
+      "counts": {
+        "app_name": {
+          "characters": 5,
+          "bytes": 5,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "subtitle": {
+          "characters": 21,
+          "bytes": 29,
+          "limit": 30,
+          "limit_unit": "characters"
+        },
+        "promotional_text": {
+          "characters": 100,
+          "bytes": 138,
+          "limit": 170,
+          "limit_unit": "characters"
+        },
+        "description": {
+          "characters": 657,
+          "bytes": 866,
+          "limit": 4000,
+          "limit_unit": "characters"
+        },
+        "keywords": {
+          "characters": 73,
+          "bytes": 92,
+          "limit": 100,
+          "limit_unit": "bytes"
+        },
+        "whats_new": {
+          "characters": 209,
+          "bytes": 279,
+          "limit": 4000,
+          "limit_unit": "characters"
+        }
+      }
+    }
+  ],
+  "app_review_notes": {
+    "locale": "en",
+    "text": "Version 1.1 review notes\n\nNo account or sign-in is required.\n\nDaily access:\n- EAST. presents exactly one wisdom per rolling 24-hour period. The lock applies to all users.\n- Keeper does not unlock additional wisdoms or bypass the 24-hour interval.\n- The Home Screen widget and “Begin EAST.” App Intent only open the app. They enter the same ritual and do not bypass the daily lock.\n\nIn-app purchase:\n- Keeper is a one-time non-consumable purchase.\n- It removes the free limits on keeping wisdoms and writing Reflections, enables Journal PDF export, and supports EAST.\n- To restore: open EAST. > tap the menu icon in the upper-right > Settings > Restore Purchases.\n- To view the purchase: use the same Settings screen > Keeper.\n\nLanguage:\n- To change language: open EAST. > tap the menu icon in the upper-right > Settings > Language.\n- Version 1.1 supports exactly 15 product languages.\n\nData and iCloud:\n- Kept wisdoms, Reflections, and Journal data work without an account.\n- Private iCloud sync is optional. It can be enabled or removed from Settings > iCloud Sync / Remove from iCloud.\n- The daily ritual timer remains on the device and is not synced through iCloud.\n\nNo review credentials are required.",
+    "counts": {
+      "characters": 1205,
+      "bytes": 1209,
+      "limit": 4000,
+      "limit_unit": "bytes"
+    }
+  }
+}
