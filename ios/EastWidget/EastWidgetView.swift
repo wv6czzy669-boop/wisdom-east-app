@@ -35,12 +35,21 @@ struct EastWidgetView: View {
     private var mainText: some View {
         switch entry.state {
         case .silence:
-            eastText("Something waits in silence.")
-                .accessibilityLabel("Something waits in silence.")
+            eastText(silenceText)
+                .accessibilityLabel(silenceText)
         case let .revealed(text, _):
             eastText(text)
                 .accessibilityLabel(text)
         }
+    }
+
+    /// Resolved once per render through the shared `Localizable.xcstrings`
+    /// catalog rather than passed as a raw string literal -- `eastText(_:)`
+    /// and `.accessibilityLabel(_:)` both take a plain `String` here, which
+    /// bypasses SwiftUI's own literal-only `LocalizedStringKey` lookup, so
+    /// this is the one place that must resolve localization explicitly.
+    private var silenceText: String {
+        String(localized: "Something waits in silence.")
     }
 
     private func eastText(_ text: String) -> some View {
