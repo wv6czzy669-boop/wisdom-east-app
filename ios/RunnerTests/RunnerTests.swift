@@ -329,6 +329,14 @@ class RunnerTests: XCTestCase {
   private let phase4CMutationId = "22222222-2222-4222-8222-222222222222"
   private let phase4CDataEpoch = "11111111-1111-4111-8111-111111111111"
 
+  // Phase 5E: a deterministic canonical wisdomId, in the same
+  // `east_wisdom_NNNN` shape `lib/data/wisdoms.dart` assigns real catalog
+  // entries -- used only where a test's fixture stands in for a genuine
+  // reveal of a known catalog wisdom. Every other `encodeActive` fixture in
+  // this file passes `wisdomId: nil`, exercising the same optional/legacy
+  // code path a pre-canonical-identity 1.0 record already relies on.
+  private let phase4CWisdomIdA = "east_wisdom_0001"
+
   // Build 26 Phase 4E-3a: `CloudKitKeptWisdomCodec.decode` now requires the
   // caller to have already archived `record`'s own system fields (exactly
   // as `CloudKitRecordTransportCoordinator.fetchZoneChanges` itself does)
@@ -349,6 +357,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: phase4CWisdomIdA,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: "A quiet thought.",
@@ -363,10 +372,39 @@ class RunnerTests: XCTestCase {
       XCTAssertFalse(envelope.isTombstone)
       XCTAssertEqual(envelope.revealId, phase4CRevealIdA)
       XCTAssertEqual(envelope.wisdomText, "Be still and know.")
+      XCTAssertEqual(envelope.wisdomId, phase4CWisdomIdA)
       XCTAssertEqual(envelope.reflectionText, "A quiet thought.")
       XCTAssertEqual(envelope.mutationId, phase4CMutationId)
       XCTAssertEqual(envelope.dataEpoch, phase4CDataEpoch)
       XCTAssertEqual(envelope.schemaVersion, CloudKitRecordSchema.keptWisdomActiveSchemaVersion)
+    case .failure(let error):
+      XCTFail("Expected successful decode, got \(error)")
+    }
+  }
+
+  // 1b. A legacy 1.0 Kept record with no canonical wisdomId (pre-Phase-5E
+  // catalog identity) must still round-trip cleanly -- `wisdomId` stays
+  // `nil` end to end, never guessed or backfilled by the codec itself.
+  func testKeptWisdomCodecRoundTripsActiveFormWithoutWisdomId() throws {
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA,
+      wisdomText: "Be still and know.",
+      wisdomId: nil,
+      revealedAtMs: 1_754_078_400_000,
+      keptAtMs: 1_754_078_700_000,
+      reflectionText: nil,
+      reflectedAtMs: nil,
+      updatedAtMs: 1_754_078_700_000,
+      mutationId: phase4CMutationId,
+      dataEpoch: phase4CDataEpoch
+    )
+
+    switch CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)) {
+    case .success(let envelope):
+      XCTAssertFalse(envelope.isTombstone)
+      XCTAssertEqual(envelope.revealId, phase4CRevealIdA)
+      XCTAssertEqual(envelope.wisdomText, "Be still and know.")
+      XCTAssertNil(envelope.wisdomId)
     case .failure(let error):
       XCTFail("Expected successful decode, got \(error)")
     }
@@ -406,6 +444,7 @@ class RunnerTests: XCTestCase {
     let recordA = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: nil,
@@ -417,6 +456,7 @@ class RunnerTests: XCTestCase {
     let recordB = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdB,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: nil,
@@ -475,6 +515,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: nil,
@@ -505,6 +546,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: nil,
@@ -532,6 +574,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: nil,
@@ -666,6 +709,7 @@ class RunnerTests: XCTestCase {
   func testKeptWisdomCodecActiveEncodeWithReflectionSetsReflectionFields() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 2,
       reflectionText: "A quiet thought.", reflectedAtMs: 3,
       updatedAtMs: 3, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
@@ -686,6 +730,7 @@ class RunnerTests: XCTestCase {
   func testKeptWisdomCodecActiveEncodeWithoutReflectionExplicitlyClearsReflectionFields() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 2,
       reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 3, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
@@ -734,6 +779,7 @@ class RunnerTests: XCTestCase {
     let existingActiveRecord = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1,
       reflectionText: "A quiet thought.", reflectedAtMs: 2,
       updatedAtMs: 2, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
@@ -786,6 +832,7 @@ class RunnerTests: XCTestCase {
     let existingActiveRecordWithReflection = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1,
       reflectionText: "A quiet thought.", reflectedAtMs: 2,
       updatedAtMs: 2, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
@@ -794,6 +841,7 @@ class RunnerTests: XCTestCase {
     let updatedActiveRecordWithoutReflection = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 3, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
@@ -1044,6 +1092,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "This exact wisdom text must never appear in a decode error.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: "This exact reflection text must never appear either.",
@@ -1091,6 +1140,7 @@ class RunnerTests: XCTestCase {
   func testActiveKeptWisdomRecordSystemFieldsAreArchiveable() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
@@ -1119,6 +1169,7 @@ class RunnerTests: XCTestCase {
   func testKeptWisdomSystemFieldsRoundTripThroughOpaqueArchiveForBothForms() throws {
     let activeRecord = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
     guard let archivedActive = CloudKitOpaqueArchive.archiveSystemFields(of: activeRecord) else {
@@ -1148,6 +1199,7 @@ class RunnerTests: XCTestCase {
   func testKeptWisdomCodecDecodeAttachesGivenSystemFieldsOnBothForms() throws {
     let activeRecord = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
     let activeSystemFields = sampleSystemFields(for: activeRecord)
@@ -1195,6 +1247,7 @@ class RunnerTests: XCTestCase {
   func testKeptWisdomWireEnvelopeSystemFieldsIsNonOptionalByConstruction() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA, wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
     guard case .success(let envelope) =
@@ -1377,6 +1430,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1_754_078_400_000,
       keptAtMs: 1_754_078_700_000,
       reflectionText: nil,
@@ -1405,11 +1459,11 @@ class RunnerTests: XCTestCase {
   // 6. Partial failure mapping.
   func testModifyRecordsMapsMixedOutcomesToPartialFailure() throws {
     let recordA = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdA, wisdomText: "A", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
     let recordB = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdB, wisdomText: "B", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdB, wisdomText: "B", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
@@ -1434,7 +1488,7 @@ class RunnerTests: XCTestCase {
   // 7. Server-record-changed mapping.
   func testModifyRecordsMapsServerRecordChangedAsADistinctPerRecordFailure() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdA, wisdomText: "A", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
@@ -1456,7 +1510,7 @@ class RunnerTests: XCTestCase {
   // 8. Retry-after classification without leaking raw metadata.
   func testModifyRecordsClassifiesRequestRateLimitedWithoutRawMetadata() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdA, wisdomText: "A", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
@@ -1506,11 +1560,11 @@ class RunnerTests: XCTestCase {
   // in this offline test target.
   func testFetchZoneChangesNeverReportsPartialDataWhenTokenExpiresAfterRecordCallbacks() throws {
     let recordA = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdA, wisdomText: "A", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
     let recordB = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdB, wisdomText: "B", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdB, wisdomText: "B", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
     let syncStateRecord = CloudKitSyncStateCodec.encode(
@@ -1608,6 +1662,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1,
       reflectionText: "A quiet thought added on another device.",
       reflectedAtMs: 2,
@@ -1642,6 +1697,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "Be still and know.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 1,
@@ -1767,7 +1823,7 @@ class RunnerTests: XCTestCase {
   // can be constructed directly in a test).
   func testSystemFieldsArchiveRoundTripsRecordIdentity() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdA, wisdomText: "A", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
@@ -1823,7 +1879,7 @@ class RunnerTests: XCTestCase {
   // 16. Operation completion exactly once, across modify and fetch.
   func testModifyAndFetchEachCompleteExactlyOnce() throws {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
-      revealId: phase4CRevealIdA, wisdomText: "A", revealedAtMs: 1, keptAtMs: 1,
+      revealId: phase4CRevealIdA, wisdomText: "A", wisdomId: nil, revealedAtMs: 1, keptAtMs: 1,
       reflectionText: nil, reflectedAtMs: nil, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
@@ -1860,6 +1916,7 @@ class RunnerTests: XCTestCase {
     let record = try CloudKitKeptWisdomCodec.encodeActive(
       revealId: phase4CRevealIdA,
       wisdomText: "This exact wisdom text must never appear in an errorCode.",
+      wisdomId: nil,
       revealedAtMs: 1, keptAtMs: 1, reflectionText: nil, reflectedAtMs: nil,
       updatedAtMs: 1, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
