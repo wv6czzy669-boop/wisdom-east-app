@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../localization/east_locale_registry.dart';
+import '../localization/east_typography_resolver.dart';
 
 abstract interface class WisdomShareHandler {
   Future<void> shareWisdom({
@@ -71,6 +72,8 @@ class WisdomShareCardLayout {
     required this.wisdomTop,
     required this.textSize,
     required this.didExceedMaxLines,
+    required this.fontFamily,
+    required this.textDirection,
   });
 
   final double fontSize;
@@ -79,6 +82,8 @@ class WisdomShareCardLayout {
   final double wisdomTop;
   final Size textSize;
   final bool didExceedMaxLines;
+  final String fontFamily;
+  final TextDirection textDirection;
 }
 
 class WisdomShareCardRenderer {
@@ -116,8 +121,12 @@ class WisdomShareCardRenderer {
   static const double _maximumLineHeight = 1.42;
   static const double _minimumLineHeight = 1.28;
 
-  WisdomShareCardLayout layoutFor(String wisdom) {
+  WisdomShareCardLayout layoutFor(
+    String wisdom, {
+    Locale locale = const Locale('en'),
+  }) {
     final trimmedWisdom = wisdom.trim();
+    final typography = EastTypographyResolver.forLocale(locale);
     final editorialLength = ((trimmedWisdom.length - 12) / 72).clamp(0.0, 1.0);
     final textBoxWidth = ui.lerpDouble(
       _minimumWisdomBoxWidth,
@@ -139,6 +148,7 @@ class WisdomShareCardRenderer {
     while (true) {
       painter = _wisdomPainter(
         trimmedWisdom,
+        locale: locale,
         fontSize: fontSize,
         lineHeight: lineHeight,
       )..layout(maxWidth: textBoxWidth);
@@ -173,6 +183,8 @@ class WisdomShareCardRenderer {
       wisdomTop: wisdomOpticalCenterY - (painter.height / 2),
       textSize: painter.size,
       didExceedMaxLines: painter.didExceedMaxLines,
+      fontFamily: typography.family,
+      textDirection: EastLocaleRegistry.textDirectionFor(locale),
     );
   }
 
@@ -188,7 +200,7 @@ class WisdomShareCardRenderer {
       throw ArgumentError.value(wisdom, 'wisdom', 'Wisdom cannot be empty.');
     }
 
-    final layout = layoutFor(trimmedWisdom);
+    final layout = layoutFor(trimmedWisdom, locale: locale);
     if (layout.didExceedMaxLines || layout.textSize.height > _wisdomBoxHeight) {
       throw StateError('Wisdom does not fit the share card safely.');
     }
@@ -253,9 +265,9 @@ class WisdomShareCardRenderer {
 
     final wisdomPainter = _wisdomPainter(
       trimmedWisdom,
+      locale: locale,
       fontSize: layout.fontSize,
       lineHeight: layout.lineHeight,
-      direction: EastLocaleRegistry.textDirectionFor(locale),
     )..layout(maxWidth: layout.textBoxWidth);
     wisdomPainter.paint(
       canvas,
@@ -287,23 +299,25 @@ class WisdomShareCardRenderer {
 
   TextPainter _wisdomPainter(
     String wisdom, {
+    required Locale locale,
     required double fontSize,
     required double lineHeight,
-    TextDirection direction = TextDirection.ltr,
   }) {
+    final typography = EastTypographyResolver.forLocale(locale);
     return TextPainter(
       text: TextSpan(
         text: wisdom,
         style: TextStyle(
           color: foregroundColor,
-          fontFamily: fontFamily,
+          fontFamily: typography.family,
+          fontFamilyFallback: typography.fallbacks,
           fontSize: fontSize,
           fontWeight: FontWeight.w400,
           letterSpacing: 0.8,
           height: lineHeight,
         ),
       ),
-      textDirection: direction,
+      textDirection: EastLocaleRegistry.textDirectionFor(locale),
       textAlign: TextAlign.center,
       maxLines: 14,
     );

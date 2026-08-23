@@ -67,28 +67,29 @@ void main() {
     );
   });
 
-  test('typography resolver uses Latin Garamond and reports PDF blockers', () {
+  test('typography resolver uses Latin Garamond and bundled script fonts', () {
     final latin = EastTypographyResolver.forLocale(const Locale('tr'));
     final arabic = EastTypographyResolver.forLocale(const Locale('ar'));
     expect(latin.family, 'EBGaramond');
     expect(latin.hasEmbeddedPdfFont, isTrue);
-    expect(arabic.family, 'Noto Naskh Arabic');
-    expect(arabic.hasEmbeddedPdfFont, isFalse);
+    expect(arabic.family, 'NotoNaskhArabic');
+    expect(arabic.hasEmbeddedPdfFont, isTrue);
+    expect(arabic.pdfFontAsset, 'assets/fonts/NotoNaskhArabic-Regular.ttf');
   });
 
-  test(
-      'non-Latin Journal PDF presentation fails safely until a font is bundled',
-      () async {
+  test('non-Latin Journal PDF presentation uses its bundled font', () async {
     final builder = JournalPdfBuilder(
       presentation: const JournalPdfPresentation(
         locale: Locale('ar'),
         textDirection: TextDirection.rtl,
       ),
     );
-    await expectLater(
-      builder.build(items: const <FavoriteItem>[], now: DateTime.utc(2026)),
-      throwsA(isA<UnsupportedError>()),
+    final bytes = await builder.build(
+      items: const <FavoriteItem>[],
+      now: DateTime.utc(2026),
     );
+    expect(bytes, isNotEmpty);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
   });
 
   test('wisdom resolution is presentation-only and preserves legacy fallback',

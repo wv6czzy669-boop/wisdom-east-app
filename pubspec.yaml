@@ -45,6 +45,8 @@ flutter:
 
   assets:
     - assets/sounds/
+    - assets/fonts/licenses/
+    - assets/fonts/glyphs/
 
   fonts:
     - family: EBGaramond
@@ -54,6 +56,26 @@ flutter:
         - asset: assets/fonts/EBGaramond-Italic-Variable.ttf
           weight: 400
           style: italic
+    - family: NotoSerifJP
+      fonts:
+        - asset: assets/fonts/NotoSerifJP-Regular.ttf
+          weight: 400
+    - family: NotoSerifKR
+      fonts:
+        - asset: assets/fonts/NotoSerifKR-Regular.ttf
+          weight: 400
+    - family: NotoSerifTC
+      fonts:
+        - asset: assets/fonts/NotoSerifTC-Regular.ttf
+          weight: 400
+    - family: NotoNaskhArabic
+      fonts:
+        - asset: assets/fonts/NotoNaskhArabic-Regular.ttf
+          weight: 400
+    - family: NotoSerifThai
+      fonts:
+        - asset: assets/fonts/NotoSerifThai-Regular.ttf
+          weight: 400
 
 flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"

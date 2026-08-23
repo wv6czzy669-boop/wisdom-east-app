@@ -68,7 +68,10 @@ class _WisdomAppState extends State<WisdomApp> {
         title: AppLocalizationsEn().appTitle,
         onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
         debugShowCheckedModeBanner: false,
-        theme: eastTheme(),
+        theme: eastTheme(
+          locale:
+              _localePreferenceController.explicitLocale ?? const Locale('en'),
+        ),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         // Generated resources include the reviewed Phase 4C catalogs, but
         // only the release-ready registry may participate in runtime locale

@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'east_locale_registry.dart';
+import 'east_typography_resolver.dart';
 import '../theme/east_design.dart';
 
 /// Production Home revealed-wisdom metrics, centralized for future catalog
@@ -20,11 +22,23 @@ abstract final class EastVisualFit {
         letterSpacing: 0.5,
       );
 
-  static double measureWisdomHeight(String text,
-      {double width = defaultPhoneWidth * wisdomWidthFactor}) {
+  static TextStyle wisdomStyleForLocale(Locale locale) =>
+      EastTypographyResolver.textStyleForLocale(
+        locale,
+        fontSize: wisdomFontSize,
+        fontWeight: FontWeight.w400,
+        height: wisdomHeight,
+        letterSpacing: 0.5,
+      );
+
+  static double measureWisdomHeight(
+    String text, {
+    double width = defaultPhoneWidth * wisdomWidthFactor,
+    Locale locale = const Locale('en'),
+  }) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: wisdomStyle),
-      textDirection: TextDirection.ltr,
+      text: TextSpan(text: text, style: wisdomStyleForLocale(locale)),
+      textDirection: EastLocaleRegistry.textDirectionFor(locale),
       textScaler: TextScaler.noScaling,
       textAlign: TextAlign.center,
     )..layout(maxWidth: width);

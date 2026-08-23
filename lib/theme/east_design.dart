@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../localization/east_typography_resolver.dart';
+
 /// EAST.'s quiet, printed-page visual system.
 ///
 /// The locked EAST. base field: #E2E0D9.
@@ -19,6 +21,32 @@ abstract final class EastColors {
 abstract final class EastTypography {
   static const String fontFamily = 'EBGaramond';
   static const List<String> fontFamilyFallback = <String>['Georgia', 'serif'];
+
+  static EastTypographyPlan planFor(BuildContext context) =>
+      EastTypographyResolver.forLocale(
+        Localizations.maybeLocaleOf(context) ?? const Locale('en'),
+      );
+
+  static TextStyle localized(
+    BuildContext context, {
+    required double size,
+    Color color = EastColors.ink,
+    double height = 1.35,
+    double letterSpacing = 0.35,
+    FontStyle fontStyle = FontStyle.normal,
+  }) {
+    final typography = planFor(context);
+    return TextStyle(
+      color: color,
+      fontSize: size,
+      fontWeight: FontWeight.w400,
+      fontFamily: typography.family,
+      fontFamilyFallback: typography.fallbacks,
+      fontStyle: fontStyle,
+      height: height,
+      letterSpacing: letterSpacing,
+    );
+  }
 
   static TextStyle editorial({
     required double size,
@@ -40,7 +68,8 @@ abstract final class EastTypography {
   }
 }
 
-ThemeData eastTheme() {
+ThemeData eastTheme({Locale locale = const Locale('en')}) {
+  final typography = EastTypographyResolver.forLocale(locale);
   final colorScheme = ColorScheme.fromSeed(
     seedColor: EastColors.ink,
     brightness: Brightness.light,
@@ -67,12 +96,12 @@ ThemeData eastTheme() {
       modalBackgroundColor: EastColors.surface,
       surfaceTintColor: Colors.transparent,
     ),
-    snackBarTheme: const SnackBarThemeData(
+    snackBarTheme: SnackBarThemeData(
       backgroundColor: EastColors.surface,
       contentTextStyle: TextStyle(
         color: EastColors.ink,
-        fontFamily: EastTypography.fontFamily,
-        fontFamilyFallback: EastTypography.fontFamilyFallback,
+        fontFamily: typography.family,
+        fontFamilyFallback: typography.fallbacks,
       ),
     ),
     dividerTheme: const DividerThemeData(color: EastColors.divider),
@@ -83,11 +112,12 @@ ThemeData eastTheme() {
       shadowColor: Colors.transparent,
     ),
     textTheme: ThemeData.light().textTheme.apply(
-          fontFamily: EastTypography.fontFamily,
+          fontFamily: typography.family,
+          fontFamilyFallback: typography.fallbacks,
           bodyColor: EastColors.ink,
           displayColor: EastColors.ink,
         ),
-    cupertinoOverrideTheme: const CupertinoThemeData(
+    cupertinoOverrideTheme: CupertinoThemeData(
       brightness: Brightness.light,
       primaryColor: EastColors.ink,
       scaffoldBackgroundColor: EastColors.background,
@@ -95,8 +125,8 @@ ThemeData eastTheme() {
       textTheme: CupertinoTextThemeData(
         textStyle: TextStyle(
           color: EastColors.ink,
-          fontFamily: EastTypography.fontFamily,
-          fontFamilyFallback: EastTypography.fontFamilyFallback,
+          fontFamily: typography.family,
+          fontFamilyFallback: typography.fallbacks,
         ),
       ),
     ),

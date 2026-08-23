@@ -1,18 +1,22 @@
 part of '../../screens/home_screen.dart';
 
 TextStyle _homeWisdomStyle(
+  BuildContext context,
   double size, {
   Color color = EastColors.ink,
   bool glow = false,
+  bool brand = false,
   double height = 1.28,
   FontStyle fontStyle = FontStyle.normal,
 }) {
+  final typography = EastTypography.planFor(context);
   return TextStyle(
     color: color,
     fontSize: size,
     fontWeight: FontWeight.w400,
-    fontFamily: EastTypography.fontFamily,
-    fontFamilyFallback: EastTypography.fontFamilyFallback,
+    fontFamily: brand ? EastTypography.fontFamily : typography.family,
+    fontFamilyFallback:
+        brand ? EastTypography.fontFamilyFallback : typography.fallbacks,
     fontStyle: fontStyle,
     height: height,
     letterSpacing: 0.5,
@@ -183,6 +187,7 @@ class _HomeRitualContent extends StatelessWidget {
       currentText,
       textAlign: TextAlign.center,
       style: _homeWisdomStyle(
+        context,
         textSize,
         color: wisdomRevealed ? animatedTextColor : finalColor,
         glow: wisdomRevealed || onHeartScreen,
@@ -266,6 +271,7 @@ class _HomeRitualContent extends StatelessWidget {
                                     eastLocalizations(context).askFrom,
                                     textAlign: TextAlign.center,
                                     style: _homeWisdomStyle(
+                                      context,
                                       textSize,
                                       color: EastColors.ink,
                                       height: 1.18,
@@ -275,6 +281,7 @@ class _HomeRitualContent extends StatelessWidget {
                                     eastLocalizations(context).yourHeart,
                                     textAlign: TextAlign.center,
                                     style: _homeWisdomStyle(
+                                      context,
                                       textSize,
                                       color: EastColors.ink,
                                       height: 1.18,
@@ -365,7 +372,9 @@ class _HomeLaunchMark extends StatelessWidget {
                   eastLocalizations(context).east,
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(
+                    context,
                     21.5,
+                    brand: true,
                     color: EastColors.ink,
                   ),
                 ),
@@ -409,6 +418,7 @@ class _HomePauseFeelText extends StatelessWidget {
               eastLocalizations(context).pause,
               textAlign: TextAlign.center,
               style: _homeWisdomStyle(
+                context,
                 textSize,
                 color: color,
                 glow: true,
@@ -427,6 +437,7 @@ class _HomePauseFeelText extends StatelessWidget {
                 eastLocalizations(context).feel,
                 textAlign: TextAlign.center,
                 style: _homeWisdomStyle(
+                  context,
                   textSize,
                   color: color,
                   glow: true,
@@ -903,12 +914,10 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
               child: Text(
                 text,
                 textAlign: TextAlign.left,
-                style: TextStyle(
+                style: EastTypography.localized(
+                  context,
+                  size: 14.5,
                   color: eastMutedTextColor.withValues(alpha: 0.70),
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w400,
-                  fontFamily: EastTypography.fontFamily,
-                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   height: 1.3,
                   letterSpacing: 0.4,
                 ),
@@ -951,6 +960,7 @@ class _HomePostRevealMessage extends StatelessWidget {
                     message,
                     textAlign: TextAlign.center,
                     style: _homeWisdomStyle(
+                      context,
                       15,
                       color: eastMutedTextColor,
                     ),

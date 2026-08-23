@@ -43,7 +43,7 @@ class LanguageSelectionScreen extends StatelessWidget {
                 children: [
                   Text(
                     l10n.language,
-                    style: EastTypography.editorial(size: 27),
+                    style: EastTypography.localized(context, size: 27),
                   ),
                   const SizedBox(height: 28),
                   _option(
@@ -98,7 +98,7 @@ class LanguageSelectionScreen extends StatelessWidget {
                 Expanded(
                   child: Text(
                     label,
-                    style: EastTypography.editorial(size: 21),
+                    style: EastTypography.localized(context, size: 21),
                   ),
                 ),
                 if (selected)

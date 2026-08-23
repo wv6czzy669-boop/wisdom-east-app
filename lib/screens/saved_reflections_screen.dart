@@ -58,12 +58,10 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     double height = 1.35,
     double letterSpacing = 0.3,
   }) {
-    return TextStyle(
+    return EastTypography.localized(
+      context,
+      size: size,
       color: color,
-      fontSize: size,
-      fontWeight: FontWeight.w400,
-      fontFamily: EastTypography.fontFamily,
-      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );

@@ -17,11 +17,23 @@ import 'journal_layout.dart';
 class JournalPdfPresentation {
   const JournalPdfPresentation({
     this.locale = const Locale('en'),
-    this.textDirection = TextDirection.ltr,
+    this.textDirection,
   });
 
   final Locale locale;
-  final TextDirection textDirection;
+  final TextDirection? textDirection;
+}
+
+class _JournalPdfFonts {
+  const _JournalPdfFonts({
+    required this.primary,
+    required this.brand,
+    required this.fallback,
+  });
+
+  final pw.Font primary;
+  final pw.Font brand;
+  final List<pw.Font> fallback;
 }
 
 /// EAST. Phase 10 — builds the on-device A4 Journal PDF.
@@ -119,35 +131,65 @@ class JournalPdfBuilder {
   }) async {
     final generatedAt = now ?? DateTime.now();
     final typography = EastTypographyResolver.forLocale(_presentation.locale);
-    final fontAsset = typography.pdfFontAsset;
-    if (fontAsset == null) {
-      throw UnsupportedError(
-        'No embedded ${EastLocaleRegistry.canonicalTag(_presentation.locale)} '
-        'PDF font is bundled yet.',
-      );
-    }
-    final fontData = await rootBundle.load(fontAsset);
-    final font = pw.Font.ttf(fontData);
+    final fonts = await _loadFonts(typography);
+    final presentationDirection = _presentation.textDirection ??
+        EastLocaleRegistry.textDirectionFor(_presentation.locale);
+    final textDirection = presentationDirection == TextDirection.rtl
+        ? pw.TextDirection.rtl
+        : pw.TextDirection.ltr;
 
     final document = pw.Document(
       compress: compress,
       title: _localizations.journalPdfTitle,
-      theme: pw.ThemeData.withFont(base: font, bold: font, italic: font),
+      theme: pw.ThemeData.withFont(
+        base: fonts.primary,
+        bold: fonts.primary,
+        italic: fonts.primary,
+        fontFallback: fonts.fallback,
+      ),
     );
 
-    document.addPage(_buildCoverPage(font));
+    document.addPage(_buildCoverPage(fonts.brand));
     document.addPage(
-      _buildTitlePage(font, ownerName: ownerName, generatedAt: generatedAt),
+      _buildTitlePage(
+        fonts,
+        ownerName: ownerName,
+        generatedAt: generatedAt,
+        textDirection: textDirection,
+      ),
     );
 
-    final groups = _planner.plan(items, font: font);
+    final groups = _planner.plan(
+      items,
+      font: fonts.primary,
+      fontFallback: fonts.fallback,
+      textDirection: textDirection,
+    );
     if (groups.isNotEmpty) {
-      document.addPage(_buildBody(font, groups));
+      document.addPage(_buildBody(fonts, groups, textDirection));
     }
 
     document.addPage(_buildFinalPage());
 
     return document.save();
+  }
+
+  Future<_JournalPdfFonts> _loadFonts(EastTypographyPlan typography) async {
+    final assets = <String>{
+      typography.pdfFontAsset,
+      ...typography.pdfFallbackAssets,
+    };
+    final byAsset = <String, pw.Font>{};
+    for (final asset in assets) {
+      byAsset[asset] = pw.Font.ttf(await rootBundle.load(asset));
+    }
+    return _JournalPdfFonts(
+      primary: byAsset[typography.pdfFontAsset]!,
+      brand: byAsset[EastTypographyResolver.latinFont.asset]!,
+      fallback: typography.pdfFallbackAssets
+          .map((asset) => byAsset[asset]!)
+          .toList(growable: false),
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -213,9 +255,10 @@ class JournalPdfBuilder {
   // whether or not the owner name exists.
   // ---------------------------------------------------------------------
   pw.Page _buildTitlePage(
-    pw.Font font, {
+    _JournalPdfFonts fonts, {
     required String? ownerName,
     required DateTime generatedAt,
+    required pw.TextDirection textDirection,
   }) {
     final year = headerYear(generatedAt);
     final trimmedOwnerName = ownerName?.trim();
@@ -224,6 +267,7 @@ class JournalPdfBuilder {
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
+      textDirection: textDirection,
       build: (context) {
         return pw.Container(
           color: _background,
@@ -239,7 +283,8 @@ class JournalPdfBuilder {
                   _localizations.journalPdfTitle,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
-                    font: font,
+                    font: fonts.primary,
+                    fontFallback: fonts.fallback,
                     fontSize: _titleFontSize,
                     color: _ink,
                   ),
@@ -253,7 +298,8 @@ class JournalPdfBuilder {
                   year,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
-                    font: font,
+                    font: fonts.primary,
+                    fontFallback: fonts.fallback,
                     fontSize: _yearFontSize,
                     color: _yearMuted,
                     letterSpacing: _yearLetterSpacing,
@@ -269,7 +315,8 @@ class JournalPdfBuilder {
                     trimmedOwnerName,
                     textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
-                      font: font,
+                      font: fonts.primary,
+                      fontFallback: fonts.fallback,
                       fontSize: _ownerFontSize,
                       color: _ownerMuted,
                     ),
@@ -288,7 +335,11 @@ class JournalPdfBuilder {
   // these exact widgets first, keeping one to three complete entries on each
   // normal page without squeezing or splitting an entry.
   // ---------------------------------------------------------------------
-  pw.Page _buildBody(pw.Font font, List<JournalPageGroup> groups) {
+  pw.Page _buildBody(
+    _JournalPdfFonts fonts,
+    List<JournalPageGroup> groups,
+    pw.TextDirection textDirection,
+  ) {
     return pw.MultiPage(
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
@@ -298,7 +349,13 @@ class JournalPdfBuilder {
           JournalBodyLayout.marginRight,
           JournalBodyLayout.marginBottom,
         ),
-        theme: pw.ThemeData.withFont(base: font, bold: font, italic: font),
+        theme: pw.ThemeData.withFont(
+          base: fonts.primary,
+          bold: fonts.primary,
+          italic: fonts.primary,
+          fontFallback: fonts.fallback,
+        ),
+        textDirection: textDirection,
         // The entire PDF uses the warm-stone field -- every body page's own stone background,
         // painted full-bleed behind the margin area too, exactly like the
         // cover/title/final pages.
@@ -306,19 +363,23 @@ class JournalPdfBuilder {
             ignoreMargins: true, child: pw.Container(color: _background)),
       ),
       maxPages: 20000,
-      footer: (context) => _buildFooter(font, context),
+      footer: (context) => _buildFooter(fonts.brand, context),
       build: (context) {
         final widgets = <pw.Widget>[];
         for (var i = 0; i < groups.length; i++) {
           if (i > 0) widgets.add(pw.NewPage());
-          widgets.addAll(_buildGroup(font, groups[i]));
+          widgets.addAll(_buildGroup(fonts, groups[i], textDirection));
         }
         return widgets;
       },
     );
   }
 
-  List<pw.Widget> _buildGroup(pw.Font font, JournalPageGroup group) {
+  List<pw.Widget> _buildGroup(
+    _JournalPdfFonts fonts,
+    JournalPageGroup group,
+    pw.TextDirection textDirection,
+  ) {
     if (group.isOverflowing) {
       // The rare, genuinely-too-long-for-one-page occurrence: emitted as
       // loose, independently-flowing widgets (never wrapped in one rigid
@@ -326,13 +387,24 @@ class JournalPdfBuilder {
       // `pdf` layout engine -- can continue naturally onto further pages.
       // Nothing is clipped or truncated.
       return JournalBodyLayout.buildOverflowingEntry(
-          font, group.entries.single);
+        fonts.primary,
+        group.entries.single,
+        fontFallback: fonts.fallback,
+        textDirection: textDirection,
+      );
     }
 
     final widgets = <pw.Widget>[];
     for (var i = 0; i < group.entries.length; i++) {
       if (i > 0) widgets.add(pw.SizedBox(height: JournalBodyLayout.entryGap));
-      widgets.add(JournalBodyLayout.buildEntry(font, group.entries[i]));
+      widgets.add(
+        JournalBodyLayout.buildEntry(
+          fonts.primary,
+          group.entries[i],
+          fontFallback: fonts.fallback,
+          textDirection: textDirection,
+        ),
+      );
     }
     return widgets;
   }

@@ -1,1 +1,3 @@
 #include "Generated.xcconfig"
+// `use_arabic=true`, required by package:pdf's contextual Arabic shaper.
+DART_DEFINES=$(inherited),dXNlX2FyYWJpYz10cnVl

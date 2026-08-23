@@ -639,7 +639,7 @@ class _HomeScreenState extends State<HomeScreen>
         duration: const Duration(milliseconds: 1400),
         content: Text(
           message,
-          style: _homeWisdomStyle(17),
+          style: _homeWisdomStyle(context, 17),
         ),
       ),
     );
@@ -2085,12 +2085,10 @@ class _HomeScreenState extends State<HomeScreen>
             child: Center(
               child: Text(
                 label,
-                style: TextStyle(
+                style: EastTypography.localized(
+                  context,
+                  size: 11,
                   color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  fontFamily: EastTypography.fontFamily,
-                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -2132,13 +2130,14 @@ class _HomeScreenState extends State<HomeScreen>
                 Text(
                   "Kept Limit",
                   textAlign: TextAlign.center,
-                  style: _homeWisdomStyle(28),
+                  style: _homeWisdomStyle(context, 28),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   "Free users can keep up to 3 wisdoms.",
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(
+                    context,
                     15,
                     color: EastColors.secondary,
                   ),

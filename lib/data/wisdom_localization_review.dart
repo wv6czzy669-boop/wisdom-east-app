@@ -60,7 +60,7 @@ const Map<String, WisdomLocalizationReviewSummary>
     <String, WisdomLocalizationReviewSummary>{
   'ja': WisdomLocalizationReviewSummary(
     qaRewriteCount: 50,
-    finalFontRenderQaRequired: true,
+    finalFontRenderQaRequired: false,
     obviousLayoutRiskCount: 0,
   ),
   'de': WisdomLocalizationReviewSummary(
@@ -75,17 +75,17 @@ const Map<String, WisdomLocalizationReviewSummary>
   ),
   'ko': WisdomLocalizationReviewSummary(
     qaRewriteCount: 15,
-    finalFontRenderQaRequired: true,
+    finalFontRenderQaRequired: false,
     obviousLayoutRiskCount: 0,
   ),
   'zh-Hant': WisdomLocalizationReviewSummary(
     qaRewriteCount: 16,
-    finalFontRenderQaRequired: true,
+    finalFontRenderQaRequired: false,
     obviousLayoutRiskCount: 0,
   ),
   'ar': WisdomLocalizationReviewSummary(
     qaRewriteCount: 33,
-    finalFontRenderQaRequired: true,
+    finalFontRenderQaRequired: false,
     obviousLayoutRiskCount: 0,
   ),
   'es': WisdomLocalizationReviewSummary(
@@ -104,8 +104,8 @@ const Map<String, WisdomLocalizationReviewSummary>
     obviousLayoutRiskCount: 0,
   ),
   'th': WisdomLocalizationReviewSummary(
-    qaRewriteCount: 6,
-    finalFontRenderQaRequired: true,
+    qaRewriteCount: 7,
+    finalFontRenderQaRequired: false,
     obviousLayoutRiskCount: 0,
   ),
   'nl': WisdomLocalizationReviewSummary(

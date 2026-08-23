@@ -153,12 +153,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     double size, {
     Color color = EastColors.ink,
   }) {
-    return TextStyle(
+    return EastTypography.localized(
+      context,
+      size: size,
       color: color,
-      fontSize: size,
-      fontWeight: FontWeight.w400,
-      fontFamily: EastTypography.fontFamily,
-      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: 1.35,
       letterSpacing: 0.4,
     );
@@ -257,12 +255,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         alignment: AlignmentDirectional.centerEnd,
         child: Text(
           value,
-          style: const TextStyle(
+          style: EastTypography.localized(
+            context,
+            size: 11,
             color: eastMutedTextColor,
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-            fontFamily: EastTypography.fontFamily,
-            fontFamilyFallback: EastTypography.fontFamilyFallback,
             letterSpacing: 2.0,
           ),
         ),
@@ -528,16 +524,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           minWidth: 44,
                           minHeight: 44,
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Text(
                             'CLOSE',
-                            style: TextStyle(
+                            style: EastTypography.localized(
+                              context,
+                              size: 11,
                               color: EastColors.ink,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              fontFamily: EastTypography.fontFamily,
-                              fontFamilyFallback:
-                                  EastTypography.fontFamilyFallback,
                               letterSpacing: 3.0,
                             ),
                           ),
@@ -571,12 +564,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Center(
               child: Text(
                 label,
-                style: TextStyle(
+                style: EastTypography.localized(
+                  context,
+                  size: 11,
                   color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  fontFamily: EastTypography.fontFamily,
-                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),
@@ -680,12 +671,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Center(
               child: Text(
                 label,
-                style: TextStyle(
+                style: EastTypography.localized(
+                  context,
+                  size: 11,
                   color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  fontFamily: EastTypography.fontFamily,
-                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),

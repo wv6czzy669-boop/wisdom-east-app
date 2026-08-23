@@ -109,12 +109,10 @@ class _JournalScreenState extends State<JournalScreen> {
     double height = 1.4,
     double letterSpacing = 0.35,
   }) {
-    return TextStyle(
+    return EastTypography.localized(
+      context,
+      size: size,
       color: color,
-      fontSize: size,
-      fontWeight: FontWeight.w400,
-      fontFamily: EastTypography.fontFamily,
-      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -319,12 +317,10 @@ class _JournalScreenState extends State<JournalScreen> {
             child: Center(
               child: Text(
                 label,
-                style: TextStyle(
+                style: EastTypography.localized(
+                  context,
+                  size: 11,
                   color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  fontFamily: EastTypography.fontFamily,
-                  fontFamilyFallback: EastTypography.fontFamilyFallback,
                   letterSpacing: 3.0,
                 ),
               ),

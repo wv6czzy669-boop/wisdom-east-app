@@ -77,12 +77,10 @@ class _KeeperScreenState extends State<KeeperScreen> {
     double size, {
     Color color = EastColors.ink,
   }) {
-    return TextStyle(
+    return EastTypography.localized(
+      context,
+      size: size,
       color: color,
-      fontSize: size,
-      fontWeight: FontWeight.w400,
-      fontFamily: EastTypography.fontFamily,
-      fontFamilyFallback: EastTypography.fontFamilyFallback,
       height: 1.32,
       letterSpacing: 0.45,
     );

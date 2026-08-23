@@ -59,14 +59,21 @@ class JournalBodyLayout {
   /// The ordinary inseparable occurrence block. This exact widget is also
   /// measured by [JournalLayoutPlanner], so pagination follows real PDF
   /// wrapping rather than a text-length estimate.
-  static pw.Widget buildEntry(pw.Font font, FavoriteItem item) {
+  static pw.Widget buildEntry(
+    pw.Font font,
+    FavoriteItem item, {
+    List<pw.Font> fontFallback = const <pw.Font>[],
+    pw.TextDirection textDirection = pw.TextDirection.ltr,
+  }) {
     final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
           marginalDate(item),
+          textDirection: textDirection,
           style: pw.TextStyle(
             font: font,
+            fontFallback: fontFallback,
             fontSize: dateFontSize,
             color: dateMuted,
             letterSpacing: dateLetterSpacing,
@@ -76,8 +83,10 @@ class JournalBodyLayout {
           padding: const pw.EdgeInsets.only(top: entryLineGap),
           child: pw.Text(
             item.text,
+            textDirection: textDirection,
             style: pw.TextStyle(
               font: font,
+              fontFallback: fontFallback,
               fontSize: wisdomFontSize,
               color: ink,
               height: 1.5,
@@ -97,14 +106,16 @@ class JournalBodyLayout {
       children: [
         header,
         pw.Padding(
-          padding: const pw.EdgeInsets.only(
+          padding: const pw.EdgeInsetsDirectional.only(
             top: entryLineGap,
-            left: reflectionIndent,
+            start: reflectionIndent,
           ),
           child: pw.Text(
             reflection,
+            textDirection: textDirection,
             style: pw.TextStyle(
               font: font,
+              fontFallback: fontFallback,
               fontSize: reflectionFontSize,
               color: reflectionTone,
               height: 1.6,
@@ -120,15 +131,19 @@ class JournalBodyLayout {
   /// following pages rather than clipping or being discarded.
   static List<pw.Widget> buildOverflowingEntry(
     pw.Font font,
-    FavoriteItem item,
-  ) {
+    FavoriteItem item, {
+    List<pw.Font> fontFallback = const <pw.Font>[],
+    pw.TextDirection textDirection = pw.TextDirection.ltr,
+  }) {
     final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
           marginalDate(item),
+          textDirection: textDirection,
           style: pw.TextStyle(
             font: font,
+            fontFallback: fontFallback,
             fontSize: dateFontSize,
             color: dateMuted,
             letterSpacing: dateLetterSpacing,
@@ -138,8 +153,10 @@ class JournalBodyLayout {
           padding: const pw.EdgeInsets.only(top: entryLineGap),
           child: pw.Text(
             item.text,
+            textDirection: textDirection,
             style: pw.TextStyle(
               font: font,
+              fontFallback: fontFallback,
               fontSize: wisdomFontSize,
               color: ink,
               height: 1.5,
@@ -156,8 +173,10 @@ class JournalBodyLayout {
       pw.SizedBox(height: entryLineGap),
       pw.Text(
         reflection,
+        textDirection: textDirection,
         style: pw.TextStyle(
           font: font,
+          fontFallback: fontFallback,
           fontSize: reflectionFontSize,
           color: reflectionTone,
           height: 1.6,
@@ -200,8 +219,10 @@ class JournalLayoutPlanner {
   List<JournalPageGroup> plan(
     List<FavoriteItem> items, {
     required pw.Font font,
+    List<pw.Font> fontFallback = const <pw.Font>[],
+    pw.TextDirection textDirection = pw.TextDirection.ltr,
   }) {
-    final context = _measurementContext(font);
+    final context = _measurementContext(font, fontFallback, textDirection);
     final availableHeight =
         pageContentHeightOverridePt ?? _availableContentHeight(context, font);
     final ordered = _orderedOldestFirst(items);
@@ -210,7 +231,13 @@ class JournalLayoutPlanner {
     var index = 0;
     while (index < ordered.length) {
       final item = ordered[index];
-      final height = _measureEntry(item, font: font, context: context);
+      final height = _measureEntry(
+        item,
+        font: font,
+        fontFallback: fontFallback,
+        textDirection: textDirection,
+        context: context,
+      );
 
       if (height > availableHeight) {
         groups.add(JournalPageGroup(entries: [item], isOverflowing: true));
@@ -224,7 +251,13 @@ class JournalLayoutPlanner {
 
       while (index < ordered.length && entries.length < maxEntriesPerPage) {
         final next = ordered[index];
-        final nextHeight = _measureEntry(next, font: font, context: context);
+        final nextHeight = _measureEntry(
+          next,
+          font: font,
+          fontFallback: fontFallback,
+          textDirection: textDirection,
+          context: context,
+        );
         if (nextHeight > availableHeight ||
             usedHeight + JournalBodyLayout.entryGap + nextHeight >
                 availableHeight) {
@@ -240,15 +273,36 @@ class JournalLayoutPlanner {
     return groups;
   }
 
-  double measureEntry(FavoriteItem item, {required pw.Font font}) {
-    final context = _measurementContext(font);
-    return _measureEntry(item, font: font, context: context);
+  double measureEntry(
+    FavoriteItem item, {
+    required pw.Font font,
+    List<pw.Font> fontFallback = const <pw.Font>[],
+    pw.TextDirection textDirection = pw.TextDirection.ltr,
+  }) {
+    final context = _measurementContext(font, fontFallback, textDirection);
+    return _measureEntry(
+      item,
+      font: font,
+      fontFallback: fontFallback,
+      textDirection: textDirection,
+      context: context,
+    );
   }
 
-  pw.Context _measurementContext(pw.Font font) {
-    return pw.Context(document: PdfDocument()).inheritFrom(
-      pw.ThemeData.withFont(base: font, bold: font, italic: font),
-    );
+  pw.Context _measurementContext(
+    pw.Font font,
+    List<pw.Font> fontFallback,
+    pw.TextDirection textDirection,
+  ) {
+    return pw.Context(document: PdfDocument()).inheritFromAll(<pw.Inherited>[
+      pw.ThemeData.withFont(
+        base: font,
+        bold: font,
+        italic: font,
+        fontFallback: fontFallback,
+      ),
+      pw.InheritedDirectionality(textDirection),
+    ]);
   }
 
   double _availableContentHeight(pw.Context context, pw.Font font) {
@@ -266,10 +320,17 @@ class JournalLayoutPlanner {
   double _measureEntry(
     FavoriteItem item, {
     required pw.Font font,
+    required List<pw.Font> fontFallback,
+    required pw.TextDirection textDirection,
     required pw.Context context,
   }) {
     return pw.Widget.measure(
-      JournalBodyLayout.buildEntry(font, item),
+      JournalBodyLayout.buildEntry(
+        font,
+        item,
+        fontFallback: fontFallback,
+        textDirection: textDirection,
+      ),
       context: context,
       constraints: pw.BoxConstraints(maxWidth: JournalBodyLayout.contentWidth),
     ).y;
