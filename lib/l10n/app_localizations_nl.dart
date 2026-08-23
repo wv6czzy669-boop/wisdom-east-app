@@ -316,4 +316,87 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'Houd EAST. levend.';
+
+  @override
+  String get operationFailedRetry =>
+      'Dit kon niet worden voltooid. Probeer het opnieuw.';
+
+  @override
+  String get restoreRequestSent =>
+      'Herstelverzoek verzonden. Keeper-toegang wordt automatisch bijgewerkt.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'Een eerder herstel wordt nog afgestemd. Keeper-toegang wordt automatisch bijgewerkt; open EAST. opnieuw voordat je het opnieuw probeert.';
+
+  @override
+  String get opening => 'Wordt geopend.';
+
+  @override
+  String get supportEmailSubject => 'EAST. ondersteuning';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Je bewaarde wijsheden en Reflecties blijven op deze iPhone.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'Hun iCloud-kopieën worden verwijderd en iCloud-synchronisatie wordt uitgeschakeld.';
+
+  @override
+  String get enableIcloudQuestion => 'iCloud-synchronisatie inschakelen?';
+
+  @override
+  String get enableIcloudData =>
+      'Je bewaarde wijsheden en Reflecties worden opgeslagen in je privé-iCloud-database en tussen je apparaten gesynchroniseerd.';
+
+  @override
+  String get dailyRitualOnDevice =>
+      'De timing van je dagelijkse ritueel blijft op dit apparaat.';
+
+  @override
+  String get removeUpper => 'VERWIJDER';
+
+  @override
+  String get saveUpper => 'OPSLAAN';
+
+  @override
+  String get enableUpper => 'INSCHAKELEN';
+
+  @override
+  String get icloudEnabling => 'Wordt ingeschakeld…';
+
+  @override
+  String get icloudEnabled => 'Ingeschakeld';
+
+  @override
+  String get icloudNotEnabled => 'Niet ingeschakeld';
+
+  @override
+  String get icloudRemovalStarting => 'Wordt gestart…';
+
+  @override
+  String get icloudRemovalCompleted => 'Verwijderd uit iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Verwijdering wacht. EAST. rondt dit af zodra iCloud beschikbaar is.';
+
+  @override
+  String get icloudRemovalIdle => 'Verwijder je iCloud-kopieën.';
+
+  @override
+  String get icloudRemovalNone => 'Niets om te verwijderen.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Reflectie kon niet worden opgeslagen. Probeer het opnieuw.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Reflectie kon niet worden opgeslagen. Er wordt opnieuw geprobeerd terwijl je schrijft.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Reflectie kon niet worden verwijderd. Probeer het opnieuw.';
 }

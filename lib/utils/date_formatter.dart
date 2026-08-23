@@ -27,7 +27,14 @@ String formatFavoriteDisplayDate(DateTime value, {String? localeTag}) {
   // Preserve Build 26's persisted English representation byte-for-byte.
   // New localized views derive fresh display text from a reliable timestamp.
   if (localeTag != null && localeTag != 'en') {
-    return DateFormat.yMMMMd(localeTag).format(value);
+    try {
+      return DateFormat.yMMMMd(localeTag).format(value);
+    } catch (_) {
+      // Library-only callers (such as a direct PDF builder test) can run
+      // before Flutter has initialized CLDR symbols. The live app initializes
+      // every approved locale during startup; retaining the legacy English
+      // shape here is a safe, presentation-only fallback.
+    }
   }
   const months = [
     "January",

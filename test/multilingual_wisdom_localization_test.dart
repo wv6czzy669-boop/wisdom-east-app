@@ -1023,12 +1023,13 @@ void main() {
       expect(record.reflectionText, 'Original user reflection — unchanged.');
     });
 
-    test('reviewed catalogs remain hidden from runtime language settings', () {
-      expect(EastLocaleRegistry.runtimeSupported, const <Locale>[Locale('en')]);
+    test('reviewed catalogs are active only through approved product locales',
+        () {
+      expect(EastLocaleRegistry.runtimeSupported, hasLength(15));
       for (final tag in reviewedLocalizedWisdomCatalogs.keys) {
         expect(
           EastLocaleRegistry.runtimeSupported,
-          isNot(contains(_localeForTag(tag))),
+          contains(_localeForTag(tag)),
           reason: tag,
         );
       }

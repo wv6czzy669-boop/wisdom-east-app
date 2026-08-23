@@ -42,7 +42,12 @@ void main() {
       ),
     );
 
-    expect(EastLocaleRegistry.runtimeSupported, const [Locale('en')]);
+    expect(
+      EastLocaleRegistry.runtimeSupported,
+      EastLocaleRegistry.targets
+          .map((definition) => definition.locale)
+          .toList(growable: false),
+    );
     expect(find.text('Pause.'), findsOneWidget);
   });
 

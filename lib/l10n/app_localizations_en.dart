@@ -313,4 +313,87 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'Keep EAST. alive.';
+
+  @override
+  String get operationFailedRetry =>
+      'This could not be completed. Please try again.';
+
+  @override
+  String get restoreRequestSent =>
+      'Restore request sent. Keeper access will update automatically.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again.';
+
+  @override
+  String get opening => 'Opening.';
+
+  @override
+  String get supportEmailSubject => 'EAST. Support';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Your Kept wisdoms and Reflections will remain on this iPhone.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'Their iCloud copies will be removed, and iCloud Sync will turn off.';
+
+  @override
+  String get enableIcloudQuestion => 'Enable iCloud Sync?';
+
+  @override
+  String get enableIcloudData =>
+      'Your Kept wisdoms and Reflections will be stored in your private iCloud database and kept in sync across your devices.';
+
+  @override
+  String get dailyRitualOnDevice =>
+      'Your daily ritual timing stays on this device.';
+
+  @override
+  String get removeUpper => 'REMOVE';
+
+  @override
+  String get saveUpper => 'SAVE';
+
+  @override
+  String get enableUpper => 'ENABLE';
+
+  @override
+  String get icloudEnabling => 'Enabling…';
+
+  @override
+  String get icloudEnabled => 'Enabled';
+
+  @override
+  String get icloudNotEnabled => 'Not enabled';
+
+  @override
+  String get icloudRemovalStarting => 'Starting…';
+
+  @override
+  String get icloudRemovalCompleted => 'Removed from iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Removal pending. EAST. will finish when iCloud is available.';
+
+  @override
+  String get icloudRemovalIdle => 'Remove your iCloud copies.';
+
+  @override
+  String get icloudRemovalNone => 'Nothing to remove.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Reflection could not be saved. Please try again.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Reflection could not be saved. It will try again as you keep writing.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Reflection could not be deleted. Please try again.';
 }

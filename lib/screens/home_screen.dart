@@ -24,6 +24,7 @@ import '../services/widget_snapshot_service.dart';
 import '../services/wisdom_notification_service.dart';
 import '../services/wisdom_selector.dart';
 import '../services/wisdom_share_service.dart';
+import '../services/wisdom_localization_resolver.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/countdown_formatter.dart';
@@ -74,6 +75,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
+  static const _wisdomPresentation = WisdomLocalizationResolver();
   int screenStep = 0;
 
   String currentText = "EAST.";
@@ -469,15 +471,16 @@ class _HomeScreenState extends State<HomeScreen>
     return _isInRitualSilence || textOpacity <= 0.01;
   }
 
-  String? get mainRitualSemanticLabel {
+  String? mainRitualSemanticLabel(BuildContext context) {
+    final l10n = eastLocalizations(context);
     if (hideMainRitualContentSemantics) return null;
     if (screenStep == 0) return 'EAST.';
     if (onPauseScreen) {
-      return pauseFeelOpacity < 1.0 ? 'Pause.' : 'Pause. Feel.';
+      return pauseFeelOpacity < 1.0 ? l10n.pause : '${l10n.pause} ${l10n.feel}';
     }
-    if (onHeartScreen) return 'Ask from your heart.';
+    if (onHeartScreen) return l10n.askFromYourHeart;
     if (wisdomRevealed && _revealPersistenceNeedsRetry) {
-      return 'Try keeping this wisdom again.';
+      return l10n.wisdomCouldNotBeKept;
     }
     return null;
   }
@@ -709,7 +712,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
 
       await transitionToText(
-        "Pause.",
+        eastLocalizations(context).pause,
         nextStep: 1,
       );
 
@@ -747,7 +750,7 @@ class _HomeScreenState extends State<HomeScreen>
           },
         );
         await transitionToText(
-          "Ask from your heart.",
+          eastLocalizations(context).askFromYourHeart,
           nextStep: 2,
         );
       }
@@ -962,8 +965,7 @@ class _HomeScreenState extends State<HomeScreen>
           _lockedWisdomText = null;
           _lockedWisdomRevealId = null;
           _lockedWisdomRevealedAt = null;
-          nextWisdomMessage =
-              status.unlockAt == null ? "" : "A new wisdom is ready.";
+          nextWisdomMessage = status.unlockAt == null ? '' : 'ready';
 
           if (onLockedCountdown || _showingLockedWisdom) {
             screenStep = 0;
@@ -1287,7 +1289,7 @@ class _HomeScreenState extends State<HomeScreen>
     final session = ++_keptDiscoverySessionId;
     setState(() {
       _firstUseKeepDiscoveryActive = true;
-      _keptDiscoveryHintText = 'Keep this wisdom.';
+      _keptDiscoveryHintText = 'keep';
       _keptDiscoveryHintOpacity = 1.0;
       _keptDiscoveryBreathActive = false;
     });
@@ -1336,7 +1338,7 @@ class _HomeScreenState extends State<HomeScreen>
         _keptDiscoveryHintOpacity <= 0.0) {
       final session = ++_keptDiscoverySessionId;
       setState(() {
-        _keptDiscoveryHintText = 'Keep this wisdom.';
+        _keptDiscoveryHintText = 'keep';
         _keptDiscoveryHintOpacity = 1.0;
         _keptDiscoveryBreathActive = false;
       });
@@ -1470,7 +1472,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (hintWasShowing) {
       setState(() {
-        _keptDiscoveryHintText = 'Kept.';
+        _keptDiscoveryHintText = 'kept';
         _keptDiscoveryHintOpacity = 1.0;
         _keptDiscoveryBreathActive = false;
       });
@@ -1571,10 +1573,20 @@ class _HomeScreenState extends State<HomeScreen>
     _shareInProgress = true;
     HapticFeedback.mediumImpact();
     try {
-      await wisdomShareService.shareWisdom(
-        wisdom: currentText,
-        sharePositionOrigin: shareOrigin,
-      );
+      final locale = Localizations.localeOf(context);
+      final presentedWisdom = _presentedWisdom(locale);
+      if (wisdomShareService case WisdomShareService service) {
+        await service.shareWisdomForLocale(
+          wisdom: presentedWisdom,
+          sharePositionOrigin: shareOrigin,
+          locale: locale,
+        );
+      } else {
+        await wisdomShareService.shareWisdom(
+          wisdom: presentedWisdom,
+          sharePositionOrigin: shareOrigin,
+        );
+      }
     } catch (_) {
       // Dismissal and share failures must leave the ritual undisturbed.
     } finally {
@@ -1592,7 +1604,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     setState(() {
       _isInRitualSilence = false;
-      currentText = "Ask from your heart.";
+      currentText = eastLocalizations(context).askFromYourHeart;
       screenStep = 2;
       _showingLockedWisdom = false;
       _revealPersistenceNeedsRetry = false;
@@ -1605,6 +1617,17 @@ class _HomeScreenState extends State<HomeScreen>
       textScale = 1.0;
     });
   }
+
+  /// Resolves only the visible copy for the existing occurrence. The stored
+  /// snapshot remains the persistence fallback and is never rewritten when a
+  /// user switches languages.
+  String _presentedWisdom(Locale locale) =>
+      _wisdomPresentation.resolve(
+        wisdomId: currentWisdomId,
+        locale: locale,
+        persistedSnapshot: currentText,
+      ) ??
+      currentText;
 
   DateTime revealBoundaryNow() {
     return widget.clock?.call() ?? DateTime.now();
@@ -2111,6 +2134,7 @@ class _HomeScreenState extends State<HomeScreen>
   /// *when* this is shown is unchanged, only the presentation.
   Widget _favoriteLimitOverlay() {
     if (!_favoriteLimitOverlayVisible) return const SizedBox.shrink();
+    final l10n = eastLocalizations(context);
 
     return Positioned.fill(
       child: IgnorePointer(
@@ -2128,13 +2152,13 @@ class _HomeScreenState extends State<HomeScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "Kept Limit",
+                  l10n.keptLimit,
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(context, 28),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  "Free users can keep up to 3 wisdoms.",
+                  l10n.freeUsersKeepLimit,
                   textAlign: TextAlign.center,
                   style: _homeWisdomStyle(
                     context,
@@ -2147,13 +2171,13 @@ class _HomeScreenState extends State<HomeScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _favoriteLimitDecisionLabel(
-                      'CANCEL',
+                      l10n.cancelUpper,
                       onTap: _dismissFavoriteLimitOverlay,
                       color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _favoriteLimitDecisionLabel(
-                      'BECOME A KEEPER',
+                      l10n.becomeKeeper,
                       onTap: _becomeKeeperFromLimitOverlay,
                       color: EastColors.ink,
                     ),
@@ -2367,12 +2391,14 @@ class _HomeScreenState extends State<HomeScreen>
     final dy = _homeSwipeDy;
     final velocityX = details.velocity.pixelsPerSecond.dx;
 
-    final isLeftward = dx < 0 && velocityX <= 0;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final isTowardKept =
+        isRtl ? dx > 0 && velocityX >= 0 : dx < 0 && velocityX <= 0;
     final horizontalDominant = dx.abs() > dy.abs() * 1.6;
     final meetsThreshold =
         dx.abs() >= distanceThreshold || velocityX.abs() >= velocityThreshold;
 
-    if (isLeftward && horizontalDominant && meetsThreshold) {
+    if (isTowardKept && horizontalDominant && meetsThreshold) {
       _homeSwipeHandled = true;
       openFavorites();
     }
@@ -2380,6 +2406,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = eastLocalizations(context);
+    final presentedText = wisdomRevealed
+        ? _presentedWisdom(Localizations.localeOf(context))
+        : currentText;
     return Scaffold(
       backgroundColor: EastColors.background,
       body: SafeArea(
@@ -2392,7 +2422,7 @@ class _HomeScreenState extends State<HomeScreen>
             Positioned.fill(
               child: _HomeMainRitualGesture(
                 navigationDisabled: navigationInProgress || _transitionLock,
-                semanticLabel: mainRitualSemanticLabel,
+                semanticLabel: mainRitualSemanticLabel(context),
                 semanticActionEnabled: mainRitualActionSemanticsEnabled,
                 hideContentSemantics: hideMainRitualContentSemantics,
                 onTap: handleMainTap,
@@ -2402,7 +2432,7 @@ class _HomeScreenState extends State<HomeScreen>
                 onSwipeEnd: _handleHomeSwipeEnd,
                 content: _HomeRitualContent(
                   screenStep: screenStep,
-                  currentText: currentText,
+                  currentText: presentedText,
                   textOpacity: textOpacity,
                   textScale: textScale,
                   pauseFeelOpacity: pauseFeelOpacity,
@@ -2455,12 +2485,18 @@ class _HomeScreenState extends State<HomeScreen>
             if (wisdomRevealed)
               _HomePostRevealMessage(
                 opacity: postRevealMessageOpacity,
-                message: nextWisdomMessage,
+                message: nextWisdomMessage == 'ready'
+                    ? l10n.dailyWisdomReady
+                    : nextWisdomMessage,
               ),
             if (wisdomRevealed && _keptDiscoveryHintOpacity > 0.0)
               _HomeKeptDiscoveryHint(
                 opacity: _keptDiscoveryHintOpacity,
-                text: _keptDiscoveryHintText,
+                text: _keptDiscoveryHintText == 'kept'
+                    ? l10n.kept
+                    : _keptDiscoveryHintText.isEmpty
+                        ? ''
+                        : l10n.keepThisWisdom,
               ),
             _favoriteLimitOverlay(),
           ],

@@ -305,4 +305,79 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'EAST.를 이어 가기.';
+
+  @override
+  String get operationFailedRetry => '완료하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get restoreRequestSent => '복원 요청을 보냈습니다. Keeper 접근 권한이 자동으로 업데이트됩니다.';
+
+  @override
+  String get restoreRecoveryPending =>
+      '이전 복원을 아직 확인하고 있습니다. Keeper 접근 권한이 자동으로 업데이트됩니다. 다시 시도하기 전에 EAST.를 다시 열어 주세요.';
+
+  @override
+  String get opening => '여는 중입니다.';
+
+  @override
+  String get supportEmailSubject => 'EAST. 지원';
+
+  @override
+  String get removeIcloudLocalData => '간직한 지혜와 성찰은 이 iPhone에 남습니다.';
+
+  @override
+  String get removeIcloudCloudData => 'iCloud 사본이 삭제되고 iCloud 동기화가 꺼집니다.';
+
+  @override
+  String get enableIcloudQuestion => 'iCloud 동기화를 켤까요?';
+
+  @override
+  String get enableIcloudData =>
+      '간직한 지혜와 성찰이 개인 iCloud 데이터베이스에 저장되고 기기 간에 동기화됩니다.';
+
+  @override
+  String get dailyRitualOnDevice => '매일의 의식 시간은 이 기기에 남습니다.';
+
+  @override
+  String get removeUpper => '제거';
+
+  @override
+  String get saveUpper => '저장';
+
+  @override
+  String get enableUpper => '활성화';
+
+  @override
+  String get icloudEnabling => '활성화하는 중…';
+
+  @override
+  String get icloudEnabled => '활성화됨';
+
+  @override
+  String get icloudNotEnabled => '활성화되지 않음';
+
+  @override
+  String get icloudRemovalStarting => '시작하는 중…';
+
+  @override
+  String get icloudRemovalCompleted => 'iCloud에서 제거됨.';
+
+  @override
+  String get icloudRemovalPending =>
+      '제거 대기 중입니다. iCloud를 사용할 수 있으면 EAST.가 마칩니다.';
+
+  @override
+  String get icloudRemovalIdle => 'iCloud 사본을 제거하세요.';
+
+  @override
+  String get icloudRemovalNone => '제거할 항목이 없습니다.';
+
+  @override
+  String get reflectionSaveFailed => '성찰을 저장하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get reflectionAutosaveFailed => '성찰을 저장하지 못했습니다. 계속 작성하는 동안 다시 시도합니다.';
+
+  @override
+  String get reflectionDeleteFailed => '성찰을 삭제하지 못했습니다. 다시 시도해 주세요.';
 }

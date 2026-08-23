@@ -90,7 +90,7 @@ void main() {
         reason: target.tag,
       );
     }
-    expect(EastLocaleRegistry.runtimeSupported, const <Locale>[Locale('en')]);
+    expect(EastLocaleRegistry.runtimeSupported, hasLength(15));
   });
 
   test('bundled assets, OFL, source documentation, and inventories exist',

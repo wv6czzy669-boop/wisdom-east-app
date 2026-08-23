@@ -315,4 +315,86 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'EAST. yaşamaya devam etsin.';
+
+  @override
+  String get operationFailedRetry =>
+      'Bu işlem tamamlanamadı. Lütfen tekrar dene.';
+
+  @override
+  String get restoreRequestSent =>
+      'Geri yükleme isteği gönderildi. Tutucu erişimi otomatik olarak güncellenecek.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'Önceki bir geri yükleme hâlâ tamamlanıyor. Tutucu erişimi otomatik olarak güncellenecek; yeniden denemeden önce EAST.’i yeniden aç.';
+
+  @override
+  String get opening => 'Açılıyor.';
+
+  @override
+  String get supportEmailSubject => 'EAST. Destek';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Kalan sözlerin ve Yansımaların bu iPhone’da kalacak.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'iCloud kopyaları kaldırılacak ve iCloud Eşzamanlama kapanacak.';
+
+  @override
+  String get enableIcloudQuestion => 'iCloud Eşzamanlama etkinleştirilsin mi?';
+
+  @override
+  String get enableIcloudData =>
+      'Kalan sözlerin ve Yansımaların özel iCloud veritabanında saklanacak ve aygıtların arasında eşzamanlanacak.';
+
+  @override
+  String get dailyRitualOnDevice => 'Günlük ritüel zamanın bu aygıtta kalır.';
+
+  @override
+  String get removeUpper => 'KALDIR';
+
+  @override
+  String get saveUpper => 'KAYDET';
+
+  @override
+  String get enableUpper => 'ETKİNLEŞTİR';
+
+  @override
+  String get icloudEnabling => 'Etkinleştiriliyor…';
+
+  @override
+  String get icloudEnabled => 'Etkin';
+
+  @override
+  String get icloudNotEnabled => 'Etkin değil';
+
+  @override
+  String get icloudRemovalStarting => 'Başlatılıyor…';
+
+  @override
+  String get icloudRemovalCompleted => 'iCloud’dan kaldırıldı.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Kaldırma bekliyor. iCloud hazır olduğunda EAST. tamamlayacak.';
+
+  @override
+  String get icloudRemovalIdle => 'iCloud kopyalarını kaldır.';
+
+  @override
+  String get icloudRemovalNone => 'Kaldırılacak bir şey yok.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Yansıma kaydedilemedi. Lütfen tekrar dene.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Yansıma kaydedilemedi. Yazmaya devam ederken yeniden denenecek.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Yansıma silinemedi. Lütfen tekrar dene.';
 }

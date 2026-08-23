@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../controllers/locale_preference_controller.dart';
 import '../l10n/east_localizations.dart';
+import '../localization/east_locale_registry.dart';
 import '../theme/east_design.dart';
 import '../widgets/east_back_button.dart';
 
-/// The intentionally small, English-only language picker.
+/// EAST.'s immediate, persisted 15-language product picker.
 class LanguageSelectionScreen extends StatelessWidget {
   const LanguageSelectionScreen({
     super.key,
@@ -38,8 +39,7 @@ class LanguageSelectionScreen extends StatelessWidget {
           child: AnimatedBuilder(
             animation: localePreferenceController,
             builder: (context, _) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              return ListView(
                 children: [
                   Text(
                     l10n.language,
@@ -53,12 +53,16 @@ class LanguageSelectionScreen extends StatelessWidget {
                     locale: null,
                   ),
                   const Divider(height: 1, color: EastColors.divider),
-                  _option(
-                    context: context,
-                    key: const ValueKey('language-english-option'),
-                    label: l10n.english,
-                    locale: const Locale('en'),
-                  ),
+                  for (final definition in EastLocaleRegistry.targets) ...[
+                    _option(
+                      context: context,
+                      key: ValueKey('language-${definition.tag}-option'),
+                      label: definition.nativeName,
+                      locale: definition.locale,
+                    ),
+                    if (definition != EastLocaleRegistry.targets.last)
+                      const Divider(height: 1, color: EastColors.divider),
+                  ],
                 ],
               );
             },
@@ -76,7 +80,10 @@ class LanguageSelectionScreen extends StatelessWidget {
   }) {
     final selected = locale == null
         ? localePreferenceController.isSystemDefault
-        : localePreferenceController.explicitLocale == locale;
+        : EastLocaleRegistry.canonicalTag(
+              localePreferenceController.explicitLocale ?? const Locale('en'),
+            ) ==
+            EastLocaleRegistry.canonicalTag(locale);
     final l10n = eastLocalizations(context);
     return Semantics(
       button: true,

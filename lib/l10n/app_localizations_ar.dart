@@ -313,4 +313,83 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'أبقِ EAST. حيًا.';
+
+  @override
+  String get operationFailedRetry => 'تعذّر إتمام ذلك. حاول مرة أخرى.';
+
+  @override
+  String get restoreRequestSent =>
+      'تم إرسال طلب الاستعادة. سيُحدَّث وصول Keeper تلقائيًا.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'ما زالت استعادة سابقة قيد التسوية. سيُحدَّث وصول Keeper تلقائيًا؛ أعد فتح EAST. قبل المحاولة مرة أخرى.';
+
+  @override
+  String get opening => 'جارٍ الفتح.';
+
+  @override
+  String get supportEmailSubject => 'دعم EAST.';
+
+  @override
+  String get removeIcloudLocalData =>
+      'ستبقى الحكم المحفوظة والتأملات على هذا الـ iPhone.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'ستُزال نسخها من iCloud، وسيتوقف تزامن iCloud.';
+
+  @override
+  String get enableIcloudQuestion => 'تفعيل تزامن iCloud؟';
+
+  @override
+  String get enableIcloudData =>
+      'ستُحفظ الحكم المحفوظة والتأملات في قاعدة بيانات iCloud الخاصة بك وتُزامن بين أجهزتك.';
+
+  @override
+  String get dailyRitualOnDevice => 'يبقى توقيت طقسِك اليومي على هذا الجهاز.';
+
+  @override
+  String get removeUpper => 'إزالة';
+
+  @override
+  String get saveUpper => 'حفظ';
+
+  @override
+  String get enableUpper => 'تفعيل';
+
+  @override
+  String get icloudEnabling => 'جارٍ التفعيل…';
+
+  @override
+  String get icloudEnabled => 'مفعّل';
+
+  @override
+  String get icloudNotEnabled => 'غير مفعّل';
+
+  @override
+  String get icloudRemovalStarting => 'جارٍ البدء…';
+
+  @override
+  String get icloudRemovalCompleted => 'تمت الإزالة من iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'الإزالة معلّقة. سيكمل EAST. عند توفر iCloud.';
+
+  @override
+  String get icloudRemovalIdle => 'أزل نسخك من iCloud.';
+
+  @override
+  String get icloudRemovalNone => 'لا شيء لإزالته.';
+
+  @override
+  String get reflectionSaveFailed => 'تعذّر حفظ التأمل. حاول مرة أخرى.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'تعذّر حفظ التأمل. ستتم المحاولة مجددًا أثناء مواصلة الكتابة.';
+
+  @override
+  String get reflectionDeleteFailed => 'تعذّر حذف التأمل. حاول مرة أخرى.';
 }

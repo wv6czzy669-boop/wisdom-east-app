@@ -316,6 +316,89 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'Mantenha EAST. vivo.';
+
+  @override
+  String get operationFailedRetry =>
+      'Não foi possível concluir. Tente novamente.';
+
+  @override
+  String get restoreRequestSent =>
+      'Solicitação de restauração enviada. O acesso ao Keeper será atualizado automaticamente.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'Uma restauração anterior ainda está sendo conciliada. O acesso ao Keeper será atualizado automaticamente; reabra o EAST. antes de tentar novamente.';
+
+  @override
+  String get opening => 'Abrindo.';
+
+  @override
+  String get supportEmailSubject => 'Suporte EAST.';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Suas sabedorias guardadas e Reflexões permanecerão neste iPhone.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'As cópias no iCloud serão removidas, e a Sincronização do iCloud será desativada.';
+
+  @override
+  String get enableIcloudQuestion => 'Ativar a Sincronização do iCloud?';
+
+  @override
+  String get enableIcloudData =>
+      'Suas sabedorias guardadas e Reflexões serão armazenadas no seu banco de dados privado do iCloud e sincronizadas entre seus dispositivos.';
+
+  @override
+  String get dailyRitualOnDevice =>
+      'O horário do seu ritual diário permanece neste dispositivo.';
+
+  @override
+  String get removeUpper => 'REMOVER';
+
+  @override
+  String get saveUpper => 'SALVAR';
+
+  @override
+  String get enableUpper => 'ATIVAR';
+
+  @override
+  String get icloudEnabling => 'Ativando…';
+
+  @override
+  String get icloudEnabled => 'Ativada';
+
+  @override
+  String get icloudNotEnabled => 'Não ativada';
+
+  @override
+  String get icloudRemovalStarting => 'Iniciando…';
+
+  @override
+  String get icloudRemovalCompleted => 'Removido do iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Remoção pendente. EAST. concluirá quando o iCloud estiver disponível.';
+
+  @override
+  String get icloudRemovalIdle => 'Remova suas cópias do iCloud.';
+
+  @override
+  String get icloudRemovalNone => 'Não há nada para remover.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Não foi possível salvar a Reflexão. Tente novamente.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Não foi possível salvar a Reflexão. Uma nova tentativa será feita enquanto você escreve.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Não foi possível excluir a Reflexão. Tente novamente.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -630,4 +713,87 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get keepEastAlive => 'Mantenha EAST. vivo.';
+
+  @override
+  String get operationFailedRetry =>
+      'Não foi possível concluir. Tente novamente.';
+
+  @override
+  String get restoreRequestSent =>
+      'Solicitação de restauração enviada. O acesso ao Keeper será atualizado automaticamente.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'Uma restauração anterior ainda está sendo conciliada. O acesso ao Keeper será atualizado automaticamente; reabra o EAST. antes de tentar novamente.';
+
+  @override
+  String get opening => 'Abrindo.';
+
+  @override
+  String get supportEmailSubject => 'Suporte EAST.';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Suas sabedorias guardadas e Reflexões permanecerão neste iPhone.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'As cópias no iCloud serão removidas, e a Sincronização do iCloud será desativada.';
+
+  @override
+  String get enableIcloudQuestion => 'Ativar a Sincronização do iCloud?';
+
+  @override
+  String get enableIcloudData =>
+      'Suas sabedorias guardadas e Reflexões serão armazenadas no seu banco de dados privado do iCloud e sincronizadas entre seus dispositivos.';
+
+  @override
+  String get dailyRitualOnDevice =>
+      'O horário do seu ritual diário permanece neste dispositivo.';
+
+  @override
+  String get removeUpper => 'REMOVER';
+
+  @override
+  String get saveUpper => 'SALVAR';
+
+  @override
+  String get enableUpper => 'ATIVAR';
+
+  @override
+  String get icloudEnabling => 'Ativando…';
+
+  @override
+  String get icloudEnabled => 'Ativada';
+
+  @override
+  String get icloudNotEnabled => 'Não ativada';
+
+  @override
+  String get icloudRemovalStarting => 'Iniciando…';
+
+  @override
+  String get icloudRemovalCompleted => 'Removido do iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Remoção pendente. EAST. concluirá quando o iCloud estiver disponível.';
+
+  @override
+  String get icloudRemovalIdle => 'Remova suas cópias do iCloud.';
+
+  @override
+  String get icloudRemovalNone => 'Não há nada para remover.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Não foi possível salvar a Reflexão. Tente novamente.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Não foi possível salvar a Reflexão. Uma nova tentativa será feita enquanto você escreve.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Não foi possível excluir a Reflexão. Tente novamente.';
 }

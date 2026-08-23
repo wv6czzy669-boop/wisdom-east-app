@@ -303,6 +303,79 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get keepEastAlive => '讓 EAST. 延續。';
+
+  @override
+  String get operationFailedRetry => '無法完成，請再試一次。';
+
+  @override
+  String get restoreRequestSent => '已送出回復請求。Keeper 權限將自動更新。';
+
+  @override
+  String get restoreRecoveryPending =>
+      '先前的回復仍在處理中。Keeper 權限將自動更新；再次嘗試前請重新開啟 EAST.。';
+
+  @override
+  String get opening => '正在開啟。';
+
+  @override
+  String get supportEmailSubject => 'EAST. 支援';
+
+  @override
+  String get removeIcloudLocalData => '保留的智慧與反思會留在這部 iPhone 上。';
+
+  @override
+  String get removeIcloudCloudData => '它們的 iCloud 副本會被移除，iCloud 同步也會關閉。';
+
+  @override
+  String get enableIcloudQuestion => '啟用 iCloud 同步？';
+
+  @override
+  String get enableIcloudData => '保留的智慧與反思會儲存在你的私人 iCloud 資料庫中，並在裝置間同步。';
+
+  @override
+  String get dailyRitualOnDevice => '每日儀式的時間仍會留在此裝置上。';
+
+  @override
+  String get removeUpper => '移除';
+
+  @override
+  String get saveUpper => '儲存';
+
+  @override
+  String get enableUpper => '啟用';
+
+  @override
+  String get icloudEnabling => '正在啟用…';
+
+  @override
+  String get icloudEnabled => '已啟用';
+
+  @override
+  String get icloudNotEnabled => '未啟用';
+
+  @override
+  String get icloudRemovalStarting => '正在開始…';
+
+  @override
+  String get icloudRemovalCompleted => '已從 iCloud 移除。';
+
+  @override
+  String get icloudRemovalPending => '等待移除。iCloud 可用時 EAST. 會完成。';
+
+  @override
+  String get icloudRemovalIdle => '移除你的 iCloud 副本。';
+
+  @override
+  String get icloudRemovalNone => '沒有可移除的內容。';
+
+  @override
+  String get reflectionSaveFailed => '無法儲存反思，請再試一次。';
+
+  @override
+  String get reflectionAutosaveFailed => '無法儲存反思；你繼續書寫時會再試一次。';
+
+  @override
+  String get reflectionDeleteFailed => '無法刪除反思，請再試一次。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -604,4 +677,77 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get keepEastAlive => '讓 EAST. 延續。';
+
+  @override
+  String get operationFailedRetry => '無法完成，請再試一次。';
+
+  @override
+  String get restoreRequestSent => '已送出回復請求。Keeper 權限將自動更新。';
+
+  @override
+  String get restoreRecoveryPending =>
+      '先前的回復仍在處理中。Keeper 權限將自動更新；再次嘗試前請重新開啟 EAST.。';
+
+  @override
+  String get opening => '正在開啟。';
+
+  @override
+  String get supportEmailSubject => 'EAST. 支援';
+
+  @override
+  String get removeIcloudLocalData => '保留的智慧與反思會留在這部 iPhone 上。';
+
+  @override
+  String get removeIcloudCloudData => '它們的 iCloud 副本會被移除，iCloud 同步也會關閉。';
+
+  @override
+  String get enableIcloudQuestion => '啟用 iCloud 同步？';
+
+  @override
+  String get enableIcloudData => '保留的智慧與反思會儲存在你的私人 iCloud 資料庫中，並在裝置間同步。';
+
+  @override
+  String get dailyRitualOnDevice => '每日儀式的時間仍會留在此裝置上。';
+
+  @override
+  String get removeUpper => '移除';
+
+  @override
+  String get saveUpper => '儲存';
+
+  @override
+  String get enableUpper => '啟用';
+
+  @override
+  String get icloudEnabling => '正在啟用…';
+
+  @override
+  String get icloudEnabled => '已啟用';
+
+  @override
+  String get icloudNotEnabled => '未啟用';
+
+  @override
+  String get icloudRemovalStarting => '正在開始…';
+
+  @override
+  String get icloudRemovalCompleted => '已從 iCloud 移除。';
+
+  @override
+  String get icloudRemovalPending => '等待移除。iCloud 可用時 EAST. 會完成。';
+
+  @override
+  String get icloudRemovalIdle => '移除你的 iCloud 副本。';
+
+  @override
+  String get icloudRemovalNone => '沒有可移除的內容。';
+
+  @override
+  String get reflectionSaveFailed => '無法儲存反思，請再試一次。';
+
+  @override
+  String get reflectionAutosaveFailed => '無法儲存反思；你繼續書寫時會再試一次。';
+
+  @override
+  String get reflectionDeleteFailed => '無法刪除反思，請再試一次。';
 }

@@ -233,7 +233,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('EAST. Productions could not be opened.'),
+      find.text('This could not be completed. Please try again.'),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -254,7 +254,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('EAST. Productions could not be opened.'),
+      find.text('This could not be completed. Please try again.'),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -317,8 +317,8 @@ void main() {
       ),
     );
 
-    expect(find.text('JUNE 21, 2026'), findsOneWidget);
-    final displayedDate = tester.widget<Text>(find.text('JUNE 21, 2026'));
+    expect(find.text('June 21, 2026'), findsOneWidget);
+    final displayedDate = tester.widget<Text>(find.text('June 21, 2026'));
     expect(displayedDate.style?.color, eastMutedTextColor);
     // The repository's own `keptAt`-derived display date — never a
     // text/date value fabricated by the test.
@@ -451,7 +451,8 @@ void main() {
     await tester.tap(privacyPolicyRow);
     await tester.pump();
 
-    expect(find.text('Privacy Policy could not be opened.'), findsOneWidget);
+    expect(find.text('This could not be completed. Please try again.'),
+        findsOneWidget);
   });
 
   testWidgets('Privacy Policy launch throw shows restrained feedback',
@@ -473,7 +474,8 @@ void main() {
     await tester.tap(privacyPolicyRow);
     await tester.pump();
 
-    expect(find.text('Privacy Policy could not be opened.'), findsOneWidget);
+    expect(find.text('This could not be completed. Please try again.'),
+        findsOneWidget);
   });
 
   testWidgets('Reach Out launch success uses mailto without feedback',
@@ -519,7 +521,8 @@ void main() {
     await tester.tap(reachOutRow);
     await tester.pump();
 
-    expect(find.text('Reach Out could not be opened.'), findsOneWidget);
+    expect(find.text('This could not be completed. Please try again.'),
+        findsOneWidget);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -536,7 +539,8 @@ void main() {
     await tester.tap(reachOutRow);
     await tester.pump();
 
-    expect(find.text('Reach Out could not be opened.'), findsOneWidget);
+    expect(find.text('This could not be completed. Please try again.'),
+        findsOneWidget);
   });
 
   testWidgets('rapid external taps produce one launch and one failure feedback',
@@ -579,7 +583,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Privacy Policy could not be opened.'), findsOneWidget);
+    expect(find.text('This could not be completed. Please try again.'),
+        findsOneWidget);
   });
 
   testWidgets('external failure feedback is skipped after disposal',
@@ -606,7 +611,8 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Privacy Policy could not be opened.'), findsNothing);
+    expect(find.text('This could not be completed. Please try again.'),
+        findsNothing);
   });
 
   testWidgets('Settings rows expose one combined actionable semantic node',
@@ -657,7 +663,7 @@ void main() {
       );
 
       _expectSemanticNode(
-        label: 'Restore Purchases. Restore in progress.',
+        label: 'Restore Purchases. Preparing…',
         isButton: true,
         isEnabled: Tristate.isFalse,
         hasTap: false,

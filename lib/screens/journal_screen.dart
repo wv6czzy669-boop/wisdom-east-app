@@ -57,7 +57,7 @@ class JournalScreen extends StatefulWidget {
 
 class _JournalScreenState extends State<JournalScreen> {
   late final JournalOwnerService _ownerService;
-  late final JournalPdfBuilder _pdfBuilder;
+  late final JournalPdfBuilder? _injectedPdfBuilder;
   late final TextEditingController _nameController;
 
   _JournalStage _stage = _JournalStage.resolving;
@@ -122,7 +122,7 @@ class _JournalScreenState extends State<JournalScreen> {
   void initState() {
     super.initState();
     _ownerService = widget.journalOwnerService ?? JournalOwnerService();
-    _pdfBuilder = widget.pdfBuilder ?? JournalPdfBuilder();
+    _injectedPdfBuilder = widget.pdfBuilder;
     _nameController = TextEditingController();
     unawaited(_bootstrap());
   }
@@ -167,7 +167,13 @@ class _JournalScreenState extends State<JournalScreen> {
 
     final Uint8List bytes;
     try {
-      bytes = await _pdfBuilder.build(
+      final locale = Localizations.localeOf(context);
+      final pdfBuilder = _injectedPdfBuilder ??
+          JournalPdfBuilder(
+            localizations: eastLocalizations(context),
+            presentation: JournalPdfPresentation(locale: locale),
+          );
+      bytes = await pdfBuilder.build(
         items: widget.items,
         ownerName: _ownerName,
       );
@@ -341,6 +347,7 @@ class _JournalScreenState extends State<JournalScreen> {
   Widget _nameDecisionOverlay() {
     if (!_editingName) return const SizedBox.shrink();
     final controller = _nameEditController!;
+    final l10n = eastLocalizations(context);
 
     return Positioned.fill(
       child: Container(
@@ -380,7 +387,7 @@ class _JournalScreenState extends State<JournalScreen> {
                   cursorColor: EastColors.ink,
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Your name',
+                    hintText: l10n.yourName,
                     hintStyle: _style(26, color: EastColors.hint),
                     enabledBorder: const UnderlineInputBorder(
                       borderSide:
@@ -398,20 +405,20 @@ class _JournalScreenState extends State<JournalScreen> {
                   children: [
                     if (_ownerName != null) ...[
                       _nameDecisionLabel(
-                        'REMOVE',
+                        l10n.removeUpper,
                         onTap: () => unawaited(_removeNameEdit()),
                         color: EastColors.secondary,
                       ),
                       const SizedBox(width: 40),
                     ],
                     _nameDecisionLabel(
-                      'CANCEL',
+                      l10n.cancelUpper,
                       onTap: _cancelNameEdit,
                       color: EastColors.secondary,
                     ),
                     const SizedBox(width: 40),
                     _nameDecisionLabel(
-                      'SAVE',
+                      l10n.saveUpper,
                       onTap: () => unawaited(_saveNameEdit()),
                       color: EastColors.ink,
                     ),

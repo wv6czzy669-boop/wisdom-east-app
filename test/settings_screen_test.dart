@@ -609,8 +609,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Remove from iCloud could not be started. Please try '
-            'again.'),
+        find.text('This could not be completed. Please try again.'),
         findsOneWidget,
       );
       expect(find.text('Removed from iCloud.'), findsNothing);
@@ -751,7 +750,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Your data could not be exported. Please try again.'),
+        find.text('This could not be completed. Please try again.'),
         findsOneWidget,
       );
       // The screen remains fully usable -- every other row is still there.

@@ -3,6 +3,8 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../models/favorite_item.dart';
 
+typedef JournalDateFormatter = String Function(FavoriteItem item);
+
 /// The Journal body's single source of truth for the dimensions, typography,
 /// and widgets used both to measure an entry and to paint it in the PDF.
 class JournalBodyLayout {
@@ -64,12 +66,13 @@ class JournalBodyLayout {
     FavoriteItem item, {
     List<pw.Font> fontFallback = const <pw.Font>[],
     pw.TextDirection textDirection = pw.TextDirection.ltr,
+    JournalDateFormatter? dateFormatter,
   }) {
     final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          marginalDate(item),
+          dateFormatter?.call(item) ?? marginalDate(item),
           textDirection: textDirection,
           style: pw.TextStyle(
             font: font,
@@ -134,12 +137,13 @@ class JournalBodyLayout {
     FavoriteItem item, {
     List<pw.Font> fontFallback = const <pw.Font>[],
     pw.TextDirection textDirection = pw.TextDirection.ltr,
+    JournalDateFormatter? dateFormatter,
   }) {
     final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          marginalDate(item),
+          dateFormatter?.call(item) ?? marginalDate(item),
           textDirection: textDirection,
           style: pw.TextStyle(
             font: font,
@@ -221,6 +225,7 @@ class JournalLayoutPlanner {
     required pw.Font font,
     List<pw.Font> fontFallback = const <pw.Font>[],
     pw.TextDirection textDirection = pw.TextDirection.ltr,
+    JournalDateFormatter? dateFormatter,
   }) {
     final context = _measurementContext(font, fontFallback, textDirection);
     final availableHeight =
@@ -236,6 +241,7 @@ class JournalLayoutPlanner {
         font: font,
         fontFallback: fontFallback,
         textDirection: textDirection,
+        dateFormatter: dateFormatter,
         context: context,
       );
 
@@ -256,6 +262,7 @@ class JournalLayoutPlanner {
           font: font,
           fontFallback: fontFallback,
           textDirection: textDirection,
+          dateFormatter: dateFormatter,
           context: context,
         );
         if (nextHeight > availableHeight ||
@@ -322,6 +329,7 @@ class JournalLayoutPlanner {
     required pw.Font font,
     required List<pw.Font> fontFallback,
     required pw.TextDirection textDirection,
+    JournalDateFormatter? dateFormatter,
     required pw.Context context,
   }) {
     return pw.Widget.measure(
@@ -330,6 +338,7 @@ class JournalLayoutPlanner {
         item,
         fontFallback: fontFallback,
         textDirection: textDirection,
+        dateFormatter: dateFormatter,
       ),
       context: context,
       constraints: pw.BoxConstraints(maxWidth: JournalBodyLayout.contentWidth),

@@ -6,6 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/favorite_item.dart';
+import '../services/wisdom_localization_resolver.dart';
+import '../utils/date_formatter.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 import '../localization/east_locale_registry.dart';
@@ -63,6 +65,7 @@ class JournalPdfBuilder {
   final JournalLayoutPlanner _planner;
   final AppLocalizations _localizations;
   final JournalPdfPresentation _presentation;
+  static const _wisdomPresentation = WisdomLocalizationResolver();
 
   /// The quiet title-page date is intentionally only the publication year.
   static String headerYear(DateTime generatedAt) => '${generatedAt.year}';
@@ -159,14 +162,33 @@ class JournalPdfBuilder {
       ),
     );
 
+    final localizedItems = items
+        .map(
+          (item) => item.copyWith(
+            text: _wisdomPresentation.resolveItem(item, _presentation.locale),
+          ),
+        )
+        .toList(growable: false);
+    String dateFormatter(FavoriteItem item) => formatLocalizedDateOrLegacy(
+          timestamp:
+              item.keptAt == null ? null : DateTime.tryParse(item.keptAt!),
+          legacyDisplay: item.date,
+          localeTag: localeTagForDate(_presentation.locale),
+        );
     final groups = _planner.plan(
-      items,
+      localizedItems,
       font: fonts.primary,
       fontFallback: fonts.fallback,
       textDirection: textDirection,
+      dateFormatter: dateFormatter,
     );
     if (groups.isNotEmpty) {
-      document.addPage(_buildBody(fonts, groups, textDirection));
+      document.addPage(_buildBody(
+        fonts,
+        groups,
+        textDirection,
+        dateFormatter,
+      ));
     }
 
     document.addPage(_buildFinalPage());
@@ -339,6 +361,7 @@ class JournalPdfBuilder {
     _JournalPdfFonts fonts,
     List<JournalPageGroup> groups,
     pw.TextDirection textDirection,
+    JournalDateFormatter dateFormatter,
   ) {
     return pw.MultiPage(
       pageTheme: pw.PageTheme(
@@ -368,7 +391,9 @@ class JournalPdfBuilder {
         final widgets = <pw.Widget>[];
         for (var i = 0; i < groups.length; i++) {
           if (i > 0) widgets.add(pw.NewPage());
-          widgets.addAll(_buildGroup(fonts, groups[i], textDirection));
+          widgets.addAll(
+            _buildGroup(fonts, groups[i], textDirection, dateFormatter),
+          );
         }
         return widgets;
       },
@@ -379,6 +404,7 @@ class JournalPdfBuilder {
     _JournalPdfFonts fonts,
     JournalPageGroup group,
     pw.TextDirection textDirection,
+    JournalDateFormatter dateFormatter,
   ) {
     if (group.isOverflowing) {
       // The rare, genuinely-too-long-for-one-page occurrence: emitted as
@@ -391,6 +417,7 @@ class JournalPdfBuilder {
         group.entries.single,
         fontFallback: fonts.fallback,
         textDirection: textDirection,
+        dateFormatter: dateFormatter,
       );
     }
 
@@ -403,6 +430,7 @@ class JournalPdfBuilder {
           group.entries[i],
           fontFallback: fonts.fallback,
           textDirection: textDirection,
+          dateFormatter: dateFormatter,
         ),
       );
     }

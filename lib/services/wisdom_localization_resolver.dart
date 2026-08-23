@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../data/localized_wisdoms.dart';
 import '../data/wisdoms.dart';
 import '../localization/east_locale_registry.dart';
+import '../models/favorite_item.dart';
 
 /// Read-only future contract: locale changes resolve presentation only and
 /// never select, reveal, save, or otherwise create a wisdom occurrence.
@@ -26,6 +27,17 @@ class WisdomLocalizationResolver {
     final canonical = wisdomId == null ? null : _englishForId(wisdomId);
     return canonical ?? persistedSnapshot;
   }
+
+  /// Presentation-only adapter for persisted Kept/Reflection occurrences.
+  /// It never mutates [item], which keeps its snapshot, stable IDs, reveal
+  /// association, and CloudKit payload completely independent of locale.
+  String resolveItem(FavoriteItem item, Locale locale) =>
+      resolve(
+        wisdomId: item.wisdomId,
+        locale: locale,
+        persistedSnapshot: item.text,
+      ) ??
+      item.text;
 
   String? _englishForId(String wisdomId) {
     for (final wisdom in wisdoms) {

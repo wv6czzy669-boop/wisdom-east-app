@@ -25,7 +25,11 @@ void main() {
       ),
       'pt-BR',
     );
-    expect(EastLocaleRegistry.runtimeSupported, const <Locale>[Locale('en')]);
+    expect(EastLocaleRegistry.runtimeSupported, hasLength(15));
+    expect(
+      EastLocaleRegistry.runtimeSupported.map(EastLocaleRegistry.canonicalTag),
+      EastLocaleRegistry.targets.map((target) => target.tag),
+    );
   });
 
   test('Arabic is RTL and every other current target is LTR', () {

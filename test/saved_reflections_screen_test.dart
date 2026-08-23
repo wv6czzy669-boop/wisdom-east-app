@@ -98,8 +98,8 @@ void main() {
       ),
     );
 
-    expect(find.text('JULY 22, 2026'), findsOneWidget);
-    expect(find.text('JULY 23, 2026'), findsOneWidget);
+    expect(find.text('July 22, 2026'), findsOneWidget);
+    expect(find.text('July 23, 2026'), findsOneWidget);
     expect(find.text('KEPT'), findsOneWidget);
     expect(find.text('REFLECTED'), findsOneWidget);
     expect(find.text('ADD REFLECTION'), findsOneWidget);

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/controllers/locale_preference_controller.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
+import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
 
@@ -54,7 +55,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('Language screen offers only System Default and English',
+  testWidgets('Language screen offers System Default and exactly 15 products',
       (tester) async {
     final controller = LocalePreferenceController(
       storage: StoragePreferencesAdapter(),
@@ -71,11 +72,16 @@ void main() {
       find.byKey(const ValueKey('language-system-default-option')),
       findsOneWidget,
     );
-    expect(
-        find.byKey(const ValueKey('language-english-option')), findsOneWidget);
-    expect(find.text('System Default'), findsOneWidget);
-    expect(find.text('English'), findsOneWidget);
-    expect(find.text('Turkish'), findsNothing);
+    for (final locale in EastLocaleRegistry.targets) {
+      final option = find.byKey(ValueKey('language-${locale.tag}-option'));
+      await tester.scrollUntilVisible(option, 160);
+      expect(
+        option,
+        findsOneWidget,
+      );
+    }
+    expect(find.byKey(const ValueKey('language-pt-option')), findsNothing);
+    expect(find.byKey(const ValueKey('language-zh-option')), findsNothing);
   });
 
   testWidgets('selection applies immediately, persists, and is localized',
@@ -90,16 +96,16 @@ void main() {
     await tester.ensureVisible(languageRow);
     await tester.tap(languageRow);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('language-english-option')));
+    await tester.tap(find.byKey(const ValueKey('language-tr-option')));
     await tester.pumpAndSettle();
 
-    expect(controller.explicitLocale, const Locale('en'));
+    expect(controller.explicitLocale, const Locale('tr'));
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString(LocalePreferenceController.preferenceKey), 'en');
+    expect(prefs.getString(LocalePreferenceController.preferenceKey), 'tr');
 
     await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await tester.pumpAndSettle();
-    expect(find.text('English'), findsOneWidget);
+    expect(find.text('Türkçe'), findsOneWidget);
 
     final settingsLanguageRow =
         find.byKey(const ValueKey('settings-language-row'));

@@ -246,7 +246,7 @@ void main() {
       final expectedKeys = _messageKeys(english);
       final expectedMetadata = _metadataKeys(english);
 
-      expect(expectedKeys, hasLength(96));
+      expect(expectedKeys, hasLength(120));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');
@@ -256,6 +256,24 @@ void main() {
           reason: '$tag metadata keys',
         );
       }
+    });
+
+    test('completion-pass user-facing English literals stay in ARBs', () {
+      final settings =
+          File('lib/screens/settings_screen.dart').readAsStringSync();
+      final reflection =
+          File('lib/screens/reflection_screen.dart').readAsStringSync();
+      final journal =
+          File('lib/screens/journal_screen.dart').readAsStringSync();
+
+      expect(settings, contains('l10n.enableIcloudQuestion'));
+      expect(settings, contains('l10n.operationFailedRetry'));
+      expect(settings, contains('supportEmailSubject'));
+      expect(settings, isNot(contains('failureMessage: "Privacy Policy')));
+      expect(reflection, contains('reflectionAutosaveFailed'));
+      expect(reflection, contains('reflectionDeleteFailed'));
+      expect(journal, contains('l10n.removeUpper'));
+      expect(journal, contains('l10n.saveUpper'));
     });
 
     test('all placeholders and placeholder metadata match English', () {
@@ -386,16 +404,22 @@ void main() {
   });
 
   group('generated localization catalog', () {
-    test('all target resources generate while runtime remains English-only',
-        () {
+    test('all target resources generate and runtime exposes only products', () {
       final generatedTags = AppLocalizations.supportedLocales
           .map(EastLocaleRegistry.canonicalTag)
           .toSet();
       expect(generatedTags, _allArbFiles.keys.toSet());
-      expect(EastLocaleRegistry.runtimeSupported, const <Locale>[Locale('en')]);
+      expect(EastLocaleRegistry.runtimeSupported, hasLength(15));
+      final runtimeTags = EastLocaleRegistry.runtimeSupported
+          .map(EastLocaleRegistry.canonicalTag)
+          .toSet();
+      expect(runtimeTags,
+          EastLocaleRegistry.targets.map((item) => item.tag).toSet());
+      expect(runtimeTags, isNot(contains('pt')));
+      expect(runtimeTags, isNot(contains('zh')));
     });
 
-    testWidgets('WisdomApp exposes only the release-ready runtime locale',
+    testWidgets('WisdomApp exposes the reviewed product runtime locales',
         (tester) async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final localeController = LocalePreferenceController(

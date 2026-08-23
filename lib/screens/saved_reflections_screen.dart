@@ -10,9 +10,11 @@ import '../models/favorite_item.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../services/saved_reflections_service.dart';
+import '../services/wisdom_localization_resolver.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
+import '../utils/date_formatter.dart';
 import '../widgets/east_back_button.dart';
 import 'journal_screen.dart';
 import 'keeper_screen.dart';
@@ -37,6 +39,7 @@ class SavedReflectionsScreen extends StatefulWidget {
 }
 
 class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
+  static const _wisdomPresentation = WisdomLocalizationResolver();
   late List<FavoriteItem> _items;
   late final SavedReflectionsService _service;
   late final PurchaseService _purchaseService;
@@ -130,7 +133,14 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     });
   }
 
-  String _displayDate(String storedDate) => storedDate.toUpperCase();
+  String _displayDate(FavoriteItem item) => formatLocalizedDateOrLegacy(
+        timestamp: item.keptAt == null ? null : DateTime.tryParse(item.keptAt!),
+        legacyDisplay: item.date,
+        localeTag: localeTagForDate(Localizations.localeOf(context)),
+      );
+
+  String _displayWisdom(FavoriteItem item) =>
+      _wisdomPresentation.resolveItem(item, Localizations.localeOf(context));
 
   void _showMessage(String message) {
     if (!mounted) return;
@@ -159,7 +169,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       keptDiagnostic('kept-screen: reload-end itemCount=${loaded.length}');
     } catch (_) {
       keptDiagnostic('kept-screen: reload-failed');
-      _showMessage('Kept wisdoms could not be refreshed.');
+      _showMessage(eastLocalizations(context).wisdomCouldNotBeRemoved);
     }
   }
 
@@ -290,11 +300,12 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         key: ValueKey('kept-${item.id}'),
         itemId: item.id,
         deleteLabelStyle: _statusStyle,
+        deleteLabel: eastLocalizations(context).deleteUpper,
         onDelete: () => unawaited(_deleteItem(item)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_displayDate(item.date),
+            Text(_displayDate(item),
                 style: _style(
                   15,
                   color: eastMutedTextColor,
@@ -303,7 +314,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             const SizedBox(height: 5),
             _status(item),
             const SizedBox(height: 7),
-            Text(item.text, style: _style(24)),
+            Text(_displayWisdom(item), style: _style(24)),
             if (!item.hasReflection) ...[
               const SizedBox(height: 12),
               Semantics(
@@ -421,12 +432,14 @@ class _KeptSwipeToDeleteRow extends StatefulWidget {
     required this.itemId,
     required this.onDelete,
     required this.deleteLabelStyle,
+    required this.deleteLabel,
     required this.child,
   });
 
   final String itemId;
   final VoidCallback onDelete;
   final TextStyle deleteLabelStyle;
+  final String deleteLabel;
   final Widget child;
 
   @override
@@ -462,12 +475,17 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
     final delta = details.primaryDelta;
     if (delta == null) return;
+    final directionalDelta =
+        Directionality.of(context) == TextDirection.rtl ? -delta : delta;
     _controller.value =
-        (_controller.value - delta / _revealWidth).clamp(0.0, 1.0);
+        (_controller.value - directionalDelta / _revealWidth).clamp(0.0, 1.0);
   }
 
   void _handleHorizontalDragEnd(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
+    final rawVelocity = details.primaryVelocity ?? 0;
+    final velocity = Directionality.of(context) == TextDirection.rtl
+        ? -rawVelocity
+        : rawVelocity;
     final double target;
     if (velocity <= -_flingVelocityThreshold) {
       target = 1.0;
@@ -494,10 +512,10 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
           // pinned to the right edge. It is only hit-testable once fully
           // revealed (`_isOpen`); while closed it sits, inert, behind the
           // foreground row.
-          Positioned(
+          PositionedDirectional(
             top: 0,
             bottom: 0,
-            right: 0,
+            end: 0,
             width: _revealWidth,
             child: AnimatedBuilder(
               animation: _controller,
@@ -514,7 +532,10 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
                 child: Container(
                   alignment: Alignment.center,
                   color: EastColors.background,
-                  child: Text('DELETE', style: widget.deleteLabelStyle),
+                  child: Text(
+                    widget.deleteLabel,
+                    style: widget.deleteLabelStyle,
+                  ),
                 ),
               ),
             ),
@@ -526,8 +547,14 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
           AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
+              final direction = Directionality.of(context);
               return Transform.translate(
-                offset: Offset(-_revealWidth * _controller.value, 0),
+                offset: Offset(
+                  (direction == TextDirection.rtl ? 1 : -1) *
+                      _revealWidth *
+                      _controller.value,
+                  0,
+                ),
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onHorizontalDragUpdate: _handleHorizontalDragUpdate,

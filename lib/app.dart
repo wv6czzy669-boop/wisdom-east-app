@@ -64,32 +64,32 @@ class _WisdomAppState extends State<WisdomApp> {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _localePreferenceController,
-      builder: (context, _) => MaterialApp(
-        title: AppLocalizationsEn().appTitle,
-        onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
-        debugShowCheckedModeBanner: false,
-        theme: eastTheme(
-          locale:
-              _localePreferenceController.explicitLocale ?? const Locale('en'),
-        ),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        // Generated resources include the reviewed Phase 4C catalogs, but
-        // only the release-ready registry may participate in runtime locale
-        // resolution. The new catalogs remain hidden until wisdoms, fonts,
-        // PDFs, and layout regression are complete.
-        supportedLocales: EastLocaleRegistry.runtimeSupported,
-        locale: _localePreferenceController.explicitLocale,
-        localeResolutionCallback: (deviceLocale, supportedLocales) {
-          return LocalePreferenceController.resolveSystemLocale(
-            deviceLocale,
-            supportedLocales,
-          );
-        },
-        home: HomeScreen(
-          savedReflectionsService: widget.savedReflectionsService,
-          localePreferenceController: _localePreferenceController,
-        ),
-      ),
+      builder: (context, _) {
+        final effectiveThemeLocale =
+            _localePreferenceController.explicitLocale ??
+                EastLocaleRegistry.resolveProductLocale(
+                  WidgetsBinding.instance.platformDispatcher.locale,
+                );
+        return MaterialApp(
+          title: AppLocalizationsEn().appTitle,
+          onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+          debugShowCheckedModeBanner: false,
+          theme: eastTheme(locale: effectiveThemeLocale),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: EastLocaleRegistry.runtimeSupported,
+          locale: _localePreferenceController.explicitLocale,
+          localeResolutionCallback: (deviceLocale, supportedLocales) {
+            return LocalePreferenceController.resolveSystemLocale(
+              deviceLocale,
+              supportedLocales,
+            );
+          },
+          home: HomeScreen(
+            savedReflectionsService: widget.savedReflectionsService,
+            localePreferenceController: _localePreferenceController,
+          ),
+        );
+      },
     );
   }
 }

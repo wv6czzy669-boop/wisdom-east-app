@@ -313,4 +313,83 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'ให้ EAST. ดำเนินต่อไป.';
+
+  @override
+  String get operationFailedRetry => 'ดำเนินการไม่สำเร็จ โปรดลองอีกครั้ง';
+
+  @override
+  String get restoreRequestSent =>
+      'ส่งคำขอกู้คืนแล้ว สิทธิ์ Keeper จะอัปเดตโดยอัตโนมัติ';
+
+  @override
+  String get restoreRecoveryPending =>
+      'ยังตรวจสอบการกู้คืนก่อนหน้าอยู่ สิทธิ์ Keeper จะอัปเดตโดยอัตโนมัติ โปรดเปิด EAST. ใหม่ก่อนลองอีกครั้ง';
+
+  @override
+  String get opening => 'กำลังเปิด';
+
+  @override
+  String get supportEmailSubject => 'EAST. การสนับสนุน';
+
+  @override
+  String get removeIcloudLocalData =>
+      'ปัญญาที่เก็บไว้และบันทึกสะท้อนคิดจะอยู่บน iPhone เครื่องนี้';
+
+  @override
+  String get removeIcloudCloudData =>
+      'สำเนาใน iCloud จะถูกลบ และการซิงค์ iCloud จะปิดลง';
+
+  @override
+  String get enableIcloudQuestion => 'เปิดใช้การซิงค์ iCloud?';
+
+  @override
+  String get enableIcloudData =>
+      'ปัญญาที่เก็บไว้และบันทึกสะท้อนคิดจะถูกเก็บในฐานข้อมูล iCloud ส่วนตัวและซิงค์ระหว่างอุปกรณ์ของคุณ';
+
+  @override
+  String get dailyRitualOnDevice => 'เวลาของพิธีกรรมประจำวันจะอยู่บนอุปกรณ์นี้';
+
+  @override
+  String get removeUpper => 'ลบ';
+
+  @override
+  String get saveUpper => 'บันทึก';
+
+  @override
+  String get enableUpper => 'เปิดใช้';
+
+  @override
+  String get icloudEnabling => 'กำลังเปิดใช้…';
+
+  @override
+  String get icloudEnabled => 'เปิดใช้แล้ว';
+
+  @override
+  String get icloudNotEnabled => 'ยังไม่เปิดใช้';
+
+  @override
+  String get icloudRemovalStarting => 'กำลังเริ่ม…';
+
+  @override
+  String get icloudRemovalCompleted => 'นำออกจาก iCloud แล้ว';
+
+  @override
+  String get icloudRemovalPending =>
+      'กำลังรอการนำออก EAST. จะทำให้เสร็จเมื่อ iCloud พร้อมใช้งาน';
+
+  @override
+  String get icloudRemovalIdle => 'นำสำเนา iCloud ของคุณออก';
+
+  @override
+  String get icloudRemovalNone => 'ไม่มีสิ่งที่จะนำออก';
+
+  @override
+  String get reflectionSaveFailed => 'บันทึกการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'บันทึกการสะท้อนคิดไม่ได้ ระบบจะลองอีกครั้งขณะที่คุณเขียนต่อ';
+
+  @override
+  String get reflectionDeleteFailed => 'ลบการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง';
 }

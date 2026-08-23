@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/controllers/locale_preference_controller.dart';
+import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 
 void main() {
@@ -58,7 +59,7 @@ void main() {
     expect(corrupt.isSystemDefault, isTrue);
 
     SharedPreferences.setMockInitialValues(<String, Object>{
-      LocalePreferenceController.preferenceKey: 'tr-TR',
+      LocalePreferenceController.preferenceKey: 'sv-SE',
     });
     final unsupported = controller();
     await unsupported.load();
@@ -67,7 +68,7 @@ void main() {
 
   test('System Default resolves supported devices and falls back to English',
       () {
-    const supported = <Locale>[Locale('en')];
+    final supported = EastLocaleRegistry.runtimeSupported;
 
     expect(
       LocalePreferenceController.resolveSystemLocale(
@@ -81,11 +82,32 @@ void main() {
         const Locale.fromSubtags(languageCode: 'tr', countryCode: 'TR'),
         supported,
       ),
-      const Locale('en'),
+      const Locale('tr'),
     );
     expect(
       LocalePreferenceController.resolveSystemLocale(
         const Locale.fromSubtags(languageCode: 'ja', countryCode: 'JP'),
+        supported,
+      ),
+      const Locale('ja'),
+    );
+    expect(
+      LocalePreferenceController.resolveSystemLocale(
+        const Locale.fromSubtags(languageCode: 'zh', countryCode: 'TW'),
+        supported,
+      ),
+      const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+    );
+    expect(
+      LocalePreferenceController.resolveSystemLocale(
+        const Locale.fromSubtags(languageCode: 'zh', countryCode: 'CN'),
+        supported,
+      ),
+      const Locale('en'),
+    );
+    expect(
+      LocalePreferenceController.resolveSystemLocale(
+        const Locale.fromSubtags(languageCode: 'pt', countryCode: 'PT'),
         supported,
       ),
       const Locale('en'),
@@ -132,7 +154,7 @@ void main() {
     });
     final preference = controller();
 
-    await preference.setExplicitLocale(const Locale('en'));
+    await preference.setExplicitLocale(const Locale('tr'));
     await preference.setExplicitLocale(null);
 
     final prefs = await SharedPreferences.getInstance();

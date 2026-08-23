@@ -303,4 +303,78 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'EAST.を生かし続ける。';
+
+  @override
+  String get operationFailedRetry => '完了できませんでした。もう一度お試しください。';
+
+  @override
+  String get restoreRequestSent => '復元リクエストを送信しました。Keeperへのアクセスは自動的に更新されます。';
+
+  @override
+  String get restoreRecoveryPending =>
+      '以前の復元を確認中です。Keeperへのアクセスは自動的に更新されます。再試行する前にEAST.を開き直してください。';
+
+  @override
+  String get opening => '開いています。';
+
+  @override
+  String get supportEmailSubject => 'EAST. サポート';
+
+  @override
+  String get removeIcloudLocalData => '残したものと内省は、このiPhoneに残ります。';
+
+  @override
+  String get removeIcloudCloudData => 'iCloud上のコピーは削除され、iCloud同期はオフになります。';
+
+  @override
+  String get enableIcloudQuestion => 'iCloud同期を有効にしますか？';
+
+  @override
+  String get enableIcloudData =>
+      '残したものと内省は、プライベートなiCloudデータベースに保存され、デバイス間で同期されます。';
+
+  @override
+  String get dailyRitualOnDevice => '毎日のリチュアルの時間はこのデバイスに残ります。';
+
+  @override
+  String get removeUpper => '削除';
+
+  @override
+  String get saveUpper => '保存';
+
+  @override
+  String get enableUpper => '有効にする';
+
+  @override
+  String get icloudEnabling => '有効にしています…';
+
+  @override
+  String get icloudEnabled => '有効';
+
+  @override
+  String get icloudNotEnabled => '無効';
+
+  @override
+  String get icloudRemovalStarting => '開始しています…';
+
+  @override
+  String get icloudRemovalCompleted => 'iCloudから削除しました。';
+
+  @override
+  String get icloudRemovalPending => '削除待ちです。iCloudが利用可能になるとEAST.が完了します。';
+
+  @override
+  String get icloudRemovalIdle => 'iCloudのコピーを削除します。';
+
+  @override
+  String get icloudRemovalNone => '削除するものはありません。';
+
+  @override
+  String get reflectionSaveFailed => 'リフレクションを保存できませんでした。もう一度お試しください。';
+
+  @override
+  String get reflectionAutosaveFailed => 'リフレクションを保存できませんでした。書き続ける間にもう一度試します。';
+
+  @override
+  String get reflectionDeleteFailed => 'リフレクションを削除できませんでした。もう一度お試しください。';
 }

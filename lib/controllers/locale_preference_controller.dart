@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../localization/east_locale_registry.dart';
 import '../persistence/storage_preferences_adapter.dart';
 
 /// Owns EAST.'s explicit locale override.
@@ -11,7 +12,7 @@ import '../persistence/storage_preferences_adapter.dart';
 class LocalePreferenceController extends ChangeNotifier {
   LocalePreferenceController({
     StoragePreferencesAdapter? storage,
-    List<Locale> supportedLocales = const <Locale>[Locale('en')],
+    List<Locale> supportedLocales = EastLocaleRegistry.runtimeSupported,
   })  : _storage = storage ?? StoragePreferencesAdapter(),
         _supportedLocales = List<Locale>.unmodifiable(supportedLocales);
 
@@ -47,7 +48,9 @@ class LocalePreferenceController extends ChangeNotifier {
     if (_changedDuringLoad) return;
 
     final parsed = parseBcp47Tag(rawTag);
-    final resolved = parsed != null && _isSupported(parsed) ? parsed : null;
+    final canonical = EastLocaleRegistry.productLocaleOrNull(parsed);
+    final resolved =
+        canonical != null && _isSupported(canonical) ? canonical : null;
     if (_sameLocale(_explicitLocale, resolved)) return;
 
     _explicitLocale = resolved;
@@ -59,8 +62,7 @@ class LocalePreferenceController extends ChangeNotifier {
   /// to System Default and removes the durable override.
   Future<void> setExplicitLocale(Locale? locale) async {
     _changedDuringLoad = true;
-    final normalized =
-        locale == null ? null : parseBcp47Tag(toBcp47Tag(locale));
+    final normalized = EastLocaleRegistry.productLocaleOrNull(locale);
     final next =
         normalized != null && _isSupported(normalized) ? normalized : null;
 
@@ -130,9 +132,7 @@ class LocalePreferenceController extends ChangeNotifier {
     );
   }
 
-  /// Resolves System Default against the locales actually translated by this
-  /// build. Exact script/region matches win, then a matching language, then
-  /// English's current first-supported fallback.
+  /// Resolves System Default through EAST.'s approved product mapping.
   static Locale resolveSystemLocale(
     Locale? deviceLocale,
     Iterable<Locale> supportedLocales,
@@ -141,15 +141,9 @@ class LocalePreferenceController extends ChangeNotifier {
     assert(supported.isNotEmpty, 'EAST. must always support English.');
     if (supported.isEmpty) return const Locale('en');
     if (deviceLocale == null) return supported.first;
-
+    final productLocale = EastLocaleRegistry.resolveProductLocale(deviceLocale);
     for (final candidate in supported) {
-      if (_sameLocale(candidate, deviceLocale)) return candidate;
-    }
-    for (final candidate in supported) {
-      if (candidate.languageCode.toLowerCase() ==
-          deviceLocale.languageCode.toLowerCase()) {
-        return candidate;
-      }
+      if (_sameLocale(candidate, productLocale)) return candidate;
     }
     return supported.first;
   }

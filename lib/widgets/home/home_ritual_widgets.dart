@@ -472,10 +472,10 @@ class _HomeTopNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
+    return PositionedDirectional(
       key: const ValueKey('top-navigation'),
       top: 0,
-      right: 8,
+      end: 8,
       child: SizedBox.square(
         dimension: 48,
         // The explicit Semantics node is the single accessibility source of
@@ -487,7 +487,7 @@ class _HomeTopNavigation extends StatelessWidget {
           excludeFromSemantics: true,
           child: Semantics(
             label: eastLocalizations(context).keptWisdoms,
-            hint: 'Double tap to view wisdoms you have kept',
+            hint: eastLocalizations(context).keptWisdoms,
             button: true,
             onTap: onKeptPressed,
             child: ExcludeSemantics(
@@ -605,10 +605,10 @@ class _HomeSettingsMenuControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
+    return PositionedDirectional(
       key: const ValueKey('settings-menu-control'),
       top: 0,
-      left: 8,
+      start: 8,
       child: SizedBox.square(
         dimension: 48,
         // Correction: the `Tooltip` wrapper is removed entirely — explicit,
@@ -706,9 +706,13 @@ class _HomeSaveControl extends StatelessWidget {
     // Item 4: the save ring is one-way from Home. Unsaved wisdom exposes a
     // real "keep" action; already-kept wisdom exposes no action at all (no
     // remove/no toggle-off) — deletion only happens inside Kept.
-    final label = isCurrentFavorite ? 'Kept' : 'Keep this wisdom';
-    final value = isCurrentFavorite ? 'Kept' : 'Not kept';
-    final hint = isCurrentFavorite ? null : 'Double tap to keep this wisdom';
+    final l10n = eastLocalizations(context);
+    final keepLabel = l10n.keepThisWisdom.replaceFirst(RegExp(r'[.!。]$'), '');
+    final label = isCurrentFavorite ? l10n.kept : keepLabel;
+    final value = label;
+    // Let the platform provide its localized tap-action instruction instead
+    // of embedding an English VoiceOver hint in the product UI.
+    final hint = null;
 
     final glyph = SizedBox.square(
       dimension: 31,
@@ -898,22 +902,22 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    return Positioned(
+    return PositionedDirectional(
       top: size.height / 2 + 72,
       height: _ringDiameter,
-      left: size.width / 2 + (_ringDiameter / 2) + _ringGap,
-      right: 24,
+      start: size.width / 2 + (_ringDiameter / 2) + _ringGap,
+      end: 24,
       child: ExcludeSemantics(
         child: IgnorePointer(
           child: Align(
-            alignment: Alignment.centerLeft,
+            alignment: AlignmentDirectional.centerStart,
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeOutCubic,
               opacity: opacity,
               child: Text(
                 text,
-                textAlign: TextAlign.left,
+                textAlign: TextAlign.start,
                 style: EastTypography.localized(
                   context,
                   size: 14.5,

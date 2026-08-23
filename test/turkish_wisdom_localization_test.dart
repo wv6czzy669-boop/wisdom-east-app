@@ -241,10 +241,8 @@ void main() {
           record.reflectionText, 'Kullanıcının özgün yansıması — unchanged.');
     });
 
-    test('Turkish remains hidden from runtime locale resolution', () {
-      expect(EastLocaleRegistry.runtimeSupported, const <Locale>[Locale('en')]);
-      expect(EastLocaleRegistry.runtimeSupported,
-          isNot(contains(const Locale('tr'))));
+    test('Turkish is an approved runtime product locale', () {
+      expect(EastLocaleRegistry.runtimeSupported, contains(const Locale('tr')));
     });
   });
 

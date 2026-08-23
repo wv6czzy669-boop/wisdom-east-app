@@ -315,4 +315,86 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'Giữ cho EAST. tiếp tục sống.';
+
+  @override
+  String get operationFailedRetry => 'Không thể hoàn tất. Vui lòng thử lại.';
+
+  @override
+  String get restoreRequestSent =>
+      'Đã gửi yêu cầu khôi phục. Quyền truy cập Keeper sẽ tự động cập nhật.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'Một lần khôi phục trước vẫn đang được đối chiếu. Quyền truy cập Keeper sẽ tự động cập nhật; hãy mở lại EAST. trước khi thử lại.';
+
+  @override
+  String get opening => 'Đang mở.';
+
+  @override
+  String get supportEmailSubject => 'Hỗ trợ EAST.';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Những điều được giữ lại và Suy ngẫm của bạn sẽ vẫn ở trên iPhone này.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'Các bản sao iCloud của chúng sẽ bị xóa và Đồng bộ iCloud sẽ tắt.';
+
+  @override
+  String get enableIcloudQuestion => 'Bật Đồng bộ iCloud?';
+
+  @override
+  String get enableIcloudData =>
+      'Những điều được giữ lại và Suy ngẫm của bạn sẽ được lưu trong cơ sở dữ liệu iCloud riêng tư và đồng bộ giữa các thiết bị.';
+
+  @override
+  String get dailyRitualOnDevice =>
+      'Thời điểm nghi thức hằng ngày vẫn ở trên thiết bị này.';
+
+  @override
+  String get removeUpper => 'XÓA';
+
+  @override
+  String get saveUpper => 'LƯU';
+
+  @override
+  String get enableUpper => 'BẬT';
+
+  @override
+  String get icloudEnabling => 'Đang bật…';
+
+  @override
+  String get icloudEnabled => 'Đã bật';
+
+  @override
+  String get icloudNotEnabled => 'Chưa bật';
+
+  @override
+  String get icloudRemovalStarting => 'Đang bắt đầu…';
+
+  @override
+  String get icloudRemovalCompleted => 'Đã xóa khỏi iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Đang chờ xóa. EAST. sẽ hoàn tất khi iCloud khả dụng.';
+
+  @override
+  String get icloudRemovalIdle => 'Xóa các bản sao iCloud của bạn.';
+
+  @override
+  String get icloudRemovalNone => 'Không có gì để xóa.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Không thể lưu Suy ngẫm. Vui lòng thử lại.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Không thể lưu Suy ngẫm. Hệ thống sẽ thử lại khi bạn tiếp tục viết.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Không thể xóa Suy ngẫm. Vui lòng thử lại.';
 }

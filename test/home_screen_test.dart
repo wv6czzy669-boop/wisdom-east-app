@@ -2838,7 +2838,7 @@ void main() {
       key: 'home-kept-control',
       overlayLabel: 'Kept',
       semanticsLabel: 'Kept wisdoms',
-      semanticsHint: 'Double tap to view wisdoms you have kept',
+      semanticsHint: 'Kept wisdoms',
       destinationKey: 'kept-screen-root',
     ),
   ];
@@ -3044,8 +3044,8 @@ void main() {
       find.byKey(const ValueKey('home-save-control-unsaved')),
     );
     expect(unsavedNode.label, 'Keep this wisdom');
-    expect(unsavedNode.value, 'Not kept');
-    expect(unsavedNode.hint, 'Double tap to keep this wisdom');
+    expect(unsavedNode.value, 'Keep this wisdom');
+    expect(unsavedNode.hint, isEmpty);
     expect(
         unsavedNode.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     semantics.dispose();
@@ -3191,7 +3191,7 @@ void main() {
 
     // Saving ends the central discovery immediately and transitions
     // straight to "Kept.".
-    expect(find.text('Kept.'), findsOneWidget);
+    expect(find.text('Kept'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
     final saved = await keptGraph.service.load();
@@ -3225,7 +3225,7 @@ void main() {
     );
 
     // "Kept." itself still fades on its own independent ~1.3s timer.
-    expect(find.text('Kept.'), findsNothing);
+    expect(find.text('Kept'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -3393,7 +3393,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(await keptGraph.service.load(), hasLength(1));
-    expect(find.text('Kept.'), findsNothing);
+    expect(find.text('Kept'), findsNothing);
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
 
@@ -3418,7 +3418,7 @@ void main() {
     // this wisdom is already kept.
     await _pumpInSteps(tester, const Duration(seconds: 10));
     expect(find.text('Keep this wisdom.'), findsNothing);
-    expect(find.text('Kept.'), findsNothing);
+    expect(find.text('Kept'), findsNothing);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt(KeptDiscoveryHintService.hintCountKey) ?? 0, 0);
@@ -3467,7 +3467,7 @@ void main() {
 
     // A save that happens with no hint showing must stay silent: no
     // "Kept." text appears even though the save itself still succeeds.
-    expect(find.text('Kept.'), findsNothing);
+    expect(find.text('Kept'), findsNothing);
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
@@ -3836,7 +3836,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     // The save still succeeds and "Kept." still appears.
-    expect(find.text('Kept.'), findsOneWidget);
+    expect(find.text('Kept'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
     final savedAfterReduceMotionSave = await keptGraph.service.load();
     expect(savedAfterReduceMotionSave, hasLength(1));
@@ -3864,7 +3864,7 @@ void main() {
 
     // "Kept." fades on its own ~1.3s timer.
     await tester.pump(const Duration(milliseconds: 900));
-    expect(find.text('Kept.'), findsNothing);
+    expect(find.text('Kept'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

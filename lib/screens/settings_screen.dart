@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../l10n/east_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/icloud_removal_controller.dart';
 import '../controllers/locale_preference_controller.dart';
+import '../localization/east_locale_registry.dart';
 import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/data_export_service.dart';
@@ -132,6 +134,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   LocalePreferenceController get _localePreferenceController =>
       widget.localePreferenceController ?? _fallbackLocalePreferenceController;
+
+  String _localePreferenceLabel(AppLocalizations l10n) {
+    final explicit = _localePreferenceController.explicitLocale;
+    return explicit == null
+        ? l10n.systemDefault
+        : EastLocaleRegistry.definitionFor(explicit).nativeName;
+  }
 
   // Shared by every Settings divider (see requirement: "all Settings
   // dividers use one shared value"). Derived from the approved muted-text
@@ -355,12 +364,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
+    final l10n = eastLocalizations(context);
     setState(() {
       _restoreResultMessage = restoreStarted
-          ? "Restore request sent. Keeper access will update automatically."
+          ? l10n.restoreRequestSent
           : _purchaseService.restoreNeedsRecovery
-              ? "A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again."
-              : "Restore is not available right now. Please try again shortly.";
+              ? l10n.restoreRecoveryPending
+              : l10n.operationFailedRetry;
       _restoreResultVisible = true;
     });
   }
@@ -379,11 +389,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get restoreSemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_restoreInProgress || _purchaseService.isLoading) {
-      return 'Restore Purchases. Restore in progress.';
+      return '${l10n.restorePurchases}. ${l10n.preparing}';
     }
-
-    return 'Restore Purchases. Restore what belongs with you.';
+    return '${l10n.restorePurchases}. ${l10n.restoreBelongs}';
   }
 
   /// Free for everyone -- no Keeper check of any kind. Generates both
@@ -412,7 +422,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted || succeeded) return;
-    showSettingsSnack('Your data could not be exported. Please try again.');
+    showSettingsSnack(eastLocalizations(context).operationFailedRetry);
   }
 
   VoidCallback? get dataExportAction {
@@ -422,12 +432,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get dataExportSemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_dataExportInProgress) {
-      return 'Export My Data. Preparing.';
+      return '${l10n.exportMyData}. ${l10n.preparing}';
     }
-
-    return 'Export My Data. Take your Kept wisdoms and Reflections with '
-        'you.';
+    return '${l10n.exportMyData}. ${l10n.exportKeptAndReflections}';
   }
 
   VoidCallback? get privacyPolicyAction {
@@ -449,27 +458,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get privacyPolicySemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_privacyPolicyLaunchInProgress) {
-      return 'Privacy Policy. Opening.';
+      return '${l10n.privacyPolicy}. ${l10n.opening}';
     }
-
-    return 'Privacy Policy. What stays private.';
+    return '${l10n.privacyPolicy}. ${l10n.whatStaysPrivate}';
   }
 
   String get reachOutSemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_reachOutLaunchInProgress) {
-      return 'Reach Out. Opening.';
+      return '${l10n.reachOut}. ${l10n.opening}';
     }
-
-    return 'Reach Out. For thoughts and questions.';
+    return '${l10n.reachOut}. ${l10n.thoughtsAndQuestions}';
   }
 
   String get eastProductionsSemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_eastProductionsLaunchInProgress) {
-      return 'EAST. Productions. Opening.';
+      return '${l10n.eastProductions}. ${l10n.opening}';
     }
-
-    return 'EAST. Productions. The world beyond the ritual.';
+    return '${l10n.eastProductions}. ${l10n.worldBeyondRitual}';
   }
 
   /// Settings visual repair: the Restore Purchases result takeover -- same
@@ -482,6 +491,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// decides what happened, only how it is shown.
   Widget _restoreResultOverlay() {
     if (!_restoreResultVisible) return const SizedBox.shrink();
+    final l10n = eastLocalizations(context);
     final message = _restoreResultMessage ?? '';
 
     return Positioned.fill(
@@ -500,7 +510,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Restore Purchases',
+                  l10n.restorePurchases,
                   textAlign: TextAlign.center,
                   style: eastStyle(28),
                 ),
@@ -513,7 +523,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 44),
                 Semantics(
                   button: true,
-                  label: 'Close',
+                  label: l10n.close,
                   child: ExcludeSemantics(
                     child: GestureDetector(
                       key: const ValueKey('settings-restore-result-close'),
@@ -526,7 +536,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         child: Center(
                           child: Text(
-                            'CLOSE',
+                            l10n.close.toUpperCase(),
                             style: EastTypography.localized(
                               context,
                               size: 11,
@@ -594,6 +604,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// already reads as destructive without a red fill.
   Widget _removeFromICloudOverlay() {
     if (!_removeFromICloudConfirmVisible) return const SizedBox.shrink();
+    final l10n = eastLocalizations(context);
 
     return Positioned.fill(
       child: IgnorePointer(
@@ -611,21 +622,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "Remove from iCloud?",
+                  '${l10n.removeFromIcloud}?',
                   textAlign: TextAlign.center,
                   style: eastStyle(28),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  "Your Kept wisdoms and Reflections will remain on this "
-                  "iPhone.",
+                  l10n.removeIcloudLocalData,
                   textAlign: TextAlign.center,
                   style: eastStyle(15, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Their iCloud copies will be removed, and iCloud Sync "
-                  "will turn off.",
+                  l10n.removeIcloudCloudData,
                   textAlign: TextAlign.center,
                   style: eastStyle(14, color: EastColors.secondary),
                 ),
@@ -634,13 +643,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _removeFromICloudDecisionLabel(
-                      'CANCEL',
+                      l10n.cancelUpper,
                       onTap: _cancelRemoveFromICloud,
                       color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _removeFromICloudDecisionLabel(
-                      'REMOVE',
+                      l10n.removeUpper,
                       onTap: _confirmRemoveFromICloud,
                       color: EastColors.ink,
                     ),
@@ -699,6 +708,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// presentation.
   Widget _enableSyncOverlay() {
     if (!_enableSyncOverlayVisible) return const SizedBox.shrink();
+    final l10n = eastLocalizations(context);
 
     return Positioned.fill(
       child: IgnorePointer(
@@ -716,21 +726,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "Enable iCloud Sync?",
+                  l10n.enableIcloudQuestion,
                   textAlign: TextAlign.center,
                   style: eastStyle(28),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  "Your Kept wisdoms and Reflections will be stored in your "
-                  "private iCloud database and kept in sync across your "
-                  "devices.",
+                  l10n.enableIcloudData,
                   textAlign: TextAlign.center,
                   style: eastStyle(15, color: EastColors.secondary),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Your daily ritual timing stays on this device.",
+                  l10n.dailyRitualOnDevice,
                   textAlign: TextAlign.center,
                   style: eastStyle(14, color: EastColors.secondary),
                 ),
@@ -739,13 +747,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _enableSyncDecisionLabel(
-                      'CANCEL',
+                      l10n.cancelUpper,
                       onTap: _cancelEnableSync,
                       color: EastColors.secondary,
                     ),
                     const SizedBox(width: 56),
                     _enableSyncDecisionLabel(
-                      'ENABLE',
+                      l10n.enableUpper,
                       onTap: _confirmEnableSync,
                       color: EastColors.ink,
                     ),
@@ -771,7 +779,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       uri: uri,
       mode: LaunchMode.externalApplication,
-      failureMessage: "Privacy Policy could not be opened.",
+      failureMessage: eastLocalizations(context).operationFailedRetry,
     );
   }
 
@@ -779,7 +787,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final uri = Uri(
       scheme: 'mailto',
       path: 'hello@east.productions',
-      query: 'subject=EAST. Support',
+      queryParameters: <String, String>{
+        'subject': eastLocalizations(context).supportEmailSubject,
+      },
     );
 
     await _runExternalAction(
@@ -789,7 +799,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       uri: uri,
       mode: LaunchMode.platformDefault,
-      failureMessage: "Reach Out could not be opened.",
+      failureMessage: eastLocalizations(context).operationFailedRetry,
     );
   }
 
@@ -803,7 +813,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       uri: uri,
       mode: LaunchMode.externalApplication,
-      failureMessage: "EAST. Productions could not be opened.",
+      failureMessage: eastLocalizations(context).operationFailedRetry,
     );
   }
 
@@ -878,18 +888,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get _cloudKitSyncSubtitle {
-    if (_cloudKitAssociationActionInProgress) return "Enabling…";
+    final l10n = eastLocalizations(context);
+    if (_cloudKitAssociationActionInProgress) return l10n.icloudEnabling;
     return _cloudKitAssociationStatus?.displayStatus ==
             SyncAssociationDisplayStatus.enabled
-        ? "Enabled"
-        : "Not enabled";
+        ? l10n.icloudEnabled
+        : l10n.icloudNotEnabled;
   }
 
   String get _cloudKitSyncSemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_cloudKitAssociationActionInProgress) {
-      return 'iCloud Sync. Enabling.';
+      return '${l10n.icloudSync}. ${l10n.icloudEnabling}';
     }
-    return 'iCloud Sync. $_cloudKitSyncSubtitle';
+    return '${l10n.icloudSync}. $_cloudKitSyncSubtitle';
   }
 
   /// `null` (disabling the row, exactly like [restoreAction] et al. do)
@@ -956,7 +968,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     if (outcome == SyncAssociationEnableOutcome.failed) {
-      showSettingsSnack("iCloud Sync could not be enabled. Please try again.");
+      showSettingsSnack(eastLocalizations(context).operationFailedRetry);
     }
 
     await _refreshSyncAssociationStatus();
@@ -997,24 +1009,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // -----------------------------------------------------------------------
 
   String get _icloudRemovalSubtitle {
-    if (_icloudRemovalActionInProgress) return "Starting…";
-    if (_icloudRemovalJustCompleted) return "Removed from iCloud.";
+    final l10n = eastLocalizations(context);
+    if (_icloudRemovalActionInProgress) return l10n.icloudRemovalStarting;
+    if (_icloudRemovalJustCompleted) return l10n.icloudRemovalCompleted;
     switch (_icloudRemovalStatus) {
       case ICloudRemovalDisplayStatus.pending:
-        return "Removal pending. EAST. will finish when iCloud is available.";
+        return l10n.icloudRemovalPending;
       case ICloudRemovalDisplayStatus.idle:
-        return "Remove your iCloud copies.";
+        return l10n.icloudRemovalIdle;
       case ICloudRemovalDisplayStatus.notApplicable:
       case null:
-        return "Nothing to remove.";
+        return l10n.icloudRemovalNone;
     }
   }
 
   String get _icloudRemovalSemanticLabel {
+    final l10n = eastLocalizations(context);
     if (_icloudRemovalActionInProgress) {
-      return 'Remove from iCloud. Starting.';
+      return '${l10n.removeFromIcloud}. ${l10n.icloudRemovalStarting}';
     }
-    return 'Remove from iCloud. $_icloudRemovalSubtitle';
+    return '${l10n.removeFromIcloud}. $_icloudRemovalSubtitle';
   }
 
   /// `null` (disabling the row) whenever an action is already in flight, or
@@ -1125,9 +1139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     if (outcome == ICloudRemovalBeginOutcome.failed) {
-      showSettingsSnack(
-        "Remove from iCloud could not be started. Please try again.",
-      );
+      showSettingsSnack(eastLocalizations(context).operationFailedRetry);
     }
 
     await _refreshICloudRemovalStatus();
@@ -1169,6 +1181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _settingsBody(BuildContext context) {
     final l10n = eastLocalizations(context);
+    final localePreferenceLabel = _localePreferenceLabel(l10n);
     return SafeArea(
       top: false,
       child: LayoutBuilder(
@@ -1263,21 +1276,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     settingsItem(
                       rowKey: const ValueKey('settings-language-row'),
                       title: l10n.language,
-                      subtitle: _localePreferenceController.isSystemDefault
-                          ? l10n.systemDefault
-                          : l10n.english,
+                      subtitle: localePreferenceLabel,
                       showSubtitle: false,
-                      semanticLabel: l10n.languageSettingSemantics(
-                        _localePreferenceController.isSystemDefault
-                            ? l10n.systemDefault
-                            : l10n.english,
-                      ),
+                      semanticLabel:
+                          l10n.languageSettingSemantics(localePreferenceLabel),
                       onTap: _openLanguage,
-                      trailing: _settingsTrailingState(
-                        _localePreferenceController.isSystemDefault
-                            ? l10n.systemDefault
-                            : l10n.english,
-                      ),
+                      trailing: _settingsTrailingState(localePreferenceLabel),
                     ),
 
                     // The world outside: a tight cluster, one

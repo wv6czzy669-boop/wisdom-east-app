@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-/// The full target-language catalog. Only [runtimeSupported] is exposed to
-/// Flutter until a locale has reviewed, translated resources.
+/// EAST.'s reviewed product-language catalog.
 enum EastScript { latin, arabic, japanese, korean, traditionalChinese, thai }
 
 class EastLocaleDefinition {
@@ -103,8 +102,26 @@ abstract final class EastLocaleRegistry {
         script: EastScript.latin),
   ];
 
-  /// Deliberately remains English-only until translated ARBs exist.
-  static const List<Locale> runtimeSupported = <Locale>[Locale('en')];
+  /// Only reviewed product locales participate in Flutter runtime selection.
+  /// Generic technical ARB fallbacks such as `pt` and `zh` are deliberately
+  /// absent: they are implementation fallbacks, not EAST. products.
+  static const List<Locale> runtimeSupported = <Locale>[
+    Locale('en'),
+    Locale('tr'),
+    Locale('ja'),
+    Locale('de'),
+    Locale('fr'),
+    Locale('ko'),
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+    Locale('ar'),
+    Locale('es'),
+    Locale.fromSubtags(languageCode: 'pt', countryCode: 'BR'),
+    Locale('it'),
+    Locale('th'),
+    Locale('nl'),
+    Locale('pl'),
+    Locale('vi'),
+  ];
 
   static String canonicalTag(Locale locale) {
     final script = locale.scriptCode;
@@ -118,15 +135,49 @@ abstract final class EastLocaleRegistry {
   }
 
   static EastLocaleDefinition definitionFor(Locale locale) {
-    final tag = canonicalTag(locale);
+    final resolved = resolveProductLocale(locale);
     return targets.firstWhere(
-      (definition) => definition.tag == tag,
-      orElse: () => targets.firstWhere(
-        (definition) => definition.locale.languageCode == locale.languageCode,
-        orElse: () => english,
-      ),
+      (definition) => canonicalTag(definition.locale) == canonicalTag(resolved),
+      orElse: () => english,
     );
   }
+
+  /// Returns an approved product locale for [locale], or English when no
+  /// product mapping is safe. Traditional Chinese and Brazilian Portuguese
+  /// intentionally require their reviewed script/region forms; `zh-Hans`,
+  /// `zh-CN`, and `pt-PT` never cross those product boundaries.
+  static Locale? productLocaleOrNull(Locale? locale) {
+    if (locale == null) return null;
+    final language = locale.languageCode.toLowerCase();
+    final script = locale.scriptCode?.toLowerCase();
+    final region = locale.countryCode?.toUpperCase();
+
+    if (language == 'zh') {
+      if (script == 'hant' ||
+          region == 'TW' ||
+          region == 'HK' ||
+          region == 'MO') {
+        return const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant');
+      }
+      return null;
+    }
+    if (language == 'pt') {
+      return region == 'BR'
+          ? const Locale.fromSubtags(languageCode: 'pt', countryCode: 'BR')
+          : null;
+    }
+
+    for (final definition in targets) {
+      if (definition.locale.languageCode == language) return definition.locale;
+    }
+    return null;
+  }
+
+  static Locale resolveProductLocale(Locale? locale) =>
+      productLocaleOrNull(locale) ?? english.locale;
+
+  static bool isProductLocale(Locale locale) =>
+      canonicalTag(resolveProductLocale(locale)) == canonicalTag(locale);
 
   static bool isRtl(Locale locale) => definitionFor(locale).isRtl;
 

@@ -316,4 +316,87 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get keepEastAlive => 'Niech EAST. trwa.';
+
+  @override
+  String get operationFailedRetry =>
+      'Nie udało się tego ukończyć. Spróbuj ponownie.';
+
+  @override
+  String get restoreRequestSent =>
+      'Wysłano prośbę o przywrócenie. Dostęp Keeper zostanie zaktualizowany automatycznie.';
+
+  @override
+  String get restoreRecoveryPending =>
+      'Poprzednie przywracanie jest jeszcze uzgadniane. Dostęp Keeper zostanie zaktualizowany automatycznie; otwórz ponownie EAST. przed kolejną próbą.';
+
+  @override
+  String get opening => 'Otwieranie.';
+
+  @override
+  String get supportEmailSubject => 'Wsparcie EAST.';
+
+  @override
+  String get removeIcloudLocalData =>
+      'Zachowane mądrości i Refleksje pozostaną na tym iPhonie.';
+
+  @override
+  String get removeIcloudCloudData =>
+      'Ich kopie iCloud zostaną usunięte, a synchronizacja iCloud zostanie wyłączona.';
+
+  @override
+  String get enableIcloudQuestion => 'Włączyć synchronizację iCloud?';
+
+  @override
+  String get enableIcloudData =>
+      'Zachowane mądrości i Refleksje będą przechowywane w prywatnej bazie iCloud i synchronizowane między urządzeniami.';
+
+  @override
+  String get dailyRitualOnDevice =>
+      'Czas codziennego rytuału pozostaje na tym urządzeniu.';
+
+  @override
+  String get removeUpper => 'USUŃ';
+
+  @override
+  String get saveUpper => 'ZAPISZ';
+
+  @override
+  String get enableUpper => 'WŁĄCZ';
+
+  @override
+  String get icloudEnabling => 'Włączanie…';
+
+  @override
+  String get icloudEnabled => 'Włączono';
+
+  @override
+  String get icloudNotEnabled => 'Nie włączono';
+
+  @override
+  String get icloudRemovalStarting => 'Rozpoczynanie…';
+
+  @override
+  String get icloudRemovalCompleted => 'Usunięto z iCloud.';
+
+  @override
+  String get icloudRemovalPending =>
+      'Usuwanie oczekuje. EAST. zakończy je, gdy iCloud będzie dostępny.';
+
+  @override
+  String get icloudRemovalIdle => 'Usuń swoje kopie iCloud.';
+
+  @override
+  String get icloudRemovalNone => 'Nie ma nic do usunięcia.';
+
+  @override
+  String get reflectionSaveFailed =>
+      'Nie udało się zapisać Refleksji. Spróbuj ponownie.';
+
+  @override
+  String get reflectionAutosaveFailed =>
+      'Nie udało się zapisać Refleksji. Próba zostanie ponowiona podczas pisania.';
+
+  @override
+  String get reflectionDeleteFailed =>
+      'Nie udało się usunąć Refleksji. Spróbuj ponownie.';
 }

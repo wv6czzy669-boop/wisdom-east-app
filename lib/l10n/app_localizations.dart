@@ -701,6 +701,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep EAST. alive.'**
   String get keepEastAlive;
+
+  /// No description provided for @operationFailedRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'This could not be completed. Please try again.'**
+  String get operationFailedRetry;
+
+  /// No description provided for @restoreRequestSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore request sent. Keeper access will update automatically.'**
+  String get restoreRequestSent;
+
+  /// No description provided for @restoreRecoveryPending.
+  ///
+  /// In en, this message translates to:
+  /// **'A previous restore is still being reconciled. Keeper access will update automatically; reopen EAST. before trying again.'**
+  String get restoreRecoveryPending;
+
+  /// No description provided for @opening.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening.'**
+  String get opening;
+
+  /// No description provided for @supportEmailSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'EAST. Support'**
+  String get supportEmailSubject;
+
+  /// No description provided for @removeIcloudLocalData.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Kept wisdoms and Reflections will remain on this iPhone.'**
+  String get removeIcloudLocalData;
+
+  /// No description provided for @removeIcloudCloudData.
+  ///
+  /// In en, this message translates to:
+  /// **'Their iCloud copies will be removed, and iCloud Sync will turn off.'**
+  String get removeIcloudCloudData;
+
+  /// No description provided for @enableIcloudQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable iCloud Sync?'**
+  String get enableIcloudQuestion;
+
+  /// No description provided for @enableIcloudData.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Kept wisdoms and Reflections will be stored in your private iCloud database and kept in sync across your devices.'**
+  String get enableIcloudData;
+
+  /// No description provided for @dailyRitualOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your daily ritual timing stays on this device.'**
+  String get dailyRitualOnDevice;
+
+  /// No description provided for @removeUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'REMOVE'**
+  String get removeUpper;
+
+  /// No description provided for @saveUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'SAVE'**
+  String get saveUpper;
+
+  /// No description provided for @enableUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'ENABLE'**
+  String get enableUpper;
+
+  /// No description provided for @icloudEnabling.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabling…'**
+  String get icloudEnabling;
+
+  /// No description provided for @icloudEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get icloudEnabled;
+
+  /// No description provided for @icloudNotEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enabled'**
+  String get icloudNotEnabled;
+
+  /// No description provided for @icloudRemovalStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting…'**
+  String get icloudRemovalStarting;
+
+  /// No description provided for @icloudRemovalCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from iCloud.'**
+  String get icloudRemovalCompleted;
+
+  /// No description provided for @icloudRemovalPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Removal pending. EAST. will finish when iCloud is available.'**
+  String get icloudRemovalPending;
+
+  /// No description provided for @icloudRemovalIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove your iCloud copies.'**
+  String get icloudRemovalIdle;
+
+  /// No description provided for @icloudRemovalNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to remove.'**
+  String get icloudRemovalNone;
+
+  /// No description provided for @reflectionSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reflection could not be saved. Please try again.'**
+  String get reflectionSaveFailed;
+
+  /// No description provided for @reflectionAutosaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reflection could not be saved. It will try again as you keep writing.'**
+  String get reflectionAutosaveFailed;
+
+  /// No description provided for @reflectionDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reflection could not be deleted. Please try again.'**
+  String get reflectionDeleteFailed;
 }
 
 class _AppLocalizationsDelegate

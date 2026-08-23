@@ -7,6 +7,7 @@ import '../models/favorite_item.dart';
 import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/saved_reflections_service.dart';
+import '../services/wisdom_localization_resolver.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
@@ -38,6 +39,7 @@ class ReflectionScreen extends StatefulWidget {
 
 class _ReflectionScreenState extends State<ReflectionScreen>
     with WidgetsBindingObserver {
+  static const _wisdomPresentation = WisdomLocalizationResolver();
   // Real-device diagnostic pass (Phase 8/root-cause repair): every
   // `keptDiagnostic(...)` call in this file (pop-requested/flush-begin/
   // local-write-begin/success/limit-reached/failed/exhausted/pop-allowed/
@@ -327,7 +329,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
           keptDiagnostic(
             'reflection-screen: local-write-limit-reached attempt=$attempt',
           );
-          _showMessage('Keeper unlocks unlimited reflections.');
+          if (mounted) {
+            _showMessage(eastLocalizations(context).reflectionSaveFailed);
+          }
         } else {
           keptDiagnostic(
             'reflection-screen: local-write-success attempt=$attempt',
@@ -343,10 +347,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
         if (attempt == attempts) {
           keptDiagnostic('reflection-screen: local-write-exhausted');
           if (mounted) {
-            _showMessage(
-              'Reflection could not be saved. It will try again as you '
-              'keep writing.',
-            );
+            _showMessage(eastLocalizations(context).reflectionAutosaveFailed);
           }
           return false;
         }
@@ -398,7 +399,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
         _deleteInProgress = false;
         _confirmingDelete = false;
       });
-      _showMessage('Reflection could not be deleted. Please try again.');
+      _showMessage(eastLocalizations(context).reflectionDeleteFailed);
     }
   }
 
@@ -579,7 +580,10 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.item.text,
+                        _wisdomPresentation.resolveItem(
+                          widget.item,
+                          Localizations.localeOf(context),
+                        ),
                         key: const ValueKey('reflection-associated-wisdom'),
                         style: _style(24, height: 1.46),
                       ),
