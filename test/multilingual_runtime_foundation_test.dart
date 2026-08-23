@@ -98,7 +98,7 @@ void main() {
     expect(
       resolver.resolve(
         wisdomId: first['id'] as String,
-        locale: const Locale('ja'),
+        locale: const Locale('sv'),
         persistedSnapshot: 'legacy',
       ),
       first['text'],
