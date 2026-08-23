@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -574,6 +576,273 @@ void main() {
     expect(find.byType(ListView), findsOneWidget);
     expect(find.text('ADD REFLECTION'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Kept stays usable at 100/135/160/200% text scale '
+      '(Build 33 accessibility repair)', (tester) async {
+    final item = await keep(
+      service,
+      text:
+          'A longer wisdom remains readable without turning the page into a card.',
+      date: DateTime.utc(2026, 7, 23),
+    );
+
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedReflectionsScreen(
+            reflections: [item],
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(ListView), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('kept-journal-control')),
+        findsOneWidget,
+        reason: 'Journal must remain reachable at ${scale}x.',
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets(
+      'Kept re-check (Build 33 real-device repair): a long Turkish wisdom '
+      'renders intact and reachable at 100/135/160/200% text scale',
+      (tester) async {
+    // Same real-device-reported wisdom (east_wisdom_0195) that broke on
+    // Home's revealed-wisdom column ("hikây/enin", "tama/mı de/ğildir").
+    // Kept's own wisdom Text has no fixed-fraction width constraint (it
+    // wraps to the full row width inside the list, unlike Home's
+    // deliberately narrow composition) -- this is a confirmatory
+    // regression check, not a fix.
+    const turkish = 'Yara hikâyenin tamamı değildir.';
+    final item =
+        await keep(service, text: turkish, date: DateTime.utc(2026, 7, 23));
+
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedReflectionsScreen(
+            reflections: [item],
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // A single `find.text(turkish)` match with the full, exact string as
+      // one Text widget's `data` is only possible if the wisdom rendered
+      // intact -- a mid-word break, truncation, or overflow-driven
+      // substitution would all break this exact-string match.
+      expect(find.text(turkish), findsOneWidget, reason: '${scale}x');
+      expect(
+        find.byKey(const ValueKey('kept-journal-control')),
+        findsOneWidget,
+        reason: 'Journal must remain reachable at ${scale}x.',
+      );
+      expect(tester.takeException(), isNull, reason: '${scale}x');
+    }
+  });
+
+  group('Voice Control actionability (Build 33 real-device repair): Kept', () {
+    testWidgets('Back has SemanticsAction.tap', (tester) async {
+      final item = await keep(
+        service,
+        text: 'A wisdom to open Kept for',
+        date: DateTime.utc(2026, 7, 23),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (context) => SavedReflectionsScreen(
+                      reflections: [item],
+                      savedReflectionsService: service,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Open Kept'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open Kept'));
+      await tester.pumpAndSettle();
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('east-back-button')),
+      );
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets('Journal has a label and SemanticsAction.tap', (tester) async {
+      final item = await keep(
+        service,
+        text: 'A wisdom kept for Journal semantics',
+        date: DateTime.utc(2026, 7, 23),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedReflectionsScreen(
+            reflections: [item],
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('kept-journal-control')),
+      );
+      expect(node.label, 'Journal');
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    // ROOT CAUSE: `_status`/`_keptItem`'s Reflection-action `Semantics`
+    // previously used the *identical* generic label
+    // (`l10n.addReflection`/`l10n.reflectedEditReflection`) for every row
+    // -- Voice Control's "Show Names" could not distinguish "Add
+    // Reflection" for item 1 from "Add Reflection" for item 2. Also
+    // missing `onTap` on the outer node (same defect class as elsewhere
+    // this session). Fixed with a 1-based, screen-order item number baked
+    // into the label (`addReflectionNumbered`/`openReflectionNumbered`).
+    testWidgets(
+        'each unreflected row has a UNIQUE "Add Reflection, item N" label '
+        'with SemanticsAction.tap', (tester) async {
+      final first = await keep(
+        service,
+        text: 'The first kept wisdom',
+        date: DateTime.utc(2026, 7, 22),
+      );
+      final second = await keep(
+        service,
+        text: 'The second kept wisdom',
+        date: DateTime.utc(2026, 7, 23),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedReflectionsScreen(
+            reflections: [first, second],
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final semantics = tester.ensureSemantics();
+      // Newest first (`second`) is item 1 on screen; `first` is item 2.
+      final item1 = tester.getSemantics(
+        find.text('ADD REFLECTION').at(0),
+      );
+      final item2 = tester.getSemantics(
+        find.text('ADD REFLECTION').at(1),
+      );
+      expect(item1.label, 'Add Reflection, item 1');
+      expect(item2.label, 'Add Reflection, item 2');
+      expect(item1.label, isNot(item2.label));
+      expect(item1.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      expect(item2.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'each already-reflected row has a UNIQUE "Open Reflection, item N" '
+        'label with SemanticsAction.tap', (tester) async {
+      final first = await keep(
+        service,
+        text: 'The first reflected wisdom',
+        date: DateTime.utc(2026, 7, 22),
+      );
+      final second = await keep(
+        service,
+        text: 'The second reflected wisdom',
+        date: DateTime.utc(2026, 7, 23),
+      );
+      await service.saveReflection(
+        itemId: first.id,
+        reflection: 'A private note on the first.',
+        isKeeper: false,
+      );
+      await service.saveReflection(
+        itemId: second.id,
+        reflection: 'A private note on the second.',
+        isKeeper: false,
+      );
+      final items = await service.load();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedReflectionsScreen(
+            reflections: items,
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final semantics = tester.ensureSemantics();
+      final item1 = tester.getSemantics(find.text('REFLECTED').at(0));
+      final item2 = tester.getSemantics(find.text('REFLECTED').at(1));
+      expect(item1.label, 'Open Reflection, item 1');
+      expect(item2.label, 'Open Reflection, item 2');
+      expect(item1.label, isNot(item2.label));
+      expect(item1.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      expect(item2.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'a row-level accessible Delete alternative remains available '
+        'alongside the swipe gesture', (tester) async {
+      final item = await keep(
+        service,
+        text: 'A wisdom with an accessible delete alternative',
+        date: DateTime.utc(2026, 7, 23),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SavedReflectionsScreen(
+            reflections: [item],
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final semantics = tester.ensureSemantics();
+      // `CustomSemanticsAction` is registered on `_keptItem`'s row-level
+      // Semantics ancestor -- the row's own key (`kept-${item.id}`, set on
+      // `_KeptSwipeToDeleteRow`) is its direct child, so this proves the
+      // action is present at the row scope regardless of which specific
+      // control (ADD REFLECTION vs REFLECTED) the row happens to show.
+      final node = tester.getSemantics(
+        find.byKey(ValueKey('kept-${item.id}')),
+      );
+      expect(
+        node.getSemanticsData().customSemanticsActionIds,
+        isNotEmpty,
+        reason: 'a row-level accessible Delete alternative must remain '
+            'available regardless of swipe state.',
+      );
+      semantics.dispose();
+    });
   });
 
   group('Kept header', () {

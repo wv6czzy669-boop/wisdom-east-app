@@ -23,14 +23,14 @@ class PendingDailyWisdomReveal {
     required this.preparedAt,
     this.confirmedRevealBoundary,
     this.phase = PendingDailyWisdomRevealPhase.prepared,
-    this.wisdomId,
-  }) {
+    String? wisdomId,
+  }) : wisdomId = wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(text) {
     _validate(
       text: text,
       preparedAt: preparedAt,
       confirmedRevealBoundary: confirmedRevealBoundary,
       phase: phase,
-      wisdomId: wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(text),
+      wisdomId: this.wisdomId,
     );
   }
 
@@ -40,6 +40,12 @@ class PendingDailyWisdomReveal {
   final DateTime preparedAt;
   final DateTime? confirmedRevealBoundary;
   final PendingDailyWisdomRevealPhase phase;
+
+  /// Optional canonical catalog identity for this in-progress reveal. When
+  /// not supplied (or decoded as null), recovered from [text] via
+  /// `resolveUniqueWisdomIdForEnglishSnapshot` -- only when exactly one
+  /// canonical wisdom shares that exact English text. Pure function of
+  /// [text] alone; never mutates stored data.
   final String? wisdomId;
 
   bool get isRevealedPendingCommit =>

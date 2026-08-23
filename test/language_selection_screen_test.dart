@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import 'package:wisdom_app/controllers/locale_preference_controller.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
+import 'package:wisdom_app/screens/language_selection_screen.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
 
 void main() {
@@ -130,5 +133,65 @@ void main() {
     expect(controller.isSystemDefault, isTrue);
     expect(
         prefs.containsKey(LocalePreferenceController.preferenceKey), isFalse);
+  });
+
+  testWidgets('Language selection stays usable at 100/135/160/200% text scale',
+      (tester) async {
+    final controller = LocalePreferenceController(
+      storage: StoragePreferencesAdapter(),
+    );
+    await controller.load();
+
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: LanguageSelectionScreen(
+            localePreferenceController: controller,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('language-system-default-option')),
+        findsOneWidget,
+        reason: 'System Default must remain reachable at ${scale}x.',
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets(
+      'Voice Control actionability (Build 33 real-device repair): rows '
+      'are unique and have SemanticsAction.tap', (tester) async {
+    final controller = LocalePreferenceController(
+      storage: StoragePreferencesAdapter(),
+    );
+    await controller.load();
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: LanguageSelectionScreen(localePreferenceController: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final semantics = tester.ensureSemantics();
+    final system = tester.getSemantics(
+      find.byKey(const ValueKey('language-system-default-option')),
+    );
+    final turkish = tester.getSemantics(
+      find.byKey(const ValueKey('language-tr-option')),
+    );
+    expect(system.label, isNot(turkish.label));
+    expect(system.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    expect(turkish.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
   });
 }

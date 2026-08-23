@@ -125,6 +125,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reflectedEditReflection => '已省思。編輯省思。';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return '新增省思，項目 $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return '開啟省思，項目 $number';
+  }
+
+  @override
   String get journalSemantic => '日記';
 
   @override
@@ -270,6 +280,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get availableWithKeeper => '可透過「留住」使用。';
+
+  @override
+  String get opensKeeper => '開啟 Keeper。';
 
   @override
   String get nameUpper => '名字';
@@ -536,6 +549,16 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get reflectedEditReflection => '已省思。編輯省思。';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return '新增省思，項目 $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return '開啟省思，項目 $number';
+  }
+
+  @override
   String get journalSemantic => '日記';
 
   @override
@@ -681,6 +704,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get availableWithKeeper => '可透過「留住」使用。';
+
+  @override
+  String get opensKeeper => '開啟 Keeper。';
 
   @override
   String get nameUpper => '名字';

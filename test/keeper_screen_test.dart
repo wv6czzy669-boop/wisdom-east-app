@@ -250,6 +250,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'Keeper stays usable at 100/135/160/200% text scale '
+      '(Build 33 accessibility repair)', (tester) async {
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(
+        MaterialApp(home: KeeperScreen(purchaseService: service)),
+      );
+      await tester.pump();
+
+      expect(find.text('Keeper'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('keeper-purchase-action')),
+        findsOneWidget,
+        reason: 'the purchase action must remain reachable at ${scale}x.',
+      );
+      expect(tester.takeException(), isNull, reason: '${scale}x');
+    }
+  });
+
   testWidgets('Keeper purchase semantics expose action and localized price',
       (tester) async {
     final semantics = tester.ensureSemantics();

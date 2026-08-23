@@ -251,7 +251,11 @@ void main() {
       // itself already existed).
       // Appearance (Dark Mode): +5 keys (appearance, light, dark,
       // appearanceSettingSemantics, appearanceOptionSemantics).
-      expect(expectedKeys, hasLength(131));
+      // Build 33 real-device Voice Control repair: +3 keys
+      // (addReflectionNumbered, openReflectionNumbered -- unique
+      // per-row Kept Reflection-action names; opensKeeper -- a truthful
+      // hint on Journal's Keeper-gated export action).
+      expect(expectedKeys, hasLength(134));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');

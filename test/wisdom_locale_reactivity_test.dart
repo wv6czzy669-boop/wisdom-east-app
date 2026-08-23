@@ -95,12 +95,28 @@ void main() {
           decoded.phase, PendingDailyWisdomRevealPhase.revealedPendingCommit);
     });
 
-    test('a pending reveal with no wisdomId still round-trips safely as null',
-        () {
+    test(
+        'a pending reveal with no wisdomId but a genuine unique-canonical '
+        'text recovers it (Build 33 historical-recovery defense-in-depth)', () {
       final original = PendingDailyWisdomReveal(
         text: englishText,
         preparedAt: DateTime.utc(2041, 7, 23, 8),
       );
+      expect(original.wisdomId, wisdomId);
+
+      final decoded = PendingDailyWisdomReveal.decode(original.encode());
+
+      expect(decoded.wisdomId, wisdomId);
+    });
+
+    test(
+        'a pending reveal with no wisdomId and non-canonical text still '
+        'round-trips safely as null', () {
+      final original = PendingDailyWisdomReveal(
+        text: 'Not a catalog wisdom at all.',
+        preparedAt: DateTime.utc(2041, 7, 23, 8),
+      );
+      expect(original.wisdomId, isNull);
 
       final decoded = PendingDailyWisdomReveal.decode(original.encode());
 

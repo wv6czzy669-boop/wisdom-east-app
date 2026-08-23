@@ -125,6 +125,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reflectedEditReflection => '内省済み。内省を編集。';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return '内省を記す、項目$number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return '内省を開く、項目$number';
+  }
+
+  @override
   String get journalSemantic => '日記';
 
   @override
@@ -270,6 +280,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get availableWithKeeper => '残すで利用できます。';
+
+  @override
+  String get opensKeeper => 'Keeperを開きます。';
 
   @override
   String get nameUpper => '名前';

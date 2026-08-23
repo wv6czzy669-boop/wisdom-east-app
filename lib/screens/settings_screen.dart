@@ -542,9 +542,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: eastStyle(15, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 44),
+                // Build 33 real-device Voice Control repair: the outer
+                // `Semantics` must carry its own `onTap` -- see
+                // `_removeFromICloudDecisionLabel` below for the full
+                // explanation.
                 Semantics(
                   button: true,
                   label: l10n.close,
+                  onTap: _closeRestoreResult,
                   child: ExcludeSemantics(
                     child: GestureDetector(
                       key: const ValueKey('settings-restore-result-close'),
@@ -578,6 +583,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // Build 33 real-device Voice Control repair: this outer `Semantics`
+  // previously had no `onTap` of its own -- `ExcludeSemantics` below
+  // discards the inner `GestureDetector`'s handler, so the node had a
+  // label and a `button` trait but no real `SemanticsAction.tap`. Voice
+  // Control's activation relies on that action being present; VoiceOver's
+  // label-then-double-tap path tolerated its absence. The same fix
+  // applies to `_enableSyncDecisionLabel`, Reflection's
+  // `_deleteDecisionLabel`, Journal's `_nameDecisionLabel`/name-action/
+  // export-action, Home's `_favoriteLimitDecisionLabel`, and Kept's
+  // Reflection-row actions -- see each site's own comment.
   Widget _removeFromICloudDecisionLabel(
     String label, {
     required VoidCallback onTap,
@@ -586,6 +601,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -692,6 +708,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -1206,7 +1223,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ignoring: _restoreResultVisible ||
                 _removeFromICloudConfirmVisible ||
                 _enableSyncOverlayVisible,
-            child: _settingsBody(context),
+            child: ExcludeSemantics(
+              excluding: _restoreResultVisible ||
+                  _removeFromICloudConfirmVisible ||
+                  _enableSyncOverlayVisible,
+              child: _settingsBody(context),
+            ),
           ),
           _restoreResultOverlay(),
           _removeFromICloudOverlay(),

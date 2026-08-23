@@ -125,6 +125,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reflectedEditReflection => 'YANSIMA. Yansımayı düzenle.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'Yansıma ekle, öğe $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'Yansımayı aç, öğe $number';
+  }
+
+  @override
   String get journalSemantic => 'Günlük';
 
   @override
@@ -278,6 +288,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'Tutucu ile kullanılabilir.';
+
+  @override
+  String get opensKeeper => 'Keeper\'ı açar.';
 
   @override
   String get nameUpper => 'İSİM';

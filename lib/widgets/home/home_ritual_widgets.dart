@@ -160,9 +160,33 @@ class _HomeRitualContent extends StatelessWidget {
       1.0,
       MediaQuery.sizeOf(context).width - 68,
     );
+    // Build 33 accessibility repair (real-device Larger Text failure): the
+    // revealed wisdom's approved composition is a narrow 60%-of-screen
+    // column at ordinary text sizes -- deliberate, unchanged here. But that
+    // fixed fraction never grew with Dynamic Type, so at high accessibility
+    // scales a single long word (agglutinative Turkish especially --
+    // "hikâyenin", "değildir") could no longer fit the line on its own,
+    // forcing Flutter's text layout to fall back to a mid-word character
+    // break rather than wrapping at the space before/after it. `FittedBox`
+    // (below) only rescales the already-wrapped result afterward; it never
+    // rewraps, so it could not fix this on its own.
+    //
+    // The fix widens the column as the ambient text scale grows, reaching
+    // the same `ritualTextWidth` already used (at every scale, including
+    // 200%+) for Pause/Feel/Ask/the locked countdown -- a width already
+    // proven safe elsewhere in this exact widget -- by 160%, the top of
+    // this task's called-out critical range. At scale 1.0 the progress
+    // term is exactly 0.0, so the width is bit-for-bit the original
+    // `screenWidth * 0.60` -- the approved 100% composition is unchanged.
+    final wisdomWidthScaleProgress =
+        ((MediaQuery.textScalerOf(context).scale(1.0) - 1.0) / 0.6)
+            .clamp(0.0, 1.0);
+    final narrowRevealedWisdomWidth = MediaQuery.sizeOf(context).width * 0.60;
     final revealedWisdomWidth = max(
       1.0,
-      MediaQuery.sizeOf(context).width * 0.60,
+      narrowRevealedWisdomWidth +
+          (ritualTextWidth - narrowRevealedWisdomWidth) *
+              wisdomWidthScaleProgress,
     );
     final textSize = screenStep == 0
         ? 42.0
@@ -221,7 +245,14 @@ class _HomeRitualContent extends StatelessWidget {
       },
       child: _RitualScaleTransition(
         enabled: !onHeartScreen,
-        scale: screenStep == 0 ? 1.0 : textScale,
+        // Build 33 accessibility repair: this scale/zoom transition is
+        // decorative embellishment on the ritual text, not the state
+        // transition itself (that's the separate opacity fade below) --
+        // Reduce Motion neutralizes it to a static 1.0 while every other
+        // aspect of ritual progression, timing, and copy is unaffected.
+        // The decorative pulse/breath animations already gate the same way
+        // (see `reduceMotion` checks elsewhere in this file).
+        scale: reduceMotion ? 1.0 : (screenStep == 0 ? 1.0 : textScale),
         duration: const Duration(
           milliseconds: 1000,
         ),
@@ -489,7 +520,6 @@ class _HomeTopNavigation extends StatelessWidget {
           excludeFromSemantics: true,
           child: Semantics(
             label: eastLocalizations(context).keptWisdoms,
-            hint: eastLocalizations(context).keptWisdoms,
             button: true,
             onTap: onKeptPressed,
             child: ExcludeSemantics(
@@ -797,22 +827,48 @@ class _HomeSaveControl extends StatelessWidget {
       child: Center(
         child: ExcludeSemantics(
           excluding: opacity <= 0.0,
-          child: IgnorePointer(
-            key: const ValueKey('kept-interaction-guard'),
-            ignoring: !interactionEnabled,
-            child: AnimatedOpacity(
-              duration: const Duration(
-                milliseconds: 1000,
-              ),
-              curve: Curves.easeOutCubic,
-              opacity: opacity,
-              onEnd: onFullyVisible,
-              child: Semantics(
-                label: label,
-                value: value,
-                hint: hint,
-                button: !isCurrentFavorite,
-                onTap: isCurrentFavorite ? null : onPressed,
+          // Build 33 real-device Voice Control repair: `Semantics(onTap:)`
+          // moved to wrap `IgnorePointer` from the *outside* -- it used to
+          // sit *inside* `IgnorePointer(ignoring: !interactionEnabled)`.
+          // `IgnorePointer`'s deprecated `ignoringSemantics` parameter
+          // defaults to null, which its own `describeSemanticsConfiguration`
+          // treats as `true`: whenever `ignoring: true` (the brief window
+          // before the ring is "fully visible" here), it implicitly set
+          // `SemanticsConfiguration.isBlockingUserActions` on its subtree,
+          // which strips `SemanticsAction.tap` from what actually reaches
+          // the platform (confirmed empirically -- an isolated probe with
+          // this exact nesting had `hasAction(SemanticsAction.tap) ==
+          // false`) even though `Semantics(onTap:)` still nominally had the
+          // handler. This is exactly "label present, no real activate
+          // action": Voice Control's "Show Names"/"Tap" (which invokes the
+          // real semantics action) could not reach this control during
+          // that window; VoiceOver's read-label-then-double-tap path
+          // tolerated it. Moving `Semantics` outside `IgnorePointer`
+          // removes it from that blocked subtree entirely (verified with
+          // the same probe: `hasAction(SemanticsAction.tap) == true`),
+          // while `IgnorePointer` keeps its exact key/`ignoring` value and
+          // still guards *touch* the same way it always did --
+          // `interactionEnabled` exists only to prevent an incidental
+          // touch mis-tap during the fade-in; `onPressed`/`toggleFavorite`
+          // are already independently guarded against being invoked
+          // prematurely (see `toggleFavorite`'s own checks), so exposing
+          // the accessibility action during that brief window is safe.
+          child: Semantics(
+            label: label,
+            value: value,
+            hint: hint,
+            button: !isCurrentFavorite,
+            onTap: isCurrentFavorite ? null : onPressed,
+            child: IgnorePointer(
+              key: const ValueKey('kept-interaction-guard'),
+              ignoring: !interactionEnabled,
+              child: AnimatedOpacity(
+                duration: const Duration(
+                  milliseconds: 1000,
+                ),
+                curve: Curves.easeOutCubic,
+                opacity: opacity,
+                onEnd: onFullyVisible,
                 child: ExcludeSemantics(
                   child: Stack(
                     alignment: Alignment.center,

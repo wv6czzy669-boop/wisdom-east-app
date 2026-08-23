@@ -125,6 +125,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reflectedEditReflection => 'تأمُّل. تعديل التأمّل.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'أضف تأمّلًا، العنصر $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'افتح التأمّل، العنصر $number';
+  }
+
+  @override
   String get journalSemantic => 'دفتر يوميات';
 
   @override
@@ -276,6 +286,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'متاح مع «احتفظ».';
+
+  @override
+  String get opensKeeper => 'يفتح Keeper.';
 
   @override
   String get nameUpper => 'الاسم';

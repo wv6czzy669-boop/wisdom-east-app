@@ -18,6 +18,7 @@
 // Synthetic content only.
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -779,6 +780,75 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(callCount, 1);
+    });
+  });
+
+  group('Voice Control actionability (Build 33 real-device repair)', () {
+    testWidgets(
+        'Restore Purchases and Language rows (the reference-quality '
+        '`settingsItem` pattern) both have SemanticsAction.tap',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: SettingsScreen()),
+      );
+      await tester.pumpAndSettle();
+
+      final semantics = tester.ensureSemantics();
+      final restore = tester.getSemantics(
+        find.byKey(const ValueKey('settings-restore-purchases-row')),
+      );
+      expect(
+        restore.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      final language = tester.getSemantics(
+        find.byKey(const ValueKey('settings-language-row')),
+      );
+      expect(
+        language.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      semantics.dispose();
+    });
+
+    // `_removeFromICloudDecisionLabel`/`_enableSyncDecisionLabel`/the
+    // restore-result Close label all previously had an outer `Semantics`
+    // with a label and `button: true` but no `onTap` of their own -- the
+    // same defect class fixed everywhere else this session (see
+    // Reflection's `_deleteDecisionLabel`, Journal's
+    // `_nameDecisionLabel`/name-action/export-action, Home's
+    // `_favoriteLimitDecisionLabel`, and Kept's Reflection-row actions
+    // for the same fix, each independently verified).
+    testWidgets(
+        'the Remove-from-iCloud decision overlay\'s labels have '
+        'SemanticsAction.tap', (tester) async {
+      syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SettingsScreen(
+            purchaseService: PurchaseService(),
+            cloudKitAssociationController: controller,
+            icloudRemovalController: icloudRemovalController,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(removalRowKey));
+      await tester.pumpAndSettle();
+
+      final semantics = tester.ensureSemantics();
+      final removeLabel = tester.getSemantics(find.text('REMOVE'));
+      final cancelLabel = tester.getSemantics(find.text('CANCEL'));
+      expect(
+        removeLabel.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      expect(
+        cancelLabel.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      semantics.dispose();
     });
   });
 }

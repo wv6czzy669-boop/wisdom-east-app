@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:wisdom_app/data/wisdoms.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -243,7 +244,10 @@ class _RecordingRenderer extends WisdomShareCardRenderer {
   final List<String> wisdoms = [];
 
   @override
-  Future<Uint8List> render(String wisdom) async {
+  Future<Uint8List> render(
+    String wisdom, {
+    EastColorScheme scheme = EastColorScheme.light,
+  }) async {
     wisdoms.add(wisdom);
     return Uint8List.fromList([1, 2, 3, 4]);
   }

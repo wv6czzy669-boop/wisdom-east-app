@@ -125,6 +125,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reflectedEditReflection => 'REFLEXIÓN. Editar reflexión.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'Añadir una reflexión, elemento $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'Abrir reflexión, elemento $number';
+  }
+
+  @override
   String get journalSemantic => 'Diario';
 
   @override
@@ -278,6 +288,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'Disponible con Guardar.';
+
+  @override
+  String get opensKeeper => 'Abre Keeper.';
 
   @override
   String get nameUpper => 'NOMBRE';

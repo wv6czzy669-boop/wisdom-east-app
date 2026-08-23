@@ -342,6 +342,18 @@ abstract class AppLocalizations {
   /// **'REFLECTED. Edit reflection.'**
   String get reflectedEditReflection;
 
+  /// No description provided for @addReflectionNumbered.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Reflection, item {number}'**
+  String addReflectionNumbered(Object number);
+
+  /// No description provided for @openReflectionNumbered.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Reflection, item {number}'**
+  String openReflectionNumbered(Object number);
+
   /// No description provided for @journalSemantic.
   ///
   /// In en, this message translates to:
@@ -635,6 +647,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Available with Keeper.'**
   String get availableWithKeeper;
+
+  /// No description provided for @opensKeeper.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens Keeper.'**
+  String get opensKeeper;
 
   /// No description provided for @nameUpper.
   ///

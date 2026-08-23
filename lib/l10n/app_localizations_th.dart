@@ -125,6 +125,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reflectedEditReflection => 'ไตร่ตรองแล้ว แก้ไขการไตร่ตรอง.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'บันทึกการไตร่ตรอง รายการที่ $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'เปิดการไตร่ตรอง รายการที่ $number';
+  }
+
+  @override
   String get journalSemantic => 'สมุดบันทึก';
 
   @override
@@ -275,6 +285,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'ใช้ได้เมื่อมี “คงไว้”.';
+
+  @override
+  String get opensKeeper => 'เปิด Keeper';
 
   @override
   String get nameUpper => 'ชื่อ';

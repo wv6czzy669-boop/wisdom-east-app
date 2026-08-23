@@ -524,6 +524,14 @@ class _HomeScreenState extends State<HomeScreen>
       return pauseFeelOpacity < 1.0 ? l10n.pause : '${l10n.pause} ${l10n.feel}';
     }
     if (onHeartScreen) return l10n.askFromYourHeart;
+    // Single source of truth for the locked/countdown state: `currentText`
+    // is the exact same already-localized message the sighted countdown
+    // Text renders (see `refreshDailyStatus`'s `CountdownFormatter.
+    // silenceMessage` assignment). Returning it here makes the outer
+    // Semantics own the announcement and (via `excludeSemantics: label !=
+    // null` below) suppresses the inner Text's own duplicate node, instead
+    // of exposing the same status twice.
+    if (onLockedCountdown) return currentText;
     if (wisdomRevealed && _revealPersistenceNeedsRetry) {
       return l10n.wisdomCouldNotBeKept;
     }
@@ -1624,11 +1632,20 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final locale = Localizations.localeOf(context);
       final presentedWisdom = _presentedWisdom(locale);
+      // Build 33: the generated share PNG follows the EFFECTIVE app
+      // appearance at this exact moment -- `EastColors.of(context)` already
+      // resolves System Default against the live platform brightness
+      // (Theme.of(context).extension<EastColorScheme>(), the same
+      // resolution every other themed surface uses), never merely the
+      // stored Appearance enum. The native iOS share sheet itself is never
+      // recolored -- only this generated image's own material.
+      final shareScheme = EastColors.of(context);
       if (wisdomShareService case WisdomShareService service) {
         await service.shareWisdomForLocale(
           wisdom: presentedWisdom,
           sharePositionOrigin: shareOrigin,
           locale: locale,
+          scheme: shareScheme,
         );
       } else {
         await wisdomShareService.shareWisdom(
@@ -2142,6 +2159,10 @@ class _HomeScreenState extends State<HomeScreen>
     unawaited(openKeeperScreen());
   }
 
+  // Build 33 real-device Voice Control repair: the outer `Semantics` must
+  // carry its own `onTap` -- see `settings_screen.dart`'s
+  // `_removeFromICloudDecisionLabel` for the full explanation of this
+  // repeated defect class.
   Widget _favoriteLimitDecisionLabel(
     String label, {
     required VoidCallback onTap,
@@ -2150,6 +2171,7 @@ class _HomeScreenState extends State<HomeScreen>
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -2467,88 +2489,113 @@ class _HomeScreenState extends State<HomeScreen>
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Build 33 accessibility repair: when the favorite-limit overlay
+            // is visible, the ritual/top-nav/save-control content beneath it
+            // must be neither touchable nor VoiceOver-reachable -- matching
+            // the IgnorePointer+ExcludeSemantics pattern already used by
+            // Settings/Reflection/Journal's own full-field decision
+            // overlays. Nesting this content in its own Stack (rather than
+            // wrapping each child individually) preserves every existing
+            // Positioned/Positioned.fill placement unchanged.
             Positioned.fill(
-              child: ColoredBox(color: EastColors.of(context).background),
-            ),
-            Positioned.fill(
-              child: _HomeMainRitualGesture(
-                navigationDisabled: navigationInProgress || _transitionLock,
-                semanticLabel: mainRitualSemanticLabel(context),
-                semanticActionEnabled: mainRitualActionSemanticsEnabled,
-                hideContentSemantics: hideMainRitualContentSemantics,
-                onTap: handleMainTap,
-                swipeToKeptEnabled: _homeSwipeToKeptEligible,
-                onSwipeStart: _handleHomeSwipeStart,
-                onSwipeUpdate: _handleHomeSwipeUpdate,
-                onSwipeEnd: _handleHomeSwipeEnd,
-                content: _HomeRitualContent(
-                  screenStep: screenStep,
-                  currentText: presentedText,
-                  textOpacity: textOpacity,
-                  textScale: textScale,
-                  pauseFeelOpacity: pauseFeelOpacity,
-                  pulseController: pulseController,
-                  askFadeAnimation: askFadeAnimation,
-                  wisdomRevealAnimation: wisdomRevealAnimation,
-                  reduceMotion: _reduceMotion,
-                  onPauseScreen: onPauseScreen,
-                  onHeartScreen: onHeartScreen,
-                  wisdomRevealed: wisdomRevealed,
-                  onLockedCountdown: onLockedCountdown,
-                  wisdomShareEnabled: wisdomRevealed &&
-                      !transitionInProgress &&
-                      !_transitionLock &&
-                      !_isInRitualSilence &&
-                      !_revealPersistenceNeedsRetry &&
-                      wisdomRevealController.value >= 1.0,
-                  wisdomShareOriginKey: _wisdomShareOriginKey,
-                  onWisdomLongPress: shareCurrentWisdom,
+              child: IgnorePointer(
+                ignoring: _favoriteLimitOverlayVisible,
+                child: ExcludeSemantics(
+                  excluding: _favoriteLimitOverlayVisible,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: EastColors.of(context).background,
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: _HomeMainRitualGesture(
+                          navigationDisabled:
+                              navigationInProgress || _transitionLock,
+                          semanticLabel: mainRitualSemanticLabel(context),
+                          semanticActionEnabled:
+                              mainRitualActionSemanticsEnabled,
+                          hideContentSemantics: hideMainRitualContentSemantics,
+                          onTap: handleMainTap,
+                          swipeToKeptEnabled: _homeSwipeToKeptEligible,
+                          onSwipeStart: _handleHomeSwipeStart,
+                          onSwipeUpdate: _handleHomeSwipeUpdate,
+                          onSwipeEnd: _handleHomeSwipeEnd,
+                          content: _HomeRitualContent(
+                            screenStep: screenStep,
+                            currentText: presentedText,
+                            textOpacity: textOpacity,
+                            textScale: textScale,
+                            pauseFeelOpacity: pauseFeelOpacity,
+                            pulseController: pulseController,
+                            askFadeAnimation: askFadeAnimation,
+                            wisdomRevealAnimation: wisdomRevealAnimation,
+                            reduceMotion: _reduceMotion,
+                            onPauseScreen: onPauseScreen,
+                            onHeartScreen: onHeartScreen,
+                            wisdomRevealed: wisdomRevealed,
+                            onLockedCountdown: onLockedCountdown,
+                            wisdomShareEnabled: wisdomRevealed &&
+                                !transitionInProgress &&
+                                !_transitionLock &&
+                                !_isInRitualSilence &&
+                                !_revealPersistenceNeedsRetry &&
+                                wisdomRevealController.value >= 1.0,
+                            wisdomShareOriginKey: _wisdomShareOriginKey,
+                            onWisdomLongPress: shareCurrentWisdom,
+                          ),
+                        ),
+                      ),
+                      if (_chromeVisible) ...[
+                        _HomeSettingsMenuControl(onPressed: openSettings),
+                        _HomeTopNavigation(
+                          onKeptPressed: openFavorites,
+                          keptEmphasized: _keptIconEmphasized,
+                        ),
+                      ],
+                      if (wisdomRevealed)
+                        _HomeSaveControl(
+                          opacity: saveControlOpacity,
+                          interactionEnabled: saveInteractionEnabled,
+                          isCurrentFavorite: isCurrentFavorite(),
+                          onPressed: toggleFavorite,
+                          showBreath: _keptDiscoveryBreathActive,
+                          onFullyVisible: () {
+                            if (!mounted ||
+                                saveInteractionEnabled ||
+                                saveControlOpacity < 1.0 ||
+                                !wisdomRevealed) {
+                              return;
+                            }
+
+                            setState(() {
+                              saveInteractionEnabled = true;
+                            });
+                          },
+                        ),
+                      if (wisdomRevealed)
+                        _HomePostRevealMessage(
+                          opacity: postRevealMessageOpacity,
+                          message: nextWisdomMessage == 'ready'
+                              ? l10n.dailyWisdomReady
+                              : nextWisdomMessage,
+                        ),
+                      if (wisdomRevealed && _keptDiscoveryHintOpacity > 0.0)
+                        _HomeKeptDiscoveryHint(
+                          opacity: _keptDiscoveryHintOpacity,
+                          text: _keptDiscoveryHintText == 'kept'
+                              ? l10n.kept
+                              : _keptDiscoveryHintText.isEmpty
+                                  ? ''
+                                  : l10n.keepThisWisdom,
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            if (_chromeVisible) ...[
-              _HomeSettingsMenuControl(onPressed: openSettings),
-              _HomeTopNavigation(
-                onKeptPressed: openFavorites,
-                keptEmphasized: _keptIconEmphasized,
-              ),
-            ],
-            if (wisdomRevealed)
-              _HomeSaveControl(
-                opacity: saveControlOpacity,
-                interactionEnabled: saveInteractionEnabled,
-                isCurrentFavorite: isCurrentFavorite(),
-                onPressed: toggleFavorite,
-                showBreath: _keptDiscoveryBreathActive,
-                onFullyVisible: () {
-                  if (!mounted ||
-                      saveInteractionEnabled ||
-                      saveControlOpacity < 1.0 ||
-                      !wisdomRevealed) {
-                    return;
-                  }
-
-                  setState(() {
-                    saveInteractionEnabled = true;
-                  });
-                },
-              ),
-            if (wisdomRevealed)
-              _HomePostRevealMessage(
-                opacity: postRevealMessageOpacity,
-                message: nextWisdomMessage == 'ready'
-                    ? l10n.dailyWisdomReady
-                    : nextWisdomMessage,
-              ),
-            if (wisdomRevealed && _keptDiscoveryHintOpacity > 0.0)
-              _HomeKeptDiscoveryHint(
-                opacity: _keptDiscoveryHintOpacity,
-                text: _keptDiscoveryHintText == 'kept'
-                    ? l10n.kept
-                    : _keptDiscoveryHintText.isEmpty
-                        ? ''
-                        : l10n.keepThisWisdom,
-              ),
             _favoriteLimitOverlay(),
           ],
         ),

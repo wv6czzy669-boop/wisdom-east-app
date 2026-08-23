@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -656,6 +657,198 @@ void main() {
       expect(sharedBytes, isNotNull);
       expect(sharedBytes, isNotEmpty);
       expect(sharedFilename, 'Journal.pdf');
+    });
+  });
+
+  group('Voice Control actionability (Build 33 real-device repair)', () {
+    testWidgets('Back has SemanticsAction.tap', (tester) async {
+      final ownerService = JournalOwnerService();
+      await ownerService.skip();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (context) => JournalScreen(
+                      items: [
+                        item(id: '1', revealId: 'r-1', text: 'A wisdom.')
+                      ],
+                      isKeeper: true,
+                      journalOwnerService: ownerService,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Open Journal'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open Journal'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('east-back-button')),
+      );
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    // ROOT CAUSE: the outer `Semantics` for the Add/Change-name AppBar
+    // action carried a `label` and `button: true` but no `onTap` --
+    // `ExcludeSemantics` below discarded the inner `TextButton`'s own
+    // handler, so no real `SemanticsAction.tap` reached the platform.
+    // Fixed with the same `onTap`-mirroring pattern used everywhere else
+    // this session.
+    testWidgets('Add/Edit Name has a label and SemanticsAction.tap',
+        (tester) async {
+      final ownerService = JournalOwnerService();
+      await ownerService.skip();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A wisdom.')],
+            isKeeper: true,
+            journalOwnerService: ownerService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('journal-name-action')),
+      );
+      expect(node.label, 'Add name');
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    // ROOT CAUSE: same missing-`onTap` defect on `_takeItWithYouAction`'s
+    // outer `Semantics`. Also verifies the export action's semantic
+    // truthfulness in the gated (non-Keeper) state: tapping it genuinely
+    // opens Keeper (see `_handleTakeItWithYou`), so it must remain a real
+    // actionable control with a hint describing that outcome, not a
+    // silent no-op dressed up as a button.
+    testWidgets('Export/Take it with you has SemanticsAction.tap for a Keeper',
+        (tester) async {
+      final ownerService = JournalOwnerService();
+      await ownerService.skip();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A wisdom.')],
+            isKeeper: true,
+            journalOwnerService: ownerService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('journal-take-action')),
+      );
+      expect(node.label, 'Take it with you.');
+      expect(node.hint, isEmpty);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'Export/Take it with you has SemanticsAction.tap and a truthful '
+        'hint when Keeper-gated (tapping genuinely opens Keeper)',
+        (tester) async {
+      final ownerService = JournalOwnerService();
+      await ownerService.skip();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A wisdom.')],
+            isKeeper: false,
+            journalOwnerService: ownerService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('journal-take-action')),
+      );
+      expect(node.label, 'Take it with you. Available with Keeper.');
+      expect(node.hint, 'Opens Keeper.');
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
+          reason: 'tapping this genuinely opens Keeper -- it must never be '
+              'presented as non-actionable.');
+      semantics.dispose();
+    });
+  });
+
+  group('Dynamic Type (Build 33 accessibility repair)', () {
+    testWidgets(
+        'the first-time name prompt stays usable at 100/135/160/200% '
+        'text scale', (tester) async {
+      for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(
+          tester.platformDispatcher.clearTextScaleFactorTestValue,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: JournalScreen(
+              items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
+              isKeeper: true,
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('journal-name-field')),
+          findsOneWidget,
+          reason: 'the name field must remain reachable at ${scale}x.',
+        );
+        expect(
+          find.byKey(const ValueKey('journal-name-skip')),
+          findsOneWidget,
+          reason: 'Skip must remain reachable at ${scale}x.',
+        );
+        expect(tester.takeException(), isNull);
+      }
+    });
+
+    testWidgets('the PDF preview stays usable at 200% text scale',
+        (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(
+        tester.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+
+      final ownerService = JournalOwnerService();
+      await ownerService.skip();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
+            isKeeper: false,
+            journalOwnerService: ownerService,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

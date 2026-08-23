@@ -125,6 +125,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reflectedEditReflection => 'SUY NGẪM. Chỉnh sửa suy ngẫm.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'Thêm suy ngẫm, mục $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'Mở suy ngẫm, mục $number';
+  }
+
+  @override
   String get journalSemantic => 'Nhật ký';
 
   @override
@@ -279,6 +289,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'Có trong “Giữ lại”.';
+
+  @override
+  String get opensKeeper => 'Mở Keeper.';
 
   @override
   String get nameUpper => 'TÊN';

@@ -125,6 +125,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reflectedEditReflection => '성찰 완료. 성찰 편집.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return '성찰 추가, 항목 $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return '성찰 열기, 항목 $number';
+  }
+
+  @override
   String get journalSemantic => '일기장';
 
   @override
@@ -270,6 +280,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get availableWithKeeper => '‘간직’에서 이용할 수 있습니다.';
+
+  @override
+  String get opensKeeper => 'Keeper를 엽니다.';
 
   @override
   String get nameUpper => '이름';

@@ -310,10 +310,16 @@ class _JournalScreenState extends State<JournalScreen> {
     required VoidCallback? onTap,
     required Color color,
   }) {
+    // Build 33 real-device Voice Control repair: the outer `Semantics`
+    // must carry its own `onTap` -- see `_takeItWithYouAction` below for
+    // the full explanation of why `ExcludeSemantics` alone left this
+    // node with a label and a `button` trait but no real
+    // `SemanticsAction.tap`.
     return Semantics(
       button: true,
       enabled: onTap != null,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -377,25 +383,33 @@ class _JournalScreenState extends State<JournalScreen> {
                 // Real-device repair: the "Journal name" heading is
                 // removed entirely -- the name itself, not a label
                 // describing it, is the clear focus of this full-field
-                // decision.
-                TextField(
-                  key: const ValueKey('journal-name-edit-field'),
-                  controller: controller,
-                  autofocus: true,
-                  textAlign: TextAlign.center,
-                  style: _style(26),
-                  cursorColor: EastColors.of(context).ink,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: l10n.yourName,
-                    hintStyle: _style(26, color: EastColors.of(context).hint),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                          color: eastMutedTextColor(context), width: 0.5),
-                    ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                          color: eastMutedTextColor(context), width: 0.5),
+                // decision. `MergeSemantics` gives VoiceOver a stable
+                // accessible name (see ReflectionScreen's writing area)
+                // without reintroducing that visible heading.
+                MergeSemantics(
+                  child: Semantics(
+                    label: l10n.yourName,
+                    child: TextField(
+                      key: const ValueKey('journal-name-edit-field'),
+                      controller: controller,
+                      autofocus: true,
+                      textAlign: TextAlign.center,
+                      style: _style(26),
+                      cursorColor: EastColors.of(context).ink,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: l10n.yourName,
+                        hintStyle:
+                            _style(26, color: EastColors.of(context).hint),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                              color: eastMutedTextColor(context), width: 0.5),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                              color: eastMutedTextColor(context), width: 0.5),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -459,9 +473,13 @@ class _JournalScreenState extends State<JournalScreen> {
         title: Text(l10n.journal, style: _style(24)),
         actions: [
           if (_stage == _JournalStage.preview)
+            // Build 33 real-device Voice Control repair: same missing-
+            // `onTap` defect as `_takeItWithYouAction`/`_nameDecisionLabel`
+            // -- fixed the same way.
             Semantics(
               button: true,
               label: _ownerName == null ? l10n.addName : l10n.changeName,
+              onTap: _openNameEditor,
               child: ExcludeSemantics(
                 child: TextButton(
                   key: const ValueKey('journal-name-action'),
@@ -652,11 +670,28 @@ class _JournalScreenState extends State<JournalScreen> {
     final isKeeper = _isKeeper;
     return Column(
       children: [
+        // Build 33 real-device Voice Control repair: the outer `Semantics`
+        // previously had no `onTap` of its own -- only the
+        // `ExcludeSemantics`-wrapped `GestureDetector` below did, which
+        // never reaches the platform. Voice Control's "Tap"/"Show Names"
+        // activation relies on the real `SemanticsAction.tap`, so this
+        // control was effectively inert to it despite reading correctly
+        // to VoiceOver. Fixed by mirroring the same handler on the outer
+        // node -- `_handleTakeItWithYou` is idempotent/self-guarding
+        // (see its own doc comment), so exposing it here changes nothing
+        // about when the action is safe to invoke.
+        //
+        // For the non-Keeper (gated) state, `_handleTakeItWithYou` is a
+        // real action -- it opens the Keeper screen, never a silent
+        // no-op -- so a `hint` truthfully describes that outcome without
+        // altering the existing visible/spoken label.
         Semantics(
           button: true,
           label: isKeeper
               ? eastLocalizations(context).takeItWithYou
               : eastLocalizations(context).takeItWithYouKeeper,
+          hint: isKeeper ? null : eastLocalizations(context).opensKeeper,
+          onTap: () => unawaited(_handleTakeItWithYou()),
           child: ExcludeSemantics(
             child: GestureDetector(
               key: const ValueKey('journal-take-action'),
@@ -668,13 +703,23 @@ class _JournalScreenState extends State<JournalScreen> {
                   eastLocalizations(context).takeItWithYou,
                   // Approved "Free state — the gate" direction: touching
                   // this never opens a paywall -- the line itself simply
-                  // recedes to ~52% and "Available with Keeper." answers
-                  // it below, in the reading tier. Nothing else moves.
+                  // recedes and "Available with Keeper." answers it below,
+                  // in the reading tier. Nothing else moves.
+                  //
+                  // Build 33 accessibility repair: recedes to 70% opacity,
+                  // not ~52% -- 52% measured ~2.95:1 (Light) / ~4.09:1
+                  // (Dark) against the main background, both below WCAG
+                  // AA's 4.5:1 for normal-sized meaningful text. 70% is the
+                  // minimum opacity that clears 4.5:1 in both Light
+                  // (~4.75:1) and Dark (~6.32:1) while still reading as
+                  // visibly receded/gated next to the fully-opaque Keeper
+                  // state -- a local presentation change only, no theme
+                  // token touched.
                   style: _style(
                     22,
                     color: isKeeper
                         ? EastColors.of(context).ink
-                        : EastColors.of(context).ink.withValues(alpha: 0.52),
+                        : EastColors.of(context).ink.withValues(alpha: 0.70),
                   ),
                 ),
               ),
@@ -719,22 +764,31 @@ class _JournalScreenState extends State<JournalScreen> {
             style: _style(16, color: eastMutedTextColor(context)),
           ),
           const SizedBox(height: 34),
-          TextField(
-            key: const ValueKey('journal-name-field'),
-            controller: _nameController,
-            autofocus: false,
-            style: _style(20),
-            cursorColor: EastColors.of(context).ink,
-            decoration: InputDecoration(
-              hintText: eastLocalizations(context).yourName,
-              hintStyle: _style(20, color: EastColors.of(context).hint),
-              enabledBorder: UnderlineInputBorder(
-                borderSide:
-                    BorderSide(color: eastMutedTextColor(context), width: 0.5),
-              ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide:
-                    BorderSide(color: eastMutedTextColor(context), width: 0.5),
+          // See ReflectionScreen's writing area for why `MergeSemantics` is
+          // used: it keeps the TextField's own native text-input semantics
+          // (value, editing actions) while adding a stable accessible name
+          // that survives the hint disappearing once a value is entered.
+          MergeSemantics(
+            child: Semantics(
+              label: eastLocalizations(context).yourName,
+              child: TextField(
+                key: const ValueKey('journal-name-field'),
+                controller: _nameController,
+                autofocus: false,
+                style: _style(20),
+                cursorColor: EastColors.of(context).ink,
+                decoration: InputDecoration(
+                  hintText: eastLocalizations(context).yourName,
+                  hintStyle: _style(20, color: EastColors.of(context).hint),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                        color: eastMutedTextColor(context), width: 0.5),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                        color: eastMutedTextColor(context), width: 0.5),
+                  ),
+                ),
               ),
             ),
           ),

@@ -341,11 +341,16 @@ void main() {
 
     final encoded = record.encode();
 
+    // 'What is meant for you does not panic.' is itself a real canonical
+    // wisdom (east_wisdom_0001) with no ambiguous duplicate, so the
+    // constructor's historical-recovery resolver (Build 33) correctly
+    // populates wisdomId even though this fixture never passed one in.
     expect(encoded, {
       'schemaVersion': 3,
       'id': 'kept-1',
       'revealId': revealIdV4,
       'wisdomText': 'What is meant for you does not panic.',
+      'wisdomId': 'east_wisdom_0001',
       'revealedAtMs': revealedAt.millisecondsSinceEpoch,
       'keptAtMs': keptAt.millisecondsSinceEpoch,
       'reflectionText': 'Stayed with me.',

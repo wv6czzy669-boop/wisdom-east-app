@@ -27,11 +27,21 @@ class KeptRecord {
     DateTime? reflectedAt,
     required DateTime updatedAt,
     required this.mutationId,
-    this.wisdomId,
+    String? wisdomId,
   })  : revealedAt = revealedAt.toUtc(),
         keptAt = keptAt.toUtc(),
         reflectedAt = reflectedAt?.toUtc(),
-        updatedAt = updatedAt.toUtc() {
+        updatedAt = updatedAt.toUtc(),
+        // Historical/previous-install recovery (Build 33): a record decoded
+        // with no persisted wisdomId is re-resolved, on every construction,
+        // against the exact-unique-English-match catalog index. This is a
+        // pure function of the immutable wisdomText snapshot below, so it is
+        // safe to recompute unconditionally on every load/decode -- it never
+        // writes anything back and never changes what it resolves to for a
+        // given snapshot. Ambiguous (zero or multiple canonical matches)
+        // text correctly stays null; see resolveUniqueWisdomIdForEnglishSnapshot.
+        wisdomId =
+            wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(wisdomText) {
     _validate(
       id: id,
       revealId: revealId,
@@ -41,7 +51,7 @@ class KeptRecord {
       reflectedAt: this.reflectedAt,
       updatedAt: this.updatedAt,
       mutationId: mutationId,
-      wisdomId: wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(wisdomText),
+      wisdomId: this.wisdomId,
     );
   }
 
@@ -93,6 +103,17 @@ class KeptRecord {
   /// Deterministic tie-breaker only — never a record identity. Version 4
   /// for a normal mutation, version 5 for deterministic migration state.
   final String mutationId;
+
+  /// Optional canonical catalog identity, used by [WisdomLocalizationResolver]
+  /// to present this record in the reader's current locale. When a caller
+  /// (or a decoded payload) does not supply one, the constructor recovers it
+  /// from [wisdomText] via `resolveUniqueWisdomIdForEnglishSnapshot` -- only
+  /// when exactly one canonical wisdom shares that exact English text.
+  /// Ambiguous text (zero or multiple matches) stays null and the record
+  /// falls back to [wisdomText] as-is, in whatever language it was
+  /// originally snapshotted. This recovery is a pure function of
+  /// [wisdomText] alone, re-evaluated on every construction/decode -- it
+  /// never mutates stored data.
   final String? wisdomId;
 
   Map<String, dynamic> encode() => {

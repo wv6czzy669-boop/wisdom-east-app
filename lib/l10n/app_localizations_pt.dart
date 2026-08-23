@@ -125,6 +125,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String get reflectedEditReflection => 'REFLEXÃO. Editar reflexão.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'Adicionar reflexão, item $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'Abrir reflexão, item $number';
+  }
+
+  @override
   String get journalSemantic => 'Diário';
 
   @override
@@ -279,6 +289,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'Disponível com Guardar.';
+
+  @override
+  String get opensKeeper => 'Abre o Keeper.';
 
   @override
   String get nameUpper => 'NOME';
@@ -561,6 +574,16 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get reflectedEditReflection => 'REFLEXÃO. Editar reflexão.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'Adicionar reflexão, item $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'Abrir reflexão, item $number';
+  }
+
+  @override
   String get journalSemantic => 'Diário';
 
   @override
@@ -715,6 +738,9 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get availableWithKeeper => 'Disponível com Guardar.';
+
+  @override
+  String get opensKeeper => 'Abre o Keeper.';
 
   @override
   String get nameUpper => 'NOME';

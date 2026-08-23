@@ -1674,13 +1674,22 @@ void main() {
     );
     expect(wisdomText.style?.fontSize, 38);
     expect(wisdomText.style?.height, 1.48);
+    // Build 33 accessibility repair (real-device Larger Text failure): at
+    // 3x text scale the revealed-wisdom column no longer stays pinned to
+    // the approved 100% composition's `screenWidth * 0.60` (192 here on
+    // this 320pt-wide iPhone SE) -- it widens toward `ritualTextWidth`
+    // (`screenWidth - 68` = 252 here), the same width already used at
+    // every scale for Pause/Feel/Ask/the locked countdown, so a single
+    // long word is no longer forced into a mid-word character break. See
+    // `_HomeRitualContent.build`'s `revealedWisdomWidth` for the full
+    // rationale.
     expect(
       tester
           .widget<SizedBox>(
             find.byKey(const ValueKey('revealed-wisdom-layout')),
           )
           .width,
-      192,
+      252,
     );
     final revealFade = tester.widget<FadeTransition>(
       revealFadeFinder,
@@ -1755,6 +1764,552 @@ void main() {
     // teardown.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+  });
+
+  testWidgets(
+      'the full ritual (idle, Pause, Feel, Ask, wisdom reveal) stays '
+      'overflow-safe at 100/135/160/200% text scale', (tester) async {
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      tester.view.physicalSize = const Size(640, 1136);
+      tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(_homeApp());
+      await _finishOpeningIntro(tester);
+      expect(tester.takeException(), isNull, reason: 'idle at ${scale}x');
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 850));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 850));
+      expect(tester.takeException(), isNull, reason: 'Pause at ${scale}x');
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1300));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Pause/Feel at ${scale}x',
+      );
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 560));
+      expect(tester.takeException(), isNull, reason: 'Ask at ${scale}x');
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 2500));
+      expect(
+        find.byKey(const ValueKey('home-kept-control')),
+        findsOneWidget,
+        reason: 'the Kept control must remain reachable at ${scale}x.',
+      );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'revealed wisdom at ${scale}x',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+  });
+
+  testWidgets('the favorite-limit overlay stays usable at 200% text scale',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(_homeApp());
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+
+    final dynamic state = tester.state(find.byType(HomeScreen));
+    state.showFavoriteLimitDialog();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(
+      find.byKey(const ValueKey('home-favorite-limit-overlay')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  group(
+      'Larger Text word-wrap safety for the revealed wisdom (Build 33 '
+      'real-device repair)', () {
+    // Real device report: at very large Dynamic Type, the revealed
+    // wisdom's fixed 60%-of-screen column never widened with text scale,
+    // so a single long word (Turkish especially -- agglutinative) could no
+    // longer fit its own line and was force-broken mid-word by Flutter's
+    // text layout (e.g. "hikây/enin", "tama/mı de/ğildir" for
+    // east_wisdom_0195, "Yara hikâyenin tamamı değildir."). The fix widens
+    // the column as text scale grows toward the same width already used
+    // (at every scale) for Pause/Feel/Ask/the locked countdown.
+    Future<void> pumpRevealedWisdom(
+      WidgetTester tester, {
+      required String text,
+      required double textScale,
+    }) async {
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final record = DailyWisdomRecord(
+        text: text,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      );
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      SharedPreferences.setMockInitialValues({
+        DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
+      });
+
+      await tester.pumpWidget(
+        _homeApp(dailyGraph: dailyGraph, clock: () => now),
+      );
+      await _finishOpeningIntro(tester);
+      await _openExistingWisdom(tester);
+    }
+
+    /// A word wider than the actual laid-out column forces Flutter's text
+    /// layout to break it internally rather than wrap at a space --
+    /// exactly the reported failure mechanism. `FittedBox` (the revealed
+    /// wisdom's outer wrapper) only rescales the already-wrapped result
+    /// afterward; it cannot rewrap, so it cannot mask a too-narrow column
+    /// here. Measuring the real rendered style/width straight off the
+    /// widget tree (not a hand-reconstructed style) keeps this proof tied
+    /// to what production actually laid out.
+    void expectNoWordExceedsTheLayoutWidth(WidgetTester tester, String text) {
+      final textFinder = find.text(text);
+      expect(textFinder, findsOneWidget,
+          reason: 'the revealed wisdom must render as one Text widget');
+
+      final rendered = tester.widget<Text>(textFinder);
+      final sizedBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('revealed-wisdom-layout')),
+      );
+      final scaler = MediaQuery.textScalerOf(tester.element(textFinder));
+      final width = sizedBox.width!;
+
+      for (final word
+          in text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty)) {
+        final painter = TextPainter(
+          text: TextSpan(text: word, style: rendered.style),
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+        )..layout();
+        expect(
+          painter.width,
+          lessThanOrEqualTo(width),
+          reason: 'the word "$word" must fit within the ${width}pt-wide '
+              'revealed-wisdom column at ${scaler.scale(1.0)}x text scale '
+              '-- otherwise Flutter is forced to break it mid-word instead '
+              'of wrapping at a space.',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    }
+
+    const turkish = 'Yara hikâyenin tamamı değildir.';
+    const german = 'Manches Ende gibt dir die Kraft zurück, von der du '
+        'vergessen hattest, dass sie deine war.';
+    const english = 'Return when the silence opens again, not before.';
+
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      testWidgets(
+          'Turkish "$turkish" never breaks a word mid-word at ${scale}x '
+          'text scale', (tester) async {
+        await pumpRevealedWisdom(tester, text: turkish, textScale: scale);
+        expectNoWordExceedsTheLayoutWidth(tester, turkish);
+      });
+
+      testWidgets(
+          'a long German wisdom never breaks a word mid-word at ${scale}x '
+          'text scale', (tester) async {
+        await pumpRevealedWisdom(tester, text: german, textScale: scale);
+        expectNoWordExceedsTheLayoutWidth(tester, german);
+      });
+
+      testWidgets(
+          'an ordinary English wisdom never breaks a word mid-word at '
+          '${scale}x text scale', (tester) async {
+        await pumpRevealedWisdom(tester, text: english, textScale: scale);
+        expectNoWordExceedsTheLayoutWidth(tester, english);
+      });
+    }
+
+    testWidgets(
+        'at 100% text scale the revealed-wisdom column width is '
+        'bit-for-bit unchanged from the approved composition', (tester) async {
+      await pumpRevealedWisdom(tester, text: turkish, textScale: 1.0);
+      final sizedBox = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('revealed-wisdom-layout')),
+      );
+      final screenWidth =
+          tester.view.physicalSize.width / tester.view.devicePixelRatio;
+      expect(sizedBox.width, screenWidth * 0.60);
+    });
+
+    testWidgets(
+        'the locked/countdown state remains reachable at 200% text scale',
+        (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final record = DailyWisdomRecord(
+        text: turkish,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      );
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      SharedPreferences.setMockInitialValues({
+        DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
+      });
+
+      await tester.pumpWidget(
+        _homeApp(dailyGraph: dailyGraph, clock: () => now),
+      );
+      await _finishOpeningIntro(tester);
+      await _openExistingWisdom(tester);
+
+      expect(
+        find.textContaining('Return when the silence opens again.'),
+        findsOneWidget,
+        reason: 'the countdown text must remain reachable at 200%.',
+      );
+      expect(
+        find.byKey(const ValueKey('home-settings-control')),
+        findsOneWidget,
+        reason: 'top navigation must remain reachable at 200%.',
+      );
+      expect(
+        find.byKey(const ValueKey('home-kept-control')),
+        findsOneWidget,
+        reason: 'top navigation must remain reachable at 200%.',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Voice Control actionability (Build 33 real-device repair): Home', () {
+    // ROOT CAUSE (see `_HomeSaveControl` in home_ritual_widgets.dart): the
+    // save ring's `Semantics(onTap:)` used to sit *inside*
+    // `IgnorePointer(ignoring: !interactionEnabled)`. `IgnorePointer`'s
+    // deprecated `ignoringSemantics` parameter defaults to null, which its
+    // own `describeSemanticsConfiguration` treats as `true` --
+    // `ignoring: true` (the brief pre-"fully visible" window right after
+    // reveal) implicitly set `SemanticsConfiguration.isBlockingUserActions`
+    // on the whole subtree, stripping `SemanticsAction.tap` from what
+    // reaches the platform even though the label/onTap handler were still
+    // nominally present. Voice Control's "Show Names"/"Tap" activates via
+    // that real semantics action; VoiceOver's label-then-double-tap path
+    // tolerated the gap. Fixed by moving `Semantics` to wrap
+    // `IgnorePointer` from the outside instead of the reverse.
+
+    /// Seeds an already-revealed daily wisdom (bypassing the multi-tap
+    /// ritual, which `_openExistingWisdom` alone cannot do without one)
+    /// and pumps Home to that settled, chrome-visible state.
+    Future<void> pumpRevealed(
+      WidgetTester tester, {
+      KeptRepositoryTestGraph? keptGraph,
+    }) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final record = DailyWisdomRecord(
+        text: 'A wisdom used to verify Voice Control actionability.',
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+      );
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      SharedPreferences.setMockInitialValues({
+        DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
+      });
+
+      // A fresh, per-test `WisdomNotificationService` (the same fake
+      // platform used elsewhere in this file) rather than the real
+      // platform-channel-backed default -- `openSettings()`'s pop path
+      // awaits `synchronizeUnlockNotification()`, which needs this to
+      // settle deterministically within a bounded pump.
+      final notificationPlatform = _HomeNotificationPlatform(enabled: true);
+      final notificationService =
+          WisdomNotificationService(platform: notificationPlatform);
+
+      await tester.pumpWidget(
+        _homeApp(
+          dailyGraph: dailyGraph,
+          keptGraph: keptGraph,
+          clock: () => now,
+          wisdomNotificationService: notificationService,
+        ),
+      );
+      await _finishOpeningIntro(tester);
+      await _openExistingWisdom(tester);
+    }
+
+    testWidgets('Settings has a label and SemanticsAction.tap', (tester) async {
+      await pumpRevealed(tester);
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('home-settings-control')),
+      );
+      final data = node.getSemanticsData();
+      expect(node.label, 'Settings');
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets('Kept has a label and SemanticsAction.tap', (tester) async {
+      await pumpRevealed(tester);
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('home-kept-control')),
+      );
+      final data = node.getSemanticsData();
+      expect(node.label, 'Kept wisdoms');
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'Keep (unsaved) has SemanticsAction.tap immediately after reveal '
+        '-- during the brief pre-"fully visible" window, the exact '
+        'regression this session fixes', (tester) async {
+      await tester.pumpWidget(_homeApp());
+      await _finishOpeningIntro(tester);
+
+      // The full fresh ritual: idle -> Pause -> Feel/Ask -> Ask -> reveal
+      // (mirrors "the full ritual ... stays overflow-safe" above).
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 850));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 850));
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1300));
+
+      await _tapCenter(tester);
+      await tester.pump(const Duration(milliseconds: 1250));
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 560));
+
+      await _tapCenter(tester);
+      // The ask-fade-to-reveal transition itself takes ~1250ms before
+      // `wisdomRevealed`/chrome actually mount (see the ask-fade pumps
+      // above/`_openExistingWisdom`'s own timings) -- then one further
+      // short pump, long enough for the save ring's own AnimatedOpacity
+      // to have started, but nowhere near its full 1000ms duration, so
+      // `saveInteractionEnabled` is still false and
+      // `kept-interaction-guard` is still `ignoring: true`.
+      await tester.pump(const Duration(milliseconds: 1300));
+      // The save ring's own reveal is staged well after the wisdom text
+      // itself settles -- empirically, `saveControlOpacity` does not
+      // reach 1.0 (its own AnimatedOpacity has not even started) until
+      // several seconds after the reveal tap. This pumps past that point
+      // (`guard.ignoring` below is asserted `true` specifically to prove
+      // this test landed inside the still-settling window, not after it).
+      await tester.pump(const Duration(milliseconds: 3000));
+
+      final guard = tester.widget<IgnorePointer>(
+        find.byKey(const ValueKey('kept-interaction-guard')),
+      );
+      expect(guard.ignoring, isTrue,
+          reason: 'this test only proves what it claims to prove if the '
+              'pre-ready window is genuinely still active.');
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('home-save-control-unsaved')),
+      );
+      final data = node.getSemanticsData();
+      expect(data.hasAction(SemanticsAction.tap), isTrue,
+          reason: 'Keep must be reachable by Voice Control even while the '
+              'save ring is still settling into view.');
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'Keep (unsaved) still has SemanticsAction.tap once fully settled',
+        (tester) async {
+      await pumpRevealed(tester);
+
+      final guard = tester.widget<IgnorePointer>(
+        find.byKey(const ValueKey('kept-interaction-guard')),
+      );
+      expect(guard.ignoring, isFalse);
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('home-save-control-unsaved')),
+      );
+      final data = node.getSemanticsData();
+      expect(node.label, 'Keep this wisdom');
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'Keep (already kept) is never falsely exposed as an active '
+        'action -- correctly announces Kept with no tap action',
+        (tester) async {
+      final keptGraph = KeptRepositoryTestGraph();
+      await pumpRevealed(tester, keptGraph: keptGraph);
+
+      await tester.tap(
+        find.byKey(const ValueKey('home-save-control-unsaved')),
+      );
+      await tester.pump(const Duration(milliseconds: 1400));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('home-save-control-kept')),
+      );
+      final data = node.getSemanticsData();
+      expect(node.label, 'Kept');
+      expect(data.hasAction(SemanticsAction.tap), isFalse,
+          reason: 'already-kept wisdom must not falsely expose an active '
+              'Keep action -- Kept only ever removes from inside Kept, '
+              'never from Home.');
+      semantics.dispose();
+    });
+
+    // STATE STABILITY: reproduces the exact real-device report ("after
+    // leaving and re-entering Home: some Voice Control names disappeared,
+    // different names appeared") with the fixes above in place. Settings/
+    // Kept/Keep must expose the identical label + tap action before and
+    // after each round trip -- proving the earlier "readable label, no
+    // real tap action" bug (not a widget-identity/rebuild issue) was the
+    // actual cause, since these controls' mount/unmount structure is
+    // otherwise unchanged by this session's fixes.
+    void expectStableChrome(WidgetTester tester) {
+      final settings = tester.getSemantics(
+        find.byKey(const ValueKey('home-settings-control')),
+      );
+      expect(settings.label, 'Settings');
+      expect(
+        settings.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      final kept = tester.getSemantics(
+        find.byKey(const ValueKey('home-kept-control')),
+      );
+      expect(kept.label, 'Kept wisdoms');
+      expect(kept.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    }
+
+    testWidgets('Home -> Settings -> Back -> Home: chrome stays stable',
+        (tester) async {
+      await pumpRevealed(tester);
+      final semantics = tester.ensureSemantics();
+      expectStableChrome(tester);
+
+      await tester.tap(find.byKey(const ValueKey('home-settings-control')));
+      final settingsDuration = await _settleRoutePush(
+        tester,
+        find.byKey(const ValueKey('settings-scroll')),
+      );
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
+      await _settleRoutePop(
+        tester,
+        settingsDuration,
+        poppedRouteFinder: find.byKey(const ValueKey('settings-scroll')),
+      );
+
+      expectStableChrome(tester);
+      semantics.dispose();
+    });
+
+    testWidgets('Home -> Kept -> Back -> Home: chrome stays stable',
+        (tester) async {
+      await pumpRevealed(tester);
+      final semantics = tester.ensureSemantics();
+      expectStableChrome(tester);
+
+      await tester.tap(find.byKey(const ValueKey('home-kept-control')));
+      final keptDuration = await _settleRoutePush(
+        tester,
+        find.byKey(const ValueKey('kept-screen-root')),
+      );
+      await tester.tap(find.byKey(const ValueKey('east-back-button')));
+      await _settleRoutePop(
+        tester,
+        keptDuration,
+        poppedRouteFinder: find.byKey(const ValueKey('kept-screen-root')),
+      );
+
+      expectStableChrome(tester);
+      semantics.dispose();
+    });
+
+    testWidgets('locale switch: chrome stays stable', (tester) async {
+      final localeController = LocalePreferenceController(
+        storage: StoragePreferencesAdapter(),
+      );
+      await localeController.load();
+      final dailyGraph = DailyAccessTestGraph();
+      final keptGraph = KeptRepositoryTestGraph();
+
+      await tester.pumpWidget(
+        _localeAwareHomeApp(
+          localeController: localeController,
+          dailyGraph: dailyGraph,
+          keptGraph: keptGraph,
+        ),
+      );
+      await _completeFreshRitual(tester);
+      await _pumpInSteps(tester, const Duration(seconds: 2));
+      final semantics = tester.ensureSemantics();
+      expectStableChrome(tester);
+
+      await localeController.setExplicitLocale(const Locale('tr'));
+      await tester.pump();
+      await tester.pump();
+
+      final settings = tester.getSemantics(
+        find.byKey(const ValueKey('home-settings-control')),
+      );
+      expect(settings.label, 'Ayarlar');
+      expect(
+        settings.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      final kept = tester.getSemantics(
+        find.byKey(const ValueKey('home-kept-control')),
+      );
+      expect(
+        kept.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('background/foreground: chrome stays stable', (tester) async {
+      await pumpRevealed(tester);
+      final semantics = tester.ensureSemantics();
+      expectStableChrome(tester);
+
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.inactive,
+      );
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.paused,
+      );
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
+      await tester.pump();
+
+      expectStableChrome(tester);
+      semantics.dispose();
+    });
   });
 
   testWidgets(
@@ -2841,14 +3396,17 @@ void main() {
       key: 'home-settings-control',
       overlayLabel: 'Settings',
       semanticsLabel: 'Settings',
-      semanticsHint: null,
       destinationKey: 'settings-scroll',
     ),
     (
+      // Build 33 accessibility repair: this control's `hint` used to
+      // duplicate `label` verbatim ("Kept wisdoms" announced twice) --
+      // neither control carries a hint now (see the unconditional
+      // `expect(node.hint, isNull)` below), matching the Settings control,
+      // which never carried a redundant hint.
       key: 'home-kept-control',
       overlayLabel: 'Kept',
       semanticsLabel: 'Kept wisdoms',
-      semanticsHint: 'Kept wisdoms',
       destinationKey: 'kept-screen-root',
     ),
   ];
@@ -2910,9 +3468,15 @@ void main() {
 
       final node = tester.getSemantics(controlFinder);
       expect(node.label, control.semanticsLabel);
-      if (control.semanticsHint != null) {
-        expect(node.hint, control.semanticsHint);
-      }
+      // Build 33 accessibility repair: neither top-nav control carries a
+      // hint -- Kept's previous hint duplicated its own label verbatim,
+      // which VoiceOver would have announced twice.
+      expect(
+        node.hint,
+        isEmpty,
+        reason: '"${control.semanticsLabel}" must not expose a redundant '
+            'hint duplicating its own label.',
+      );
       final nodeData = node.getSemanticsData();
       expect(nodeData.hasAction(SemanticsAction.tap), isTrue);
       // Correction: the outer `GestureDetector`'s no-op `onLongPress` must

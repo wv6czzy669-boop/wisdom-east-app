@@ -36,12 +36,25 @@ class WisdomShareService implements WisdomShareHandler {
     await _share(bytes, sharePositionOrigin);
   }
 
+  /// [scheme] is the share PNG's own material only -- background, wordmark,
+  /// wisdom text, and the line beneath the wordmark -- never the native iOS
+  /// share sheet, which this app never recolors. Callers should pass the
+  /// EFFECTIVE appearance at the moment of sharing (`EastColors.of(context)`
+  /// already resolves System Default against the live platform brightness,
+  /// exactly like every other themed surface in the app), not merely the
+  /// stored Appearance preference enum. Defaults to Light for callers that
+  /// have no theme context.
   Future<void> shareWisdomForLocale({
     required String wisdom,
     required Rect sharePositionOrigin,
     required Locale locale,
+    EastColorScheme scheme = EastColorScheme.light,
   }) async {
-    final bytes = await _renderer.renderForLocale(wisdom, locale: locale);
+    final bytes = await _renderer.renderForLocale(
+      wisdom,
+      locale: locale,
+      scheme: scheme,
+    );
     await _share(bytes, sharePositionOrigin);
   }
 
@@ -90,6 +103,10 @@ class WisdomShareCardRenderer {
 
   static const int pixelWidth = 1080;
   static const int pixelHeight = 1920;
+  // Build 33: the share PNG now follows the caller-supplied `scheme`
+  // (`render`/`renderForLocale`'s `scheme` parameter) rather than always
+  // Light. These two constants remain only as the documented default value
+  // for callers that pass no scheme, and as `_wisdomPainter`'s own default.
   static const Color backgroundColor = EastColors.background;
   static const Color foregroundColor = EastColors.ink;
   static const String fontFamily = 'EBGaramond';
@@ -97,15 +114,15 @@ class WisdomShareCardRenderer {
   static const double wisdomOpticalCenterY = 900;
 
   // Update 3: small centered line beneath the "EAST." wordmark, replacing
-  // the removed bottom ritual circle. Uses `EastColors.secondary` -- the
-  // same *Light* value the in-app `eastMutedTextColor` token resolves to
-  // for a Light-appearance context -- at full opacity with no additional
-  // `.withValues(alpha: ...)` reduction. This share card is a static
-  // export artifact (see class doc comment) and is pinned to Light
-  // regardless of the live app's Appearance, so it deliberately reads the
-  // constant here rather than the theme-reactive `eastMutedTextColor`
-  // (`theme/muted_text_color.dart`), which now requires a `BuildContext`
-  // this canvas-only renderer never has.
+  // the removed bottom ritual circle. Painted with `scheme.secondary` at
+  // full opacity, no additional `.withValues(alpha: ...)` reduction -- the
+  // same relationship the in-app `eastMutedTextColor` token has to `ink` in
+  // each palette. This share card is a static export artifact (see class
+  // doc comment) rendered on a bare `Canvas` with no `BuildContext`, so it
+  // reads its colors from the `scheme` passed in by the caller (Build 33:
+  // the effective app appearance at share time) rather than the
+  // theme-reactive `eastMutedTextColor` (`theme/muted_text_color.dart`),
+  // which requires one.
   static const double wordmarkLineGap = 13;
   static const double wordmarkLineThickness = 1;
   // Correction: the line's width is derived from the actual rendered
@@ -191,12 +208,20 @@ class WisdomShareCardRenderer {
     );
   }
 
-  Future<Uint8List> render(String wisdom) =>
-      renderForLocale(wisdom, locale: const Locale('en'));
+  Future<Uint8List> render(
+    String wisdom, {
+    EastColorScheme scheme = EastColorScheme.light,
+  }) =>
+      renderForLocale(wisdom, locale: const Locale('en'), scheme: scheme);
 
+  /// [scheme] themes only this generated PNG's own material -- it never
+  /// touches the native iOS share sheet. Defaults to [EastColorScheme.light]
+  /// (pixel-identical to this renderer's previous, always-Light behavior)
+  /// so every existing caller/test is unaffected unless it opts in.
   Future<Uint8List> renderForLocale(
     String wisdom, {
     required Locale locale,
+    EastColorScheme scheme = EastColorScheme.light,
   }) async {
     final trimmedWisdom = wisdom.trim();
     if (trimmedWisdom.isEmpty) {
@@ -217,13 +242,13 @@ class WisdomShareCardRenderer {
         pixelHeight.toDouble(),
       ),
     );
-    canvas.drawColor(backgroundColor, BlendMode.src);
+    canvas.drawColor(scheme.background, BlendMode.src);
 
     final brandPainter = TextPainter(
-      text: const TextSpan(
+      text: TextSpan(
         text: 'EAST.',
         style: TextStyle(
-          color: foregroundColor,
+          color: scheme.ink,
           fontFamily: fontFamily,
           fontSize: 46,
           fontWeight: FontWeight.w400,
@@ -251,7 +276,7 @@ class WisdomShareCardRenderer {
     // blend across two rows — flatter and closer to "no glow" than a
     // sub-pixel-positioned line would be.
     final wordmarkLinePaint = Paint()
-      ..color = EastColors.secondary
+      ..color = scheme.secondary
       ..style = PaintingStyle.fill;
     final wordmarkLineTop =
         (brandTop + brandPainter.height + wordmarkLineGap).roundToDouble();
@@ -271,6 +296,7 @@ class WisdomShareCardRenderer {
       locale: locale,
       fontSize: layout.fontSize,
       lineHeight: layout.lineHeight,
+      color: scheme.ink,
     )..layout(maxWidth: layout.textBoxWidth);
     wisdomPainter.paint(
       canvas,
@@ -305,13 +331,14 @@ class WisdomShareCardRenderer {
     required Locale locale,
     required double fontSize,
     required double lineHeight,
+    Color color = foregroundColor,
   }) {
     final typography = EastTypographyResolver.forLocale(locale);
     return TextPainter(
       text: TextSpan(
         text: wisdom,
         style: TextStyle(
-          color: foregroundColor,
+          color: color,
           fontFamily: typography.family,
           fontFamilyFallback: typography.fallbacks,
           fontSize: fontSize,

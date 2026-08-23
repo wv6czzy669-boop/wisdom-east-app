@@ -378,6 +378,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'Settings stays usable at 100/135/160/200% text scale '
+      '(Build 33 accessibility repair)', (tester) async {
+    for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(
+        const MaterialApp(home: SettingsScreen()),
+      );
+      await tester.pump();
+
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.text('Keeper'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '${scale}x');
+    }
+  });
+
   testWidgets('Keeper row tap pushes exactly one Keeper route', (tester) async {
     // A single completed gesture on Keeper immediately pushes a new route
     // that covers the Settings list — there is no physically deliverable

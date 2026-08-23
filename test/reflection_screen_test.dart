@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
@@ -989,6 +991,183 @@ void main() {
         expect(event.eventName, isNot(contains(analyticsItem.id)));
         expect(event.eventName, isNot(contains(analyticsItem.revealId!)));
       }
+    });
+  });
+
+  group('Voice Control actionability (Build 33 real-device repair)', () {
+    testWidgets('Back has SemanticsAction.tap', (tester) async {
+      await tester.pumpWidget(openable(item));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('east-back-button')),
+      );
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'the writing area exposes real text-field editing semantics with '
+        'a stable accessible name', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReflectionScreen(
+            item: item,
+            isKeeper: false,
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(
+        find.byKey(const ValueKey('reflection-writing-area')),
+      );
+      // `MergeSemantics` folds the TextField's own native text-input
+      // semantics (still a real editable field, not excluded) together
+      // with a stable accessible name that survives the hint
+      // disappearing once a value is entered -- see
+      // `_ReflectionScreenState.build`.
+      expect(node.getSemanticsData().flagsCollection.isTextField, isTrue);
+      expect(node.label, contains('Reflection'));
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'Delete (in the AppBar, once a reflection exists) has a label '
+        'and SemanticsAction.tap', (tester) async {
+      await service.saveReflection(
+        itemId: item.id,
+        reflection: 'A private reflection to delete.',
+        isKeeper: false,
+      );
+      final reflected = (await service.load()).single;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReflectionScreen(
+            item: reflected,
+            isKeeper: false,
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(find.text('Delete'));
+      expect(node.label, 'Delete reflection');
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'the delete-confirmation Cancel/Delete decision labels have '
+        'SemanticsAction.tap', (tester) async {
+      await service.saveReflection(
+        itemId: item.id,
+        reflection: 'A private reflection to delete.',
+        isKeeper: false,
+      );
+      final reflected = (await service.load()).single;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReflectionScreen(
+            item: reflected,
+            isKeeper: false,
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      final semantics = tester.ensureSemantics();
+      final cancel = tester.getSemantics(
+        find.descendant(
+          of: find.byKey(const ValueKey('reflection-delete-decision')),
+          matching: find.text('CANCEL'),
+        ),
+      );
+      final delete = tester.getSemantics(
+        find.descendant(
+          of: find.byKey(const ValueKey('reflection-delete-decision')),
+          matching: find.text('DELETE'),
+        ),
+      );
+      expect(cancel.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      expect(delete.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+  });
+
+  group('Dynamic Type (Build 33 accessibility repair)', () {
+    testWidgets('Reflection editor stays usable at 100/135/160/200% text scale',
+        (tester) async {
+      for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(
+          tester.platformDispatcher.clearTextScaleFactorTestValue,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ReflectionScreen(
+              item: item,
+              isKeeper: false,
+              savedReflectionsService: service,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('reflection-writing-area')),
+          findsOneWidget,
+          reason: 'the writing area must remain reachable at ${scale}x.',
+        );
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'no overflow/exception at ${scale}x text scale.',
+        );
+      }
+    });
+
+    testWidgets(
+        'Reflection delete confirmation overlay stays usable at 200% '
+        'text scale', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(
+        tester.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+
+      await service.saveReflection(
+        itemId: item.id,
+        reflection: 'A private memory.',
+        isKeeper: false,
+      );
+      final reflected = (await service.load()).single;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReflectionScreen(
+            item: reflected,
+            isKeeper: false,
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('reflection-delete-decision')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -258,7 +258,14 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     }
   }
 
-  Widget _status(FavoriteItem item) {
+  // Build 33 real-device Voice Control repair: `itemNumber` (1-based,
+  // screen-order -- see `itemBuilder`'s `index`) makes each row's
+  // Reflection action uniquely addressable by name ("Open Reflection,
+  // item 2"), since the wisdom text itself must never be the spoken
+  // control name and dates are not guaranteed unique. The static date/
+  // wisdom content remains unnumbered and VoiceOver-readable via ordinary
+  // Text auto-semantics -- only the actionable control's name changes.
+  Widget _status(FavoriteItem item, int itemNumber) {
     final l10n = eastLocalizations(context);
     if (!item.hasReflection) {
       return ConstrainedBox(
@@ -270,9 +277,32 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       );
     }
 
+    // Build 33 real-device Voice Control repair: the outer `Semantics`
+    // previously carried a `label` and `button: true` but no `onTap` of
+    // its own -- the only tap handler lived on the `GestureDetector`
+    // wrapped in `ExcludeSemantics` below, so no `SemanticsAction.tap`
+    // ever reached the platform. VoiceOver's read-the-label-and-double-
+    // tap path tolerated this; Voice Control's "Tap <name>"/"Show Names"
+    // -- which activates via the real semantics action -- did not. Fixed
+    // by mirroring the same `onTap` on the outer node, matching the
+    // pattern already used correctly elsewhere (Settings' `settingsItem`,
+    // Language/Appearance rows, `EastBackButton`).
+    //
+    // `container: true` is also new here: `_keptItem`'s own outer
+    // `Semantics(customSemanticsActions: {...})` has no `container` of
+    // its own, so it merges every un-boundaried descendant's label into
+    // one combined string (date + status + wisdom) -- without a boundary
+    // here, this control's own unique per-row label would get swallowed
+    // into that same merged string, defeating the per-row uniqueness
+    // below. `container: true` keeps this control's accessible name
+    // exactly what it claims to be, and correspondingly keeps the row's
+    // static content (date/status/wisdom) as the one coherent,
+    // un-cluttered content node the audit called for.
     return Semantics(
+      container: true,
       button: true,
-      label: l10n.reflectedEditReflection,
+      label: l10n.openReflectionNumbered(itemNumber),
+      onTap: () => _openReflection(item),
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -289,7 +319,8 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     );
   }
 
-  Widget _keptItem(FavoriteItem item) {
+  Widget _keptItem(FavoriteItem item, int index) {
+    final itemNumber = index + 1;
     return Semantics(
       customSemanticsActions: {
         CustomSemanticsAction(label: eastLocalizations(context).delete): () {
@@ -312,14 +343,21 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                   letterSpacing: 0.4,
                 )),
             const SizedBox(height: 5),
-            _status(item),
+            _status(item, itemNumber),
             const SizedBox(height: 7),
             Text(_displayWisdom(item), style: _style(24)),
             if (!item.hasReflection) ...[
               const SizedBox(height: 12),
+              // `container: true` -- see `_status` above for why this is
+              // needed to keep this control's per-row label from merging
+              // into the row's static date/status/wisdom content.
               Semantics(
+                container: true,
                 button: true,
-                label: eastLocalizations(context).addReflection,
+                label: eastLocalizations(context).addReflectionNumbered(
+                  itemNumber,
+                ),
+                onTap: () => _openReflection(item),
                 child: ExcludeSemantics(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -375,7 +413,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             child: ExcludeSemantics(
               child: IconButton(
                 key: const ValueKey('kept-journal-control'),
-                tooltip: l10n.journal,
                 onPressed: () => unawaited(_openJournal()),
                 icon: const Icon(Icons.menu_book_outlined),
               ),
@@ -406,7 +443,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                 );
               },
               itemBuilder: (context, index) {
-                return _keptItem(visibleItems[index]);
+                return _keptItem(visibleItems[index], index);
               },
             ),
     );
@@ -520,9 +557,19 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
             child: AnimatedBuilder(
               animation: _controller,
               builder: (context, child) {
+                // Build 33 accessibility repair: while closed, this control
+                // must not exist as an accessibility-focusable child --
+                // VoiceOver swipe navigation should never land on a "DELETE"
+                // stop with no visible on-screen anchor. The row-level
+                // CustomSemanticsAction("Delete") (see `_keptItem`) already
+                // provides a fully accessible delete path regardless of
+                // this region's open/closed state.
                 return IgnorePointer(
                   ignoring: !_isOpen,
-                  child: child,
+                  child: ExcludeSemantics(
+                    excluding: !_isOpen,
+                    child: child,
+                  ),
                 );
               },
               child: GestureDetector(

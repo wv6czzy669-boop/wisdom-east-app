@@ -5,6 +5,8 @@
 // These IDs are deliberately explicit and positional: catalog order is the
 // migration contract for the existing English snapshots. Never generate,
 // reorder, or reuse them at runtime.
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 const List<String> _catalogWisdomIds = <String>[
   'east_wisdom_0001',
   'east_wisdom_0002',
@@ -3660,9 +3662,21 @@ bool isCanonicalWisdomId(String value) => RegExp(
 String? resolveUniqueWisdomIdForEnglishSnapshot(String snapshot) =>
     _uniqueWisdomIdByEnglishSnapshot[snapshot];
 
-Map<String, String?> _buildUniqueWisdomIdByEnglishSnapshot() {
+Map<String, String?> _buildUniqueWisdomIdByEnglishSnapshot() =>
+    buildUniqueWisdomIdByEnglishSnapshotFrom(wisdoms);
+
+/// The pure reduction behind [resolveUniqueWisdomIdForEnglishSnapshot],
+/// extracted only so a test can exercise the exact-duplicate-text
+/// ("unresolved on ambiguity") branch deterministically -- the live
+/// [wisdoms] catalog has no exact-duplicate text today, so that branch
+/// cannot otherwise be reached through the real catalog. Never called in
+/// production with anything other than [wisdoms] itself.
+@visibleForTesting
+Map<String, String?> buildUniqueWisdomIdByEnglishSnapshotFrom(
+  List<Map<String, dynamic>> catalog,
+) {
   final result = <String, String?>{};
-  for (final wisdom in wisdoms) {
+  for (final wisdom in catalog) {
     final text = wisdom['text'] as String;
     final id = wisdom['id'] as String;
     result.update(text, (_) => null, ifAbsent: () => id);

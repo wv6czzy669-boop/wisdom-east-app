@@ -18,7 +18,14 @@ abstract final class EastColors {
   static const Color ink = Color(0xFF2C2924);
   static const Color secondary = Color(0xFF625D54);
   static const Color utilityInk = Color(0xFF4F4A42);
-  static const Color hint = Color(0xFF938D82);
+  // Build 33 accessibility repair: the previous hint tone (#938D82) measured
+  // ~2.49:1 against #E2E0D9 -- below WCAG AA even for large text. This is
+  // 2% interpolated from `secondary` (#625D54) toward `background`
+  // (was 35%), the minimum shift that clears 4.5:1 for normal-sized
+  // meaningful hint/placeholder text (measures ~4.75:1) while staying
+  // dimmer than `secondary`. `background`/`ink`/`secondary`/`divider` are
+  // unchanged.
+  static const Color hint = Color(0xFF656057);
   static const Color divider = Color(0xFFC3BDB2);
   static const Color accent = Color(0xFF8B7652);
   static const Color overlay = Color(0xF0E2E0D9);
@@ -46,9 +53,12 @@ abstract final class EastColors {
 ///  - `utilityInk`: interpolated 30% from `ink` toward `secondary`, for the
 ///    same "dark but not headline-weight" body-copy role `utilityInk` plays
 ///    in Light.
-///  - `hint`: interpolated 35% from `secondary` toward `background`, dimmer
-///    than secondary text (placeholders/hints must recede) but kept well
-///    clear of the divider tone so it never becomes illegible.
+///  - `hint`: interpolated from `secondary` toward `background` (Build 33
+///    accessibility repair -- both palettes were previously interpolated
+///    35%, which measured below WCAG AA; Dark now uses 20%, Light uses 2%,
+///    each the minimum shift that holds >=4.5:1 against `background`),
+///    dimmer than secondary text (placeholders/hints must recede) while
+///    remaining legible for normal-sized meaningful hint/placeholder text.
 ///  - `accent`: the Light accent (`#8B7652`) lightened 35% toward `ink` so
 ///    it stays visible against a dark field without introducing a bright or
 ///    saturated color.
@@ -94,7 +104,13 @@ class EastColorScheme extends ThemeExtension<EastColorScheme> {
     ink: Color(0xFFD8D4CB),
     secondary: Color(0xFFA9A49B),
     utilityInk: Color(0xFFCAC6BD),
-    hint: Color(0xFF78746D),
+    // Build 33 accessibility repair: the previous hint tone (#78746D)
+    // measured ~3.70:1 against #1C1B18 -- below WCAG AA (4.5:1) for
+    // normal-sized text. This is 20% interpolated from `secondary`
+    // (#A9A49B) toward `background` (was 35%), clearing 4.5:1 (measures
+    // ~4.92:1) while staying dimmer than `secondary`. `background`/
+    // `ink` (`#D8D4CB`)/`secondary` (`#A9A49B`)/`divider` are unchanged.
+    hint: Color(0xFF8D8981),
     divider: Color(0xFF34312C),
     accent: Color(0xFFA6977C),
     overlay: Color(0xF01C1B18),

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -587,6 +588,76 @@ void main() {
         isNot(EastColorScheme.dark.background),
       );
     });
+  });
+
+  group('Dynamic Type (Build 33 accessibility repair)', () {
+    testWidgets(
+        'Appearance selection stays usable at 100/135/160/200% text scale',
+        (tester) async {
+      final appearance = AppearancePreferenceController(
+        storage: StoragePreferencesAdapter(),
+      );
+      await appearance.load();
+
+      for (final scale in [1.0, 1.35, 1.6, 2.0]) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: AppearanceSelectionScreen(
+              appearancePreferenceController: appearance,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('appearance-system-option')),
+          findsOneWidget,
+          reason: 'System Default must remain reachable at ${scale}x.',
+        );
+        expect(
+          find.byKey(const ValueKey('appearance-dark-option')),
+          findsOneWidget,
+          reason: 'Dark must remain reachable at ${scale}x.',
+        );
+        expect(tester.takeException(), isNull);
+      }
+    });
+  });
+
+  testWidgets(
+      'Voice Control actionability (Build 33 real-device repair): rows '
+      'are unique and have SemanticsAction.tap', (tester) async {
+    final appearance = AppearancePreferenceController(
+      storage: StoragePreferencesAdapter(),
+    );
+    await appearance.load();
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AppearanceSelectionScreen(
+          appearancePreferenceController: appearance,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final semantics = tester.ensureSemantics();
+    final system = tester.getSemantics(
+      find.byKey(const ValueKey('appearance-system-option')),
+    );
+    final dark = tester.getSemantics(
+      find.byKey(const ValueKey('appearance-dark-option')),
+    );
+    expect(system.label, isNot(dark.label));
+    expect(system.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    expect(dark.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
   });
 }
 

@@ -125,6 +125,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reflectedEditReflection => 'REFLECTED. Edit reflection.';
 
   @override
+  String addReflectionNumbered(Object number) {
+    return 'Add Reflection, item $number';
+  }
+
+  @override
+  String openReflectionNumbered(Object number) {
+    return 'Open Reflection, item $number';
+  }
+
+  @override
   String get journalSemantic => 'Journal';
 
   @override
@@ -277,6 +287,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get availableWithKeeper => 'Available with Keeper.';
+
+  @override
+  String get opensKeeper => 'Opens Keeper.';
 
   @override
   String get nameUpper => 'NAME';

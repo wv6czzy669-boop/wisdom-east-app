@@ -418,10 +418,16 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     required VoidCallback? onTap,
     required Color color,
   }) {
+    // Build 33 real-device Voice Control repair: the outer `Semantics`
+    // must carry its own `onTap` -- `ExcludeSemantics` below discards the
+    // inner `GestureDetector`'s, so without this the node has a label and
+    // a `button` trait but no real `SemanticsAction.tap`, which Voice
+    // Control's activation relies on.
     return Semantics(
       button: true,
       enabled: onTap != null,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -562,6 +568,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                 button: true,
                 enabled: !_deleteInProgress,
                 label: l10n.deleteReflection,
+                onTap: _deleteInProgress ? null : _delete,
                 child: ExcludeSemantics(
                   child: TextButton(
                     onPressed: _deleteInProgress ? null : _delete,
@@ -577,76 +584,105 @@ class _ReflectionScreenState extends State<ReflectionScreen>
               top: false,
               child: IgnorePointer(
                 ignoring: _confirmingDelete,
-                child: SingleChildScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    16,
-                    24,
-                    28 + MediaQuery.viewInsetsOf(context).bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _wisdomPresentation.resolveItem(
-                          widget.item,
-                          Localizations.localeOf(context),
+                child: ExcludeSemantics(
+                  excluding: _confirmingDelete,
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.fromLTRB(
+                      24,
+                      16,
+                      24,
+                      28 + MediaQuery.viewInsetsOf(context).bottom,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _wisdomPresentation.resolveItem(
+                            widget.item,
+                            Localizations.localeOf(context),
+                          ),
+                          key: const ValueKey('reflection-associated-wisdom'),
+                          style: _style(24, height: 1.46),
                         ),
-                        key: const ValueKey('reflection-associated-wisdom'),
-                        style: _style(24, height: 1.46),
-                      ),
-                      const SizedBox(height: 42),
-                      TextField(
-                        key: const ValueKey('reflection-writing-area'),
-                        controller: _controller,
-                        enabled: !_deleteInProgress,
-                        autofocus: false,
-                        keyboardType: TextInputType.multiline,
-                        minLines: 7,
-                        maxLines: null,
-                        maxLength:
-                            SavedReflectionsService.maximumReflectionLength,
-                        inputFormatters: [
-                          LengthLimitingTextInputFormatter(
-                            SavedReflectionsService.maximumReflectionLength,
-                          ),
-                        ],
-                        style: _style(20, height: 1.45),
-                        cursorColor: EastColors.of(context).ink,
-                        decoration: InputDecoration(
-                          hintText: _prompt,
-                          hintStyle: _style(
-                            20,
-                            color: EastColors.of(context).hint,
-                            height: 1.45,
-                          ),
-                          counter: characterCount >= counterThreshold
-                              ? Text(
-                                  '$characterCount/'
-                                  '${SavedReflectionsService.maximumReflectionLength}',
-                                  style: _style(
-                                    13,
-                                    color: EastColors.of(context).secondary,
+                        const SizedBox(height: 42),
+                        // A stable, always-present accessible name for this
+                        // field: `MergeSemantics` folds the TextField's own
+                        // native text-input semantics (live value, editing
+                        // actions, and the framework's built-in
+                        // maxLength-driven character-count announcement)
+                        // together with this label, so the field's purpose
+                        // is announced whether or not it is empty --
+                        // `hintText` alone is not a reliable accessible name
+                        // once a value has been entered.
+                        MergeSemantics(
+                          child: Semantics(
+                            label: eastLocalizations(context).reflection,
+                            child: TextField(
+                              key: const ValueKey('reflection-writing-area'),
+                              controller: _controller,
+                              enabled: !_deleteInProgress,
+                              autofocus: false,
+                              keyboardType: TextInputType.multiline,
+                              minLines: 7,
+                              maxLines: null,
+                              maxLength: SavedReflectionsService
+                                  .maximumReflectionLength,
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(
+                                  SavedReflectionsService
+                                      .maximumReflectionLength,
+                                ),
+                              ],
+                              style: _style(20, height: 1.45),
+                              cursorColor: EastColors.of(context).ink,
+                              decoration: InputDecoration(
+                                hintText: _prompt,
+                                hintStyle: _style(
+                                  20,
+                                  color: EastColors.of(context).hint,
+                                  height: 1.45,
+                                ),
+                                // The TextField's own `maxLength` already
+                                // gives VoiceOver a native, non-obtrusive
+                                // current/maximum character announcement
+                                // (Flutter wires this into the field's own
+                                // Semantics automatically). This visible
+                                // counter is a sighted-only convenience near
+                                // the limit; excluding it from semantics
+                                // avoids a redundant duplicate announcement.
+                                counter: ExcludeSemantics(
+                                  child: characterCount >= counterThreshold
+                                      ? Text(
+                                          '$characterCount/'
+                                          '${SavedReflectionsService.maximumReflectionLength}',
+                                          style: _style(
+                                            13,
+                                            color: EastColors.of(context)
+                                                .secondary,
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                                enabledBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: eastMutedTextColor(context),
+                                    width: 0.5,
                                   ),
-                                )
-                              : const SizedBox.shrink(),
-                          enabledBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                              color: eastMutedTextColor(context),
-                              width: 0.5,
-                            ),
-                          ),
-                          focusedBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                              color: eastMutedTextColor(context),
-                              width: 0.5,
+                                ),
+                                focusedBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: eastMutedTextColor(context),
+                                    width: 0.5,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
