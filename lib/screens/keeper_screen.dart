@@ -55,7 +55,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
           ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: EastColors.surface,
+              backgroundColor: EastColors.of(context).surface,
               content: Text(
                 "Keeper access could not be saved. Please try Restore Purchases.",
                 style: keeperStyle(17),
@@ -75,7 +75,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
 
   TextStyle keeperStyle(
     double size, {
-    Color color = EastColors.ink,
+    Color? color,
   }) {
     return EastTypography.localized(
       context,
@@ -103,7 +103,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: EastColors.surface,
+          backgroundColor: EastColors.of(context).surface,
           content: Text(
             _purchaseService.purchaseNeedsRecovery
                 ? "Purchase status is still updating. Please use Restore Purchases in Settings."
@@ -125,12 +125,12 @@ class _KeeperScreenState extends State<KeeperScreen> {
     final purchaseEnabled =
         !isKeeper && purchaseAvailable && !_purchaseService.isLoading;
     return Scaffold(
-      backgroundColor: EastColors.background,
+      backgroundColor: EastColors.of(context).background,
       appBar: AppBar(
-        backgroundColor: EastColors.background,
-        foregroundColor: EastColors.ink,
-        iconTheme: const IconThemeData(
-          color: EastColors.ink,
+        backgroundColor: EastColors.of(context).background,
+        foregroundColor: EastColors.of(context).ink,
+        iconTheme: IconThemeData(
+          color: EastColors.of(context).ink,
           size: 22,
           weight: 300,
         ),
@@ -161,7 +161,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         25,
-                        color: eastMutedTextColor,
+                        color: eastMutedTextColor(context),
                       ).copyWith(letterSpacing: 1.55),
                     ),
                     const SizedBox(height: 92),
@@ -195,21 +195,25 @@ class _KeeperScreenState extends State<KeeperScreen> {
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: EastColors.ink.withValues(alpha: 0.012),
+                                color: EastColors.of(context)
+                                    .ink
+                                    .withValues(alpha: 0.012),
                                 border: Border.all(
-                                  color: eastMutedTextColor,
+                                  color: eastMutedTextColor(context),
                                   width: 0.7,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: EastColors.accent
+                                    color: EastColors.of(context)
+                                        .accent
                                         .withValues(alpha: 0.05),
                                     blurRadius: 122,
                                     spreadRadius: 5,
                                   ),
                                   BoxShadow(
-                                    color:
-                                        EastColors.ink.withValues(alpha: 0.02),
+                                    color: EastColors.of(context)
+                                        .ink
+                                        .withValues(alpha: 0.02),
                                     blurRadius: 78,
                                     spreadRadius: 2,
                                   ),
@@ -259,7 +263,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       textAlign: TextAlign.center,
                       style: keeperStyle(
                         14,
-                        color: eastMutedTextColor,
+                        color: eastMutedTextColor(context),
                       ).copyWith(letterSpacing: 0.8),
                     ),
                   ],

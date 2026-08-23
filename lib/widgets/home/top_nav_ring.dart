@@ -57,7 +57,7 @@ class DoubleRingIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.square(
+    return SizedBox.square(
       dimension: TopNavRingGeometry.outerDiameter,
       // Only this base ring carries the key — the transient Kept-icon
       // emphasis pulse (`_KeptIconEmphasis` in `home_ritual_widgets.dart`)
@@ -66,9 +66,14 @@ class DoubleRingIcon extends StatelessWidget {
       // `find.byKey('kept-top-nav-ring')` always finds exactly one widget
       // regardless of whether the pulse is active. `DoubleRingIcon` is
       // only ever used for Kept, so this key is unambiguous.
+      //
+      // The color is resolved explicitly from the current Appearance
+      // (rather than relying on `TopNavRingPainter`'s own default, which
+      // stays pinned to `TopNavRingGeometry.color` for any caller that
+      // never supplies one) so Kept's ring stays visible in Dark Mode.
       child: CustomPaint(
-        key: ValueKey('kept-top-nav-ring'),
-        painter: TopNavRingPainter(),
+        key: const ValueKey('kept-top-nav-ring'),
+        painter: TopNavRingPainter(color: EastColors.of(context).ink),
       ),
     );
   }
@@ -85,29 +90,32 @@ class HomeTopNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    final color = EastColors.of(context).ink;
+    return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _Bar(),
-        SizedBox(height: _barGap),
-        _Bar(),
-        SizedBox(height: _barGap),
-        _Bar(),
+        _Bar(color: color),
+        const SizedBox(height: _barGap),
+        _Bar(color: color),
+        const SizedBox(height: _barGap),
+        _Bar(color: color),
       ],
     );
   }
 }
 
 class _Bar extends StatelessWidget {
-  const _Bar();
+  const _Bar({required this.color});
+
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: HomeTopNavBar._barLength,
       height: TopNavRingGeometry.strokeWidth,
-      color: TopNavRingGeometry.color,
+      color: color,
     );
   }
 }

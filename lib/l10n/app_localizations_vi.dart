@@ -64,6 +64,25 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'Giao diện';
+
+  @override
+  String get light => 'Sáng';
+
+  @override
+  String get dark => 'Tối';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'Giao diện. Lựa chọn hiện tại: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'Quay lại';
 
   @override
@@ -208,6 +227,26 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'Lúc này, bạn đang nhận thấy điều gì?';
+
+  @override
+  String get returnWhenSilenceOpensAgain =>
+      'Quay lại khi tĩnh lặng mở ra một lần nữa.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'Điều gì còn lại?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'Điều gì đọng lại trong bạn?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer =>
+      'Điều gì trở nên rõ ràng hơn?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'Điều gì cảm thấy khác đi?';
+
+  @override
+  String get reflectionPromptCarryForward => 'Bạn muốn mang theo điều gì?';
 
   @override
   String get deleteReflectionQuestion => 'Xóa suy ngẫm?';

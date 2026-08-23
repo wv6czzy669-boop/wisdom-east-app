@@ -64,6 +64,25 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get appearance => '外観';
+
+  @override
+  String get light => 'ライト';
+
+  @override
+  String get dark => 'ダーク';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return '外観。現在の選択: $value。';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => '戻る';
 
   @override
@@ -203,6 +222,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get reflectionPrompt => '今、何に気づいていますか？';
+
+  @override
+  String get returnWhenSilenceOpensAgain => '静けさがまた開いたら、戻ってきて。';
+
+  @override
+  String get reflectionPromptWhatRemains => '何が残りますか？';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => '何があなたの中に残りましたか？';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => '何がはっきりしましたか？';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => '何が違って感じられますか？';
+
+  @override
+  String get reflectionPromptCarryForward => '何を持ち続けたいですか？';
 
   @override
   String get deleteReflectionQuestion => '内省を削除しますか？';

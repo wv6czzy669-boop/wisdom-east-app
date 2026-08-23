@@ -56,7 +56,16 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   // `_runPersistLoop`, for why correctness no longer depends on it.
   late final TextEditingController _controller;
   late final SavedReflectionsService _service;
-  late final String _prompt;
+  late final int _promptIndex;
+
+  /// Phase 5G: resolved every `build()` (never cached), exactly like this
+  /// screen's own wisdom presentation, so a locale change while this
+  /// screen is open updates the shown prompt immediately. [_promptIndex]
+  /// itself is the stable prompt *identity* -- fixed once in [initState],
+  /// never re-derived -- so switching locale changes only which language
+  /// this list is read in, never which prompt is selected.
+  String get _prompt =>
+      localizedReflectionPrompts(eastLocalizations(context))[_promptIndex];
 
   Timer? _debounceTimer;
 
@@ -91,7 +100,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
 
   TextStyle _style(
     double size, {
-    Color color = EastColors.ink,
+    Color? color,
     double height = 1.38,
     double letterSpacing = 0.35,
   }) {
@@ -114,7 +123,8 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     // (falling back to its always-present `id` only for pre-revealId
     // legacy Kept records) -- never on a persisted "chosen prompt" field,
     // and never re-derived from anything that can change across a save.
-    _prompt = reflectionPromptFor(widget.item.revealId ?? widget.item.id);
+    _promptIndex =
+        reflectionPromptIndexFor(widget.item.revealId ?? widget.item.id);
     _lastPersistedText = widget.item.reflection?.trim();
     _controller = TextEditingController(text: widget.item.reflection)
       ..addListener(_handleTextChanged);
@@ -160,7 +170,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: EastColors.surface,
+          backgroundColor: EastColors.of(context).surface,
           content: Text(message, style: _style(17)),
         ),
       );
@@ -448,7 +458,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
           opacity: _confirmingDelete ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('reflection-delete-decision'),
-            color: EastColors.overlay,
+            color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -465,7 +475,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                   textAlign: TextAlign.center,
                   style: _style(
                     15,
-                    color: EastColors.secondary,
+                    color: EastColors.of(context).secondary,
                     height: 1.45,
                     letterSpacing: 0.4,
                   ),
@@ -477,7 +487,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                     _deleteDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _deleteInProgress ? null : _cancelDelete,
-                      color: EastColors.secondary,
+                      color: EastColors.of(context).secondary,
                     ),
                     const SizedBox(width: 56),
                     _deleteDecisionLabel(
@@ -485,7 +495,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                       onTap: _deleteInProgress
                           ? null
                           : () => unawaited(_confirmDelete()),
-                      color: EastColors.ink,
+                      color: EastColors.of(context).ink,
                     ),
                   ],
                 ),
@@ -537,10 +547,10 @@ class _ReflectionScreenState extends State<ReflectionScreen>
         unawaited(_handlePopAttempt());
       },
       child: Scaffold(
-        backgroundColor: EastColors.background,
+        backgroundColor: EastColors.of(context).background,
         appBar: AppBar(
-          backgroundColor: EastColors.background,
-          foregroundColor: EastColors.ink,
+          backgroundColor: EastColors.of(context).background,
+          foregroundColor: EastColors.of(context).ink,
           surfaceTintColor: Colors.transparent,
           shadowColor: Colors.transparent,
           elevation: 0,
@@ -604,12 +614,12 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                           ),
                         ],
                         style: _style(20, height: 1.45),
-                        cursorColor: EastColors.ink,
+                        cursorColor: EastColors.of(context).ink,
                         decoration: InputDecoration(
                           hintText: _prompt,
                           hintStyle: _style(
                             20,
-                            color: EastColors.hint,
+                            color: EastColors.of(context).hint,
                             height: 1.45,
                           ),
                           counter: characterCount >= counterThreshold
@@ -618,19 +628,19 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                                   '${SavedReflectionsService.maximumReflectionLength}',
                                   style: _style(
                                     13,
-                                    color: EastColors.secondary,
+                                    color: EastColors.of(context).secondary,
                                   ),
                                 )
                               : const SizedBox.shrink(),
-                          enabledBorder: const UnderlineInputBorder(
+                          enabledBorder: UnderlineInputBorder(
                             borderSide: BorderSide(
-                              color: eastMutedTextColor,
+                              color: eastMutedTextColor(context),
                               width: 0.5,
                             ),
                           ),
-                          focusedBorder: const UnderlineInputBorder(
+                          focusedBorder: UnderlineInputBorder(
                             borderSide: BorderSide(
-                              color: eastMutedTextColor,
+                              color: eastMutedTextColor(context),
                               width: 0.5,
                             ),
                           ),

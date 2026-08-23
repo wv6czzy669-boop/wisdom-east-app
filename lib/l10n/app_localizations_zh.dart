@@ -64,6 +64,25 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get appearance => '外观';
+
+  @override
+  String get light => '浅色';
+
+  @override
+  String get dark => '深色';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return '外观。当前选择：$value。';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => '返回';
 
   @override
@@ -203,6 +222,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reflectionPrompt => '此刻，你注意到了什麼？';
+
+  @override
+  String get returnWhenSilenceOpensAgain => '寂靜再次敞開時，回來吧。';
+
+  @override
+  String get reflectionPromptWhatRemains => '什麼留下了？';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => '什麼留在你心裡？';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => '什麼變得更清晰了？';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => '什麼感覺不一樣了？';
+
+  @override
+  String get reflectionPromptCarryForward => '你想帶著什麼前行？';
 
   @override
   String get deleteReflectionQuestion => '刪除省思？';
@@ -438,6 +475,25 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
+  String get appearance => '外觀';
+
+  @override
+  String get light => '淺色';
+
+  @override
+  String get dark => '深色';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return '外觀。目前選擇：$value。';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => '返回';
 
   @override
@@ -577,6 +633,24 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get reflectionPrompt => '此刻，你注意到了什麼？';
+
+  @override
+  String get returnWhenSilenceOpensAgain => '寂靜再次敞開時，回來吧。';
+
+  @override
+  String get reflectionPromptWhatRemains => '什麼留下了？';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => '什麼留在你心裡？';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => '什麼變得更清晰了？';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => '什麼感覺不一樣了？';
+
+  @override
+  String get reflectionPromptCarryForward => '你想帶著什麼前行？';
 
   @override
   String get deleteReflectionQuestion => '刪除省思？';

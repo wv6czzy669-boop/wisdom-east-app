@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../controllers/appearance_preference_controller.dart';
 import '../controllers/latest_request_guard.dart';
 import '../controllers/locale_preference_controller.dart';
 import '../controllers/ritual_flow_controller.dart';
@@ -50,6 +51,7 @@ class HomeScreen extends StatefulWidget {
     this.analyticsService,
     this.widgetSnapshotService,
     this.localePreferenceController,
+    this.appearancePreferenceController,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
     this.dailyWisdomStatusTimeout =
         DailyWisdomAccessService.defaultStatusTimeout,
@@ -66,6 +68,7 @@ class HomeScreen extends StatefulWidget {
   final AnalyticsService? analyticsService;
   final WidgetSnapshotService? widgetSnapshotService;
   final LocalePreferenceController? localePreferenceController;
+  final AppearancePreferenceController? appearancePreferenceController;
   final Duration dailyWisdomOperationTimeout;
   final Duration dailyWisdomStatusTimeout;
 
@@ -92,6 +95,15 @@ class _HomeScreenState extends State<HomeScreen>
   bool navigationInProgress = false;
   bool saveInteractionEnabled = false;
   bool _reduceMotion = false;
+  // Phase 5G: last-seen effective locale, so `didChangeDependencies` can
+  // detect a genuine language change (explicit override or a resolved
+  // System Default change) and refresh the two pieces of EAST.-authored
+  // presentation that are otherwise only ever computed once and cached in
+  // state -- the daily-lock/countdown message and the scheduled
+  // notification's copy -- instead of leaving stale-locale text to sit
+  // until the next unrelated trigger (60-second timer tick, resume, etc.).
+  // `null` only before the very first `didChangeDependencies` call.
+  Locale? _lastKnownLocale;
   bool _isInRitualSilence = false;
   bool _dailyStatusResolved = false;
   bool _dailyLockActive = false;
@@ -373,16 +385,49 @@ class _HomeScreenState extends State<HomeScreen>
     super.didChangeDependencies();
 
     final reduceMotion = MediaQuery.of(context).disableAnimations;
-    if (_reduceMotion == reduceMotion) return;
+    if (_reduceMotion != reduceMotion) {
+      _reduceMotion = reduceMotion;
+      if (_reduceMotion) {
+        pulseController.stop();
+        pulseController.value = 0.5;
+      } else if (WidgetsBinding.instance.lifecycleState ==
+              AppLifecycleState.resumed &&
+          !pulseController.isAnimating) {
+        pulseController.repeat(reverse: true);
+      }
+    }
 
-    _reduceMotion = reduceMotion;
-    if (_reduceMotion) {
-      pulseController.stop();
-      pulseController.value = 0.5;
-    } else if (WidgetsBinding.instance.lifecycleState ==
-            AppLifecycleState.resumed &&
-        !pulseController.isAnimating) {
-      pulseController.repeat(reverse: true);
+    final locale = Localizations.localeOf(context);
+    if (_lastKnownLocale != locale) {
+      final isFirstCall = _lastKnownLocale == null;
+      _lastKnownLocale = locale;
+
+      // Always kept in sync with the current locale -- including the very
+      // first call, since `WisdomNotificationService`'s own default (used
+      // by the app-wide singleton, which has no `BuildContext` of its own
+      // to resolve a locale from) is English regardless of which locale
+      // the app actually launches into.
+      wisdomNotificationService.updateCopy(
+        WisdomNotificationCopy(eastLocalizations(context)),
+      );
+
+      if (!isFirstCall) {
+        // Presentation-only refresh: recomputes the daily-lock/countdown
+        // message (`nextWisdomMessage`/`currentText`) in the newly selected
+        // language, without touching `unlockAt`, the daily lock, or any
+        // persisted wisdom/notification-trigger state. The initial value is
+        // already computed by the normal startup load path, so this only
+        // needs to fire on a genuine subsequent change.
+        unawaited(updateNextWisdomMessage());
+        // `synchronizeUnlockNotification` -> `WisdomNotificationService
+        // .synchronizeWithStatus` is the exact same reconciliation already
+        // used at resume/launch/Settings-return: it only ever touches an
+        // *already-authorized* pending reminder (never schedules for a
+        // user who never opted in, never re-enables a denied one), and
+        // replaces it at the identical `unlockAt` -- the copy update above
+        // is the only reason this particular call changes its title/body.
+        unawaited(synchronizeUnlockNotification());
+      }
     }
   }
 
@@ -638,7 +683,7 @@ class _HomeScreenState extends State<HomeScreen>
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: EastColors.surface,
+        backgroundColor: EastColors.of(context).surface,
         duration: const Duration(milliseconds: 1400),
         content: Text(
           message,
@@ -996,7 +1041,11 @@ class _HomeScreenState extends State<HomeScreen>
       lockedWisdomId = status.wisdomId;
     }
 
-    final message = CountdownFormatter.silenceMessage(status.remaining!);
+    if (!mounted) return;
+    final message = CountdownFormatter.silenceMessage(
+      status.remaining!,
+      eastLocalizations(context).returnWhenSilenceOpensAgain,
+    );
 
     if (_canCommitAccessRefresh(refreshGeneration)) {
       setState(() {
@@ -2025,6 +2074,8 @@ class _HomeScreenState extends State<HomeScreen>
         MaterialPageRoute(
           builder: (context) => SettingsScreen(
             localePreferenceController: widget.localePreferenceController,
+            appearancePreferenceController:
+                widget.appearancePreferenceController,
           ),
         ),
       );
@@ -2145,7 +2196,7 @@ class _HomeScreenState extends State<HomeScreen>
           opacity: _favoriteLimitOverlayVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('home-favorite-limit-overlay'),
-            color: EastColors.overlay,
+            color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -2163,7 +2214,7 @@ class _HomeScreenState extends State<HomeScreen>
                   style: _homeWisdomStyle(
                     context,
                     15,
-                    color: EastColors.secondary,
+                    color: EastColors.of(context).secondary,
                   ),
                 ),
                 const SizedBox(height: 44),
@@ -2173,13 +2224,13 @@ class _HomeScreenState extends State<HomeScreen>
                     _favoriteLimitDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _dismissFavoriteLimitOverlay,
-                      color: EastColors.secondary,
+                      color: EastColors.of(context).secondary,
                     ),
                     const SizedBox(width: 56),
                     _favoriteLimitDecisionLabel(
                       l10n.becomeKeeper,
                       onTap: _becomeKeeperFromLimitOverlay,
-                      color: EastColors.ink,
+                      color: EastColors.of(context).ink,
                     ),
                   ],
                 ),
@@ -2411,13 +2462,13 @@ class _HomeScreenState extends State<HomeScreen>
         ? _presentedWisdom(Localizations.localeOf(context))
         : currentText;
     return Scaffold(
-      backgroundColor: EastColors.background,
+      backgroundColor: EastColors.of(context).background,
       body: SafeArea(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const Positioned.fill(
-              child: ColoredBox(color: EastColors.background),
+            Positioned.fill(
+              child: ColoredBox(color: EastColors.of(context).background),
             ),
             Positioned.fill(
               child: _HomeMainRitualGesture(

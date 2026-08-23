@@ -64,6 +64,25 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get appearance => '외관';
+
+  @override
+  String get light => '라이트';
+
+  @override
+  String get dark => '다크';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return '외관. 현재 선택: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => '뒤로';
 
   @override
@@ -203,6 +222,24 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get reflectionPrompt => '지금 무엇을 알아차렸나요?';
+
+  @override
+  String get returnWhenSilenceOpensAgain => '고요가 다시 열릴 때 돌아오세요.';
+
+  @override
+  String get reflectionPromptWhatRemains => '무엇이 남아 있나요?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => '무엇이 마음에 남았나요?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => '무엇이 더 선명해졌나요?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => '무엇이 다르게 느껴지나요?';
+
+  @override
+  String get reflectionPromptCarryForward => '무엇을 간직하고 싶나요?';
 
   @override
   String get deleteReflectionQuestion => '성찰을 삭제할까요?';

@@ -73,28 +73,30 @@ void main() {
         .toSet();
     expect(renderedCopy, lockedCopy.toSet());
 
+    final mutedColor =
+        eastMutedTextColor(tester.element(find.text('Keep what stays.')));
     expect(
       tester.widget<Text>(find.text('Keep what stays.')).style?.color,
-      eastMutedTextColor,
+      mutedColor,
     );
     expect(
       tester.widget<Text>(find.text('Keep EAST. alive.')).style?.color,
-      eastMutedTextColor,
+      mutedColor,
     );
     expect(
       tester.widget<Text>(find.text('Keep without limit.')).style?.color,
-      isNot(eastMutedTextColor),
+      isNot(mutedColor),
     );
     expect(
       tester.widget<Text>(find.text('Reflect without limit.')).style?.color,
-      isNot(eastMutedTextColor),
+      isNot(mutedColor),
     );
     expect(
       tester
           .widget<Text>(find.text('Take your Journal with you.'))
           .style
           ?.color,
-      isNot(eastMutedTextColor),
+      isNot(mutedColor),
     );
   });
 
@@ -116,7 +118,9 @@ void main() {
       ),
     );
     final ringDecoration = ringContainer.decoration! as BoxDecoration;
-    expect(ringDecoration.border!.top.color, eastMutedTextColor);
+    final mutedColor =
+        eastMutedTextColor(tester.element(find.text('Keep what stays.')));
+    expect(ringDecoration.border!.top.color, mutedColor);
     expect(
       ringDecoration.border!.top.color,
       tester.widget<Text>(find.text('Keep what stays.')).style!.color,
@@ -146,11 +150,11 @@ void main() {
     // Secondary description colors (muted lines) are unaffected.
     expect(
       tester.widget<Text>(find.text('Keep what stays.')).style?.color,
-      eastMutedTextColor,
+      mutedColor,
     );
     expect(
       tester.widget<Text>(find.text('Keep EAST. alive.')).style?.color,
-      eastMutedTextColor,
+      mutedColor,
     );
   });
 

@@ -176,7 +176,19 @@ class WisdomNotificationService {
   final WisdomNotificationPlatform _platform;
   final StoragePreferencesAdapter _preferencesAdapter;
   final DateTime Function() _clock;
-  final WisdomNotificationCopy _copy;
+  WisdomNotificationCopy _copy;
+
+  /// Phase 5G: updates the EAST.-authored title/body used by every
+  /// subsequent [schedule]/[synchronizeWithStatus]/
+  /// [scheduleFromAuthoritativeUnlock] call. Presentation only -- never
+  /// touches `unlockAt`, opt-in status, or any persisted state. The caller
+  /// (`HomeScreen`, the only place with a `BuildContext` to resolve a
+  /// locale from) is responsible for calling this whenever the current
+  /// EAST. locale is first known and whenever it changes; this service
+  /// itself has, and needs, no locale awareness of its own.
+  void updateCopy(WisdomNotificationCopy copy) {
+    _copy = copy;
+  }
 
   bool _promptHandledInMemory = false;
   Future<void>? _initialization;

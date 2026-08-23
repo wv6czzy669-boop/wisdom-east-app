@@ -64,6 +64,25 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'Darstellung';
+
+  @override
+  String get light => 'Hell';
+
+  @override
+  String get dark => 'Dunkel';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'Darstellung. Aktuelle Auswahl: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'Zurück';
 
   @override
@@ -208,6 +227,25 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'Was nimmst du gerade wahr?';
+
+  @override
+  String get returnWhenSilenceOpensAgain =>
+      'Kehre zurück, wenn die Stille sich wieder öffnet.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'Was bleibt?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'Was ist dir geblieben?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'Was wurde klarer?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'Was fühlt sich anders an?';
+
+  @override
+  String get reflectionPromptCarryForward => 'Was möchtest du mitnehmen?';
 
   @override
   String get deleteReflectionQuestion => 'Reflexion löschen?';

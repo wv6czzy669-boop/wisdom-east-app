@@ -7,12 +7,35 @@ import WidgetKit
 /// Visual-polish repair: iOS already labels this widget "EAST." below its
 /// frame (the Home Screen widget/application label), so the interior no
 /// longer repeats a ring or wordmark of its own -- only the phrase itself.
-private let eastStone = Color(red: 226.0 / 255.0, green: 224.0 / 255.0, blue: 217.0 / 255.0)
-private let eastInk = Color(red: 44.0 / 255.0, green: 41.0 / 255.0, blue: 36.0 / 255.0)
+///
+/// Appearance (Dark Mode): a WidgetKit widget is hosted by the system (Home
+/// Screen/Lock Screen), outside the app's own view hierarchy, so it always
+/// follows the *device's* system appearance -- it has no concept of, and
+/// cannot honor, the in-app explicit Light/Dark override (that would need
+/// cross-process App Group coordination, which is exactly the kind of
+/// complicated, widget-specific sync this feature's own scope excludes).
+/// Reacting to `colorScheme` here is the trivial, standard WidgetKit
+/// mechanism for that system-level match -- the light values are pinned to
+/// the app's own locked field/ink; the dark values are the app's locked
+/// Dark Mode field/ink (`east_design.dart`'s `EastColorScheme.dark`).
+private let eastStoneLight = Color(red: 226.0 / 255.0, green: 224.0 / 255.0, blue: 217.0 / 255.0)
+private let eastInkLight = Color(red: 44.0 / 255.0, green: 41.0 / 255.0, blue: 36.0 / 255.0)
+private let eastStoneDark = Color(red: 28.0 / 255.0, green: 27.0 / 255.0, blue: 24.0 / 255.0)
+private let eastInkDark = Color(red: 216.0 / 255.0, green: 212.0 / 255.0, blue: 203.0 / 255.0)
 private let eastWidgetURL = URL(string: "eastwidget://open")
 
 struct EastWidgetView: View {
     let entry: EastWidgetEntry
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var eastStone: Color {
+        colorScheme == .dark ? eastStoneDark : eastStoneLight
+    }
+
+    private var eastInk: Color {
+        colorScheme == .dark ? eastInkDark : eastInkLight
+    }
 
     var body: some View {
         GeometryReader { geometry in

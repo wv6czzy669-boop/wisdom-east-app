@@ -64,6 +64,25 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'รูปลักษณ์';
+
+  @override
+  String get light => 'สว่าง';
+
+  @override
+  String get dark => 'มืด';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'รูปลักษณ์ ตัวเลือกปัจจุบัน: $value';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'กลับ';
 
   @override
@@ -206,6 +225,24 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'ตอนนี้คุณสังเกตเห็นอะไร?';
+
+  @override
+  String get returnWhenSilenceOpensAgain => 'กลับมาเมื่อความเงียบเปิดอีกครั้ง.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'อะไรที่หลงเหลืออยู่?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'อะไรที่ยังคงอยู่กับคุณ?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'อะไรที่ชัดเจนขึ้น?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'อะไรที่รู้สึกแตกต่างไป?';
+
+  @override
+  String get reflectionPromptCarryForward => 'คุณอยากพกอะไรติดตัวไปต่อ?';
 
   @override
   String get deleteReflectionQuestion => 'ลบการไตร่ตรอง?';

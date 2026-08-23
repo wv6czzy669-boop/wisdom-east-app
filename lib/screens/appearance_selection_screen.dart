@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 
-import '../controllers/locale_preference_controller.dart';
+import '../controllers/appearance_preference_controller.dart';
 import '../l10n/east_localizations.dart';
-import '../localization/east_locale_registry.dart';
 import '../theme/east_design.dart';
 import '../widgets/east_back_button.dart';
 
-/// EAST.'s immediate, persisted 15-language product picker.
-class LanguageSelectionScreen extends StatelessWidget {
-  const LanguageSelectionScreen({
+/// EAST.'s immediate, persisted Appearance picker: System Default, Light,
+/// Dark. Deliberately mirrors [LanguageSelectionScreen]'s structure and
+/// restraint -- exactly three plain-text rows, no flags/icons/preview, no
+/// Save button, applies immediately, normal back navigation. Appearance is
+/// independent of Language: this screen never reads or writes any locale
+/// preference.
+class AppearanceSelectionScreen extends StatelessWidget {
+  const AppearanceSelectionScreen({
     super.key,
-    required this.localePreferenceController,
+    required this.appearancePreferenceController,
   });
 
-  final LocalePreferenceController localePreferenceController;
+  final AppearancePreferenceController appearancePreferenceController;
 
   static const WidgetStateProperty<Color?> _noOverlayColor =
       WidgetStatePropertyAll(Colors.transparent);
@@ -38,35 +42,39 @@ class LanguageSelectionScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 36),
           child: AnimatedBuilder(
-            animation: localePreferenceController,
+            animation: appearancePreferenceController,
             builder: (context, _) {
               final palette = EastColors.of(context);
               return ListView(
                 children: [
                   Text(
-                    l10n.language,
+                    l10n.appearance,
                     style: EastTypography.localized(context, size: 27),
                   ),
                   const SizedBox(height: 28),
                   _option(
                     context: context,
-                    key: const ValueKey('language-system-default-option'),
+                    key: const ValueKey('appearance-system-option'),
                     label: l10n.systemDefault,
-                    locale: null,
+                    mode: EastAppearanceMode.system,
                     palette: palette,
                   ),
                   Divider(height: 1, color: palette.divider),
-                  for (final definition in EastLocaleRegistry.targets) ...[
-                    _option(
-                      context: context,
-                      key: ValueKey('language-${definition.tag}-option'),
-                      label: definition.nativeName,
-                      locale: definition.locale,
-                      palette: palette,
-                    ),
-                    if (definition != EastLocaleRegistry.targets.last)
-                      Divider(height: 1, color: palette.divider),
-                  ],
+                  _option(
+                    context: context,
+                    key: const ValueKey('appearance-light-option'),
+                    label: l10n.light,
+                    mode: EastAppearanceMode.light,
+                    palette: palette,
+                  ),
+                  Divider(height: 1, color: palette.divider),
+                  _option(
+                    context: context,
+                    key: const ValueKey('appearance-dark-option'),
+                    label: l10n.dark,
+                    mode: EastAppearanceMode.dark,
+                    palette: palette,
+                  ),
                 ],
               );
             },
@@ -80,25 +88,20 @@ class LanguageSelectionScreen extends StatelessWidget {
     required BuildContext context,
     required Key key,
     required String label,
-    required Locale? locale,
+    required EastAppearanceMode mode,
     required EastColorScheme palette,
   }) {
-    final selected = locale == null
-        ? localePreferenceController.isSystemDefault
-        : EastLocaleRegistry.canonicalTag(
-              localePreferenceController.explicitLocale ?? const Locale('en'),
-            ) ==
-            EastLocaleRegistry.canonicalTag(locale);
+    final selected = appearancePreferenceController.mode == mode;
     final l10n = eastLocalizations(context);
     return Semantics(
       button: true,
       selected: selected,
-      label: l10n.languageOptionSemantics(label),
-      onTap: () => localePreferenceController.setExplicitLocale(locale),
+      label: l10n.appearanceOptionSemantics(label),
+      onTap: () => appearancePreferenceController.setMode(mode),
       child: ExcludeSemantics(
         child: InkWell(
           key: key,
-          onTap: () => localePreferenceController.setExplicitLocale(locale),
+          onTap: () => appearancePreferenceController.setMode(mode),
           overlayColor: _noOverlayColor,
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,

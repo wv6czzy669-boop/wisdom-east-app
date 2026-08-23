@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../l10n/east_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../controllers/appearance_preference_controller.dart';
 import '../controllers/icloud_removal_controller.dart';
 import '../controllers/locale_preference_controller.dart';
 import '../localization/east_locale_registry.dart';
@@ -15,6 +16,7 @@ import '../services/purchase_service.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
+import 'appearance_selection_screen.dart';
 import 'keeper_screen.dart';
 import 'language_selection_screen.dart';
 
@@ -32,12 +34,14 @@ class SettingsScreen extends StatefulWidget {
     this.icloudRemovalController,
     this.dataExportService,
     this.localePreferenceController,
+    this.appearancePreferenceController,
   });
 
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
   final DataExportService? dataExportService;
   final LocalePreferenceController? localePreferenceController;
+  final AppearancePreferenceController? appearancePreferenceController;
 
   /// Build 26 Phase 4G: injectable only for tests -- production always uses
   /// the single [app_services.cloudKitAssociationController] instance (see
@@ -63,6 +67,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late final LocalePreferenceController _fallbackLocalePreferenceController =
       LocalePreferenceController();
+  late final AppearancePreferenceController
+      _fallbackAppearancePreferenceController =
+      AppearancePreferenceController();
   bool _keeperNavigationInProgress = false;
   bool _privacyPolicyLaunchInProgress = false;
   bool _reachOutLaunchInProgress = false;
@@ -135,6 +142,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   LocalePreferenceController get _localePreferenceController =>
       widget.localePreferenceController ?? _fallbackLocalePreferenceController;
 
+  AppearancePreferenceController get _appearancePreferenceController =>
+      widget.appearancePreferenceController ??
+      _fallbackAppearancePreferenceController;
+
   String _localePreferenceLabel(AppLocalizations l10n) {
     final explicit = _localePreferenceController.explicitLocale;
     return explicit == null
@@ -142,12 +153,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : EastLocaleRegistry.definitionFor(explicit).nativeName;
   }
 
+  String _appearancePreferenceLabel(AppLocalizations l10n) {
+    switch (_appearancePreferenceController.mode) {
+      case EastAppearanceMode.system:
+        return l10n.systemDefault;
+      case EastAppearanceMode.light:
+        return l10n.light;
+      case EastAppearanceMode.dark:
+        return l10n.dark;
+    }
+  }
+
   // Shared by every Settings divider (see requirement: "all Settings
   // dividers use one shared value"). Derived from the approved muted-text
   // token rather than a duplicated raw RGB literal.
-  final Color _settingsDividerColor = eastMutedTextColor.withValues(
-    alpha: 0.30,
-  );
+  Color _settingsDividerColor(BuildContext context) =>
+      eastMutedTextColor(context).withValues(alpha: 0.30);
 
   PurchaseService get _purchaseService =>
       widget.purchaseService ?? app_services.purchaseService;
@@ -160,7 +181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   TextStyle eastStyle(
     double size, {
-    Color color = EastColors.ink,
+    Color? color,
   }) {
     return EastTypography.localized(
       context,
@@ -233,7 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             subtitle,
                             style: eastStyle(
                               15,
-                              color: EastColors.secondary,
+                              color: EastColors.of(context).secondary,
                             ),
                           ),
                         ],
@@ -267,7 +288,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: EastTypography.localized(
             context,
             size: 11,
-            color: eastMutedTextColor,
+            color: eastMutedTextColor(context),
             letterSpacing: 2.0,
           ),
         ),
@@ -277,7 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _settingsGroupDivider() {
     return Divider(
-      color: _settingsDividerColor,
+      color: _settingsDividerColor(context),
       thickness: 0.5,
     );
   }
@@ -300,7 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: EastColors.surface,
+        backgroundColor: EastColors.of(context).surface,
         duration: const Duration(milliseconds: 1600),
         content: Text(
           message,
@@ -503,7 +524,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           opacity: _restoreResultVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('settings-restore-result'),
-            color: EastColors.overlay,
+            color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -518,7 +539,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: eastStyle(15, color: EastColors.secondary),
+                  style: eastStyle(15, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 44),
                 Semantics(
@@ -540,7 +561,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: EastTypography.localized(
                               context,
                               size: 11,
-                              color: EastColors.ink,
+                              color: EastColors.of(context).ink,
                               letterSpacing: 3.0,
                             ),
                           ),
@@ -615,7 +636,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           opacity: _removeFromICloudConfirmVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('settings-remove-from-icloud-confirm'),
-            color: EastColors.overlay,
+            color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -630,13 +651,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(
                   l10n.removeIcloudLocalData,
                   textAlign: TextAlign.center,
-                  style: eastStyle(15, color: EastColors.secondary),
+                  style: eastStyle(15, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   l10n.removeIcloudCloudData,
                   textAlign: TextAlign.center,
-                  style: eastStyle(14, color: EastColors.secondary),
+                  style: eastStyle(14, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 44),
                 Row(
@@ -645,13 +666,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _removeFromICloudDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _cancelRemoveFromICloud,
-                      color: EastColors.secondary,
+                      color: EastColors.of(context).secondary,
                     ),
                     const SizedBox(width: 56),
                     _removeFromICloudDecisionLabel(
                       l10n.removeUpper,
                       onTap: _confirmRemoveFromICloud,
-                      color: EastColors.ink,
+                      color: EastColors.of(context).ink,
                     ),
                   ],
                 ),
@@ -719,7 +740,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           opacity: _enableSyncOverlayVisible ? 1.0 : 0.0,
           child: Container(
             key: const ValueKey('settings-enable-sync-confirm'),
-            color: EastColors.overlay,
+            color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
@@ -734,13 +755,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(
                   l10n.enableIcloudData,
                   textAlign: TextAlign.center,
-                  style: eastStyle(15, color: EastColors.secondary),
+                  style: eastStyle(15, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   l10n.dailyRitualOnDevice,
                   textAlign: TextAlign.center,
-                  style: eastStyle(14, color: EastColors.secondary),
+                  style: eastStyle(14, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 44),
                 Row(
@@ -749,13 +770,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _enableSyncDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _cancelEnableSync,
-                      color: EastColors.secondary,
+                      color: EastColors.of(context).secondary,
                     ),
                     const SizedBox(width: 56),
                     _enableSyncDecisionLabel(
                       l10n.enableUpper,
                       onTap: _confirmEnableSync,
-                      color: EastColors.ink,
+                      color: EastColors.of(context).ink,
                     ),
                   ],
                 ),
@@ -840,6 +861,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       MaterialPageRoute(
         builder: (context) => LanguageSelectionScreen(
           localePreferenceController: _localePreferenceController,
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  /// Mirrors [_openLanguage] exactly -- Appearance and Language are two
+  /// fully independent preferences that happen to share the same "push a
+  /// minimal picker, refresh this row on return" shape.
+  Future<void> _openAppearance() async {
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AppearanceSelectionScreen(
+          appearancePreferenceController: _appearancePreferenceController,
         ),
       ),
     );
@@ -1148,12 +1185,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: EastColors.background,
+      backgroundColor: EastColors.of(context).background,
       appBar: AppBar(
-        backgroundColor: EastColors.background,
-        foregroundColor: EastColors.ink,
-        iconTheme: const IconThemeData(
-          color: EastColors.ink,
+        backgroundColor: EastColors.of(context).background,
+        foregroundColor: EastColors.of(context).ink,
+        iconTheme: IconThemeData(
+          color: EastColors.of(context).ink,
           size: 22,
           weight: 300,
         ),
@@ -1182,6 +1219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _settingsBody(BuildContext context) {
     final l10n = eastLocalizations(context);
     final localePreferenceLabel = _localePreferenceLabel(l10n);
+    final appearancePreferenceLabel = _appearancePreferenceLabel(l10n);
     return SafeArea(
       top: false,
       child: LayoutBuilder(
@@ -1211,7 +1249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       textAlign: TextAlign.center,
                       style: eastStyle(
                         17,
-                        color: eastMutedTextColor,
+                        color: eastMutedTextColor(context),
                       ),
                     ),
                     const SizedBox(height: 40),
@@ -1282,6 +1320,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           l10n.languageSettingSemantics(localePreferenceLabel),
                       onTap: _openLanguage,
                       trailing: _settingsTrailingState(localePreferenceLabel),
+                    ),
+                    const SizedBox(height: 24),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-appearance-row'),
+                      title: l10n.appearance,
+                      subtitle: appearancePreferenceLabel,
+                      showSubtitle: false,
+                      semanticLabel: l10n.appearanceSettingSemantics(
+                        appearancePreferenceLabel,
+                      ),
+                      onTap: _openAppearance,
+                      trailing:
+                          _settingsTrailingState(appearancePreferenceLabel),
                     ),
 
                     // The world outside: a tight cluster, one

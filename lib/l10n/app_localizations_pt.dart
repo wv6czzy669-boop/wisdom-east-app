@@ -64,6 +64,25 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'Aparência';
+
+  @override
+  String get light => 'Claro';
+
+  @override
+  String get dark => 'Escuro';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'Aparência. Seleção atual: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'Voltar';
 
   @override
@@ -208,6 +227,26 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'O que você está percebendo agora?';
+
+  @override
+  String get returnWhenSilenceOpensAgain =>
+      'Volte quando o silêncio se abrir novamente.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'O que permanece?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'O que ficou com você?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'O que ficou mais claro?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'O que parece diferente?';
+
+  @override
+  String get reflectionPromptCarryForward =>
+      'O que você gostaria de levar com você?';
 
   @override
   String get deleteReflectionQuestion => 'Excluir reflexão?';
@@ -461,6 +500,25 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   }
 
   @override
+  String get appearance => 'Aparência';
+
+  @override
+  String get light => 'Claro';
+
+  @override
+  String get dark => 'Escuro';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'Aparência. Seleção atual: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'Voltar';
 
   @override
@@ -605,6 +663,26 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get reflectionPrompt => 'O que você está percebendo agora?';
+
+  @override
+  String get returnWhenSilenceOpensAgain =>
+      'Volte quando o silêncio se abrir novamente.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'O que permanece?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'O que ficou com você?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'O que ficou mais claro?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'O que parece diferente?';
+
+  @override
+  String get reflectionPromptCarryForward =>
+      'O que você gostaria de levar com você?';
 
   @override
   String get deleteReflectionQuestion => 'Excluir reflexão?';

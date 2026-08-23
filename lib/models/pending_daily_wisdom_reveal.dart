@@ -104,6 +104,7 @@ class PendingDailyWisdomReveal {
       preparedAt: preparedAt,
       confirmedRevealBoundary: confirmedRevealBoundary,
       phase: phase,
+      wisdomId: wisdomId,
     );
   }
 

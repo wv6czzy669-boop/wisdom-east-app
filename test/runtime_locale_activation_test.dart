@@ -107,9 +107,15 @@ void main() {
     const resolver = WisdomLocalizationResolver();
 
     final english = resolver.resolveItem(item, const Locale('en'));
+    final turkish = resolver.resolveItem(item, const Locale('tr'));
     final japanese = resolver.resolveItem(item, const Locale('ja'));
     expect(english, source['text']);
+    // Phase 5G real-device scenario: EN -> TR -> JA, proving the known
+    // wisdomId presentation change spans all three, never just a single
+    // locale pair.
+    expect(turkish, isNot(english));
     expect(japanese, isNot(english));
+    expect(japanese, isNot(turkish));
     expect(item.id, 'kept-1');
     expect(item.revealId, 'aaaaaaaa-1111-4111-8111-111111111111');
     expect(item.wisdomId, source['id']);

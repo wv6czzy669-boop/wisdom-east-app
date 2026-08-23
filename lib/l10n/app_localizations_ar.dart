@@ -64,6 +64,25 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'المظهر';
+
+  @override
+  String get light => 'فاتح';
+
+  @override
+  String get dark => 'داكن';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'المظهر. التحديد الحالي: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'رجوع';
 
   @override
@@ -207,6 +226,24 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'ما الذي تلاحظه الآن؟';
+
+  @override
+  String get returnWhenSilenceOpensAgain => 'عد حين ينفتح الصمت من جديد.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'ما الذي يبقى؟';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'ما الذي بقي معك؟';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'ما الذي أصبح أوضح؟';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'ما الذي يبدو مختلفًا؟';
+
+  @override
+  String get reflectionPromptCarryForward => 'ما الذي تودّ أن تحمله معك؟';
 
   @override
   String get deleteReflectionQuestion => 'حذف التأمّل؟';

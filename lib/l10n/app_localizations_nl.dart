@@ -64,6 +64,25 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'Weergave';
+
+  @override
+  String get light => 'Licht';
+
+  @override
+  String get dark => 'Donker';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'Weergave. Huidige keuze: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'Terug';
 
   @override
@@ -208,6 +227,25 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'Wat merk je nu op?';
+
+  @override
+  String get returnWhenSilenceOpensAgain =>
+      'Kom terug wanneer de stilte weer opengaat.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'Wat blijft?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'Wat is er bij je gebleven?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'Wat werd duidelijker?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'Wat voelt anders?';
+
+  @override
+  String get reflectionPromptCarryForward => 'Wat zou je willen meenemen?';
 
   @override
   String get deleteReflectionQuestion => 'Reflectie verwijderen?';

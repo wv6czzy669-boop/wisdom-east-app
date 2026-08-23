@@ -5,12 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wisdom_app/controllers/locale_preference_controller.dart';
+import 'package:wisdom_app/data/wisdoms.dart' show wisdoms;
+import 'package:wisdom_app/l10n/app_localizations.dart';
+import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
+import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/repositories/daily_access_repository.dart';
 import 'package:wisdom_app/screens/home_screen.dart';
+import 'package:wisdom_app/services/wisdom_localization_resolver.dart';
 import 'package:wisdom_app/services/analytics_event.dart';
 import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
@@ -1150,10 +1156,14 @@ void main() {
         matches(RegExp(r'^\d+ min$')),
       ),
     );
-    expect(countdown.style?.color, eastMutedTextColor);
+    final mutedColor = eastMutedTextColor(
+      tester
+          .element(find.textContaining('Return when the silence opens again.')),
+    );
+    expect(countdown.style?.color, mutedColor);
     expect(
       tester.widget<Text>(find.text('Keeper one daily wisdom')).style?.color,
-      isNot(eastMutedTextColor),
+      isNot(mutedColor),
     );
   });
 
@@ -5032,6 +5042,199 @@ void main() {
       expect(widgetService.calls, [isA<_RecordedPublishSilence>()]);
     });
   });
+
+  group('Wisdom locale reactivity (release-blocking regression fix)', () {
+    // ROOT CAUSE (see `lib/models/pending_daily_wisdom_reveal.dart`):
+    // `PendingDailyWisdomReveal.decode()` read `wisdomId` off the encoded
+    // JSON and even validated it, but never actually passed it to the
+    // `PendingDailyWisdomReveal(...)` constructor call it returned --  every
+    // round trip through persisted storage (which `finalizeVisualReveal`
+    // always goes through, even for a same-session fresh reveal) silently
+    // dropped the canonical wisdom identity. `HomeScreen.currentWisdomId`
+    // then landed `null`, so `_presentedWisdom` fell through to the
+    // originally-revealed English `persistedSnapshot` forever, regardless
+    // of `Localizations.localeOf(context)` -- the exact reported symptom
+    // (AppLocalizations strings translate correctly; the revealed wisdom
+    // itself never does). Fixed by passing `wisdomId: wisdomId` through in
+    // `decode()`.
+    const resolver = WisdomLocalizationResolver();
+
+    Future<String> keptWisdomIdOf(
+      WidgetTester tester,
+      KeptRepositoryTestGraph keptGraph,
+    ) async {
+      await tester.tap(
+        find.byKey(const ValueKey('home-save-control-unsaved')),
+      );
+      await tester.pump(const Duration(milliseconds: 1400));
+      final saved = await keptGraph.service.load();
+      final wisdomId = saved.first.wisdomId;
+      expect(wisdomId, isNotNull,
+          reason: 'a fresh reveal must carry a '
+              'canonical wisdomId through to Kept');
+      return wisdomId!;
+    }
+
+    testWidgets(
+        '9-11. Home: the revealed wisdom text updates EN -> TR -> JA -> AR '
+        'for a known wisdomId, with identity fields unchanged throughout',
+        (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      final keptGraph = KeptRepositoryTestGraph();
+      final localeController = LocalePreferenceController(
+        storage: StoragePreferencesAdapter(),
+      );
+      await localeController.load();
+
+      await tester.pumpWidget(
+        _localeAwareHomeApp(
+          localeController: localeController,
+          dailyGraph: dailyGraph,
+          keptGraph: keptGraph,
+          clock: () => now,
+        ),
+      );
+      await _completeFreshRitual(tester);
+      await _pumpInSteps(tester, const Duration(seconds: 2));
+
+      final wisdomTextFinder = find.descendant(
+        of: find.byKey(const ValueKey('wisdom-reveal-fade')),
+        matching: find.byType(Text),
+      );
+      final englishText = tester.widget<Text>(wisdomTextFinder.first).data;
+      expect(englishText, isNotNull);
+
+      // Save now (this consumes the "unsaved" ring state, so it happens
+      // once, after the English reading above) to introspect the canonical
+      // wisdomId this specific reveal actually carries, and to prove
+      // (below) that saving/locale-switching never disturb it.
+      final wisdomId = await keptWisdomIdOf(tester, keptGraph);
+      final revealId = (await keptGraph.service.load()).first.revealId;
+
+      for (final locale in [
+        const Locale('tr'),
+        const Locale('ja'),
+        const Locale('ar'),
+      ]) {
+        await localeController.setExplicitLocale(locale);
+        await tester.pump();
+        await tester.pump();
+
+        final displayed = tester.widget<Text>(wisdomTextFinder.first).data;
+        final expected = resolver.resolve(
+          wisdomId: wisdomId,
+          locale: locale,
+          persistedSnapshot: englishText,
+        );
+        expect(displayed, expected, reason: 'locale=$locale');
+        // The known-good regression case: reviewed catalogs cover this
+        // wisdomId for every locale exercised here, so the resolved
+        // presentation must actually differ from the stale English text,
+        // not merely equal the (also correct) English fallback.
+        expect(displayed, isNot(englishText), reason: 'locale=$locale');
+      }
+
+      // Identity fields are presentation-independent -- confirm they
+      // never moved while three locale switches drove the display text.
+      final afterSwitches = await keptGraph.service.load();
+      expect(afterSwitches.first.wisdomId, wisdomId);
+      expect(afterSwitches.first.revealId, revealId);
+    });
+
+    testWidgets(
+        '15-18. locale switching never changes wisdomId/revealId/unlockAt '
+        'or the daily lock', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      final keptGraph = KeptRepositoryTestGraph();
+      final localeController = LocalePreferenceController(
+        storage: StoragePreferencesAdapter(),
+      );
+      await localeController.load();
+
+      await tester.pumpWidget(
+        _localeAwareHomeApp(
+          localeController: localeController,
+          dailyGraph: dailyGraph,
+          keptGraph: keptGraph,
+          clock: () => now,
+        ),
+      );
+      await _completeFreshRitual(tester);
+      await _pumpInSteps(tester, const Duration(seconds: 2));
+
+      final statusBefore = await dailyGraph.service.status();
+      expect(statusBefore.unlockAt, isNotNull);
+
+      await localeController.setExplicitLocale(const Locale('tr'));
+      await tester.pump();
+      await tester.pump();
+      await localeController.setExplicitLocale(const Locale('ja'));
+      await tester.pump();
+      await tester.pump();
+
+      final statusAfter = await dailyGraph.service.status();
+      expect(statusAfter.unlockAt, statusBefore.unlockAt);
+      expect(statusAfter.revealedAt, statusBefore.revealedAt);
+      expect(statusAfter.wisdomId, statusBefore.wisdomId);
+      // Still locked (daily lock untouched by presentation-only switches).
+      expect(statusAfter.unlockAt!.isAfter(now), isTrue);
+    });
+
+    testWidgets(
+        '24. Share uses the current locale, not the locale the wisdom was '
+        'first revealed in', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final wisdomId = 'east_wisdom_0301';
+      final englishText =
+          wisdoms.firstWhere((w) => w['id'] == wisdomId)['text'] as String;
+      final record = DailyWisdomRecord(
+        text: englishText,
+        revealedAt: now,
+        unlockAt: now.add(const Duration(hours: 24)),
+        revealId: '123e4567-e89b-42d3-a456-426614174001',
+        wisdomId: wisdomId,
+      );
+      SharedPreferences.setMockInitialValues({
+        DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
+      });
+      final shareService = _RecordingWisdomShareService();
+      final localeController = LocalePreferenceController(
+        storage: StoragePreferencesAdapter(),
+      );
+      await localeController.load();
+
+      await tester.pumpWidget(
+        _localeAwareHomeApp(
+          localeController: localeController,
+          dailyGraph: DailyAccessTestGraph(clock: () => now),
+          wisdomShareService: shareService,
+          clock: () => now,
+        ),
+      );
+      await _finishOpeningIntro(tester);
+      await _openExistingWisdom(tester);
+      await _pumpUntilWisdomShareEnabled(tester);
+
+      await localeController.setExplicitLocale(const Locale('tr'));
+      await tester.pump();
+      await tester.pump();
+
+      final expectedTurkish = const WisdomLocalizationResolver().resolve(
+        wisdomId: wisdomId,
+        locale: const Locale('tr'),
+        persistedSnapshot: englishText,
+      );
+      expect(expectedTurkish, isNot(englishText));
+
+      _wisdomShareGesture(tester).onLongPress!();
+      await tester.pump();
+
+      expect(shareService.calls, 1);
+      expect(shareService.wisdoms.single, expectedTurkish);
+    });
+  });
 }
 
 class _RecordedPublishRevealed {
@@ -5219,6 +5422,49 @@ Widget _homeApp({
       dailyWisdomOperationTimeout: dailyWisdomOperationTimeout,
       dailyWisdomStatusTimeout: dailyWisdomStatusTimeout,
     ),
+  );
+}
+
+/// Mirrors `WisdomApp`'s real locale wiring exactly (`app.dart`) --
+/// `_homeApp()` above deliberately does not, since it never needs live
+/// locale reactivity -- so tests that switch [localeController] can prove
+/// `HomeScreen` actually rebuilds under a `Localizations` ancestor the same
+/// way it does in production, rather than under a locale-inert bare
+/// `MaterialApp`.
+Widget _localeAwareHomeApp({
+  required LocalePreferenceController localeController,
+  DailyAccessTestGraph? dailyGraph,
+  KeptRepositoryTestGraph? keptGraph,
+  WisdomShareHandler? wisdomShareService,
+  WisdomClock? clock,
+}) {
+  final resolvedDailyGraph = dailyGraph ?? DailyAccessTestGraph(clock: clock);
+  final resolvedKeptGraph = keptGraph ?? KeptRepositoryTestGraph();
+  return AnimatedBuilder(
+    animation: localeController,
+    builder: (context, _) {
+      return MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: EastLocaleRegistry.runtimeSupported,
+        locale: localeController.explicitLocale,
+        localeResolutionCallback: (deviceLocale, supportedLocales) {
+          return LocalePreferenceController.resolveSystemLocale(
+            deviceLocale,
+            supportedLocales,
+          );
+        },
+        home: HomeScreen(
+          storageService: StorageService(),
+          savedReflectionsService: resolvedKeptGraph.service,
+          dailyWisdomAccessService: resolvedDailyGraph.service,
+          keptDiscoveryHintService: KeptDiscoveryHintService(),
+          ratingRequestService: RatingRequestService(),
+          wisdomShareService: wisdomShareService,
+          clock: clock,
+          localePreferenceController: localeController,
+        ),
+      );
+    },
   );
 }
 

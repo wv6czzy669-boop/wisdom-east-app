@@ -10,4 +10,9 @@ import 'east_design.dart';
 /// color and must not be applied to new call sites without the same
 /// explicit approval that introduced it. See EAST_ARCHITECTURE_V1.md for
 /// the broader design-system baseline.
-const Color eastMutedTextColor = EastColors.secondary;
+///
+/// Theme-reactive: resolves through [EastColors.of], so it follows
+/// Appearance (System/Light/Dark) exactly like every other EAST. color.
+/// The Light value remains pixel-identical to the original constant.
+Color eastMutedTextColor(BuildContext context) =>
+    EastColors.of(context).secondary;

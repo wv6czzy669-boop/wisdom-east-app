@@ -5,7 +5,6 @@ import 'package:flutter/painting.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../theme/east_design.dart';
-import '../theme/muted_text_color.dart';
 import '../localization/east_locale_registry.dart';
 import '../localization/east_typography_resolver.dart';
 
@@ -98,11 +97,15 @@ class WisdomShareCardRenderer {
   static const double wisdomOpticalCenterY = 900;
 
   // Update 3: small centered line beneath the "EAST." wordmark, replacing
-  // the removed bottom ritual circle. Uses the exact same shared
-  // `eastMutedTextColor` token (see `theme/muted_text_color.dart`) already
-  // used, at full opacity with no additional `.withValues(alpha: ...)`
-  // reduction, by the in-app "Return when the silence opens again." text
-  // (`_HomePostRevealMessage` in `home_ritual_widgets.dart`).
+  // the removed bottom ritual circle. Uses `EastColors.secondary` -- the
+  // same *Light* value the in-app `eastMutedTextColor` token resolves to
+  // for a Light-appearance context -- at full opacity with no additional
+  // `.withValues(alpha: ...)` reduction. This share card is a static
+  // export artifact (see class doc comment) and is pinned to Light
+  // regardless of the live app's Appearance, so it deliberately reads the
+  // constant here rather than the theme-reactive `eastMutedTextColor`
+  // (`theme/muted_text_color.dart`), which now requires a `BuildContext`
+  // this canvas-only renderer never has.
   static const double wordmarkLineGap = 13;
   static const double wordmarkLineThickness = 1;
   // Correction: the line's width is derived from the actual rendered
@@ -248,7 +251,7 @@ class WisdomShareCardRenderer {
     // blend across two rows — flatter and closer to "no glow" than a
     // sub-pixel-positioned line would be.
     final wordmarkLinePaint = Paint()
-      ..color = eastMutedTextColor
+      ..color = EastColors.secondary
       ..style = PaintingStyle.fill;
     final wordmarkLineTop =
         (brandTop + brandPainter.height + wordmarkLineGap).roundToDouble();

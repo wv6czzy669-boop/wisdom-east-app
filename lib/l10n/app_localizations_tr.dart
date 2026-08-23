@@ -64,6 +64,25 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get appearance => 'Görünüm';
+
+  @override
+  String get light => 'Açık';
+
+  @override
+  String get dark => 'Koyu';
+
+  @override
+  String appearanceSettingSemantics(Object value) {
+    return 'Görünüm. Geçerli seçim: $value.';
+  }
+
+  @override
+  String appearanceOptionSemantics(Object option) {
+    return '$option';
+  }
+
+  @override
   String get back => 'Geri';
 
   @override
@@ -208,6 +227,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get reflectionPrompt => 'Şimdi ne fark ediyorsun?';
+
+  @override
+  String get returnWhenSilenceOpensAgain =>
+      'Sessizlik yeniden açıldığında geri dön.';
+
+  @override
+  String get reflectionPromptWhatRemains => 'Ne kalıyor?';
+
+  @override
+  String get reflectionPromptWhatStayedWithYou => 'Sende ne kaldı?';
+
+  @override
+  String get reflectionPromptWhatBecameClearer => 'Ne daha net oldu?';
+
+  @override
+  String get reflectionPromptWhatFeelsDifferent => 'Neyi farklı hissediyorsun?';
+
+  @override
+  String get reflectionPromptCarryForward => 'Neyi yanında taşımak istersin?';
 
   @override
   String get deleteReflectionQuestion => 'Yansıma silinsin mi?';

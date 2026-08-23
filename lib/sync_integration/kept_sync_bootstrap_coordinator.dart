@@ -1782,6 +1782,7 @@ final class KeptSyncBootstrapCoordinator {
       id: id,
       revealId: revealId,
       wisdomText: projection.wisdomText!,
+      wisdomId: projection.wisdomId,
       revealedAt: DateTime.fromMillisecondsSinceEpoch(
         projection.revealedAtMs!,
         isUtc: true,
@@ -1842,6 +1843,7 @@ final class KeptSyncBootstrapCoordinator {
       id: payload.localId ?? payload.mutationId,
       revealId: payload.revealId,
       wisdomText: payload.wisdomText!,
+      wisdomId: payload.wisdomId,
       revealedAt: DateTime.fromMillisecondsSinceEpoch(
         payload.revealedAtMs!,
         isUtc: true,
@@ -1896,6 +1898,7 @@ final class KeptSyncBootstrapCoordinator {
       id: payload.localId ?? payload.mutationId,
       revealId: payload.revealId,
       wisdomText: payload.wisdomText!,
+      wisdomId: payload.wisdomId,
       revealedAt: DateTime.fromMillisecondsSinceEpoch(
         payload.revealedAtMs!,
         isUtc: true,

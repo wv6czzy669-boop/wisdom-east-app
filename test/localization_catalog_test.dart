@@ -246,7 +246,12 @@ void main() {
       final expectedKeys = _messageKeys(english);
       final expectedMetadata = _metadataKeys(english);
 
-      expect(expectedKeys, hasLength(120));
+      // Phase 5G: +6 keys (returnWhenSilenceOpensAgain and the five newly
+      // localized Reflection prompt alternatives; `reflectionPrompt`
+      // itself already existed).
+      // Appearance (Dark Mode): +5 keys (appearance, light, dark,
+      // appearanceSettingSemantics, appearanceOptionSemantics).
+      expect(expectedKeys, hasLength(131));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');
@@ -331,6 +336,10 @@ void main() {
         'notificationTitle',
         'eastProductions',
         'languageOptionSemantics',
+        // Same reasoning as languageOptionSemantics above: a pure
+        // `{option}` placeholder passthrough, identical by design in
+        // every locale.
+        'appearanceOptionSemantics',
       };
 
       for (final tag in _allArbFiles.keys.where((tag) => tag != 'en')) {

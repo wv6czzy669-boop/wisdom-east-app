@@ -57,7 +57,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   TextStyle _style(
     double size, {
-    Color color = EastColors.ink,
+    Color? color,
     double height = 1.35,
     double letterSpacing = 0.3,
   }) {
@@ -72,7 +72,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   TextStyle get _statusStyle => _style(
         13,
-        color: eastMutedTextColor,
+        color: eastMutedTextColor(context),
         letterSpacing: 1.15,
       );
 
@@ -148,7 +148,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: EastColors.surface,
+          backgroundColor: EastColors.of(context).surface,
           content: Text(message, style: _style(17)),
         ),
       );
@@ -308,7 +308,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             Text(_displayDate(item),
                 style: _style(
                   15,
-                  color: eastMutedTextColor,
+                  color: eastMutedTextColor(context),
                   letterSpacing: 0.4,
                 )),
             const SizedBox(height: 5),
@@ -352,12 +352,12 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
     return Scaffold(
       key: const ValueKey('kept-screen-root'),
-      backgroundColor: EastColors.background,
+      backgroundColor: EastColors.of(context).background,
       appBar: AppBar(
-        backgroundColor: EastColors.background,
-        foregroundColor: EastColors.ink,
-        iconTheme: const IconThemeData(
-          color: EastColors.ink,
+        backgroundColor: EastColors.of(context).background,
+        foregroundColor: EastColors.of(context).ink,
+        iconTheme: IconThemeData(
+          color: EastColors.of(context).ink,
           size: 22,
           weight: 300,
         ),
@@ -389,7 +389,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                 l10n.nothingHasStayedYet,
                 style: _style(
                   21,
-                  color: eastMutedTextColor,
+                  color: eastMutedTextColor(context),
                 ),
               ),
             )
@@ -397,10 +397,10 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
               padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
               itemCount: visibleItems.length,
               separatorBuilder: (context, index) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 18),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   child: Divider(
-                    color: EastColors.divider,
+                    color: EastColors.of(context).divider,
                     thickness: 0.5,
                   ),
                 );
@@ -531,7 +531,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
                 onTap: widget.onDelete,
                 child: Container(
                   alignment: Alignment.center,
-                  color: EastColors.background,
+                  color: EastColors.of(context).background,
                   child: Text(
                     widget.deleteLabel,
                     style: widget.deleteLabelStyle,
@@ -567,7 +567,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
             child: SizedBox(
               width: double.infinity,
               child: ColoredBox(
-                color: EastColors.background,
+                color: EastColors.of(context).background,
                 child: widget.child,
               ),
             ),

@@ -36,7 +36,18 @@ void main() {
 
     expect(find.byKey(const ValueKey('settings-language-row')), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
-    expect(find.text('System Default'), findsOneWidget);
+    // Appearance (Dark Mode) reused "System Default" as one of its own
+    // three options, so Settings can legitimately show this text twice
+    // (Language's own trailing state and Appearance's) -- scope this
+    // assertion to Language's row specifically rather than the whole
+    // screen.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-language-row')),
+        matching: find.text('System Default'),
+      ),
+      findsOneWidget,
+    );
 
     final semantics = tester.ensureSemantics();
     expect(

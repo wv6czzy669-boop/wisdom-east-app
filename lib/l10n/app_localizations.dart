@@ -228,6 +228,36 @@ abstract class AppLocalizations {
   /// **'{language}'**
   String languageOptionSemantics(Object language);
 
+  /// No description provided for @appearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearance;
+
+  /// No description provided for @light.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get light;
+
+  /// No description provided for @dark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get dark;
+
+  /// No description provided for @appearanceSettingSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance. Current selection: {value}.'**
+  String appearanceSettingSemantics(Object value);
+
+  /// No description provided for @appearanceOptionSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{option}'**
+  String appearanceOptionSemantics(Object option);
+
   /// No description provided for @back.
   ///
   /// In en, this message translates to:
@@ -509,6 +539,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'What are you noticing now?'**
   String get reflectionPrompt;
+
+  /// No description provided for @returnWhenSilenceOpensAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Return when the silence opens again.'**
+  String get returnWhenSilenceOpensAgain;
+
+  /// No description provided for @reflectionPromptWhatRemains.
+  ///
+  /// In en, this message translates to:
+  /// **'What remains?'**
+  String get reflectionPromptWhatRemains;
+
+  /// No description provided for @reflectionPromptWhatStayedWithYou.
+  ///
+  /// In en, this message translates to:
+  /// **'What stayed with you?'**
+  String get reflectionPromptWhatStayedWithYou;
+
+  /// No description provided for @reflectionPromptWhatBecameClearer.
+  ///
+  /// In en, this message translates to:
+  /// **'What became clearer?'**
+  String get reflectionPromptWhatBecameClearer;
+
+  /// No description provided for @reflectionPromptWhatFeelsDifferent.
+  ///
+  /// In en, this message translates to:
+  /// **'What feels different?'**
+  String get reflectionPromptWhatFeelsDifferent;
+
+  /// No description provided for @reflectionPromptCarryForward.
+  ///
+  /// In en, this message translates to:
+  /// **'What would you like to carry forward?'**
+  String get reflectionPromptCarryForward;
 
   /// No description provided for @deleteReflectionQuestion.
   ///

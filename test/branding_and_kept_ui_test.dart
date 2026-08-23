@@ -50,7 +50,7 @@ void main() {
     expect(find.text('Where silence speaks.'), findsOneWidget);
     expect(
       tester.widget<Text>(find.text('Where silence speaks.')).style?.color,
-      eastMutedTextColor,
+      eastMutedTextColor(tester.element(find.text('Where silence speaks.'))),
     );
     expect(
       find.text('Support the circle, keep what stays.'),
@@ -128,7 +128,9 @@ void main() {
     final dividers = tester.widgetList<Divider>(find.byType(Divider)).toList();
     expect(dividers, hasLength(2));
 
-    final expectedDividerColor = eastMutedTextColor.withValues(alpha: 0.30);
+    final expectedDividerColor = eastMutedTextColor(
+      tester.element(find.byType(SettingsScreen)),
+    ).withValues(alpha: 0.30);
     for (final divider in dividers) {
       expect(divider.color, expectedDividerColor);
       expect(divider.thickness, 0.5);
@@ -161,7 +163,7 @@ void main() {
     // the new shared divider color.
     expect(
       tester.widget<Text>(find.text('Where silence speaks.')).style?.color,
-      eastMutedTextColor,
+      eastMutedTextColor(tester.element(find.text('Where silence speaks.'))),
     );
   });
 
@@ -319,7 +321,10 @@ void main() {
 
     expect(find.text('June 21, 2026'), findsOneWidget);
     final displayedDate = tester.widget<Text>(find.text('June 21, 2026'));
-    expect(displayedDate.style?.color, eastMutedTextColor);
+    expect(
+      displayedDate.style?.color,
+      eastMutedTextColor(tester.element(find.text('June 21, 2026'))),
+    );
     // The repository's own `keptAt`-derived display date — never a
     // text/date value fabricated by the test.
     expect(reflections.single.date, 'June 21, 2026');

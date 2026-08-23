@@ -105,7 +105,7 @@ class _JournalScreenState extends State<JournalScreen> {
 
   TextStyle _style(
     double size, {
-    Color color = EastColors.ink,
+    Color? color,
     double height = 1.4,
     double letterSpacing = 0.35,
   }) {
@@ -352,7 +352,7 @@ class _JournalScreenState extends State<JournalScreen> {
     return Positioned.fill(
       child: Container(
         key: const ValueKey('journal-name-decision'),
-        color: EastColors.overlay,
+        color: EastColors.of(context).overlay,
         child: SafeArea(
           // Real-device repair: `Center` used to position this composition
           // relative to the *available* body height, which changes when
@@ -384,18 +384,18 @@ class _JournalScreenState extends State<JournalScreen> {
                   autofocus: true,
                   textAlign: TextAlign.center,
                   style: _style(26),
-                  cursorColor: EastColors.ink,
+                  cursorColor: EastColors.of(context).ink,
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: l10n.yourName,
-                    hintStyle: _style(26, color: EastColors.hint),
-                    enabledBorder: const UnderlineInputBorder(
-                      borderSide:
-                          BorderSide(color: eastMutedTextColor, width: 0.5),
+                    hintStyle: _style(26, color: EastColors.of(context).hint),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                          color: eastMutedTextColor(context), width: 0.5),
                     ),
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide:
-                          BorderSide(color: eastMutedTextColor, width: 0.5),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                          color: eastMutedTextColor(context), width: 0.5),
                     ),
                   ),
                 ),
@@ -407,20 +407,20 @@ class _JournalScreenState extends State<JournalScreen> {
                       _nameDecisionLabel(
                         l10n.removeUpper,
                         onTap: () => unawaited(_removeNameEdit()),
-                        color: EastColors.secondary,
+                        color: EastColors.of(context).secondary,
                       ),
                       const SizedBox(width: 40),
                     ],
                     _nameDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _cancelNameEdit,
-                      color: EastColors.secondary,
+                      color: EastColors.of(context).secondary,
                     ),
                     const SizedBox(width: 40),
                     _nameDecisionLabel(
                       l10n.saveUpper,
                       onTap: () => unawaited(_saveNameEdit()),
-                      color: EastColors.ink,
+                      color: EastColors.of(context).ink,
                     ),
                   ],
                 ),
@@ -436,7 +436,7 @@ class _JournalScreenState extends State<JournalScreen> {
   Widget build(BuildContext context) {
     final l10n = eastLocalizations(context);
     return Scaffold(
-      backgroundColor: EastColors.background,
+      backgroundColor: EastColors.of(context).background,
       // Real-device repair: without this, the keyboard's appearance behind
       // the name-decision overlay shrinks this Scaffold's own body height,
       // which reflows *everything* inside it -- both the overlay (see
@@ -448,8 +448,8 @@ class _JournalScreenState extends State<JournalScreen> {
       // `_buildNamePrompt`.
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        backgroundColor: EastColors.background,
-        foregroundColor: EastColors.ink,
+        backgroundColor: EastColors.of(context).background,
+        foregroundColor: EastColors.of(context).ink,
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         elevation: 0,
@@ -470,7 +470,7 @@ class _JournalScreenState extends State<JournalScreen> {
                     l10n.nameUpper,
                     style: _style(
                       11,
-                      color: eastMutedTextColor,
+                      color: eastMutedTextColor(context),
                       letterSpacing: 2.2,
                     ),
                   ),
@@ -499,7 +499,7 @@ class _JournalScreenState extends State<JournalScreen> {
         child: Text(
           eastLocalizations(context).nothingHasStayedYet,
           key: const ValueKey('journal-empty-state'),
-          style: _style(21, color: eastMutedTextColor),
+          style: _style(21, color: eastMutedTextColor(context)),
         ),
       );
     }
@@ -519,7 +519,7 @@ class _JournalScreenState extends State<JournalScreen> {
             eastLocalizations(context).journalCouldNotBePrepared,
             key: const ValueKey('journal-error-state'),
             textAlign: TextAlign.center,
-            style: _style(19, color: eastMutedTextColor),
+            style: _style(19, color: eastMutedTextColor(context)),
           ),
         );
       case _JournalStage.generating:
@@ -565,7 +565,7 @@ class _JournalScreenState extends State<JournalScreen> {
         final page = pages[index];
         return Container(
           margin: _previewPageMargin,
-          color: EastColors.background,
+          color: EastColors.of(context).background,
           child: AspectRatio(
             aspectRatio: page.aspectRatio,
             child: Image(
@@ -625,7 +625,7 @@ class _JournalScreenState extends State<JournalScreen> {
                   useActions: false,
                   pdfFileName: 'Journal.pdf',
                   scrollViewDecoration:
-                      const BoxDecoration(color: EastColors.background),
+                      BoxDecoration(color: EastColors.of(context).background),
                   loadingWidget: const SizedBox.shrink(),
                   pagesBuilder: _pagesBuilder,
                 )
@@ -673,8 +673,8 @@ class _JournalScreenState extends State<JournalScreen> {
                   style: _style(
                     22,
                     color: isKeeper
-                        ? EastColors.ink
-                        : EastColors.ink.withValues(alpha: 0.52),
+                        ? EastColors.of(context).ink
+                        : EastColors.of(context).ink.withValues(alpha: 0.52),
                   ),
                 ),
               ),
@@ -716,7 +716,7 @@ class _JournalScreenState extends State<JournalScreen> {
           const SizedBox(height: 10),
           Text(
             eastLocalizations(context).onlyKeptOnThisDevice,
-            style: _style(16, color: eastMutedTextColor),
+            style: _style(16, color: eastMutedTextColor(context)),
           ),
           const SizedBox(height: 34),
           TextField(
@@ -724,15 +724,17 @@ class _JournalScreenState extends State<JournalScreen> {
             controller: _nameController,
             autofocus: false,
             style: _style(20),
-            cursorColor: EastColors.ink,
+            cursorColor: EastColors.of(context).ink,
             decoration: InputDecoration(
               hintText: eastLocalizations(context).yourName,
-              hintStyle: _style(20, color: EastColors.hint),
-              enabledBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: eastMutedTextColor, width: 0.5),
+              hintStyle: _style(20, color: EastColors.of(context).hint),
+              enabledBorder: UnderlineInputBorder(
+                borderSide:
+                    BorderSide(color: eastMutedTextColor(context), width: 0.5),
               ),
-              focusedBorder: const UnderlineInputBorder(
-                borderSide: BorderSide(color: eastMutedTextColor, width: 0.5),
+              focusedBorder: UnderlineInputBorder(
+                borderSide:
+                    BorderSide(color: eastMutedTextColor(context), width: 0.5),
               ),
             ),
           ),
@@ -751,7 +753,7 @@ class _JournalScreenState extends State<JournalScreen> {
                 onPressed: () => unawaited(_continueFromNamePrompt()),
                 child: Text(
                   eastLocalizations(context).continueAction,
-                  style: _style(17, color: eastMutedTextColor),
+                  style: _style(17, color: eastMutedTextColor(context)),
                 ),
               ),
             ],

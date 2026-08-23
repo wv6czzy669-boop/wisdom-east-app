@@ -3,15 +3,16 @@ part of '../../screens/home_screen.dart';
 TextStyle _homeWisdomStyle(
   BuildContext context,
   double size, {
-  Color color = EastColors.ink,
+  Color? color,
   bool glow = false,
   bool brand = false,
   double height = 1.28,
   FontStyle fontStyle = FontStyle.normal,
 }) {
   final typography = EastTypography.planFor(context);
+  final palette = EastColors.of(context);
   return TextStyle(
-    color: color,
+    color: color ?? palette.ink,
     fontSize: size,
     fontWeight: FontWeight.w400,
     fontFamily: brand ? EastTypography.fontFamily : typography.family,
@@ -23,11 +24,11 @@ TextStyle _homeWisdomStyle(
     shadows: glow
         ? [
             Shadow(
-              color: EastColors.ink.withValues(alpha: 0.12),
+              color: palette.ink.withValues(alpha: 0.12),
               blurRadius: 14,
             ),
             Shadow(
-              color: EastColors.accent.withValues(alpha: 0.045),
+              color: palette.accent.withValues(alpha: 0.045),
               blurRadius: 24,
             ),
           ]
@@ -175,8 +176,9 @@ class _HomeRitualContent extends StatelessWidget {
                         ? 60.0
                         : 34.0;
 
-    final finalColor = EastColors.ink;
-    final darkColor = EastColors.surface;
+    final palette = EastColors.of(context);
+    final finalColor = palette.ink;
+    final darkColor = palette.surface;
 
     final animatedTextColor = Color.lerp(
       darkColor,
@@ -273,7 +275,7 @@ class _HomeRitualContent extends StatelessWidget {
                                     style: _homeWisdomStyle(
                                       context,
                                       textSize,
-                                      color: EastColors.ink,
+                                      color: finalColor,
                                       height: 1.18,
                                     ),
                                   ),
@@ -283,7 +285,7 @@ class _HomeRitualContent extends StatelessWidget {
                                     style: _homeWisdomStyle(
                                       context,
                                       textSize,
-                                      color: EastColors.ink,
+                                      color: finalColor,
                                       height: 1.18,
                                     ),
                                   ),
@@ -361,7 +363,7 @@ class _HomeLaunchMark extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: EastColors.ink.withValues(alpha: 0.70),
+                  color: EastColors.of(context).ink.withValues(alpha: 0.70),
                   width: 0.85,
                 ),
               ),
@@ -375,7 +377,7 @@ class _HomeLaunchMark extends StatelessWidget {
                     context,
                     21.5,
                     brand: true,
-                    color: EastColors.ink,
+                    color: EastColors.of(context).ink,
                   ),
                 ),
               ),
@@ -584,7 +586,7 @@ class _KeptTopNavBreath extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: EastColors.ink,
+                  color: EastColors.of(context).ink,
                   width: TopNavRingGeometry.strokeWidth,
                 ),
               ),
@@ -644,7 +646,7 @@ class _HomeSettingsMenuControl extends StatelessWidget {
 }
 
 class _HomeSaveCirclePainter extends CustomPainter {
-  const _HomeSaveCirclePainter({required this.filled});
+  const _HomeSaveCirclePainter({required this.filled, required this.color});
 
   static const double _strokeWidth = 1.0;
   // The previous text glyph occupied a smaller visual area than its 31px
@@ -652,6 +654,7 @@ class _HomeSaveCirclePainter extends CustomPainter {
   static const double _visibleDiameter = 18.5;
 
   final bool filled;
+  final Color color;
 
   double get visibleDiameter => _visibleDiameter;
 
@@ -660,7 +663,7 @@ class _HomeSaveCirclePainter extends CustomPainter {
     final center = size.center(Offset.zero);
     final outerRadius = _visibleDiameter / 2;
     final paint = Paint()
-      ..color = EastColors.ink
+      ..color = color
       ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
       ..strokeWidth = _strokeWidth;
 
@@ -673,7 +676,7 @@ class _HomeSaveCirclePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HomeSaveCirclePainter oldDelegate) {
-    return oldDelegate.filled != filled;
+    return oldDelegate.filled != filled || oldDelegate.color != color;
   }
 }
 
@@ -714,11 +717,15 @@ class _HomeSaveControl extends StatelessWidget {
     // of embedding an English VoiceOver hint in the product UI.
     final hint = null;
 
+    final palette = EastColors.of(context);
     final glyph = SizedBox.square(
       dimension: 31,
       child: CustomPaint(
         key: const ValueKey('home-save-circle-paint'),
-        painter: _HomeSaveCirclePainter(filled: isCurrentFavorite),
+        painter: _HomeSaveCirclePainter(
+          filled: isCurrentFavorite,
+          color: palette.ink,
+        ),
       ),
     );
 
@@ -752,8 +759,8 @@ class _HomeSaveControl extends StatelessWidget {
     // that keeps this correct even if the glyph is ever changed to an
     // `Icon`.
     final iconButtonStyle = IconButton.styleFrom(
-      foregroundColor: EastColors.ink,
-      disabledForegroundColor: EastColors.ink,
+      foregroundColor: palette.ink,
+      disabledForegroundColor: palette.ink,
       backgroundColor: Colors.transparent,
       overlayColor: Colors.transparent,
       splashFactory: NoSplash.splashFactory,
@@ -861,7 +868,7 @@ class _SaveRingBreath extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: EastColors.ink,
+                  color: EastColors.of(context).ink,
                   width: 0.8,
                 ),
               ),
@@ -921,7 +928,7 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
                 style: EastTypography.localized(
                   context,
                   size: 14.5,
-                  color: eastMutedTextColor.withValues(alpha: 0.70),
+                  color: eastMutedTextColor(context).withValues(alpha: 0.70),
                   height: 1.3,
                   letterSpacing: 0.4,
                 ),
@@ -966,7 +973,7 @@ class _HomePostRevealMessage extends StatelessWidget {
                     style: _homeWisdomStyle(
                       context,
                       15,
-                      color: eastMutedTextColor,
+                      color: eastMutedTextColor(context),
                     ),
                   ),
                 ],
