@@ -6,6 +6,9 @@
   "askFromYourHeart": "Demande avec le cœur.",
   "east": "EAST.",
   "kept": "Ce qui reste",
+  "searchKept": "Rechercher",
+  "clearSearch": "Effacer la recherche",
+  "noKeptSearchResults": "Aucun résultat.",
   "keptUpper": "CE QUI RESTE",
   "reflectedUpper": "RÉFLEXION",
   "addReflectionUpper": "AJOUTER UNE RÉFLEXION",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "Qu'aimerais-tu emporter avec toi ?",
   "deleteReflectionQuestion": "Supprimer la réflexion ?",
   "reflectionDeleteExplanation": "La réflexion sera retirée de cette sagesse gardée.",
+  "removeKeptQuestion": "Retirer de « Ce qui reste » ?",
+  "keptDeleteExplanation": "Cette sagesse et sa réflexion seront supprimées.",
   "cancelUpper": "ANNULER",
   "continueAction": "Continuer",
   "onlyKeptOnThisDevice": "Gardé uniquement sur cet appareil.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "Rien à supprimer.",
   "reflectionSaveFailed": "La Réflexion n’a pas pu être enregistrée. Réessaie.",
   "reflectionAutosaveFailed": "La Réflexion n’a pas pu être enregistrée. Un nouvel essai aura lieu pendant que tu écris.",
-  "reflectionDeleteFailed": "La Réflexion n’a pas pu être supprimée. Réessaie."
+  "reflectionDeleteFailed": "La Réflexion n’a pas pu être supprimée. Réessaie.",
+  "remainingDurationHoursMinutes": "{hours, plural, one{Encore 1 heure} other{Encore {hours} heures}} {minutes, plural, one{et 1 minute} other{et {minutes} minutes}}",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours, plural, one{Encore 1 heure} other{Encore {hours} heures}}",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes, plural, one{Encore 1 minute} other{Encore {minutes} minutes}}",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

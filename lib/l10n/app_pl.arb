@@ -6,6 +6,9 @@
   "askFromYourHeart": "Zapytaj prosto z serca.",
   "east": "EAST.",
   "kept": "Zachowane",
+  "searchKept": "Szukaj",
+  "clearSearch": "Wyczyść wyszukiwanie",
+  "noKeptSearchResults": "Niczego nie znaleziono.",
   "keptUpper": "ZACHOWANE",
   "reflectedUpper": "REFLEKSJA",
   "addReflectionUpper": "DODAJ REFLEKSJĘ",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "Co chcesz zabrać ze sobą?",
   "deleteReflectionQuestion": "Usunąć refleksję?",
   "reflectionDeleteExplanation": "Refleksja zostanie usunięta z tej zachowanej mądrości.",
+  "removeKeptQuestion": "Usunąć z „Zachowanych”?",
+  "keptDeleteExplanation": "Ta mądrość i jej refleksja zostaną usunięte.",
   "cancelUpper": "ANULUJ",
   "continueAction": "Kontynuuj",
   "onlyKeptOnThisDevice": "Zachowane tylko na tym urządzeniu.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "Nie ma nic do usunięcia.",
   "reflectionSaveFailed": "Nie udało się zapisać Refleksji. Spróbuj ponownie.",
   "reflectionAutosaveFailed": "Nie udało się zapisać Refleksji. Próba zostanie ponowiona podczas pisania.",
-  "reflectionDeleteFailed": "Nie udało się usunąć Refleksji. Spróbuj ponownie."
+  "reflectionDeleteFailed": "Nie udało się usunąć Refleksji. Spróbuj ponownie.",
+  "remainingDurationHoursMinutes": "{hours, plural, one{Została 1 godzina} few{Zostały {hours} godziny} many{Zostało {hours} godzin} other{Zostało {hours} godziny}} {minutes, plural, one{i 1 minuta} few{i {minutes} minuty} many{i {minutes} minut} other{i {minutes} minuty}}",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours, plural, one{Została 1 godzina} few{Zostały {hours} godziny} many{Zostało {hours} godzin} other{Zostało {hours} godziny}}",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes, plural, one{Została 1 minuta} few{Zostały {minutes} minuty} many{Zostało {minutes} minut} other{Zostało {minutes} minuty}}",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

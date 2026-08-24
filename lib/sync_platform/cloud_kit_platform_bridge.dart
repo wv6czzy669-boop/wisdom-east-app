@@ -14,16 +14,13 @@ import 'cloud_kit_zone_configuration_result.dart';
 /// `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md`'s Phase 4B-1 section for
 /// the exact channel contract this is the Dart-side shape of.
 ///
-/// Build 26 Phase 4C-2 extends this interface, narrowly, with the two
-/// record-transport operations ([modifyPrivateRecords]/
-/// [fetchPrivateZoneChanges]) -- still **not** `lib/sync/sync_engine.dart`'s
-/// `SyncEngine`: neither new method here starts a sync cycle, applies a
-/// remote change locally, resolves a conflict, or persists a change token --
-/// they are narrow, one-shot record-transport primitives a future
-/// `SyncEngine` implementation may compose, exactly as
-/// [configurePrivateZone] already is. Nothing behind this interface is
-/// called from application/repository/startup code in this phase (see
-/// `test/sync_platform/cloud_kit_platform_privacy_test.dart`).
+/// Build 26 Phase 4C-2 extended this interface with two narrow record-
+/// transport operations ([modifyPrivateRecords]/[fetchPrivateZoneChanges]).
+/// This bridge still never starts a sync cycle, applies a remote change
+/// locally, resolves a conflict, or persists a change token: those
+/// responsibilities belong to `SyncOrchestrator`, the integration
+/// coordinators and `CloudKitSyncRuntimeCoordinator`. Keeping this boundary
+/// one-shot prevents native transport from becoming a second sync engine.
 abstract interface class CloudKitPlatformBridge {
   /// A content-free snapshot of the current CloudKit account state. Never
   /// throws for "no account" or "restricted" -- those are ordinary,
@@ -69,13 +66,12 @@ abstract interface class CloudKitPlatformBridge {
   );
 
   /// Build 26 Phase 5 (slice 2): a narrow, single-record, content-minimal
-  /// read of the `CKEastSyncState` singleton -- used only by the Phase 5
-  /// remote deletion runner (`lib/sync_deletion/`) to read the current
-  /// authoritative epoch before establishing its replacement. Never called
-  /// by [modifyPrivateRecords]/[fetchPrivateZoneChanges]'s own callers
-  /// (`SyncOrchestrator`/`KeptSyncBootstrapCoordinator`), and never mutates
-  /// anything itself. See `cloud_kit_sync_state_epoch_contract.dart` for why
-  /// this exists separately from [fetchPrivateZoneChanges].
+  /// read of the `CKEastSyncState` singleton. Used by the Phase 5 remote
+  /// deletion runner (`lib/sync_deletion/`) and by completed bootstrap's
+  /// epoch guard, which must not consume or depend on the incremental zone
+  /// token. Never mutates anything itself. See
+  /// `cloud_kit_sync_state_epoch_contract.dart` for why this exists
+  /// separately from [fetchPrivateZoneChanges].
   Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch();
 
   /// Build 26 Phase 5 (slice 2): lists every `CKKeptWisdom` record currently

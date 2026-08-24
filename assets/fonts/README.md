@@ -6,11 +6,27 @@ Corpus-only subsetting is deliberately avoided: Reflections are arbitrary user
 text, so every primary family retains its complete upstream cmap and the app/PDF
 font plans include every other bundled script as a fallback.
 
-All five new families are redistributed under the SIL Open Font License 1.1.
-The exact upstream copyright and license texts are retained at
-`licenses/OFL-NotoCJK.txt`, `licenses/OFL-NotoNaskhArabic.txt`, and
-`licenses/OFL-NotoSerifThai.txt`. The OFL permits application embedding,
-redistribution, modification, and subsetting.
+Every bundled font is redistributed under the SIL Open Font License 1.1.
+The exact upstream copyright and license texts are retained under `licenses/`,
+including `OFL-EBGaramond.txt` for both copies of EB Garamond and the existing
+Noto license files. The OFL permits application embedding, redistribution,
+modification, and subsetting.
+
+The Flutter and WidgetKit copies of `EBGaramond-Variable.ttf` are byte-for-byte
+identical to Google Fonts' official `ofl/ebgaramond/EBGaramond[wght].ttf`
+(upstream repository commit `106a4a6d377987459ae5e68673a4570f13b957fb`).
+SHA-256: `ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027`.
+
+Journal PDFs additionally embed Noto Color Emoji 2.051 as their first fallback
+font. The `pdf` package reads its CBDT bitmap glyphs directly, so arbitrary
+Reflection emoji remain visible in exported Journals without a network request
+or any change to EAST.'s on-screen serif typography. The pinned upstream file
+is `googlefonts/noto-emoji` tag `v2.051`, commit marker
+`e92753bfa55fd449e427d4d325f9c8c40408c74e`; its SIL OFL 1.1 text is retained
+at `licenses/OFL-NotoEmoji.txt`.
+
+`NotoColorEmoji.ttf` SHA-256:
+`72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b`.
 
 | Locale | Family/output | Official source | Upstream version/commit | Source SHA-256 | Output SHA-256 |
 |---|---|---|---|---|---|

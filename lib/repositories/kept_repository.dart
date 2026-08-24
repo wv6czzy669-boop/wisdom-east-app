@@ -72,8 +72,8 @@ class RemovedKeptOccurrence {
 }
 
 /// The authoritative, production Kept repository (Build 26 Phase 3D-C
-/// production cutover; wired via `app_services.dart`'s `keptRepository`
-/// global and consumed through `SavedReflectionsService`). This doc comment
+/// production cutover; constructed by `app_services.dart` and consumed
+/// through `SavedReflectionsService`). This doc comment
 /// previously claimed "not yet used by production" — that was accurate only
 /// during Phase 3D-B and is corrected here as of Phase 4E-2, which adds the
 /// optional authorization/preset parameters below without changing anything

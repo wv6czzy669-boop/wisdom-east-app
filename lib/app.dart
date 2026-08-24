@@ -8,7 +8,9 @@ import 'l10n/app_localizations.dart';
 import 'l10n/app_localizations_en.dart';
 import 'localization/east_locale_registry.dart';
 import 'screens/home_screen.dart';
+import 'services/app_services.dart' as app_services;
 import 'services/saved_reflections_service.dart';
+import 'services/widget_presentation_sync_coordinator.dart';
 import 'theme/east_design.dart';
 
 class WisdomApp extends StatefulWidget {
@@ -53,6 +55,19 @@ class _WisdomAppState extends State<WisdomApp> {
   late final AppearancePreferenceController _appearancePreferenceController =
       widget.appearancePreferenceController ?? AppearancePreferenceController();
 
+  // EAST. 1.2 Slice 3 -- the single Medium Widget presentation-sync
+  // coordinator, owned here and never moved into HomeScreen or
+  // app_services. Uses the exact same locale/appearance controllers this
+  // state already owns above, so Appearance and Language stay driven by
+  // one source of truth each.
+  late final WidgetPresentationSyncCoordinator
+      _widgetPresentationSyncCoordinator = WidgetPresentationSyncCoordinator(
+    appearanceController: _appearancePreferenceController,
+    localeController: _localePreferenceController,
+    dailyWisdomAccessService: app_services.createDailyWisdomAccessService(),
+    widgetSnapshotService: app_services.widgetSnapshotService,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -62,10 +77,14 @@ class _WisdomAppState extends State<WisdomApp> {
     if (widget.appearancePreferenceController == null) {
       unawaited(_appearancePreferenceController.load());
     }
+    _widgetPresentationSyncCoordinator.start();
   }
 
   @override
   void dispose() {
+    // Disposed before the preference controllers below, so the coordinator
+    // never observes a disposed controller mid-teardown.
+    _widgetPresentationSyncCoordinator.dispose();
     if (widget.localePreferenceController == null) {
       _localePreferenceController.dispose();
     }
@@ -110,6 +129,8 @@ class _WisdomAppState extends State<WisdomApp> {
             savedReflectionsService: widget.savedReflectionsService,
             localePreferenceController: _localePreferenceController,
             appearancePreferenceController: _appearancePreferenceController,
+            widgetPresentationSyncCoordinator:
+                _widgetPresentationSyncCoordinator,
           ),
         );
       },

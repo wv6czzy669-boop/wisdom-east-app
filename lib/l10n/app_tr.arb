@@ -6,6 +6,9 @@
   "askFromYourHeart": "Soruyu kalbinden sor.",
   "east": "EAST.",
   "kept": "Kalanlar",
+  "searchKept": "Ara",
+  "clearSearch": "Aramayı temizle",
+  "noKeptSearchResults": "Hiçbir şey bulunamadı.",
   "keptUpper": "KALANLAR",
   "reflectedUpper": "YANSIMA",
   "addReflectionUpper": "YANSIMA EKLE",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "Neyi yanında taşımak istersin?",
   "deleteReflectionQuestion": "Yansıma silinsin mi?",
   "reflectionDeleteExplanation": "Yansıma bu bilgelikten kaldırılacak.",
+  "removeKeptQuestion": "Kalanlardan kaldırılsın mı?",
+  "keptDeleteExplanation": "Bu bilgelik ve Yansıması kaldırılacak.",
   "cancelUpper": "İPTAL",
   "continueAction": "Devam Et",
   "onlyKeptOnThisDevice": "Yalnızca bu aygıtta tutuluyor.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "Kaldırılacak bir şey yok.",
   "reflectionSaveFailed": "Yansıma kaydedilemedi. Lütfen tekrar dene.",
   "reflectionAutosaveFailed": "Yansıma kaydedilemedi. Yazmaya devam ederken yeniden denenecek.",
-  "reflectionDeleteFailed": "Yansıma silinemedi. Lütfen tekrar dene."
+  "reflectionDeleteFailed": "Yansıma silinemedi. Lütfen tekrar dene.",
+  "remainingDurationHoursMinutes": "{hours} saat {minutes} dakika kaldı",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours} saat kaldı",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes} dakika kaldı",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

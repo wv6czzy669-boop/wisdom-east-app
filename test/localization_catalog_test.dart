@@ -10,11 +10,11 @@ import 'package:wisdom_app/controllers/locale_preference_controller.dart';
 import 'package:wisdom_app/data/wisdoms.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
-import 'package:wisdom_app/localization/visual_fit.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/theme/east_design.dart';
 
 import 'persistence_test_helpers.dart';
+import 'test_support/visual_fit.dart';
 
 const Map<String, String> _arbFiles = <String, String>{
   'en': 'app_en.arb',
@@ -255,7 +255,15 @@ void main() {
       // (addReflectionNumbered, openReflectionNumbered -- unique
       // per-row Kept Reflection-action names; opensKeeper -- a truthful
       // hint on Journal's Keeper-gated export action).
-      expect(expectedKeys, hasLength(134));
+      // EAST. 1.2 HH:MM countdown: +3 keys (remainingDurationHoursMinutes,
+      // remainingDurationHoursOnly, remainingDurationMinutesOnly -- the
+      // natural-language duration phrases composed for accessibility,
+      // never the raw visible HH:MM token).
+      // Kept delete safety: +2 keys (removeKeptQuestion and
+      // keptDeleteExplanation), matching Reflection's full-field decision.
+      // Kept search: +3 keys (searchKept, clearSearch,
+      // noKeptSearchResults), kept entirely on-device.
+      expect(expectedKeys, hasLength(142));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');
@@ -413,6 +421,39 @@ void main() {
         const <String>{'price'},
       );
       expect(arabic['east'], 'EAST.');
+    });
+
+    test(
+        'EAST. 1.2 countdown accessibility keys use complete CLDR plural '
+        'categories in Arabic and Polish', () {
+      const countdownKeys = <String>{
+        'remainingDurationHoursMinutes',
+        'remainingDurationHoursOnly',
+        'remainingDurationMinutesOnly',
+      };
+      Set<String> pluralCategories(String message) =>
+          RegExp(r'(zero|one|two|few|many|other)\{')
+              .allMatches(message)
+              .map((match) => match.group(1)!)
+              .toSet();
+
+      final arabic = _readArb('ar');
+      for (final key in countdownKeys) {
+        expect(
+          pluralCategories(arabic[key] as String),
+          const <String>{'zero', 'one', 'two', 'few', 'many', 'other'},
+          reason: 'ar:$key must use every CLDR plural category',
+        );
+      }
+
+      final polish = _readArb('pl');
+      for (final key in countdownKeys) {
+        expect(
+          pluralCategories(polish[key] as String),
+          const <String>{'one', 'few', 'many', 'other'},
+          reason: 'pl:$key must use every CLDR plural category',
+        );
+      }
     });
   });
 

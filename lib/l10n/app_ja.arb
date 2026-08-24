@@ -6,6 +6,9 @@
   "askFromYourHeart": "心から問いかける。",
   "east": "EAST.",
   "kept": "残したもの",
+  "searchKept": "検索",
+  "clearSearch": "検索をクリア",
+  "noKeptSearchResults": "見つかりませんでした。",
   "keptUpper": "残したもの",
   "reflectedUpper": "内省",
   "addReflectionUpper": "内省を記す",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "何を持ち続けたいですか？",
   "deleteReflectionQuestion": "内省を削除しますか？",
   "reflectionDeleteExplanation": "この残した知恵から内省が削除されます。",
+  "removeKeptQuestion": "残したものから削除しますか？",
+  "keptDeleteExplanation": "この知恵と内省が削除されます。",
   "cancelUpper": "キャンセル",
   "continueAction": "続ける",
   "onlyKeptOnThisDevice": "このデバイスにのみ残されています。",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "削除するものはありません。",
   "reflectionSaveFailed": "リフレクションを保存できませんでした。もう一度お試しください。",
   "reflectionAutosaveFailed": "リフレクションを保存できませんでした。書き続ける間にもう一度試します。",
-  "reflectionDeleteFailed": "リフレクションを削除できませんでした。もう一度お試しください。"
+  "reflectionDeleteFailed": "リフレクションを削除できませんでした。もう一度お試しください。",
+  "remainingDurationHoursMinutes": "残り{hours}時間{minutes}分",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "残り{hours}時間",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "残り{minutes}分",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

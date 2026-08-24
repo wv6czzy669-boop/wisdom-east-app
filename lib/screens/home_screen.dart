@@ -5,8 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../controllers/appearance_preference_controller.dart';
-import '../controllers/latest_request_guard.dart';
+import '../controllers/home_kept_controller.dart';
+import '../controllers/home_swipe_to_kept_tracker.dart';
+import '../controllers/kept_discovery_timer_controller.dart';
 import '../controllers/locale_preference_controller.dart';
+import '../controllers/notification_offer_gate.dart';
+import '../controllers/ritual_access_coordinator.dart';
+import '../controllers/ritual_access_view_state.dart';
+import '../controllers/ritual_commit_coordinator.dart';
+import '../controllers/ritual_completion_coordinator.dart';
 import '../controllers/ritual_flow_controller.dart';
 import '../models/favorite_item.dart';
 import '../models/daily_wisdom_selection.dart';
@@ -20,8 +27,7 @@ import '../services/kept_discovery_hint_service.dart';
 import '../services/rating_request_service.dart';
 import '../services/ritual_audio_policy.dart';
 import '../services/saved_reflections_service.dart';
-import '../services/storage_service.dart';
-import '../services/widget_snapshot_service.dart';
+import '../services/widget_presentation_sync_coordinator.dart';
 import '../services/wisdom_notification_service.dart';
 import '../services/wisdom_selector.dart';
 import '../services/wisdom_share_service.dart';
@@ -36,12 +42,30 @@ import 'saved_reflections_screen.dart';
 import 'settings_screen.dart';
 
 part '../widgets/home/home_ritual_widgets.dart';
+part 'home_screen_kept.dart';
+
+/// Shared by both countdown render sites' accessibility composition (Site
+/// A's outer ritual `Semantics` label, Site B's post-reveal countdown
+/// `Semantics` node) -- always built from the same integers the visible
+/// `HH:MM` token renders from, never by parsing a display string.
+String _naturalCountdownDuration(
+  BuildContext context,
+  CountdownDuration duration,
+) {
+  final l10n = eastLocalizations(context);
+  if (duration.hours == 0) {
+    return l10n.remainingDurationMinutesOnly(duration.minutes);
+  }
+  if (duration.minutes == 0) {
+    return l10n.remainingDurationHoursOnly(duration.hours);
+  }
+  return l10n.remainingDurationHoursMinutes(duration.hours, duration.minutes);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     this.clock,
-    this.storageService,
     this.dailyWisdomAccessService,
     this.savedReflectionsService,
     this.wisdomShareService,
@@ -49,7 +73,7 @@ class HomeScreen extends StatefulWidget {
     this.keptDiscoveryHintService,
     this.ratingRequestService,
     this.analyticsService,
-    this.widgetSnapshotService,
+    this.widgetPresentationSyncCoordinator,
     this.localePreferenceController,
     this.appearancePreferenceController,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
@@ -58,7 +82,6 @@ class HomeScreen extends StatefulWidget {
   });
 
   final WisdomClock? clock;
-  final StorageService? storageService;
   final DailyWisdomAccessService? dailyWisdomAccessService;
   final SavedReflectionsService? savedReflectionsService;
   final WisdomShareHandler? wisdomShareService;
@@ -66,7 +89,15 @@ class HomeScreen extends StatefulWidget {
   final KeptDiscoveryHintService? keptDiscoveryHintService;
   final RatingRequestService? ratingRequestService;
   final AnalyticsService? analyticsService;
-  final WidgetSnapshotService? widgetSnapshotService;
+
+  /// EAST. 1.2 Slice 3 -- test-only injection seam. Production `WisdomApp`
+  /// always supplies its one real coordinator (`lib/app.dart`); an isolated
+  /// test that mounts `HomeScreen` directly and doesn't care about widget
+  /// sync may safely leave this `null` -- `notifyFreshReveal` is only ever
+  /// called through this field, never through an `app_services` fallback,
+  /// since no such fallback singleton exists (ownership stays in
+  /// `_WisdomAppState` only).
+  final WidgetPresentationSyncCoordinator? widgetPresentationSyncCoordinator;
   final LocalePreferenceController? localePreferenceController;
   final AppearancePreferenceController? appearancePreferenceController;
   final Duration dailyWisdomOperationTimeout;
@@ -79,7 +110,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   static const _wisdomPresentation = WisdomLocalizationResolver();
-  int screenStep = 0;
+  final RitualFlowController ritualFlowController = RitualFlowController();
+
+  RitualPhase get _phase => ritualFlowController.phase;
+
+  /// Temporary black-box test/diagnostic compatibility. Ritual behavior is
+  /// now driven exclusively by [_phase], never by numeric step values.
+  int get screenStep => _phase.legacyStep;
 
   String currentText = "EAST.";
 
@@ -105,18 +142,16 @@ class _HomeScreenState extends State<HomeScreen>
   // `null` only before the very first `didChangeDependencies` call.
   Locale? _lastKnownLocale;
   bool _isInRitualSilence = false;
-  bool _dailyStatusResolved = false;
-  bool _dailyLockActive = false;
+  RitualAccessViewState _accessViewState =
+      const RitualAccessViewState.unresolved();
   bool _showingLockedWisdom = false;
   bool _saveOperationInProgress = false;
   bool _favoriteLimitOverlayVisible = false;
   bool _shareInProgress = false;
-  bool _notificationPermissionOfferShowing = false;
-  bool _notificationPermissionOfferScheduled = false;
+  final NotificationOfferGate _notificationOfferGate = NotificationOfferGate();
   bool _revealPersistenceNeedsRetry = false;
   DateTime? _pendingRevealBoundaryForRetry;
   DateTime? _pendingNotificationUnlockAt;
-  String? _lockedWisdomText;
   // Build 26 Phase 3D-C: the authoritative reveal identity for whatever
   // wisdom `currentText` currently displays, copied verbatim from the
   // `DailyWisdomRecord` an authoritative `DailyWisdomStatus`/
@@ -128,19 +163,10 @@ class _HomeScreenState extends State<HomeScreen>
   String? currentRevealId;
   String? currentWisdomId;
   DateTime? currentRevealedAt;
-  // Mirrors `_lockedWisdomText`: the reveal identity of the locked wisdom a
-  // tap on the locked countdown would re-display via
-  // `transitionToExistingWisdom`.
-  String? _lockedWisdomRevealId;
-  String? _lockedWisdomId;
-  DateTime? _lockedWisdomRevealedAt;
 
-  // Item 5 — Home left-swipe opens Kept. Cumulative drag offset for the
-  // current gesture, reset on every swipe start; `_homeSwipeHandled` makes
-  // sure a single gesture can only trigger navigation once.
-  double _homeSwipeDx = 0;
-  double _homeSwipeDy = 0;
-  bool _homeSwipeHandled = false;
+  // Item 5 — Home left-swipe opens Kept. Navigation and ritual eligibility
+  // stay here; the gesture geometry and one-trigger guard are isolated.
+  final HomeSwipeToKeptTracker _swipeToKeptTracker = HomeSwipeToKeptTracker();
 
   // Item 6 / P13 — Save -> Kept micro-guidance.
   //
@@ -159,7 +185,6 @@ class _HomeScreenState extends State<HomeScreen>
   double _keptDiscoveryHintOpacity = 0.0;
   bool _keptDiscoveryBreathActive = false;
   bool _keptIconEmphasized = false;
-  Timer? _keptDiscoverySavedTextTimer;
   // P13: true from the moment the first-ever successful save completes the
   // central discovery until the user actually opens Kept via the top-right
   // control -- drives the (also no-timeout) top-right Kept-icon teaching
@@ -167,13 +192,8 @@ class _HomeScreenState extends State<HomeScreen>
   // `_firstUseKeepDiscoveryActive` above (see `KeptDiscoveryHintService`'s
   // `keptNavDiscoveryPendingKey`).
   bool _keptNavDiscoveryActive = false;
-  // The top-right Kept teaching breath chain's own timer (start delay, each
-  // breath's own duration, and the pause between breaths).
-  Timer? _keptIconEmphasisTimer;
-  // The center save-ring breath chain's own timer (first-breath delay,
-  // each breath's own duration, and the pause between breaths).
-  Timer? _keptDiscoveryBreathResetTimer;
-  int _keptDiscoverySessionId = 0;
+  final KeptDiscoveryTimerController _keptDiscoveryTimers =
+      KeptDiscoveryTimerController();
 
   // P13: the ritual ordinal (1-based) of the reveal currently in flight,
   // set once `finishCommittedDailyWisdom` learns it from
@@ -184,44 +204,6 @@ class _HomeScreenState extends State<HomeScreen>
   // of every fresh reveal so a stale value from an earlier reveal can never
   // leak into the next one's notification/discovery decision.
   int? _pendingRitualOrdinal;
-
-  static const Duration _keptDiscoveryBreathFirstDelay = Duration(
-    milliseconds: 250,
-  );
-  static const Duration _keptDiscoveryBreathDuration = Duration(
-    milliseconds: 1200,
-  );
-  static const Duration _keptDiscoveryBreathPause = Duration(
-    milliseconds: 200,
-  );
-
-  // Update 1C: "Kept." remains visible for approximately 1.3 seconds
-  // (replacing the previous ~900ms window).
-  static const Duration _keptDiscoverySavedTextDuration = Duration(
-    milliseconds: 1300,
-  );
-
-  static const Duration _keptTopNavBreathStartDelay = Duration(
-    milliseconds: 350,
-  );
-  static const Duration _keptTopNavBreathDuration = Duration(
-    milliseconds: 1050,
-  );
-  static const Duration _keptTopNavBreathPause = Duration(
-    milliseconds: 165,
-  );
-
-  final ritualFlowController = const RitualFlowController();
-  final accessRefreshGuard = LatestRequestGuard();
-
-  /// Build 26 Phase 4H-6: guards the silent background `favorites` reload
-  /// triggered by [app_services.keptStateRevisionNotifier] (an incoming
-  /// CloudKit sync applying new/changed Kept or Reflection data while Home
-  /// is already mounted) -- a dedicated instance, never shared with
-  /// [accessRefreshGuard] (which guards an unrelated async operation,
-  /// [updateNextWisdomMessage]), so the two can never cross-invalidate each
-  /// other.
-  final keptStateRefreshGuard = LatestRequestGuard();
 
   int delayedCallbackSession = 0;
 
@@ -275,8 +257,6 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  List<FavoriteItem> favorites = [];
-
   bool isKeeper = false;
 
   late AnimationController pulseController;
@@ -288,7 +268,6 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? countdownTimer;
 
   final AudioService audioService = AudioService();
-  late final StorageService storageService;
   late final DailyWisdomAccessService dailyWisdomAccessService;
   late final SavedReflectionsService savedReflectionsService;
   late final WisdomShareHandler wisdomShareService;
@@ -296,9 +275,12 @@ class _HomeScreenState extends State<HomeScreen>
   late final KeptDiscoveryHintService keptDiscoveryHintService;
   late final RatingRequestService ratingRequestService;
   late final AnalyticsService analyticsService;
-  late final WidgetSnapshotService widgetSnapshotService;
+  late final RitualAccessCoordinator ritualAccessCoordinator;
+  late final RitualCommitCoordinator ritualCommitCoordinator;
+  late final RitualCompletionCoordinator ritualCompletionCoordinator;
+  late final HomeKeptController homeKeptController;
+  List<FavoriteItem> get favorites => homeKeptController.items;
   final GlobalKey _wisdomShareOriginKey = GlobalKey();
-  Timer? _notificationPermissionOfferTimer;
 
   void startCountdownTimer() {
     if (countdownTimer?.isActive ?? false) return;
@@ -318,7 +300,24 @@ class _HomeScreenState extends State<HomeScreen>
     countdownTimer = null;
   }
 
-  String nextWisdomMessage = "";
+  /// A [CountdownPresentation] (sentence + the duration stored in
+  /// [_accessViewState]) is built fresh from this and the live
+  /// `eastLocalizations(context)` at build/semantics time, never cached, so
+  /// an explicit or System Default locale change updates the visible
+  /// sentence and accessibility phrase immediately -- never a stale,
+  /// previously-localized presentation frozen at an earlier build.
+  ///
+  /// Builds the current [CountdownPresentation] from [_accessViewState]
+  /// and the live locale, or `null` when no countdown is active. Never
+  /// cached in state.
+  CountdownPresentation? _currentCountdownPresentation(BuildContext context) {
+    final duration = _accessViewState.countdownDuration;
+    if (duration == null) return null;
+    return CountdownPresentation(
+      sentence: eastLocalizations(context).returnWhenSilenceOpensAgain,
+      duration: duration,
+    );
+  }
 
   final WisdomSelectorService wisdomSelector = WisdomSelectorService();
 
@@ -331,7 +330,6 @@ class _HomeScreenState extends State<HomeScreen>
     // Build 26 Phase 4H-6: subscribe to the neutral incoming-Kept-state
     // signal for as long as Home stays mounted.
     app_services.keptStateRevisionNotifier.addListener(_onKeptStateChanged);
-    storageService = widget.storageService ?? app_services.storageService;
     dailyWisdomAccessService = widget.dailyWisdomAccessService ??
         app_services.createDailyWisdomAccessService(
           clock: widget.clock,
@@ -339,6 +337,23 @@ class _HomeScreenState extends State<HomeScreen>
         );
     savedReflectionsService =
         widget.savedReflectionsService ?? app_services.savedReflectionsService;
+    homeKeptController = HomeKeptController(
+      loadItems: savedReflectionsService.load,
+      keepWisdom: (request) async {
+        final result = await savedReflectionsService.toggle(
+          text: request.text,
+          date: request.date,
+          isKeeper: request.isKeeper,
+          revealId: request.revealId,
+          revealedAt: request.revealedAt,
+          wisdomId: request.wisdomId,
+        );
+        return HomeKeptWriteResult(
+          items: result.items,
+          limitReached: result.limitReached,
+        );
+      },
+    );
     wisdomShareService =
         widget.wisdomShareService ?? app_services.wisdomShareService;
     wisdomNotificationService = widget.wisdomNotificationService ??
@@ -348,8 +363,21 @@ class _HomeScreenState extends State<HomeScreen>
     ratingRequestService =
         widget.ratingRequestService ?? app_services.ratingRequestService;
     analyticsService = widget.analyticsService ?? app_services.analyticsService;
-    widgetSnapshotService =
-        widget.widgetSnapshotService ?? app_services.widgetSnapshotService;
+    ritualAccessCoordinator = RitualAccessCoordinator(
+      loadStatus: dailyWisdomAccessService.status,
+    );
+    ritualCommitCoordinator = RitualCommitCoordinator(
+      timeout: widget.dailyWisdomOperationTimeout,
+    );
+    ritualCompletionCoordinator = RitualCompletionCoordinator(
+      recordCompletedRitual: ratingRequestService.recordCompletedRitual,
+      trackRitualCompletion: analyticsService.ritualCompleted,
+      publishFreshWidgetReveal:
+          widget.widgetPresentationSyncCoordinator?.notifyFreshReveal,
+      refreshDailyAccessPresentation: updateNextWisdomMessage,
+      scheduleWisdomUnlock:
+          wisdomNotificationService.scheduleFromAuthoritativeUnlock,
+    );
 
     pulseController = AnimationController(
       vsync: this,
@@ -413,7 +441,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (!isFirstCall) {
         // Presentation-only refresh: recomputes the daily-lock/countdown
-        // message (`nextWisdomMessage`/`currentText`) in the newly selected
+        // message (`currentText` while that surface is active) in the newly
         // language, without touching `unlockAt`, the daily lock, or any
         // persisted wisdom/notification-trigger state. The initial value is
         // already computed by the normal startup load path, so this only
@@ -435,15 +463,15 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     flowSessionId++;
     invalidateDelayedCallbacks();
-    accessRefreshGuard.invalidate();
-    keptStateRefreshGuard.invalidate();
+    ritualAccessCoordinator.dispose();
+    homeKeptController.dispose();
 
     WidgetsBinding.instance.removeObserver(this);
     app_services.purchaseService.removeListener(_syncKeeperStatus);
     app_services.keptStateRevisionNotifier.removeListener(_onKeptStateChanged);
     stopCountdownTimer();
-    _notificationPermissionOfferTimer?.cancel();
-    _cancelAllDiscoveryTimers();
+    _notificationOfferGate.dispose();
+    _keptDiscoveryTimers.dispose();
     pulseController.dispose();
     wisdomRevealController.dispose();
     askFadeController.dispose();
@@ -492,10 +520,10 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  bool get onPauseScreen => ritualFlowController.isPauseScreen(screenStep);
-  bool get onHeartScreen => ritualFlowController.isHeartScreen(screenStep);
-  bool get wisdomRevealed => ritualFlowController.isWisdomRevealed(screenStep);
-  bool get onLockedCountdown => screenStep == 5;
+  bool get onPauseScreen => _phase.isPause;
+  bool get onHeartScreen => _phase.isHeart;
+  bool get wisdomRevealed => _phase.isRevealed;
+  bool get onLockedCountdown => _phase.isLockedCountdown;
 
   // Approved Ritual direction: the hamburger + Kept chrome is absent
   // for every ritual beat (entrance through the ask) and returns only once
@@ -507,8 +535,8 @@ class _HomeScreenState extends State<HomeScreen>
     if (navigationInProgress || transitionInProgress || _transitionLock) {
       return false;
     }
-    if (screenStep == 0) return _dailyStatusResolved;
-    if (screenStep == 1 || screenStep == 2) return true;
+    if (_phase == RitualPhase.launch) return _accessViewState.isResolved;
+    if (_phase == RitualPhase.pause || _phase == RitualPhase.heart) return true;
     return wisdomRevealed && _revealPersistenceNeedsRetry;
   }
 
@@ -519,19 +547,23 @@ class _HomeScreenState extends State<HomeScreen>
   String? mainRitualSemanticLabel(BuildContext context) {
     final l10n = eastLocalizations(context);
     if (hideMainRitualContentSemantics) return null;
-    if (screenStep == 0) return 'EAST.';
+    if (_phase == RitualPhase.launch) return 'EAST.';
     if (onPauseScreen) {
       return pauseFeelOpacity < 1.0 ? l10n.pause : '${l10n.pause} ${l10n.feel}';
     }
     if (onHeartScreen) return l10n.askFromYourHeart;
-    // Single source of truth for the locked/countdown state: `currentText`
-    // is the exact same already-localized message the sighted countdown
-    // Text renders (see `refreshDailyStatus`'s `CountdownFormatter.
-    // silenceMessage` assignment). Returning it here makes the outer
+    // Site A is the sole owner of the countdown announcement here: composed
+    // from the same `CountdownDuration` integers the visible `HH:MM` token
+    // renders from, never from a parsed display string, and never the raw
+    // `HH:MM` token itself. Returning a non-null label here makes the outer
     // Semantics own the announcement and (via `excludeSemantics: label !=
-    // null` below) suppresses the inner Text's own duplicate node, instead
-    // of exposing the same status twice.
-    if (onLockedCountdown) return currentText;
+    // null` below) suppresses the inner Text's own duplicate node.
+    if (onLockedCountdown) {
+      final presentation = _currentCountdownPresentation(context);
+      if (presentation == null) return null;
+      return '${presentation.sentence} '
+          '${_naturalCountdownDuration(context, presentation.duration)}';
+    }
     if (wisdomRevealed && _revealPersistenceNeedsRetry) {
       return l10n.wisdomCouldNotBeKept;
     }
@@ -612,7 +644,7 @@ class _HomeScreenState extends State<HomeScreen>
   // repeat the native request.
   void _maybeRequestAppRating() {
     if (!mounted) return;
-    if (screenStep != 0) return;
+    if (_phase != RitualPhase.launch) return;
     if (transitionInProgress || _transitionLock || navigationInProgress) {
       return;
     }
@@ -708,19 +740,12 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {});
   }
 
-  Future<void> saveDailyArchive(String text) async {
-    await storageService.saveDailyArchive(
-      text: text,
-      today: formattedToday(),
-    );
-  }
-
   Future<void> handleMainTap() async {
     if (transitionInProgress || _transitionLock) return;
 
     invalidateDelayedCallbacks();
 
-    if (screenStep == 0) {
+    if (_phase == RitualPhase.launch) {
       HapticFeedback.selectionClick();
 
       final launchFlowSession = flowSessionId;
@@ -731,21 +756,23 @@ class _HomeScreenState extends State<HomeScreen>
 
       transitionInProgress = false;
 
-      if (!_dailyStatusResolved) return;
+      if (!_accessViewState.isResolved) return;
 
-      if (_dailyLockActive) {
-        final lockedWisdomText = _lockedWisdomText;
-        if (lockedWisdomText == null) {
+      if (_accessViewState.isLocked) {
+        final lockedWisdom = _accessViewState.wisdom;
+        if (lockedWisdom == null) {
+          final countdown = _currentCountdownPresentation(context);
+          if (countdown == null) return;
           await transitionToText(
-            nextWisdomMessage,
-            nextStep: 5,
+            countdown.plainText,
+            nextPhase: RitualPhase.lockedCountdown,
           );
         } else {
           await transitionToExistingWisdom(
-            lockedWisdomText,
-            revealId: _lockedWisdomRevealId,
-            revealedAt: _lockedWisdomRevealedAt,
-            wisdomId: _lockedWisdomId,
+            lockedWisdom.text,
+            revealId: lockedWisdom.revealId,
+            revealedAt: lockedWisdom.revealedAt,
+            wisdomId: lockedWisdom.wisdomId,
           );
         }
         return;
@@ -766,13 +793,13 @@ class _HomeScreenState extends State<HomeScreen>
 
       await transitionToText(
         eastLocalizations(context).pause,
-        nextStep: 1,
+        nextPhase: RitualPhase.pause,
       );
 
       return;
     }
 
-    if (screenStep == 1) {
+    if (_phase == RitualPhase.pause) {
       HapticFeedback.lightImpact();
 
       if (pauseFeelOpacity < 1.0) {
@@ -804,14 +831,14 @@ class _HomeScreenState extends State<HomeScreen>
         );
         await transitionToText(
           eastLocalizations(context).askFromYourHeart,
-          nextStep: 2,
+          nextPhase: RitualPhase.heart,
         );
       }
 
       return;
     }
 
-    if (screenStep == 2) {
+    if (_phase == RitualPhase.heart) {
       await revealWisdom();
       return;
     }
@@ -857,7 +884,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> transitionToText(
     String newText, {
-    required int nextStep,
+    required RitualPhase nextPhase,
   }) async {
     if (transitionInProgress) return;
 
@@ -875,23 +902,23 @@ class _HomeScreenState extends State<HomeScreen>
         textScale = 1.0;
       });
 
-      final fadeOutDuration = onPauseScreen && nextStep == 2
+      final fadeOutDuration = onPauseScreen && nextPhase == RitualPhase.heart
           ? const Duration(milliseconds: 1250)
-          : ritualFlowController.transitionFadeOutDuration(nextStep);
+          : ritualFlowController.transitionFadeOutDuration(nextPhase);
 
       await Future.delayed(fadeOutDuration);
 
       if (!isCurrentFlow(currentFlow)) return;
 
-      if (nextStep == 2) {
+      if (nextPhase == RitualPhase.heart) {
         askFadeController.stop();
         askFadeController.value = 1.0;
       }
 
       setState(() {
         currentText = newText;
-        screenStep = nextStep;
-        if (nextStep != 1) {
+        ritualFlowController.transitionTo(nextPhase);
+        if (nextPhase != RitualPhase.pause) {
           pauseFeelOpacity = 0.0;
         }
       });
@@ -909,7 +936,7 @@ class _HomeScreenState extends State<HomeScreen>
       });
 
       await Future.delayed(
-        ritualFlowController.transitionSettleDuration(nextStep),
+        ritualFlowController.transitionSettleDuration(nextPhase),
       );
 
       if (!isCurrentFlow(currentFlow)) return;
@@ -945,7 +972,7 @@ class _HomeScreenState extends State<HomeScreen>
       });
 
       await Future.delayed(
-        ritualFlowController.transitionFadeOutDuration(4),
+        ritualFlowController.transitionFadeOutDuration(RitualPhase.revealed),
       );
 
       if (!isCurrentFlow(currentFlow)) return;
@@ -958,7 +985,7 @@ class _HomeScreenState extends State<HomeScreen>
         currentRevealId = revealId;
         currentRevealedAt = revealedAt;
         currentWisdomId = wisdomId;
-        screenStep = 4;
+        ritualFlowController.transitionTo(RitualPhase.revealed);
         _showingLockedWisdom = true;
         textOpacity = 1.0;
         textScale = 1.0;
@@ -994,85 +1021,43 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> updateNextWisdomMessage() async {
-    final refreshGeneration = accessRefreshGuard.begin();
+    final nextAccessViewState = await ritualAccessCoordinator.refresh();
+    if (!mounted || nextAccessViewState == null) return;
 
-    final DailyWisdomStatus status;
-
-    try {
-      status = await dailyWisdomAccessService.status();
-    } catch (_) {
-      if (_canCommitAccessRefresh(refreshGeneration)) {
-        setState(() {
-          nextWisdomMessage = "";
-          _dailyStatusResolved = false;
-        });
-      }
-      return;
-    }
-
-    if (status.isReady) {
-      if (_canCommitAccessRefresh(refreshGeneration)) {
-        setState(() {
-          _dailyStatusResolved = true;
-          _dailyLockActive = false;
-          _lockedWisdomText = null;
-          _lockedWisdomRevealId = null;
-          _lockedWisdomRevealedAt = null;
-          nextWisdomMessage = status.unlockAt == null ? '' : 'ready';
-
-          if (onLockedCountdown || _showingLockedWisdom) {
-            screenStep = 0;
-            _showingLockedWisdom = false;
-            currentText = "EAST.";
-            currentRevealId = null;
-            currentRevealedAt = null;
-            currentWisdomId = null;
-            textOpacity = 1.0;
-            textScale = 1.0;
-          }
-        });
-      }
-      return;
-    }
-
-    String? lockedWisdomText;
-    String? lockedRevealId;
-    DateTime? lockedRevealedAt;
-    String? lockedWisdomId;
-    final text = status.lockedText?.trim();
-    if (text != null &&
-        text.isNotEmpty &&
-        text != DailyWisdomAccessService.corruptRecordRecoveryText) {
-      lockedWisdomText = status.lockedText;
-      lockedRevealId = status.revealId;
-      lockedRevealedAt = status.revealedAt;
-      lockedWisdomId = status.wisdomId;
-    }
-
-    if (!mounted) return;
-    final message = CountdownFormatter.silenceMessage(
-      status.remaining!,
-      eastLocalizations(context).returnWhenSilenceOpensAgain,
-    );
-
-    if (_canCommitAccessRefresh(refreshGeneration)) {
+    if (!nextAccessViewState.isLocked) {
       setState(() {
-        _dailyStatusResolved = true;
-        _dailyLockActive = true;
-        _lockedWisdomText = lockedWisdomText;
-        _lockedWisdomRevealId = lockedRevealId;
-        _lockedWisdomRevealedAt = lockedRevealedAt;
-        _lockedWisdomId = lockedWisdomId;
-        nextWisdomMessage = message;
-        if (onLockedCountdown) {
-          currentText = message;
+        _accessViewState = nextAccessViewState;
+
+        if (nextAccessViewState.isResolved &&
+            (onLockedCountdown || _showingLockedWisdom)) {
+          ritualFlowController.transitionTo(RitualPhase.launch);
+          _showingLockedWisdom = false;
+          currentText = "EAST.";
+          currentRevealId = null;
+          currentRevealedAt = null;
+          currentWisdomId = null;
+          textOpacity = 1.0;
+          textScale = 1.0;
         }
       });
+      return;
     }
-  }
 
-  bool _canCommitAccessRefresh(int generation) {
-    return mounted && accessRefreshGuard.isCurrent(generation);
+    // The duration in `_accessViewState` is the source of truth from this
+    // point on. `presentation.plainText` below only updates `currentText`
+    // while the large locked-countdown surface is already visible.
+    final duration = nextAccessViewState.countdownDuration!;
+    final presentation = CountdownPresentation(
+      sentence: eastLocalizations(context).returnWhenSilenceOpensAgain,
+      duration: duration,
+    );
+
+    setState(() {
+      _accessViewState = nextAccessViewState;
+      if (onLockedCountdown) {
+        currentText = presentation.plainText;
+      }
+    });
   }
 
   Future<DailyWisdomPreparedReveal> prepareDailyWisdomReveal() {
@@ -1089,71 +1074,16 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void finishCommittedDailyWisdom(DailyWisdomAccess access) {
-    if (access.isNew) {
-      unawaited(
-        saveDailyArchive(access.text).catchError((_) {
-          // Archiving is best-effort and must never hide a persisted wisdom.
-        }),
-      );
-
-      // EAST. Phase 6: a durably committed, genuinely new reveal is the one
-      // authoritative "ritual successfully completed" moment -- never an
-      // interrupted or still-retrying reveal (those never reach here).
-      // Recording is fire-and-forget local bookkeeping only; the actual
-      // native rating request happens later, at a safe idle moment (see
-      // `_maybeRequestAppRating`), never here mid-reveal.
-      //
-      // P13: this call's return value doubles as the ritual ordinal
-      // (`_pendingRitualOrdinal`) the notification/discovery timing branch
-      // reads once its own Timer fires, several seconds later -- ample
-      // time for this single SharedPreferences round trip to resolve.
-      // `_pendingRitualOrdinal` was already reset to `null` at the start of
-      // this reveal (see the reveal-transition method above), so a stale
-      // value can never leak in.
-      unawaited(
-        ratingRequestService.recordCompletedRitual().then((ordinal) {
-          if (!mounted) return;
-          _pendingRitualOrdinal = ordinal;
-        }),
-      );
-
-      // EAST. Phase 7: the same authoritative "ritual successfully
-      // completed" moment as the rating-eligibility bookkeeping directly
-      // above. No parameter: `access.text`/`revealId`/`revealedAt` never
-      // travel through this call.
-      analyticsService.ritualCompleted();
-
-      // EAST. Phase 11: the one authoritative "durably committed, genuinely
-      // new reveal" moment the Medium Widget is allowed to mirror -- never
-      // an interrupted or still-retrying reveal (those never reach here,
-      // exactly like the rating/analytics calls directly above). The widget
-      // never selects or reveals wisdom itself; this is the only place that
-      // publishes a fresh occurrence to it.
-      final freshUnlockAt = access.unlockAt;
-      if (freshUnlockAt != null) {
-        unawaited(
-          widgetSnapshotService.publishRevealed(
-            text: access.text,
-            unlockAt: freshUnlockAt,
-          ),
-        );
-      }
-    }
-
-    unawaited(
-      updateNextWisdomMessage().catchError((_) {
-        // Countdown copy is noncritical after the daily wisdom is persisted.
-      }),
+    final result = ritualCompletionCoordinator.finish(
+      access,
+      onRitualOrdinalResolved: (ordinal) {
+        if (!mounted) return;
+        _pendingRitualOrdinal = ordinal;
+      },
     );
-
-    final unlockAt = access.unlockAt;
-    if (unlockAt != null) {
-      unawaited(
-        wisdomNotificationService.scheduleFromAuthoritativeUnlock(unlockAt),
-      );
-      if (access.isNew) {
-        _pendingNotificationUnlockAt = unlockAt;
-      }
+    final notificationOfferUnlockAt = result.notificationOfferUnlockAt;
+    if (notificationOfferUnlockAt != null) {
+      _pendingNotificationUnlockAt = notificationOfferUnlockAt;
     }
   }
 
@@ -1161,36 +1091,12 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final status = await dailyWisdomAccessService.status();
       await wisdomNotificationService.synchronizeWithStatus(status);
-      // EAST. Phase 11: fire-and-forget, like every other widget-snapshot
-      // publish call site -- this must never delay or gate the notification
-      // synchronization (or anything awaiting this method, e.g. the rating
-      // request that follows it at the idle entry points) on a platform
-      // channel round trip. `_synchronizeWidgetSnapshot` never throws (both
-      // `WidgetSnapshotService` methods already fail closed internally).
-      unawaited(_synchronizeWidgetSnapshot(status));
+      // EAST. 1.2 Slice 3: widget-snapshot reconciliation is no longer
+      // triggered from here -- `WidgetPresentationSyncCoordinator`
+      // (`lib/app.dart`) owns its own independent launch/resume
+      // reconciliation, fully decoupled from notification synchronization.
     } catch (_) {
       // Notification synchronization must not affect daily access.
-    }
-  }
-
-  /// EAST. Phase 11: reconciles the Medium Widget's snapshot against the
-  /// current authoritative status -- called only from cold start and
-  /// foreground resume (via [synchronizeUnlockNotification]'s own call
-  /// sites), never from the 60-second countdown timer tick or any other
-  /// per-frame/per-rebuild path. `publishRevealed`/`publishSilence` are
-  /// themselves idempotent (`EastWidgetSnapshotStore` only asks WidgetKit to
-  /// reload when the persisted snapshot actually changes), so a repeated
-  /// reconciliation that finds nothing new is always a safe no-op.
-  Future<void> _synchronizeWidgetSnapshot(DailyWisdomStatus status) async {
-    final unlockAt = status.unlockAt;
-    final lockedText = status.lockedText;
-    if (!status.isReady && lockedText != null && unlockAt != null) {
-      await widgetSnapshotService.publishRevealed(
-        text: lockedText,
-        unlockAt: unlockAt,
-      );
-    } else {
-      await widgetSnapshotService.publishSilence();
     }
   }
 
@@ -1202,48 +1108,18 @@ class _HomeScreenState extends State<HomeScreen>
   // first-use Keep discovery; ritual 2 alone reaches the native prompt;
   // every other ordinal (3+, or one that could not be determined) offers
   // neither, automatically -- it never falls through to the native prompt
-  // "by default". The scheduling mechanism itself -- delay, guard flags,
-  // single-flight behavior -- is unchanged from the pre-P13
-  // implementation.
+  // "by default". The first-use Keep discovery uses a three-second
+  // post-reveal delay; ritual 2 retains the original six-second native
+  // permission timing through the second guarded wait below.
   void _queueNotificationPermissionOffer(
     DateTime unlockAt, {
-    Duration delay = const Duration(seconds: 6),
+    Duration delay = const Duration(seconds: 3),
   }) {
-    if (_notificationPermissionOfferScheduled ||
-        _notificationPermissionOfferShowing) {
-      return;
-    }
-
-    _notificationPermissionOfferScheduled = true;
     final offerFlow = flowSessionId;
-    _notificationPermissionOfferTimer = Timer(
-      delay,
-      () {
-        _notificationPermissionOfferTimer = null;
-        // Correction: a real Mac run showed the discovery hint's display
-        // count incrementing while the native permission Future was still
-        // genuinely pending. Root cause: `_notificationPermissionOfferScheduled`
-        // used to be cleared to `false` right here, *before*
-        // `_showNotificationPermissionOffer`'s own `shouldOfferPermission()`
-        // check (its first `await`) had resolved and set
-        // `_notificationPermissionOfferShowing = true` — leaving a real
-        // window, between this Timer firing and that first `await`
-        // resolving, where *both* guard flags were `false` while the offer
-        // was still genuinely in flight.
-        //
-        // The fix: `_notificationPermissionOfferScheduled` is no longer
-        // cleared here at all, and `_notificationPermissionOfferShowing` is
-        // set `true` synchronously, right here, before this callback's own
-        // first `await` — so from the moment this offer was queued (above)
-        // through to the single `finally` in
-        // `_runQueuedNotificationPermissionOffer` below, at least one of
-        // the two flags is continuously `true`, with no tick where both
-        // are `false`. Both are cleared together, exactly once, in that
-        // `finally` — the sole completion path, reached regardless of
-        // which branch is taken.
-        _notificationPermissionOfferShowing = true;
-        unawaited(_runQueuedNotificationPermissionOffer(offerFlow, unlockAt));
-      },
+    _notificationOfferGate.schedule(
+      delay: delay,
+      runOffer: () =>
+          _runQueuedNotificationPermissionOffer(offerFlow, unlockAt),
     );
   }
 
@@ -1251,41 +1127,48 @@ class _HomeScreenState extends State<HomeScreen>
     int offerFlow,
     DateTime unlockAt,
   ) async {
-    try {
-      if (!mounted ||
-          offerFlow != flowSessionId ||
-          _pendingNotificationUnlockAt != unlockAt ||
-          !wisdomRevealed ||
-          transitionInProgress ||
-          navigationInProgress ||
-          _isInRitualSilence) {
-        return;
-      }
-      // P13 (locked contract): an explicit, closed three-way switch on the
-      // ritual ordinal -- never an `!= 1`/`else` fallthrough. Ritual 1
-      // begins the first-use Keep discovery and never reaches the native
-      // prompt. Ritual 2 alone reaches the existing, unmodified
-      // native-prompt path. Every other ordinal -- 3+, or undetermined
-      // (`null`, e.g. a rating request already attempted, or a read/write
-      // failure) -- does neither: the automatic offer fails closed rather
-      // than falling through to the native prompt "by default". This also
-      // means a missed ritual-2 timing window (app killed/backgrounded
-      // before its own offer fired) is never silently deferred to ritual
-      // 3 -- ordinal 3 simply matches neither case below.
-      if (_pendingRitualOrdinal == 1) {
-        _pendingNotificationUnlockAt = null;
-        await _beginFirstUseKeepDiscovery();
-        return;
-      }
-      if (_pendingRitualOrdinal == 2) {
-        await _showNotificationPermissionOffer(unlockAt);
-        return;
-      }
-      _pendingNotificationUnlockAt = null;
-    } finally {
-      _notificationPermissionOfferScheduled = false;
-      _notificationPermissionOfferShowing = false;
+    if (!_canRunQueuedNotificationPermissionOffer(offerFlow, unlockAt)) {
+      return;
     }
+    // P13 (locked contract): an explicit, closed three-way switch on the
+    // ritual ordinal -- never an `!= 1`/`else` fallthrough. Ritual 1
+    // begins the first-use Keep discovery and never reaches the native
+    // prompt. Ritual 2 alone reaches the existing, unmodified
+    // native-prompt path. Every other ordinal -- 3+, or undetermined
+    // (`null`, e.g. a rating request already attempted, or a read/write
+    // failure) -- does neither: the automatic offer fails closed rather
+    // than falling through to the native prompt "by default".
+    if (_pendingRitualOrdinal == 1) {
+      _pendingNotificationUnlockAt = null;
+      await _beginFirstUseKeepDiscovery();
+      return;
+    }
+    if (_pendingRitualOrdinal == 2) {
+      // The first-use Keep discovery now appears three seconds after the
+      // wisdom has fully revealed. Keep ritual 2's native notification
+      // permission request at its established six-second timing by waiting
+      // for the remaining half of that shared post-reveal slot here.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!_canRunQueuedNotificationPermissionOffer(offerFlow, unlockAt)) {
+        return;
+      }
+      await _showNotificationPermissionOffer(unlockAt);
+      return;
+    }
+    _pendingNotificationUnlockAt = null;
+  }
+
+  bool _canRunQueuedNotificationPermissionOffer(
+    int offerFlow,
+    DateTime unlockAt,
+  ) {
+    return mounted &&
+        offerFlow == flowSessionId &&
+        _pendingNotificationUnlockAt == unlockAt &&
+        wisdomRevealed &&
+        !transitionInProgress &&
+        !navigationInProgress &&
+        !_isInRitualSilence;
   }
 
   Future<void> _showNotificationPermissionOffer(DateTime unlockAt) async {
@@ -1322,8 +1205,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   // P13 — the central "Keep this wisdom." first-use discovery. Reached
   // only once, ever, per device: from `_runQueuedNotificationPermissionOffer`
-  // at the exact timing slot the native notification prompt would
-  // otherwise have appeared, and only when `_pendingRitualOrdinal == 1`
+  // three seconds after the first wisdom has fully appeared, and only when
+  // `_pendingRitualOrdinal == 1`
   // (this device's first genuinely completed ritual -- see
   // `RatingRequestService.recordCompletedRitual`). Unlike the discovery
   // hint this replaces, there is deliberately no hide/timeout timer
@@ -1343,7 +1226,6 @@ class _HomeScreenState extends State<HomeScreen>
     if (isCurrentFavorite()) return;
 
     final reduceMotion = _reduceMotion;
-    final session = ++_keptDiscoverySessionId;
     setState(() {
       _firstUseKeepDiscoveryActive = true;
       _keptDiscoveryHintText = 'keep';
@@ -1360,11 +1242,7 @@ class _HomeScreenState extends State<HomeScreen>
     unawaited(keptDiscoveryHintService.markCentralDiscoveryPending());
 
     if (!reduceMotion) {
-      _keptDiscoveryBreathResetTimer?.cancel();
-      _keptDiscoveryBreathResetTimer = Timer(
-        _keptDiscoveryBreathFirstDelay,
-        () => _startKeptDiscoveryBreath(session),
-      );
+      _startKeptDiscoveryBreathing();
     }
     // Deliberately no hide timer: this discovery never times out (see
     // this method's own doc comment).
@@ -1393,18 +1271,13 @@ class _HomeScreenState extends State<HomeScreen>
         !_isInRitualSilence &&
         !isCurrentFavorite() &&
         _keptDiscoveryHintOpacity <= 0.0) {
-      final session = ++_keptDiscoverySessionId;
       setState(() {
         _keptDiscoveryHintText = 'keep';
         _keptDiscoveryHintOpacity = 1.0;
         _keptDiscoveryBreathActive = false;
       });
       if (!_reduceMotion) {
-        _keptDiscoveryBreathResetTimer?.cancel();
-        _keptDiscoveryBreathResetTimer = Timer(
-          _keptDiscoveryBreathFirstDelay,
-          () => _startKeptDiscoveryBreath(session),
-        );
+        _startKeptDiscoveryBreathing();
       }
     }
 
@@ -1421,34 +1294,19 @@ class _HomeScreenState extends State<HomeScreen>
     // silently losing the resumed animation for the rest of the session.
     if (_keptNavDiscoveryActive &&
         !_keptIconEmphasized &&
-        _keptIconEmphasisTimer == null &&
+        !_keptDiscoveryTimers.hasNavTimer &&
         !_reduceMotion) {
       _scheduleKeptTopNavBreaths();
     }
   }
 
-  // Loops for as long as `_firstUseKeepDiscoveryActive` is true -- there is
-  // no fixed breath count under P13's no-timeout contract; the ring simply
-  // keeps breathing, calmly, for as long as the discovery remains owed.
-  // Guarded by the same `session` id every other discovery timer uses, so
-  // a stale chain from a dismissed/replaced reveal can never touch a later
-  // reveal's state.
-  void _startKeptDiscoveryBreath(int session) {
-    if (!mounted || session != _keptDiscoverySessionId) return;
-    setState(() => _keptDiscoveryBreathActive = true);
-    _keptDiscoveryBreathResetTimer = Timer(
-      _keptDiscoveryBreathDuration,
-      () => _endKeptDiscoveryBreath(session),
-    );
-  }
-
-  void _endKeptDiscoveryBreath(int session) {
-    if (!mounted || session != _keptDiscoverySessionId) return;
-    setState(() => _keptDiscoveryBreathActive = false);
-    if (!_firstUseKeepDiscoveryActive) return;
-    _keptDiscoveryBreathResetTimer = Timer(
-      _keptDiscoveryBreathPause,
-      () => _startKeptDiscoveryBreath(session),
+  void _startKeptDiscoveryBreathing() {
+    _keptDiscoveryTimers.startCentralBreathing(
+      onActiveChanged: (active) {
+        if (!mounted) return;
+        setState(() => _keptDiscoveryBreathActive = active);
+      },
+      shouldContinue: () => mounted && _firstUseKeepDiscoveryActive,
     );
   }
 
@@ -1462,16 +1320,10 @@ class _HomeScreenState extends State<HomeScreen>
   // themselves -- those persist across interruption by design (see
   // `_resumePendingDiscoveryIfNeeded`).
   void _cancelAllDiscoveryTimers() {
-    _keptDiscoverySavedTextTimer?.cancel();
-    _keptDiscoverySavedTextTimer = null;
-    _keptIconEmphasisTimer?.cancel();
-    _keptIconEmphasisTimer = null;
-    _keptDiscoveryBreathResetTimer?.cancel();
-    _keptDiscoveryBreathResetTimer = null;
+    _keptDiscoveryTimers.cancelAll();
   }
 
   void _dismissKeptDiscoveryHint() {
-    _keptDiscoverySessionId++;
     _cancelAllDiscoveryTimers();
     if (_keptDiscoveryHintOpacity != 0.0 ||
         _keptDiscoveryBreathActive ||
@@ -1509,7 +1361,6 @@ class _HomeScreenState extends State<HomeScreen>
     // hint state) before deciding what — if anything — to show next, so
     // nothing from the pre-save state can fire later.
     _cancelAllDiscoveryTimers();
-    _keptDiscoverySessionId++;
     _firstUseKeepDiscoveryActive = false;
 
     bool wasCompletedBefore;
@@ -1534,16 +1385,12 @@ class _HomeScreenState extends State<HomeScreen>
         _keptDiscoveryBreathActive = false;
       });
 
-      _keptDiscoverySavedTextTimer?.cancel();
-      _keptDiscoverySavedTextTimer = Timer(
-        _keptDiscoverySavedTextDuration,
-        () {
-          if (!mounted) return;
-          setState(() {
-            _keptDiscoveryHintOpacity = 0.0;
-          });
-        },
-      );
+      _keptDiscoveryTimers.scheduleSavedTextHide(() {
+        if (!mounted) return;
+        setState(() {
+          _keptDiscoveryHintOpacity = 0.0;
+        });
+      });
     } else {
       setState(() {
         _keptDiscoveryHintOpacity = 0.0;
@@ -1566,38 +1413,16 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // Starts the top-right Kept-navigation teaching breath chain. Not tied
-  // to `_keptDiscoverySessionId` (that id belongs to the reveal-scoped
-  // discovery-hint text/center-breath flow, which this emphasis is
-  // deliberately independent of); guarded only by `mounted` and
-  // `_keptNavDiscoveryActive`, and cancelled the same way every other
-  // discovery timer is — via `_cancelAllDiscoveryTimers()` on dispose,
-  // navigation, lifecycle change, or a new wisdom reveal (see
-  // `_resumePendingDiscoveryIfNeeded` for how it resumes afterward).
+  // Starts the independent top-right Kept-navigation teaching breath chain.
+  // Eligibility and visible state stay in Home; timer ownership lives in
+  // [KeptDiscoveryTimerController].
   void _scheduleKeptTopNavBreaths() {
-    _keptIconEmphasisTimer?.cancel();
-    _keptIconEmphasisTimer = Timer(
-      _keptTopNavBreathStartDelay,
-      _startKeptTopNavBreath,
-    );
-  }
-
-  void _startKeptTopNavBreath() {
-    if (!mounted || !_keptNavDiscoveryActive) return;
-    setState(() => _keptIconEmphasized = true);
-    _keptIconEmphasisTimer = Timer(
-      _keptTopNavBreathDuration,
-      _endKeptTopNavBreath,
-    );
-  }
-
-  void _endKeptTopNavBreath() {
-    if (!mounted) return;
-    setState(() => _keptIconEmphasized = false);
-    if (!_keptNavDiscoveryActive) return;
-    _keptIconEmphasisTimer = Timer(
-      _keptTopNavBreathPause,
-      _startKeptTopNavBreath,
+    _keptDiscoveryTimers.startNavBreathing(
+      onActiveChanged: (active) {
+        if (!mounted) return;
+        setState(() => _keptIconEmphasized = active);
+      },
+      shouldContinue: () => mounted && _keptNavDiscoveryActive,
     );
   }
 
@@ -1671,7 +1496,7 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       _isInRitualSilence = false;
       currentText = eastLocalizations(context).askFromYourHeart;
-      screenStep = 2;
+      ritualFlowController.transitionTo(RitualPhase.heart);
       _showingLockedWisdom = false;
       _revealPersistenceNeedsRetry = false;
       _pendingRevealBoundaryForRetry = null;
@@ -1697,6 +1522,57 @@ class _HomeScreenState extends State<HomeScreen>
 
   DateTime revealBoundaryNow() {
     return widget.clock?.call() ?? DateTime.now();
+  }
+
+  void _showRevealCommitRetryState() {
+    if (!mounted) return;
+    setState(() {
+      _revealPersistenceNeedsRetry = true;
+      saveControlOpacity = 0.0;
+      saveInteractionEnabled = false;
+      postRevealMessageOpacity = 0.0;
+    });
+  }
+
+  void _applyCommittedAccess(
+    DailyWisdomAccess access, {
+    required double nextSaveControlOpacity,
+    required bool nextSaveInteractionEnabled,
+    required double nextPostRevealMessageOpacity,
+  }) {
+    finishCommittedDailyWisdom(access);
+    _pendingRevealBoundaryForRetry = null;
+    setState(() {
+      _revealPersistenceNeedsRetry = false;
+      _showingLockedWisdom = !access.isNew;
+      currentRevealId = access.revealId;
+      currentRevealedAt = access.revealedAt;
+      currentWisdomId = access.wisdomId;
+      saveControlOpacity = nextSaveControlOpacity;
+      saveInteractionEnabled = nextSaveInteractionEnabled;
+      postRevealMessageOpacity = nextPostRevealMessageOpacity;
+    });
+  }
+
+  void _observeLateRevealCommit(
+    Future<RitualCommitResolution> eventualResolution,
+    int currentFlow,
+  ) {
+    unawaited(
+      eventualResolution.then((resolution) {
+        if (!mounted || currentFlow != flowSessionId) return;
+        if (resolution is RitualCommitSucceeded) {
+          _applyCommittedAccess(
+            resolution.access,
+            nextSaveControlOpacity: 1.0,
+            nextSaveInteractionEnabled: true,
+            nextPostRevealMessageOpacity: 1.0,
+          );
+          return;
+        }
+        _showRevealCommitRetryState();
+      }),
+    );
   }
 
   Future<void> revealWisdom() async {
@@ -1831,27 +1707,23 @@ class _HomeScreenState extends State<HomeScreen>
         currentRevealId = revealedAccess.revealId;
         currentRevealedAt = revealedAccess.revealedAt;
         currentWisdomId = revealedAccess.wisdomId;
-        screenStep = 4;
+        ritualFlowController.transitionTo(RitualPhase.revealed);
         _showingLockedWisdom = !revealedAccess.isNew;
         textOpacity = 1.0;
         textScale = 1.0;
       });
 
-      // Correction: the notification-offer "scheduled" guard
-      // (`_notificationPermissionOfferScheduled`) must become active in
-      // the same synchronous turn the reveal itself becomes visible — not
-      // deferred to a post-frame callback, closing a race window a real
-      // Mac run once exposed. Queueing the offer here — synchronously,
-      // before anything in this method yields control again — closes that
-      // window entirely. This is only a reordering: the offer's own
-      // delay/Timer, its guard conditions, and `wisdomRevealController.forward`
-      // (still correctly deferred to the next frame below) are all
-      // unchanged.
+      // The notification-offer gate must become busy in the same synchronous
+      // turn the reveal itself becomes visible — not deferred to a post-frame
+      // callback. Queueing it here closes that race window. This is only a
+      // reordering: the offer's delay, guard conditions, and
+      // `wisdomRevealController.forward` (still deferred to the next frame
+      // below) are unchanged.
       final unlockAt = revealedAccess.unlockAt;
       if (revealedAccess.isNew && unlockAt != null) {
         _queueNotificationPermissionOffer(
           unlockAt,
-          delay: wisdomRevealController.duration! + const Duration(seconds: 6),
+          delay: wisdomRevealController.duration! + const Duration(seconds: 3),
         );
       }
 
@@ -1871,76 +1743,39 @@ class _HomeScreenState extends State<HomeScreen>
               text: revealReady.text,
               revealBoundary: revealBoundary,
             );
-      final DailyWisdomAccess committedAccess;
-      try {
-        committedAccess = await commitFuture.timeout(
-          widget.dailyWisdomOperationTimeout,
-        );
-      } on TimeoutException {
-        if (!mounted || currentFlow != flowSessionId) return;
-        setState(() {
-          _revealPersistenceNeedsRetry = true;
-          saveControlOpacity = 0.0;
-          saveInteractionEnabled = false;
-          postRevealMessageOpacity = 0.0;
-        });
-        unawaited(
-          commitFuture.then(
-            (lateAccess) {
-              if (!mounted || currentFlow != flowSessionId) return;
-              finishCommittedDailyWisdom(lateAccess);
-              _pendingRevealBoundaryForRetry = null;
-              setState(() {
-                _revealPersistenceNeedsRetry = false;
-                _showingLockedWisdom = !lateAccess.isNew;
-                currentRevealId = lateAccess.revealId;
-                currentRevealedAt = lateAccess.revealedAt;
-                currentWisdomId = lateAccess.wisdomId;
-                saveControlOpacity = 1.0;
-                saveInteractionEnabled = true;
-                postRevealMessageOpacity = 1.0;
-              });
-            },
-            onError: (_) {
-              if (!mounted || currentFlow != flowSessionId) return;
-              setState(() {
-                _revealPersistenceNeedsRetry = true;
-                saveControlOpacity = 0.0;
-                saveInteractionEnabled = false;
-                postRevealMessageOpacity = 0.0;
-              });
-            },
-          ),
-        );
-        return;
-      } catch (_) {
-        if (!mounted || currentFlow != flowSessionId) return;
-        setState(() {
-          _revealPersistenceNeedsRetry = true;
-          saveControlOpacity = 0.0;
-          saveInteractionEnabled = false;
-          postRevealMessageOpacity = 0.0;
-        });
-        return;
-      }
+      final commitAttempt = await ritualCommitCoordinator.run(commitFuture);
 
       if (!mounted || currentFlow != flowSessionId) return;
 
-      finishCommittedDailyWisdom(committedAccess);
-      _pendingRevealBoundaryForRetry = null;
+      if (commitAttempt is RitualCommitTimedOut) {
+        _showRevealCommitRetryState();
+        _observeLateRevealCommit(
+          commitAttempt.eventualResolution,
+          currentFlow,
+        );
+        return;
+      }
 
-      setState(() {
-        currentRevealId = committedAccess.revealId;
-        currentRevealedAt = committedAccess.revealedAt;
-        currentWisdomId = committedAccess.wisdomId;
-      });
+      final commitResolution =
+          (commitAttempt as RitualCommitCompleted).resolution;
+      if (commitResolution is RitualCommitFailed) {
+        _showRevealCommitRetryState();
+        return;
+      }
+      final committedAccess =
+          (commitResolution as RitualCommitSucceeded).access;
+      _applyCommittedAccess(
+        committedAccess,
+        nextSaveControlOpacity: 0.0,
+        nextSaveInteractionEnabled: false,
+        nextPostRevealMessageOpacity: 0.0,
+      );
 
       await Future.delayed(const Duration(milliseconds: 900));
 
       if (!mounted || currentFlow != flowSessionId) return;
 
       setState(() {
-        _revealPersistenceNeedsRetry = false;
         saveControlOpacity = 1.0;
       });
 
@@ -1966,83 +1801,42 @@ class _HomeScreenState extends State<HomeScreen>
 
     _transitionLock = true;
     final currentFlow = flowSessionId;
-    Future<DailyWisdomAccess>? finalization;
 
     try {
       final retryBoundary = _pendingRevealBoundaryForRetry;
       if (retryBoundary == null) {
-        setState(() {
-          _revealPersistenceNeedsRetry = true;
-          saveControlOpacity = 0.0;
-          saveInteractionEnabled = false;
-          postRevealMessageOpacity = 0.0;
-        });
+        _showRevealCommitRetryState();
         return;
       }
-      finalization = dailyWisdomAccessService.finalizeVisualReveal(
+      final finalization = dailyWisdomAccessService.finalizeVisualReveal(
         text: currentText,
         revealBoundary: retryBoundary,
       );
-      final committedAccess = await finalization.timeout(
-        widget.dailyWisdomOperationTimeout,
+      final commitAttempt = await ritualCommitCoordinator.run(finalization);
+
+      if (!mounted || currentFlow != flowSessionId) return;
+
+      if (commitAttempt is RitualCommitTimedOut) {
+        _showRevealCommitRetryState();
+        _observeLateRevealCommit(
+          commitAttempt.eventualResolution,
+          currentFlow,
+        );
+        return;
+      }
+
+      final commitResolution =
+          (commitAttempt as RitualCommitCompleted).resolution;
+      if (commitResolution is RitualCommitFailed) {
+        _showRevealCommitRetryState();
+        return;
+      }
+      _applyCommittedAccess(
+        (commitResolution as RitualCommitSucceeded).access,
+        nextSaveControlOpacity: 1.0,
+        nextSaveInteractionEnabled: false,
+        nextPostRevealMessageOpacity: 0.0,
       );
-
-      if (!mounted || currentFlow != flowSessionId) return;
-
-      finishCommittedDailyWisdom(committedAccess);
-      _pendingRevealBoundaryForRetry = null;
-
-      setState(() {
-        _revealPersistenceNeedsRetry = false;
-        _showingLockedWisdom = !committedAccess.isNew;
-        currentRevealId = committedAccess.revealId;
-        currentRevealedAt = committedAccess.revealedAt;
-        currentWisdomId = committedAccess.wisdomId;
-        saveControlOpacity = 1.0;
-      });
-    } on TimeoutException {
-      if (!mounted || currentFlow != flowSessionId) return;
-      setState(() {
-        _revealPersistenceNeedsRetry = true;
-        saveControlOpacity = 0.0;
-        saveInteractionEnabled = false;
-        postRevealMessageOpacity = 0.0;
-      });
-      unawaited(
-        finalization!.then(
-          (lateAccess) {
-            if (!mounted || currentFlow != flowSessionId) return;
-            finishCommittedDailyWisdom(lateAccess);
-            _pendingRevealBoundaryForRetry = null;
-            setState(() {
-              _revealPersistenceNeedsRetry = false;
-              _showingLockedWisdom = !lateAccess.isNew;
-              currentRevealId = lateAccess.revealId;
-              currentRevealedAt = lateAccess.revealedAt;
-              saveControlOpacity = 1.0;
-              saveInteractionEnabled = true;
-              postRevealMessageOpacity = 1.0;
-            });
-          },
-          onError: (_) {
-            if (!mounted || currentFlow != flowSessionId) return;
-            setState(() {
-              _revealPersistenceNeedsRetry = true;
-              saveControlOpacity = 0.0;
-              saveInteractionEnabled = false;
-              postRevealMessageOpacity = 0.0;
-            });
-          },
-        ),
-      );
-    } catch (_) {
-      if (!mounted || currentFlow != flowSessionId) return;
-      setState(() {
-        _revealPersistenceNeedsRetry = true;
-        saveControlOpacity = 0.0;
-        saveInteractionEnabled = false;
-        postRevealMessageOpacity = 0.0;
-      });
     } finally {
       if (currentFlow == flowSessionId) {
         _transitionLock = false;
@@ -2117,364 +1911,27 @@ class _HomeScreenState extends State<HomeScreen>
     return currentFavorite() != null;
   }
 
-  /// Build 26 Phase 3D-C: identity, not text, is what determines whether
-  /// the wisdom currently on screen is already Kept. Two different daily
-  /// reveals can carry identical wisdom text (the wisdom pool repeats), so
-  /// matching on `item.text == currentText` could wrongly report an
-  /// unrelated occurrence as already kept. `currentRevealId` is only ever
-  /// non-null once a reveal is genuinely authoritative (see
-  /// `updateNextWisdomMessage`, `revealWisdom`, `retryRevealedWisdomCommit`,
-  /// `transitionToExistingWisdom`), so a `null` here always means "not yet
-  /// identified" rather than "not kept" — `toggleFavorite` gates on that
-  /// distinction separately.
+  /// Narrow identity diagnostic retained on the concrete State object for
+  /// Home's black-box regression coverage. Matching remains controller-owned.
   FavoriteItem? currentFavorite() {
-    final revealId = currentRevealId;
-    if (revealId == null) return null;
-
-    for (final item in favorites) {
-      if (item.revealId == revealId) {
-        return item;
-      }
-    }
-
-    return null;
+    return homeKeptController.currentFavorite(currentRevealId);
   }
 
+  /// Kept-limit presentation entry point retained on the concrete State so
+  /// accessibility/large-text widget tests can open the overlay directly.
   void showFavoriteLimitDialog() {
-    if (!mounted) return;
-    setState(() {
+    _updateHomePresentation(() {
       _favoriteLimitOverlayVisible = true;
     });
   }
 
-  void _dismissFavoriteLimitOverlay() {
+  /// The one state-update seam used by Home's part-file presentation
+  /// extensions. Keeping the protected [setState] call on the actual
+  /// [State] subclass preserves Flutter's lifecycle contract while feature
+  /// slices remain separately readable.
+  void _updateHomePresentation(VoidCallback update) {
     if (!mounted) return;
-    setState(() {
-      _favoriteLimitOverlayVisible = false;
-    });
-  }
-
-  void _becomeKeeperFromLimitOverlay() {
-    _dismissFavoriteLimitOverlay();
-    unawaited(openKeeperScreen());
-  }
-
-  // Build 33 real-device Voice Control repair: the outer `Semantics` must
-  // carry its own `onTap` -- see `settings_screen.dart`'s
-  // `_removeFromICloudDecisionLabel` for the full explanation of this
-  // repeated defect class.
-  Widget _favoriteLimitDecisionLabel(
-    String label, {
-    required VoidCallback onTap,
-    required Color color,
-  }) {
-    return Semantics(
-      button: true,
-      label: label,
-      onTap: onTap,
-      child: ExcludeSemantics(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            child: Center(
-              child: Text(
-                label,
-                style: EastTypography.localized(
-                  context,
-                  size: 11,
-                  color: color,
-                  letterSpacing: 3.0,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// The approved full-field EAST decision takeover -- same visual system
-  /// as Reflection's Delete Reflection (`reflection_screen.dart`'s
-  /// `_deleteDecisionOverlay`), Journal Name
-  /// (`journal_screen.dart`'s `_nameDecisionOverlay`), and Settings'
-  /// Restore Purchases result (`settings_screen.dart`'s
-  /// `_restoreResultOverlay`): the screen beneath stays mounted and
-  /// strongly dimmed, no `AlertDialog`, no card, no rounded rectangle, no
-  /// border, no shadow. Replaces the previous `AlertDialog`-based
-  /// `showFavoriteLimitDialog`; the limit/entitlement logic that decides
-  /// *when* this is shown is unchanged, only the presentation.
-  Widget _favoriteLimitOverlay() {
-    if (!_favoriteLimitOverlayVisible) return const SizedBox.shrink();
-    final l10n = eastLocalizations(context);
-
-    return Positioned.fill(
-      child: IgnorePointer(
-        ignoring: !_favoriteLimitOverlayVisible,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          opacity: _favoriteLimitOverlayVisible ? 1.0 : 0.0,
-          child: Container(
-            key: const ValueKey('home-favorite-limit-overlay'),
-            color: EastColors.of(context).overlay,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  l10n.keptLimit,
-                  textAlign: TextAlign.center,
-                  style: _homeWisdomStyle(context, 28),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  l10n.freeUsersKeepLimit,
-                  textAlign: TextAlign.center,
-                  style: _homeWisdomStyle(
-                    context,
-                    15,
-                    color: EastColors.of(context).secondary,
-                  ),
-                ),
-                const SizedBox(height: 44),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _favoriteLimitDecisionLabel(
-                      l10n.cancelUpper,
-                      onTap: _dismissFavoriteLimitOverlay,
-                      color: EastColors.of(context).secondary,
-                    ),
-                    const SizedBox(width: 56),
-                    _favoriteLimitDecisionLabel(
-                      l10n.becomeKeeper,
-                      onTap: _becomeKeeperFromLimitOverlay,
-                      color: EastColors.of(context).ink,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> toggleFavorite() async {
-    if (!wisdomRevealed || _saveOperationInProgress) return;
-    final wisdomCouldNotBeKept =
-        eastLocalizations(context).wisdomCouldNotBeKept;
-
-    // Item 4: the Home save ring is one-way. Once the current wisdom is
-    // already kept, tapping the filled ring must do nothing — no removal,
-    // no persistence mutation, no haptic, no dialog. Deletion only ever
-    // happens from the explicit DELETE action inside Kept. This is the one
-    // guard for the whole one-way behavior; `SavedReflectionsService`'s
-    // toggle API itself is unchanged.
-    if (isCurrentFavorite()) return;
-
-    // Build 26 Phase 3D-C: keeping a wisdom now requires its authoritative
-    // reveal identity. A reveal that has not yet committed (or whose commit
-    // is still pending after a timeout) has neither, and must never be
-    // keepable — there is no genuine occurrence identity to keep yet.
-    final revealId = currentRevealId;
-    final revealedAt = currentRevealedAt;
-    if (revealId == null || revealedAt == null) {
-      showEastSnack(wisdomCouldNotBeKept);
-      return;
-    }
-
-    _saveOperationInProgress = true;
-
-    try {
-      // Build 26 Phase 3D-C compatibility contract (locked): `text`/`date`
-      // are accepted for source/API compatibility only. `date` is never
-      // parsed and never used to derive `revealedAt` — the authoritative
-      // timestamp passed below is `revealedAt` (from `currentRevealedAt`)
-      // alone, and identity remains `revealId` alone.
-      final result = await savedReflectionsService.toggle(
-        text: currentText,
-        date: formattedToday(),
-        isKeeper: isKeeper,
-        revealId: revealId,
-        revealedAt: revealedAt,
-        wisdomId: currentWisdomId,
-      );
-
-      if (!mounted) return;
-      if (result.limitReached) {
-        showFavoriteLimitDialog();
-        return;
-      }
-
-      setState(() {
-        favorites = result.items;
-      });
-
-      await _onWisdomSuccessfullyKept();
-    } catch (_) {
-      showEastSnack(wisdomCouldNotBeKept);
-    } finally {
-      _saveOperationInProgress = false;
-    }
-  }
-
-  Future<void> loadFavorites() async {
-    final List<FavoriteItem> loadedFavorites;
-
-    try {
-      loadedFavorites = await savedReflectionsService.load();
-    } catch (_) {
-      // Build 26 Phase 3D-C: a load failure (e.g. protected storage
-      // temporarily unavailable) must never be interpreted as "there are no
-      // Kept wisdoms" — silently collapsing to `[]` here would visibly wipe
-      // the Kept list for a transient failure. Leave `favorites` exactly as
-      // it already was.
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      favorites = loadedFavorites;
-    });
-  }
-
-  /// Build 26 Phase 4H-6: invoked synchronously by
-  /// [app_services.keptStateRevisionNotifier] only after an incoming
-  /// CloudKit sync has durably applied a Kept/Reflection content change
-  /// while Home is mounted. Never shows a spinner or dialog, never resets
-  /// scroll/navigation/ritual state, and never touches
-  /// [loadKeeperStatus]/[updateNextWisdomMessage] or any Keeper-purchase
-  /// refresh path -- this signal is scoped to `favorites` alone.
-  void _onKeptStateChanged() {
-    if (!mounted) return;
-    final generation = keptStateRefreshGuard.begin();
-    unawaited(_reloadFavoritesForIncomingStateChange(generation));
-  }
-
-  Future<void> _reloadFavoritesForIncomingStateChange(int generation) async {
-    final List<FavoriteItem> loadedFavorites;
-    try {
-      loadedFavorites = await savedReflectionsService.load();
-    } catch (_) {
-      // A failed silent background refresh must never interrupt the
-      // ritual UI with a dialog/snackbar -- leave `favorites` exactly as
-      // it already was. A future incoming batch will retry.
-      return;
-    }
-    // Both checks matter: `mounted` guards against a dispose that happened
-    // while `load()` was in flight; `isCurrent` guards against a newer
-    // incoming notification's own reload having already started (and
-    // possibly already finished) after this one began.
-    if (!mounted || !keptStateRefreshGuard.isCurrent(generation)) return;
-    setState(() {
-      favorites = loadedFavorites;
-    });
-  }
-
-  Future<void> openFavorites() async {
-    if (navigationInProgress || transitionInProgress || _transitionLock) return;
-
-    // P13: opening Kept (via this control or the equivalent swipe gesture
-    // -- both funnel through here) is the one authoritative "the user
-    // found where Kept lives" moment. Stop the top-right teaching breath
-    // and permanently mark this first-use discovery complete -- it never
-    // automatically replays after this, on this device. A no-op (no
-    // write) when the discovery was never pending in the first place.
-    if (_keptNavDiscoveryActive) {
-      _keptIconEmphasisTimer?.cancel();
-      _keptIconEmphasisTimer = null;
-      _keptNavDiscoveryActive = false;
-      setState(() {
-        _keptIconEmphasized = false;
-      });
-      unawaited(keptDiscoveryHintService.markNavDiscoveryCompleted());
-    }
-
-    navigationInProgress = true;
-    interruptRitualForNavigation();
-
-    try {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SavedReflectionsScreen(
-            reflections: List<FavoriteItem>.from(favorites),
-            isKeeper: isKeeper,
-            savedReflectionsService: savedReflectionsService,
-          ),
-        ),
-      );
-      if (!mounted) return;
-      await loadFavorites();
-    } finally {
-      if (mounted) {
-        navigationInProgress = false;
-        _resumePendingDiscoveryIfNeeded();
-      }
-    }
-  }
-
-  // Item 5 — Home left-swipe opens Kept.
-  //
-  // Deliberately more restrictive than `openFavorites()`'s own guard: the
-  // gesture must stay silent during Pause/Feel/Ask-from-your-heart, active
-  // transitions, ritual silence, a pending persistence retry, the native
-  // notification-permission offer, and an in-flight save/share, in addition
-  // to reusing the exact same navigation guards `openFavorites()` already
-  // checks. Restricted to the three states item 5 names: the initial
-  // stable Home screen (0), fully revealed wisdom (4), and the locked
-  // countdown (5).
-  bool get _homeSwipeToKeptEligible {
-    if (!mounted) return false;
-    if (navigationInProgress || transitionInProgress || _transitionLock) {
-      return false;
-    }
-    if (_isInRitualSilence) return false;
-    if (_revealPersistenceNeedsRetry) return false;
-    if (_notificationPermissionOfferShowing) return false;
-    if (_saveOperationInProgress || _shareInProgress) return false;
-    return screenStep == 0 || screenStep == 4 || screenStep == 5;
-  }
-
-  void _handleHomeSwipeStart(DragStartDetails details) {
-    _homeSwipeDx = 0;
-    _homeSwipeDy = 0;
-    _homeSwipeHandled = false;
-  }
-
-  void _handleHomeSwipeUpdate(DragUpdateDetails details) {
-    _homeSwipeDx += details.delta.dx;
-    _homeSwipeDy += details.delta.dy;
-  }
-
-  void _handleHomeSwipeEnd(DragEndDetails details) {
-    if (_homeSwipeHandled) return;
-    if (!_homeSwipeToKeptEligible) return;
-
-    const double distanceThreshold = 60.0;
-    const double velocityThreshold = 320.0;
-
-    final dx = _homeSwipeDx;
-    final dy = _homeSwipeDy;
-    final velocityX = details.velocity.pixelsPerSecond.dx;
-
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
-    final isTowardKept =
-        isRtl ? dx > 0 && velocityX >= 0 : dx < 0 && velocityX <= 0;
-    final horizontalDominant = dx.abs() > dy.abs() * 1.6;
-    final meetsThreshold =
-        dx.abs() >= distanceThreshold || velocityX.abs() >= velocityThreshold;
-
-    if (isTowardKept && horizontalDominant && meetsThreshold) {
-      _homeSwipeHandled = true;
-      openFavorites();
-    }
+    setState(update);
   }
 
   @override
@@ -2483,6 +1940,11 @@ class _HomeScreenState extends State<HomeScreen>
     final presentedText = wisdomRevealed
         ? _presentedWisdom(Localizations.localeOf(context))
         : currentText;
+    // Built fresh every build from `_accessViewState` and the live
+    // locale (see `_currentCountdownPresentation`'s own doc comment) --
+    // shared by both countdown render sites below so they always show the
+    // identical HH:MM token for the identical underlying duration.
+    final countdownPresentation = _currentCountdownPresentation(context);
     return Scaffold(
       backgroundColor: EastColors.of(context).background,
       body: SafeArea(
@@ -2524,7 +1986,7 @@ class _HomeScreenState extends State<HomeScreen>
                           onSwipeUpdate: _handleHomeSwipeUpdate,
                           onSwipeEnd: _handleHomeSwipeEnd,
                           content: _HomeRitualContent(
-                            screenStep: screenStep,
+                            phase: _phase,
                             currentText: presentedText,
                             textOpacity: textOpacity,
                             textScale: textScale,
@@ -2537,6 +1999,7 @@ class _HomeScreenState extends State<HomeScreen>
                             onHeartScreen: onHeartScreen,
                             wisdomRevealed: wisdomRevealed,
                             onLockedCountdown: onLockedCountdown,
+                            countdownPresentation: countdownPresentation,
                             wisdomShareEnabled: wisdomRevealed &&
                                 !transitionInProgress &&
                                 !_transitionLock &&
@@ -2578,9 +2041,10 @@ class _HomeScreenState extends State<HomeScreen>
                       if (wisdomRevealed)
                         _HomePostRevealMessage(
                           opacity: postRevealMessageOpacity,
-                          message: nextWisdomMessage == 'ready'
+                          message: _accessViewState.showReadyMessage
                               ? l10n.dailyWisdomReady
-                              : nextWisdomMessage,
+                              : countdownPresentation?.plainText ?? '',
+                          countdownPresentation: countdownPresentation,
                         ),
                       if (wisdomRevealed && _keptDiscoveryHintOpacity > 0.0)
                         _HomeKeptDiscoveryHint(
@@ -2590,6 +2054,11 @@ class _HomeScreenState extends State<HomeScreen>
                               : _keptDiscoveryHintText.isEmpty
                                   ? ''
                                   : l10n.keepThisWisdom,
+                          showBreath: _keptDiscoveryHintText == 'keep' &&
+                              _keptDiscoveryBreathActive,
+                          onPressed: _keptDiscoveryHintText == 'keep'
+                              ? toggleFavorite
+                              : null,
                         ),
                     ],
                   ),

@@ -97,6 +97,7 @@ import '../sync_platform/cloud_kit_account_snapshot.dart';
 import '../sync_platform/cloud_kit_modify_records_contract.dart';
 import '../sync_platform/cloud_kit_platform_bridge.dart';
 import '../sync_platform/cloud_kit_platform_error.dart';
+import '../sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import '../sync_platform/cloud_kit_zone_changes_contract.dart';
 import '../utils/kept_timestamp_canonicalizer.dart';
 import '../utils/remote_kept_identity.dart';
@@ -1524,12 +1525,11 @@ final class KeptSyncBootstrapCoordinator {
   }
 
   /// Section 13: only reachable when the marker matches and the bucket is
-  /// already `complete`. Performs an incremental fetch using the bucket's
-  /// own persisted token (never a full refetch) so the common, unchanged
-  /// case costs nothing beyond a cheap empty-changeset round trip. Never
-  /// reads `changedKeptWisdomRecords`/`keptWisdomRecordSystemFields` from
-  /// the result -- this path mutates nothing regardless of what else the
-  /// fetch happens to return.
+  /// already `complete`. Reads only the singleton control record through the
+  /// content-minimal epoch API, independently of the incremental change
+  /// token. This keeps an expired token recoverable by [SyncOrchestrator],
+  /// which owns clearing it and performing the subsequent full refetch.
+  /// This path mutates nothing regardless of the result.
   Future<BootstrapRunResult> _checkAlreadyCompleteForEpochChange(
     String fingerprint,
     AccountSyncState completeBucket,
@@ -1550,47 +1550,36 @@ final class KeptSyncBootstrapCoordinator {
       );
     }
 
-    final CloudKitZoneChangesResult fetchResult;
+    final CloudKitSyncStateEpochResult epochResult;
     try {
-      fetchResult = await _bridge.fetchPrivateZoneChanges(
-        CloudKitZoneChangesRequest(
-          previousServerToken: completeBucket.serverChangeToken,
-        ),
-      );
+      epochResult = await _bridge.fetchSyncStateEpoch();
     } on CloudKitPlatformException {
       return const BootstrapRunResult(status: BootstrapRunStatus.fetchFailed);
     }
 
-    if (fetchResult.outcome == CloudKitZoneChangesOutcome.tokenExpired) {
-      // Cannot determine the authoritative control record from an
-      // incremental fetch whose token just expired -- fail closed to the
-      // same recovery-required signal rather than guessing. This phase
-      // performs no mutation on this path at all, so there is nothing to
-      // roll back either way.
-      return const BootstrapRunResult(
-        status: BootstrapRunStatus.remoteEpochChangedRecoveryRequired,
-      );
+    switch (epochResult.outcome) {
+      case CloudKitSyncStateEpochOutcome.found:
+        if (epochResult.dataEpoch == completeBucket.dataEpoch) {
+          return const BootstrapRunResult(
+            status: BootstrapRunStatus.alreadyComplete,
+          );
+        }
+        return const BootstrapRunResult(
+          status: BootstrapRunStatus.remoteEpochChangedRecoveryRequired,
+        );
+      case CloudKitSyncStateEpochOutcome.notFound:
+        // A complete local bucket cannot safely continue after its remote
+        // epoch barrier disappeared. Treat this exactly like an epoch
+        // rotation: fail closed without mutating local Kept state.
+        return const BootstrapRunResult(
+          status: BootstrapRunStatus.remoteEpochChangedRecoveryRequired,
+        );
+      case CloudKitSyncStateEpochOutcome.failure:
+      case CloudKitSyncStateEpochOutcome.unknown:
+        return const BootstrapRunResult(
+          status: BootstrapRunStatus.fetchFailed,
+        );
     }
-    if (fetchResult.outcome != CloudKitZoneChangesOutcome.success) {
-      return const BootstrapRunResult(status: BootstrapRunStatus.fetchFailed);
-    }
-    if (fetchResult.changedSyncStateRecords.length > 1) {
-      return const BootstrapRunResult(
-        status: BootstrapRunStatus.controlRecordInvalid,
-      );
-    }
-    if (fetchResult.changedSyncStateRecords.isEmpty) {
-      return const BootstrapRunResult(
-          status: BootstrapRunStatus.alreadyComplete);
-    }
-    final remoteEpoch = fetchResult.changedSyncStateRecords.single.dataEpoch;
-    if (remoteEpoch == completeBucket.dataEpoch) {
-      return const BootstrapRunResult(
-          status: BootstrapRunStatus.alreadyComplete);
-    }
-    return const BootstrapRunResult(
-      status: BootstrapRunStatus.remoteEpochChangedRecoveryRequired,
-    );
   }
 
   // -------------------------------------------------------------------

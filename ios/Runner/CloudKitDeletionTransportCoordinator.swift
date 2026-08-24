@@ -19,7 +19,7 @@ import Foundation
 protocol CloudKitDeletionTransportDatabase {
   func fetch(
     withRecordID recordID: CKRecord.ID,
-    completionHandler: @escaping (CKRecord?, Error?) -> Void
+    completionHandler: @escaping @Sendable (CKRecord?, Error?) -> Void
   )
   func add(_ operation: CKDatabaseOperation)
 }
@@ -50,6 +50,30 @@ extension CKDatabase: CloudKitDeletionTransportDatabase {}
 /// existing handlers -- this coordinator performs no `CKDatabase` operation
 /// on its own initiative.
 final class CloudKitDeletionTransportCoordinator {
+  private final class LockedState<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+      self.value = value
+    }
+
+    func withValue<Result>(_ body: (inout Value) -> Result) -> Result {
+      lock.lock()
+      defer { lock.unlock() }
+      return body(&value)
+    }
+
+    func snapshot() -> Value {
+      withValue { $0 }
+    }
+  }
+
+  private struct RecordNamesAccumulator {
+    var recordNames: [String] = []
+    var recordMatchError: Error?
+  }
+
   // MARK: - Sync-state epoch read
 
   enum SyncStateEpochOutcome: String {
@@ -163,7 +187,7 @@ final class CloudKitDeletionTransportCoordinator {
   /// `CloudKitRecordTransportCoordinator.fetchZoneChanges`'s own
   /// `fetchAllChanges = true` aggregates internally for its own read.
   func listKeptWisdomRecordNames(completion: @escaping (RecordNamesResult) -> Void) {
-    var recordNames: [String] = []
+    let state = LockedState(RecordNamesAccumulator())
 
     func runQuery(cursor: CKQueryOperation.Cursor?) {
       let operation: CKQueryOperation
@@ -176,22 +200,42 @@ final class CloudKitDeletionTransportCoordinator {
         operation.zoneID = CloudKitRecordIdentity.zoneID
       }
       operation.desiredKeys = []
-      operation.recordFetchedBlock = { record in
-        recordNames.append(record.recordID.recordName)
+      operation.recordMatchedBlock = { _, result in
+        switch result {
+        case .success(let record):
+          state.withValue { $0.recordNames.append(record.recordID.recordName) }
+        case .failure(let error):
+          state.withValue { $0.recordMatchError = error }
+        }
       }
-      operation.queryCompletionBlock = { nextCursor, error in
-        if let error = error {
+      operation.queryResultBlock = { result in
+        let snapshot = state.snapshot()
+        if let recordMatchError = snapshot.recordMatchError {
+          completion(
+            RecordNamesResult(
+              outcome: .failure, recordNames: [],
+              errorCode: CloudKitErrorClassifier.symbolicCode(for: recordMatchError)))
+          return
+        }
+        guard case .success(let nextCursor) = result else {
+          let error: Error
+          if case .failure(let operationError) = result {
+            error = operationError
+          } else {
+            error = CKError(.internalError)
+          }
           completion(
             RecordNamesResult(
               outcome: .failure, recordNames: [],
               errorCode: CloudKitErrorClassifier.symbolicCode(for: error)))
           return
         }
-        if let nextCursor = nextCursor {
+        if let nextCursor {
           runQuery(cursor: nextCursor)
           return
         }
-        completion(RecordNamesResult(outcome: .success, recordNames: recordNames, errorCode: nil))
+        completion(
+          RecordNamesResult(outcome: .success, recordNames: snapshot.recordNames, errorCode: nil))
       }
       operation.qualityOfService = .userInitiated
       database.add(operation)
@@ -208,13 +252,8 @@ final class CloudKitDeletionTransportCoordinator {
   /// `CloudKitRecordTransportCoordinator.modifyRecords`'s own "one call, one
   /// operation" shape.
   ///
-  /// Uses only the legacy completion-block API (deployment target iOS 13,
-  /// same constraint as every other coordinator in this file): per-record
-  /// delete outcomes are recovered from `modifyRecordsCompletionBlock`'s own
-  /// `deletedRecordIDs` (successes) and, for failures, from a
-  /// `CKError.partialFailure`'s `partialErrorsByItemID` dictionary -- the
-  /// legacy API has no `perRecordDeleteBlock` (that is an iOS 15+
-  /// addition).
+  /// Uses CloudKit's iOS 15 result callbacks so every attempted record has
+  /// one explicit outcome, independent of the operation-level result.
   func deleteKeptWisdomRecords(
     recordNames: [String], completion: @escaping (DeleteResult) -> Void
   ) {
@@ -227,33 +266,26 @@ final class CloudKitDeletionTransportCoordinator {
     let recordIDs = recordNames.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
 
     let operation = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDs)
-    operation.modifyRecordsCompletionBlock = { _, deletedRecordIDs, error in
-      var outcomes: [DeleteOutcome] = []
-      var succeededNames = Set<String>()
-      for recordID in deletedRecordIDs ?? [] {
-        succeededNames.insert(recordID.recordName)
-        outcomes.append(DeleteOutcome(recordName: recordID.recordName, success: true, errorCode: nil))
-      }
-
-      if let ckError = error as? CKError, ckError.code == .partialFailure,
-        let perItem = ckError.partialErrorsByItemID as? [CKRecord.ID: Error]
-      {
-        for (recordID, itemError) in perItem {
-          if succeededNames.contains(recordID.recordName) { continue }
-          outcomes.append(
+    let outcomeState = LockedState([DeleteOutcome]())
+    operation.perRecordDeleteBlock = { recordID, result in
+      switch result {
+      case .success:
+        outcomeState.withValue {
+          $0.append(
+            DeleteOutcome(recordName: recordID.recordName, success: true, errorCode: nil))
+        }
+      case .failure(let error):
+        outcomeState.withValue {
+          $0.append(
             DeleteOutcome(
               recordName: recordID.recordName, success: false,
-              errorCode: CloudKitErrorClassifier.symbolicCode(for: itemError)))
+              errorCode: CloudKitErrorClassifier.symbolicCode(for: error)))
         }
-        let allSucceeded = outcomes.count == recordIDs.count && outcomes.allSatisfy { $0.success }
-        completion(
-          DeleteResult(
-            overallStatus: allSucceeded ? .allSucceeded : .partialFailure, outcomes: outcomes,
-            errorCode: nil))
-        return
       }
-
-      if let error = error {
+    }
+    operation.modifyRecordsResultBlock = { result in
+      let outcomes = outcomeState.snapshot()
+      if case .failure(let error) = result {
         // No per-record outcome was ever collected -- the operation itself
         // never got to attempt a single record (e.g. no network). Reported
         // as a transport-level failure, never as every record individually

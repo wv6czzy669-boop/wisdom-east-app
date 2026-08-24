@@ -86,11 +86,6 @@ final class MethodChannelFileProtectionBridge implements FileProtectionBridge {
         'file-protection-failed: path=$path errorType=MissingPluginException '
         '(no native handler registered for $channelName/$methodName)',
       );
-      await persistKeptDiagnosticLast(
-        stage: 'file-protection:$methodName',
-        errorType: 'MissingPluginException',
-        errorCode: 'channel_unavailable',
-      );
       throw FileProtectionException(
         'File protection channel is unavailable.',
         error,
@@ -100,11 +95,6 @@ final class MethodChannelFileProtectionBridge implements FileProtectionBridge {
         'file-protection-failed: path=$path errorType=PlatformException '
         'code=${error.code}',
       );
-      await persistKeptDiagnosticLast(
-        stage: 'file-protection:$methodName',
-        errorType: 'PlatformException',
-        errorCode: error.code,
-      );
       throw FileProtectionException(
         'File protection failed: ${error.code}',
         error,
@@ -112,10 +102,6 @@ final class MethodChannelFileProtectionBridge implements FileProtectionBridge {
     } catch (error) {
       keptDiagnostic(
         'file-protection-failed: path=$path errorType=${error.runtimeType}',
-      );
-      await persistKeptDiagnosticLast(
-        stage: 'file-protection:$methodName',
-        errorType: error.runtimeType.toString(),
       );
       throw FileProtectionException(
         'File protection failed unexpectedly.',
@@ -128,11 +114,6 @@ final class MethodChannelFileProtectionBridge implements FileProtectionBridge {
         'file-protection-failed: path=$path '
         'unexpectedResultType=${rawResult.runtimeType} '
         'unexpectedResultValue=$rawResult',
-      );
-      await persistKeptDiagnosticLast(
-        stage: 'file-protection:$methodName',
-        errorType: 'UnexpectedResult',
-        errorCode: rawResult.runtimeType.toString(),
       );
       throw const FileProtectionException(
         'File protection did not return a successful result.',

@@ -7,14 +7,7 @@ import Foundation
 /// `EASTKeptZone`'s changes since an opaque prior server token. Built
 /// directly on `CKModifyRecordsOperation`/`CKFetchRecordZoneChangesOperation`
 /// (never `CKSyncEngine`, unavailable below iOS 17 -- this app's deployment
-/// target is iOS 13 per `docs/architecture/EAST_CLOUDKIT_SYNC_V1.md` §6),
-/// using only the legacy completion-block API surface (`perRecordCompletionBlock`,
-/// `modifyRecordsCompletionBlock`, `recordChangedBlock`,
-/// `recordWithIDWasDeletedBlock`, `recordZoneFetchCompletionBlock`,
-/// `fetchRecordZoneChangesCompletionBlock`) that has been available since
-/// long before iOS 13, exactly like
-/// `CloudKitPrivateZoneCoordinator`'s existing `modifyRecordZonesCompletionBlock`
-/// usage.
+/// target is iOS 15), using CloudKit's typed iOS 15 result callbacks.
 ///
 /// Reuses `CloudKitPrivateZoneCoordinator.swift`'s existing
 /// `CloudKitZoneOperationDatabase` seam (`fetch(withRecordZoneID:completionHandler:)`
@@ -69,12 +62,12 @@ import Foundation
 /// every changed `CKKeptWisdom` record this coordinator returns (active or
 /// soft-tombstone alike) now also carries that exact `CKRecord`'s own
 /// archived system fields (`CloudKitOpaqueArchive.archiveSystemFields(of:)`
-/// -- the same mechanism `modifyRecords`'s `perRecordCompletionBlock`
+/// -- the same mechanism `modifyRecords`'s `perRecordSaveBlock`
 /// already uses on the save path), so a future local edit to a
 /// remotely-adopted record can use CloudKit's own
 /// `.ifServerRecordUnchanged` optimistic-concurrency precondition instead
 /// of an unconditional overwrite. Archiving happens in `fetchZoneChanges`
-/// itself, immediately inside `recordChangedBlock`, *before* handing the
+/// itself, immediately inside `recordWasChangedBlock`, *before* handing the
 /// record to `CloudKitKeptWisdomCodec.decode` -- if archiving ever fails or
 /// produces an empty value, that one record fails closed via the same
 /// `sawUndecodableRecord` mechanism an undecodable record already uses;
@@ -82,6 +75,35 @@ import Foundation
 /// missing or fabricated system fields. `CKEastSyncState` records and the
 /// physical-deletion path are unaffected by this change.
 final class CloudKitRecordTransportCoordinator {
+  private final class LockedState<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+      self.value = value
+    }
+
+    func withValue<Result>(_ body: (inout Value) -> Result) -> Result {
+      lock.lock()
+      defer { lock.unlock() }
+      return body(&value)
+    }
+
+    func snapshot() -> Value {
+      withValue { $0 }
+    }
+  }
+
+  private struct ZoneChangesAccumulator {
+    var changedKeptWisdomRecords: [CloudKitKeptWisdomWireEnvelope] = []
+    var changedSyncStateRecords: [CloudKitSyncStateWireEnvelope] = []
+    var sawUndecodableRecord = false
+    var sawUnexpectedPhysicalDeletion = false
+    var finalToken: CKServerChangeToken?
+    var zoneFetchError: Error?
+    var recordChangeError: Error?
+  }
+
   // MARK: - Modify (save)
 
   struct ModifyOutcome {
@@ -229,35 +251,42 @@ final class CloudKitRecordTransportCoordinator {
     }
 
     let expectedTotal = outcomes.count + recordsToSave.count
+    let outcomeState = LockedState(outcomes)
     let operation = CKModifyRecordsOperation(recordsToSave: recordsToSave, recordIDsToDelete: nil)
     operation.savePolicy = .ifServerRecordUnchanged
-    operation.perRecordCompletionBlock = { record, error in
-      if let error = error {
-        outcomes.append(
-          ModifyOutcome(
-            recordName: record.recordID.recordName,
-            success: false,
-            systemFields: nil,
-            errorCode: CloudKitErrorClassifier.symbolicCode(for: error)
-          ))
-        return
+    operation.perRecordSaveBlock = { recordID, result in
+      switch result {
+      case .failure(let error):
+        outcomeState.withValue {
+          $0.append(
+            ModifyOutcome(
+              recordName: recordID.recordName,
+              success: false,
+              systemFields: nil,
+              errorCode: CloudKitErrorClassifier.symbolicCode(for: error)
+            ))
+        }
+      case .success(let record):
+        let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record)
+        outcomeState.withValue {
+          $0.append(
+            ModifyOutcome(
+              recordName: record.recordID.recordName,
+              success: true,
+              systemFields: systemFields,
+              errorCode: nil
+            ))
+        }
       }
-      let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record)
-      outcomes.append(
-        ModifyOutcome(
-          recordName: record.recordID.recordName,
-          success: true,
-          systemFields: systemFields,
-          errorCode: nil
-        ))
     }
-    operation.modifyRecordsCompletionBlock = { _, _, error in
+    operation.modifyRecordsResultBlock = { result in
+      let outcomes = outcomeState.snapshot()
       // No per-record outcome was ever collected -- the operation itself
       // never got to attempt a single record (e.g. no network). Reported
       // as a transport-level failure, never as every record individually
       // failing (which would misrepresent that CloudKit never actually
       // tried them).
-      if outcomes.isEmpty, let error = error {
+      if outcomes.isEmpty, case .failure(let error) = result {
         completion(
           ModifyResult(
             overallStatus: .transportFailure,
@@ -312,59 +341,46 @@ final class CloudKitRecordTransportCoordinator {
     )
     operation.fetchAllChanges = true
 
-    var changedKeptWisdomRecords: [CloudKitKeptWisdomWireEnvelope] = []
-    var changedSyncStateRecords: [CloudKitSyncStateWireEnvelope] = []
-    var sawUndecodableRecord = false
-    // Deliberately a Bool, never a collected list of names or record IDs --
-    // the deleted record's own identity must never be captured anywhere in
-    // this coordinator, including in memory pending completion. See this
-    // file's own top doc comment ("Deletion") for the full rationale.
-    var sawUnexpectedPhysicalDeletion = false
-    var finalToken: CKServerChangeToken?
-    var zoneFetchError: Error?
+    let state = LockedState(ZoneChangesAccumulator())
 
-    operation.recordChangedBlock = { record in
-      guard record.recordID.zoneID.zoneName == CloudKitRecordSchema.zoneName else {
-        sawUndecodableRecord = true
+    operation.recordWasChangedBlock = { _, result in
+      guard case .success(let record) = result else {
+        if case .failure(let error) = result {
+          state.withValue { $0.recordChangeError = error }
+        }
         return
       }
-      switch record.recordType {
-      case CloudKitRecordSchema.keptWisdomRecordType:
-        // Build 26 Phase 4E-3a: archive this record's own opaque CloudKit
-        // system fields *before* decoding it -- using the exact same
-        // mechanism the modify/save path already relies on
-        // (`CloudKitOpaqueArchive.archiveSystemFields(of:)`). A changed
-        // `CKKeptWisdom` record (active or soft-tombstone alike; both are
-        // real, addressable `CKRecord`s) that this coordinator cannot
-        // archive system fields for is never silently treated as though it
-        // were conflict-safe -- it fails this one record closed via the
-        // exact same `sawUndecodableRecord` mechanism an undecodable
-        // record already uses, never a fabricated or empty fallback value.
-        guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record),
-          !systemFields.isEmpty
-        else {
-          sawUndecodableRecord = true
+      state.withValue { accumulator in
+        guard record.recordID.zoneID.zoneName == CloudKitRecordSchema.zoneName else {
+          accumulator.sawUndecodableRecord = true
           return
         }
-        switch CloudKitKeptWisdomCodec.decode(record, systemFields: systemFields) {
-        case .success(let envelope):
-          changedKeptWisdomRecords.append(envelope)
-        case .failure:
-          // Fails this one record closed, never the whole fetch -- but
-          // this transport also never claims a fully-successful fetch
-          // happened while silently discarding a record it could not
-          // trust (native test: "malformed returned record rejected").
-          sawUndecodableRecord = true
+        switch record.recordType {
+        case CloudKitRecordSchema.keptWisdomRecordType:
+          // Archive before decode so every accepted remote record retains
+          // the exact optimistic-concurrency baseline CloudKit returned.
+          guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record),
+            !systemFields.isEmpty
+          else {
+            accumulator.sawUndecodableRecord = true
+            return
+          }
+          switch CloudKitKeptWisdomCodec.decode(record, systemFields: systemFields) {
+          case .success(let envelope):
+            accumulator.changedKeptWisdomRecords.append(envelope)
+          case .failure:
+            accumulator.sawUndecodableRecord = true
+          }
+        case CloudKitRecordSchema.syncStateRecordType:
+          switch CloudKitSyncStateCodec.decode(record) {
+          case .success(let envelope):
+            accumulator.changedSyncStateRecords.append(envelope)
+          case .failure:
+            accumulator.sawUndecodableRecord = true
+          }
+        default:
+          accumulator.sawUndecodableRecord = true
         }
-      case CloudKitRecordSchema.syncStateRecordType:
-        switch CloudKitSyncStateCodec.decode(record) {
-        case .success(let envelope):
-          changedSyncStateRecords.append(envelope)
-        case .failure:
-          sawUndecodableRecord = true
-        }
-      default:
-        sawUndecodableRecord = true
       }
     }
 
@@ -377,21 +393,26 @@ final class CloudKitRecordTransportCoordinator {
       // fact that this happened is recorded, so a caller can never recover
       // or infer which record was deleted through this transport.
       guard recordID.zoneID.zoneName == CloudKitRecordSchema.zoneName else { return }
-      sawUnexpectedPhysicalDeletion = true
+      state.withValue { $0.sawUnexpectedPhysicalDeletion = true }
     }
 
-    operation.recordZoneFetchCompletionBlock = { _, token, _, _, error in
-      finalToken = token
-      zoneFetchError = error
+    operation.recordZoneFetchResultBlock = { _, result in
+      switch result {
+      case .success(let value):
+        state.withValue { $0.finalToken = value.serverChangeToken }
+      case .failure(let error):
+        state.withValue { $0.zoneFetchError = error }
+      }
     }
 
-    operation.fetchRecordZoneChangesCompletionBlock = { operationError in
+    operation.fetchRecordZoneChangesResultBlock = { result in
+      let state = state.snapshot()
       // Checked first, before every other outcome: an out-of-band physical
       // deletion is treated as more significant than a concurrent token
       // expiry, transport error, or decode failure -- whatever else this
       // fetch observed, it must never be reported as if it had succeeded
       // (or as any outcome other than this one) once this has happened.
-      if sawUnexpectedPhysicalDeletion {
+      if state.sawUnexpectedPhysicalDeletion {
         completion(
           ZoneChangesResult(
             outcome: .unexpectedPhysicalDeletion,
@@ -402,7 +423,13 @@ final class CloudKitRecordTransportCoordinator {
           ))
         return
       }
-      let effectiveError = operationError ?? zoneFetchError
+      let operationError: Error?
+      if case .failure(let error) = result {
+        operationError = error
+      } else {
+        operationError = nil
+      }
+      let effectiveError = operationError ?? state.zoneFetchError ?? state.recordChangeError
       if let ckError = effectiveError as? CKError, ckError.code == .changeTokenExpired {
         completion(
           ZoneChangesResult(
@@ -426,7 +453,7 @@ final class CloudKitRecordTransportCoordinator {
           ))
         return
       }
-      if sawUndecodableRecord {
+      if state.sawUndecodableRecord {
         completion(
           ZoneChangesResult(
             outcome: .failure,
@@ -437,7 +464,7 @@ final class CloudKitRecordTransportCoordinator {
           ))
         return
       }
-      guard let finalToken = finalToken,
+      guard let finalToken = state.finalToken,
         let archivedToken = CloudKitOpaqueArchive.archiveServerChangeToken(finalToken)
       else {
         completion(
@@ -453,8 +480,8 @@ final class CloudKitRecordTransportCoordinator {
       completion(
         ZoneChangesResult(
           outcome: .success,
-          changedKeptWisdomRecords: changedKeptWisdomRecords,
-          changedSyncStateRecords: changedSyncStateRecords,
+          changedKeptWisdomRecords: state.changedKeptWisdomRecords,
+          changedSyncStateRecords: state.changedSyncStateRecords,
           serverToken: archivedToken,
           errorCode: nil
         ))

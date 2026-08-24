@@ -120,13 +120,8 @@ void main() {
       expect(status.retryAttempt, 0);
       expect(status.retryScheduled, isFalse);
       expect(harness.retryScheduler.scheduled, isEmpty);
-      // Not asserting an exact fetch-call count here: `runBootstrap()`
-      // always performs its own epoch-check fetch even when the bucket is
-      // already complete (`_checkAlreadyCompleteForEpochChange`), so the
-      // exact number of `fetchPrivateZoneChanges` calls per pass is a
-      // bootstrap-internal implementation detail, not part of this
-      // coordinator's own contract. `lastOutcome == completed` is the
-      // correctness property this test actually needs.
+      // The exact number of transport calls remains an inner-layer detail;
+      // `lastOutcome == completed` is the runtime contract this test needs.
       expect(harness.bridge.getAccountSnapshotCallCount, greaterThan(0));
     });
 
@@ -163,6 +158,64 @@ void main() {
       final records = await harness.keptRepository.loadAllRecords();
       expect(records, hasLength(1));
       expect(records.single.wisdomText, 'Wisdom from device B.');
+    });
+
+    test(
+        'an expired incremental token is cleared, retried as a full fetch, '
+        'and restores remote Kept content without losing the local epoch',
+        () async {
+      final harness = _RuntimeHarness();
+      const fingerprint =
+          'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+      harness.bridge.currentFingerprint = fingerprint;
+      final coordinator = harness.buildCoordinator();
+      addTearDown(coordinator.dispose);
+
+      await coordinator.requestSync(SyncRuntimeTrigger.startup);
+      final beforeExpiry =
+          await harness.syncPersistenceStore.loadAccountState(fingerprint);
+      expect(beforeExpiry, isNotNull);
+      expect(beforeExpiry!.serverChangeToken, isNotNull);
+
+      final deviceB = _RuntimeHarness(server: harness.server);
+      deviceB.bridge.currentFingerprint = fingerprint;
+      await deviceB.bootstrapCoordinator.runBootstrap();
+      await deviceB.integrationCoordinator.recordKeep(
+        revealId: const Uuid().v4(),
+        wisdomText: 'Recovered after token expiry.',
+        revealedAt: DateTime.utc(2026, 8, 24),
+        isKeeper: false,
+      );
+      await deviceB.integrationCoordinator.reconcileForAssociatedAccount(
+        const AssociatedSyncAccountContext(accountFingerprint: fingerprint),
+      );
+      await deviceB.orchestrator.runSyncPass();
+
+      harness.server.forceTokenExpiredOnNextFetch();
+      await coordinator.requestSync(SyncRuntimeTrigger.foreground);
+
+      expect(
+        coordinator.status.lastOutcome,
+        SyncRuntimeOutcome.retryableFailure,
+      );
+      expect(coordinator.status.retryScheduled, isTrue);
+      final afterExpiry =
+          await harness.syncPersistenceStore.loadAccountState(fingerprint);
+      expect(afterExpiry!.serverChangeToken, isNull);
+      expect(afterExpiry.dataEpoch, beforeExpiry.dataEpoch);
+
+      harness.retryScheduler.fireLatest();
+      await _pumpMicrotasks();
+
+      expect(coordinator.status.lastOutcome, SyncRuntimeOutcome.completed);
+      expect(coordinator.status.retryScheduled, isFalse);
+      final afterRecovery =
+          await harness.syncPersistenceStore.loadAccountState(fingerprint);
+      expect(afterRecovery!.serverChangeToken, isNotNull);
+      expect(afterRecovery.dataEpoch, beforeExpiry.dataEpoch);
+      final records = await harness.keptRepository.loadAllRecords();
+      expect(records, hasLength(1));
+      expect(records.single.wisdomText, 'Recovered after token expiry.');
     });
   });
 
@@ -680,19 +733,10 @@ void main() {
           const Duration(seconds: 30));
     });
 
-    // Note: `runBootstrap()` always performs its own epoch-check fetch
-    // first, on every call, even when the bucket is already complete (see
-    // `_checkAlreadyCompleteForEpochChange`) -- so a one-shot
-    // `forceTransportFailureOnNextFetch` fault is always consumed by
-    // bootstrap's own fetch, never by `SyncOrchestrator.runSyncPass`'s
-    // fetch, inside one full pipeline pass. There is no way to target the
-    // orchestrator's own fetch specifically without a two-fault queue the
-    // synthetic server does not provide, so a genuinely-reachable *terminal*
-    // status is exercised instead below (`ambiguousLegacyState`) -- the
-    // outer coordinator's classification/retry behavior for a terminal
-    // outcome is identical regardless of which inner layer produced it (see
-    // `_finishPass`), so this is still full coverage of the terminal-outcome
-    // contract.
+    // Bootstrap's complete-bucket epoch guard uses the dedicated singleton
+    // read, so fetch faults now reach SyncOrchestrator's incremental fetch
+    // directly. Terminal classification remains covered below by the
+    // independently meaningful ambiguous-legacy-state case.
     test(
         'multiple legacy account buckets with no durable marker -> '
         'ambiguousLegacyState classified as terminalFailure, no retry timer',
@@ -866,17 +910,14 @@ void main() {
       // `scriptedFetchHolds` fixes this deterministically by call order
       // rather than by timing: every one of pass 1's three fetches is
       // explicitly scripted against `firstHold`, and the coalesced
-      // follow-up pass's own fetches -- exactly two, since by the time it
-      // starts the bucket is already `complete` (bootstrap takes the
-      // single-fetch "already complete" epoch-check path instead of the
-      // three-fetch fresh-device path), plus `runSyncPass`'s own fetch --
-      // are explicitly scripted against `secondHold`.
+      // follow-up pass's one zone-change fetch (bootstrap now checks the
+      // already-complete epoch through the separate direct-record API) is
+      // explicitly scripted against `secondHold`.
       harness.bridge.scriptedFetchHolds = [
         firstHold, // 1. bootstrap baseline fetch (pass 1)
         firstHold, // 2. bootstrap control-record verify fetch (pass 1)
         firstHold, // 3. SyncOrchestrator fetch (pass 1)
-        secondHold, // 4. bootstrap already-complete epoch-check (follow-up)
-        secondHold, // 5. SyncOrchestrator fetch (follow-up)
+        secondHold, // 4. SyncOrchestrator fetch (follow-up)
       ];
       final coordinator = harness.buildCoordinator();
       addTearDown(coordinator.dispose);
@@ -889,7 +930,7 @@ void main() {
       unawaited(followUp.then((_) => followUpCompleted = true));
 
       // Release only pass 1's own three scripted fetches -- the follow-up
-      // pass's own two scripted fetches remain gated by `secondHold`, a
+      // pass's own scripted fetch remains gated by `secondHold`, a
       // completely separate, still-incomplete `Completer`, regardless of
       // exactly when the follow-up pass's own fetch calls actually occur.
       firstHold.complete();
@@ -1317,12 +1358,9 @@ class _FakeRuntimeCloudKitBridge implements CloudKitPlatformBridge {
     return server.fetch(request);
   }
 
-  // Build 26 Phase 5 (slice 2/3): the three deletion-runner-only bridge
-  // methods -- never called by CloudKitSyncRuntimeCoordinator itself, only
-  // by the CloudKitRemoteDeletionRunner it now owns internally (Slice 3).
-  // Delegate to the exact same shared `server` every other bridge method in
-  // this class already uses (see `SyntheticCloudKitServer`'s own Slice 3
-  // extension) -- never a second, competing in-memory model.
+  // Direct epoch reads serve both completed bootstrap and the deletion
+  // runner. All three methods delegate to the same shared server every other
+  // bridge method uses -- never a second, competing in-memory model.
   int fetchSyncStateEpochCallCount = 0;
   int listKeptWisdomRecordNamesCallCount = 0;
   int deleteKeptWisdomRecordsCallCount = 0;

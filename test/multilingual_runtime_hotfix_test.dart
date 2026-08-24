@@ -81,23 +81,28 @@ void main() {
     }
 
     test(
-        'CountdownFormatter.silenceMessage embeds the caller-supplied '
-        'localized sentence and leaves the duration math untouched', () {
+        'CountdownPresentation.plainText embeds the caller-supplied '
+        'localized sentence and the ceiling-based HH:MM token, for every '
+        'product locale', () {
       for (final locale in locales) {
         final l10n = lookupAppLocalizations(locale);
         final sentence = l10n.returnWhenSilenceOpensAgain;
 
-        final underAnHour = CountdownFormatter.silenceMessage(
-          const Duration(minutes: 41, seconds: 30),
-          sentence,
+        final underAnHour = CountdownPresentation(
+          sentence: sentence,
+          duration: CountdownFormatter.resolve(
+            const Duration(minutes: 41, seconds: 30),
+          ),
         );
-        expect(underAnHour, '$sentence\n42 min');
+        expect(underAnHour.plainText, '$sentence\n00:42');
 
-        final overAnHour = CountdownFormatter.silenceMessage(
-          const Duration(hours: 19, minutes: 24),
-          sentence,
+        final overAnHour = CountdownPresentation(
+          sentence: sentence,
+          duration: CountdownFormatter.resolve(
+            const Duration(hours: 19, minutes: 24),
+          ),
         );
-        expect(overAnHour, '$sentence\n19h 24m');
+        expect(overAnHour.plainText, '$sentence\n19:24');
       }
     });
 

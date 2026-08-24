@@ -53,6 +53,8 @@ void main() {
   String finalPath() => '${dirPath()}/east_kept_state_v3.json';
   String tempPathFor(String token) =>
       '${dirPath()}/.east_kept_state_v3.tmp-$token.json';
+  String recoveryTempPathFor(String token) =>
+      '${dirPath()}/.east_kept_state_v3.recover-$token.json';
   String backupPathFor(String token) =>
       '${dirPath()}/.east_kept_state_v3.backup-$token.json';
 
@@ -709,5 +711,124 @@ void main() {
       expect(file.path.startsWith('${dirPath()}/'), isTrue,
           reason: '${file.path} was written outside east_kept_state');
     }
+  });
+
+  test(
+      '31. load-time final protection failures are typed and keep their '
+      'cause out of diagnostic rendering', () async {
+    final bridge = _FakeFileProtectionBridge();
+    final store = buildStore(bridge: bridge);
+    final envelope = buildEnvelope();
+    await store.replace(envelope);
+    bridge.failNextTimeFor(finalPath());
+
+    Object? caught;
+    try {
+      await store.load();
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught, isA<KeptStateStoreException>());
+    final typed = caught! as KeptStateStoreException;
+    expect(typed.stage, 'load-protect');
+    expect(typed.cause, isA<FileProtectionException>());
+    expect(typed.toString(), isNot(contains(tempRoot.path)));
+    expect(typed.toString(), isNot(contains('Simulated protection failure')));
+    expect(await File(finalPath()).readAsString(), envelope.encodeString());
+  });
+
+  test(
+      '32. recovery-temp protection failure preserves the selected backup '
+      'byte-for-byte and leaves no authoritative final', () async {
+    final bridge = _FakeFileProtectionBridge();
+    final store = buildStore(bridge: bridge, tokenFactory: () => 'recover');
+    Directory(dirPath()).createSync(recursive: true);
+    final envelope = buildEnvelope(
+      records: [buildRecord(id: 'kept-recovery-source')],
+    );
+    final backupPath = backupPathFor('source');
+    final backupBytes = envelope.encodeString();
+    await File(backupPath).writeAsString(backupBytes);
+    bridge.failNextTimeFor(recoveryTempPathFor('recover'));
+
+    await expectLater(
+      store.load(),
+      throwsA(
+        isA<KeptStateStoreException>().having(
+          (error) => error.stage,
+          'stage',
+          'load-recover-protect-temp',
+        ),
+      ),
+    );
+
+    expect(await File(backupPath).readAsString(), backupBytes);
+    expect(await File(finalPath()).exists(), isFalse);
+    expect(await File(recoveryTempPathFor('recover')).exists(), isFalse);
+
+    final recovered = await store.load();
+    expect(recovered, envelope);
+  });
+
+  test(
+      '33. recovered-final protection failure preserves the selected backup '
+      'and a later healthy load can still recover it', () async {
+    final bridge = _FakeFileProtectionBridge();
+    final store = buildStore(bridge: bridge, tokenFactory: () => 'recover');
+    Directory(dirPath()).createSync(recursive: true);
+    final envelope = buildEnvelope(
+      records: [buildRecord(id: 'kept-final-protect-source')],
+    );
+    final backupPath = backupPathFor('source');
+    final backupBytes = envelope.encodeString();
+    await File(backupPath).writeAsString(backupBytes);
+    bridge.failNextTimeFor(finalPath());
+
+    await expectLater(
+      store.load(),
+      throwsA(
+        isA<KeptStateStoreException>().having(
+          (error) => error.stage,
+          'stage',
+          'load-recover-protect-final',
+        ),
+      ),
+    );
+
+    expect(await File(backupPath).readAsString(), backupBytes);
+    expect(await File(finalPath()).exists(), isFalse);
+    expect(await store.load(), envelope);
+  });
+
+  test(
+      '34. existing but wholly corrupt backups fail closed instead of '
+      'looking like a never-written store', () async {
+    final store = buildStore();
+    Directory(dirPath()).createSync(recursive: true);
+    await File(backupPathFor('bad-a')).writeAsString('{bad');
+    await File(backupPathFor('bad-b')).writeAsString('{also-bad');
+
+    await expectLater(
+      store.load(),
+      throwsA(
+        isA<KeptStateStoreException>().having(
+          (error) => error.stage,
+          'stage',
+          'load-recover-exhausted',
+        ),
+      ),
+    );
+  });
+
+  test('35. successful ordinary load removes stale recovery-temp files',
+      () async {
+    final store = buildStore();
+    final envelope = buildEnvelope();
+    await store.replace(envelope);
+    await File(recoveryTempPathFor('stale')).writeAsString('stale');
+
+    expect(await store.load(), envelope);
+    expect(await File(recoveryTempPathFor('stale')).exists(), isFalse);
   });
 }

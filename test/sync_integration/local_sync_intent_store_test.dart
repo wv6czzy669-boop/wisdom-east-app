@@ -865,4 +865,24 @@ void main() {
     final reloaded = await store.loadIntents();
     expect(reloaded.single.enqueuedAt, DateTime.utc(2026, 8, 9, 12, 0, 0, 123));
   });
+
+  test(
+      '28. existing but wholly corrupt backups fail closed instead of '
+      'silently becoming an empty intent envelope', () async {
+    final store = buildStore();
+    await Directory(dirPath()).create(recursive: true);
+    await File(backupPathFor('bad-a')).writeAsString('{bad');
+    await File(backupPathFor('bad-b')).writeAsString('{also-bad');
+
+    await expectLater(
+      store.loadIntents(),
+      throwsA(
+        isA<LocalSyncIntentStoreException>().having(
+          (error) => error.stage,
+          'stage',
+          'load-recover-exhausted',
+        ),
+      ),
+    );
+  });
 }

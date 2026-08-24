@@ -1,7 +1,8 @@
 /// Review artifact for a wisdom that has not met every production criterion.
 ///
 /// Unresolved entries never appear in a reviewed locale catalog. Keeping the
-/// review details here makes omission explicit and auditable.
+/// review details with the tests makes omission explicit and auditable without
+/// exposing QA-only models from the production package.
 class UnresolvedWisdomLocalization {
   const UnresolvedWisdomLocalization({
     required this.locale,

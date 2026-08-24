@@ -35,6 +35,9 @@ migrate_working_dir/
 
 # Generated App Store screenshot captures are local upload artifacts.
 /artifacts/
+/scratchpad/
+/tool/app_store_screenshots/localized_final/
+/tool/app_store_screenshots/sources/
 
 # Symbolication related
 app.*.symbols

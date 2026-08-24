@@ -2,14 +2,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/data/localized_wisdoms.dart';
-import 'package:wisdom_app/data/wisdom_localization_review.dart';
 import 'package:wisdom_app/data/wisdoms.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
-import 'package:wisdom_app/localization/visual_fit.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/services/wisdom_localization_resolver.dart';
 import 'package:wisdom_app/theme/east_design.dart';
+
+import 'test_support/visual_fit.dart';
+import 'test_support/wisdom_localization_review.dart';
 
 Map<String, String> get _englishById => <String, String>{
       for (final wisdom in wisdoms)
@@ -880,17 +881,11 @@ void main() {
       'pl',
       'vi',
     ]) {
-      var maximumHeight = 0.0;
-      var maximumId = '';
       final disproportionate = <String>[];
       for (final entry in reviewedLocalizedWisdomCatalogs[tag]!.entries) {
         final sourceHeight =
             EastVisualFit.measureWisdomHeight(_englishById[entry.key]!);
         final targetHeight = EastVisualFit.measureWisdomHeight(entry.value);
-        if (targetHeight > maximumHeight) {
-          maximumHeight = targetHeight;
-          maximumId = entry.key;
-        }
         expect(
           targetHeight,
           lessThanOrEqualTo(EastVisualFit.englishWisdomMaximumHeight),
@@ -907,7 +902,6 @@ void main() {
           );
         }
       }
-      debugPrint('VISUAL_FIT $tag max=$maximumHeight id=$maximumId');
       expect(disproportionate, isEmpty,
           reason: '$tag disproportionate:\n${disproportionate.join('\n')}');
     }

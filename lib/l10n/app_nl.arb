@@ -6,6 +6,9 @@
   "askFromYourHeart": "Vraag vanuit je hart.",
   "east": "EAST.",
   "kept": "Wat blijft",
+  "searchKept": "Zoeken",
+  "clearSearch": "Zoekopdracht wissen",
+  "noKeptSearchResults": "Niets gevonden.",
   "keptUpper": "WAT BLIJFT",
   "reflectedUpper": "REFLECTIE",
   "addReflectionUpper": "REFLECTIE TOEVOEGEN",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "Wat zou je willen meenemen?",
   "deleteReflectionQuestion": "Reflectie verwijderen?",
   "reflectionDeleteExplanation": "De reflectie wordt uit deze bewaarde wijsheid verwijderd.",
+  "removeKeptQuestion": "Verwijderen uit ‘Wat blijft’?",
+  "keptDeleteExplanation": "Deze wijsheid en de reflectie worden verwijderd.",
   "cancelUpper": "ANNULEER",
   "continueAction": "Ga door",
   "onlyKeptOnThisDevice": "Alleen op dit apparaat bewaard.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "Niets om te verwijderen.",
   "reflectionSaveFailed": "Reflectie kon niet worden opgeslagen. Probeer het opnieuw.",
   "reflectionAutosaveFailed": "Reflectie kon niet worden opgeslagen. Er wordt opnieuw geprobeerd terwijl je schrijft.",
-  "reflectionDeleteFailed": "Reflectie kon niet worden verwijderd. Probeer het opnieuw."
+  "reflectionDeleteFailed": "Reflectie kon niet worden verwijderd. Probeer het opnieuw.",
+  "remainingDurationHoursMinutes": "{hours, plural, one{Nog 1 uur} other{Nog {hours} uur}} {minutes, plural, one{en 1 minuut} other{en {minutes} minuten}}",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours, plural, one{Nog 1 uur} other{Nog {hours} uur}}",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes, plural, one{Nog 1 minuut} other{Nog {minutes} minuten}}",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/widgets.dart' show Brightness, Locale;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:wisdom_app/localization/east_typography_resolver.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/services/journal_layout.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
@@ -21,6 +25,11 @@ int _physicalPageCount(Uint8List bytes) {
   return RegExp(r'/Type\s*/Page(?!s)\b').allMatches(text).length;
 }
 
+int _embeddedImageCount(Uint8List bytes) {
+  final text = latin1.decode(bytes, allowInvalid: true);
+  return RegExp(r'/Subtype\s*/Image\b').allMatches(text).length;
+}
+
 List<String> _mediaBoxes(Uint8List bytes) {
   final text = latin1.decode(bytes, allowInvalid: true);
   return RegExp(r'/MediaBox\s*\[([^\]]+)\]')
@@ -28,6 +37,23 @@ List<String> _mediaBoxes(Uint8List bytes) {
       .map((m) => m.group(1)!.trim())
       .toList();
 }
+
+String _pdfNumber(double value) {
+  var result = value.toStringAsFixed(5);
+  while (result.endsWith('0')) {
+    result = result.substring(0, result.length - 1);
+  }
+  if (result.endsWith('.')) result = result.substring(0, result.length - 1);
+  return result;
+}
+
+String _fillColorOperator(PdfColor color) =>
+    '${_pdfNumber(color.red)} ${_pdfNumber(color.green)} '
+    '${_pdfNumber(color.blue)} rg';
+
+String _strokeColorOperator(PdfColor color) =>
+    '${_pdfNumber(color.red)} ${_pdfNumber(color.green)} '
+    '${_pdfNumber(color.blue)} RG';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +87,92 @@ void main() {
   test('title-page header uses only the Journal generation year', () {
     expect(JournalPdfBuilder.headerYear(DateTime.utc(2026, 8, 16)), '2026');
     expect(JournalPdfBuilder.headerYear(DateTime.utc(2031, 1, 1)), '2031');
+  });
+
+  test('Journal presentation exposes the locked EAST Light and Dark palettes',
+      () {
+    const light = JournalPdfPresentation();
+    const dark = JournalPdfPresentation(brightness: Brightness.dark);
+
+    expect(light.palette.background.toInt(), 0xFFE2E0D9);
+    expect(light.palette.ink.toInt(), 0xFF2C2924);
+    expect(light.palette.finalRingTone.toInt(), 0xFF807A70);
+    expect(dark.palette.background.toInt(), 0xFF1C1B18);
+    expect(dark.palette.ink.toInt(), 0xFFD8D4CB);
+    expect(dark.palette.dateMuted.toInt(), 0xFFA9A49B);
+    expect(dark.palette.finalRingTone.toInt(), 0xFF8D8981);
+  });
+
+  test('final page uses the strengthened closing-ring tone in both themes',
+      () async {
+    final lightBytes = await JournalPdfBuilder().build(
+      items: const [],
+      now: now,
+      compress: false,
+    );
+    final darkBytes = await JournalPdfBuilder(
+      presentation: const JournalPdfPresentation(
+        brightness: Brightness.dark,
+      ),
+    ).build(
+      items: const [],
+      now: now,
+      compress: false,
+    );
+
+    final lightPdf = latin1.decode(lightBytes, allowInvalid: true);
+    final darkPdf = latin1.decode(darkBytes, allowInvalid: true);
+    expect(
+      lightPdf,
+      contains(_strokeColorOperator(JournalPdfPalette.light.finalRingTone)),
+    );
+    expect(
+      darkPdf,
+      contains(_strokeColorOperator(JournalPdfPalette.dark.finalRingTone)),
+    );
+  });
+
+  test('Dark Journal paints every page with Dark field and ink tokens',
+      () async {
+    final items = [
+      item(
+        id: 'dark-journal',
+        revealId: 'r-dark-journal',
+        text: 'Dark presentation stays editorial.',
+        keptAt: now,
+        reflection: 'The same content, under the active appearance.',
+      ),
+    ];
+    final lightBytes = await JournalPdfBuilder().build(
+      items: items,
+      now: now,
+      compress: false,
+    );
+    final darkBytes = await JournalPdfBuilder(
+      presentation: const JournalPdfPresentation(
+        brightness: Brightness.dark,
+      ),
+    ).build(
+      items: items,
+      now: now,
+      compress: false,
+    );
+
+    final lightPdf = latin1.decode(lightBytes, allowInvalid: true);
+    final darkPdf = latin1.decode(darkBytes, allowInvalid: true);
+    expect(
+      lightPdf,
+      contains(_fillColorOperator(JournalPdfPalette.light.background)),
+    );
+    expect(
+      darkPdf,
+      contains(_fillColorOperator(JournalPdfPalette.dark.background)),
+    );
+    expect(
+      darkPdf,
+      contains(_fillColorOperator(JournalPdfPalette.dark.ink)),
+    );
+    expect(_physicalPageCount(darkBytes), _physicalPageCount(lightBytes));
   });
 
   test('every Journal body folio uses the fixed bottom-right alignment', () {
@@ -156,6 +268,48 @@ void main() {
     );
 
     expect(_physicalPageCount(bytes), 3);
+  });
+
+  test('Reflection emoji render through the bundled PDF fallback', () async {
+    final printMessages = <String>[];
+    late Uint8List bytes;
+    await runZoned(
+      () async {
+        bytes = await JournalPdfBuilder().build(
+          items: [
+            item(
+              id: 'emoji',
+              revealId: 'r-emoji',
+              text: 'A quiet moment.',
+              keptAt: now,
+              reflection: 'Calm 🙂 🌿 ✨ ❤️ 👍🏽 👨‍👩‍👧‍👦 🇹🇷',
+            ),
+          ],
+          ownerName: 'A quiet journal ✨',
+          now: now,
+          compress: false,
+        );
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (self, parent, zone, message) => printMessages.add(message),
+      ),
+    );
+
+    expect(bytes, isNotEmpty);
+    expect(
+      printMessages.where(
+        (message) => message.contains('Unable to find a font'),
+      ),
+      isEmpty,
+    );
+    expect(_embeddedImageCount(bytes), greaterThanOrEqualTo(8));
+    expect(normalizeJournalPdfText('❤️ 👍🏽 👨‍👩‍👧‍👦'), '❤ 👍 👨👩👧👦');
+    expect(
+      EastTypographyResolver.forLocale(const Locale('en'))
+          .pdfFallbackAssets
+          .first,
+      EastTypographyResolver.pdfEmojiFontAsset,
+    );
   });
 
   test(

@@ -3,12 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/data/wisdoms.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/localization/east_typography_resolver.dart';
-import 'package:wisdom_app/localization/visual_fit.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/services/ritual_audio_policy.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
 import 'package:wisdom_app/services/wisdom_localization_resolver.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
+
+import 'test_support/visual_fit.dart';
 
 void main() {
   test('target registry preserves all fifteen canonical locale tags', () {

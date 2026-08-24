@@ -20,7 +20,7 @@ enum EastWidgetSnapshotBridge {
         case EastWidgetSnapshotBridgeConstants.methodPublishRevealed:
             handlePublishRevealed(call, result: result)
         case EastWidgetSnapshotBridgeConstants.methodPublishSilence:
-            handlePublishSilence(result: result)
+            handlePublishSilence(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -44,20 +44,77 @@ enum EastWidgetSnapshotBridge {
             return
         }
 
+        // EAST. 1.2 Slice 2A -- the required content contract above is
+        // completely unchanged: optional presentation fields are read only
+        // after `text`/`unlockAtMillis` have already been validated, and can
+        // never make otherwise-valid revealed content fail.
         let unlockAt = Date(timeIntervalSince1970: unlockAtMillis.doubleValue / 1000.0)
-        let changed = EastWidgetSnapshotStore.publishRevealed(text: text, unlockAt: unlockAt)
+        let changed: Bool
+        if containsPresentationPayload(call.arguments) {
+            changed = EastWidgetSnapshotStore.publishRevealed(
+                text: text,
+                unlockAt: unlockAt,
+                presentation: presentation(from: call.arguments)
+            )
+        } else {
+            // Legacy path, byte-for-byte unchanged: an old Dart binary
+            // sending only `text`/`unlockAtMillis` never creates a
+            // presentation key.
+            changed = EastWidgetSnapshotStore.publishRevealed(text: text, unlockAt: unlockAt)
+        }
         if changed {
             reloadTimelines()
         }
         result(nil)
     }
 
-    private static func handlePublishSilence(result: @escaping FlutterResult) {
-        let changed = EastWidgetSnapshotStore.publishSilence()
+    private static func handlePublishSilence(
+        _ call: FlutterMethodCall,
+        result: @escaping FlutterResult
+    ) {
+        let changed: Bool
+        if containsPresentationPayload(call.arguments) {
+            changed = EastWidgetSnapshotStore.publishSilence(presentation: presentation(from: call.arguments))
+        } else {
+            // Legacy path, byte-for-byte unchanged: old Dart code always
+            // calls this with null arguments, which never creates a
+            // presentation key.
+            changed = EastWidgetSnapshotStore.publishSilence()
+        }
         if changed {
             reloadTimelines()
         }
         result(nil)
+    }
+
+    /// EAST. 1.2 Slice 2A -- `true` only when at least one of the two
+    /// optional presentation argument *keys* is present in `arguments`
+    /// (even if its value is malformed, or an explicit Dart `null`, which
+    /// arrives here as `NSNull`) -- key *presence*, not value validity, is
+    /// what distinguishes a presentation-aware call from a legacy one. A
+    /// non-`[String: Any]` argument (including `nil`, exactly what every
+    /// legacy `publishSilence` call sends today) always resolves to `false`.
+    /// No force casts.
+    static func containsPresentationPayload(_ arguments: Any?) -> Bool {
+        guard let map = arguments as? [String: Any] else { return false }
+        return map[EastWidgetSnapshotBridgeConstants.argAppearanceMode] != nil
+            || map[EastWidgetSnapshotBridgeConstants.argLocaleOverrideTag] != nil
+    }
+
+    /// EAST. 1.2 Slice 2A -- pure decoding only. Safely handles `nil`, a
+    /// non-map argument, a map missing either or both presentation keys,
+    /// and wrong-typed values (each simply fails its own `as? String` cast
+    /// and falls through to the store's own safe default) -- no force
+    /// casts anywhere. All validation itself -- the 15-locale allowlist and
+    /// appearance parsing -- lives solely in
+    /// `EastWidgetSnapshotStore.validatedPresentation`, never duplicated
+    /// here.
+    static func presentation(from arguments: Any?) -> EastWidgetPresentation {
+        let map = arguments as? [String: Any]
+        return EastWidgetSnapshotStore.validatedPresentation(
+            appearanceModeRaw: map?[EastWidgetSnapshotBridgeConstants.argAppearanceMode] as? String,
+            localeOverrideTagRaw: map?[EastWidgetSnapshotBridgeConstants.argLocaleOverrideTag] as? String
+        )
     }
 
     private static func reloadTimelines() {

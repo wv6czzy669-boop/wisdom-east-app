@@ -2,9 +2,10 @@ name: wisdom_app
 description: A minimal wisdom app
 publish_to: "none"
 
-version: 1.1.0+33
+version: 1.2.0+35
 environment:
   sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
@@ -12,20 +13,20 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: any
-  in_app_purchase: ^3.2.0
+  in_app_purchase: ^3.3.0
   in_app_review: ^2.0.12
-  url_launcher: ^6.3.1
-  share_plus: ^13.2.1
+  url_launcher: ^6.3.2
+  share_plus: ^13.3.0
   pdf: ^3.13.0
   printing: ^5.15.0
-  flutter_local_notifications: ^22.1.0
+  flutter_local_notifications: ^22.3.0
   flutter_timezone: ^5.1.0
   timezone: ^0.11.1
 
-  shared_preferences: ^2.2.2
-  audioplayers: ^6.6.0
-  uuid: ^4.5.3
-  path_provider: ^2.1.5
+  shared_preferences: ^2.5.5
+  audioplayers: ^6.8.1
+  uuid: ^4.6.0
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -36,7 +37,7 @@ dev_dependencies:
     sdk: flutter
 
   in_app_purchase_platform_interface: ^1.4.1
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
 
 flutter:
@@ -45,17 +46,14 @@ flutter:
 
   assets:
     - assets/sounds/
+    - assets/fonts/NotoColorEmoji.ttf
     - assets/fonts/licenses/
-    - assets/fonts/glyphs/
 
   fonts:
     - family: EBGaramond
       fonts:
         - asset: assets/fonts/EBGaramond-Variable.ttf
           weight: 400
-        - asset: assets/fonts/EBGaramond-Italic-Variable.ttf
-          weight: 400
-          style: italic
     - family: NotoSerifJP
       fonts:
         - asset: assets/fonts/NotoSerifJP-Regular.ttf

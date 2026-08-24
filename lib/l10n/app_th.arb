@@ -6,6 +6,9 @@
   "askFromYourHeart": "ถามจากใจ.",
   "east": "EAST.",
   "kept": "สิ่งที่เก็บไว้",
+  "searchKept": "ค้นหา",
+  "clearSearch": "ล้างการค้นหา",
+  "noKeptSearchResults": "ไม่พบสิ่งที่ค้นหา",
   "keptUpper": "สิ่งที่เก็บไว้",
   "reflectedUpper": "การไตร่ตรอง",
   "addReflectionUpper": "บันทึกการไตร่ตรอง",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "คุณอยากพกอะไรติดตัวไปต่อ?",
   "deleteReflectionQuestion": "ลบการไตร่ตรอง?",
   "reflectionDeleteExplanation": "การไตร่ตรองจะถูกนำออกจากข้อคิดที่เก็บไว้นี้.",
+  "removeKeptQuestion": "นำออกจากสิ่งที่เก็บไว้?",
+  "keptDeleteExplanation": "ข้อคิดนี้และการไตร่ตรองจะถูกนำออก.",
   "cancelUpper": "ยกเลิก",
   "continueAction": "ดำเนินการต่อ",
   "onlyKeptOnThisDevice": "เก็บไว้บนอุปกรณ์นี้เท่านั้น.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "ไม่มีสิ่งที่จะนำออก",
   "reflectionSaveFailed": "บันทึกการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง",
   "reflectionAutosaveFailed": "บันทึกการสะท้อนคิดไม่ได้ ระบบจะลองอีกครั้งขณะที่คุณเขียนต่อ",
-  "reflectionDeleteFailed": "ลบการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง"
+  "reflectionDeleteFailed": "ลบการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง",
+  "remainingDurationHoursMinutes": "เหลืออีก {hours} ชั่วโมง {minutes} นาที",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "เหลืออีก {hours} ชั่วโมง",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "เหลืออีก {minutes} นาที",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

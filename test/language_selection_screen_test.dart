@@ -62,7 +62,6 @@ void main() {
         isButton: true,
         hasEnabledState: true,
         isEnabled: true,
-        isHidden: true,
         hasTapAction: true,
       ),
     );

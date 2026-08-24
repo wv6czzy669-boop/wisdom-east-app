@@ -6,6 +6,9 @@
   "askFromYourHeart": "اسأل من قلبك.",
   "east": "EAST.",
   "kept": "ما بقي",
+  "searchKept": "بحث",
+  "clearSearch": "مسح البحث",
+  "noKeptSearchResults": "لم يُعثر على شيء.",
   "keptUpper": "ما بقي",
   "reflectedUpper": "تأمُّل",
   "addReflectionUpper": "أضف تأمّلًا",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "ما الذي تودّ أن تحمله معك؟",
   "deleteReflectionQuestion": "حذف التأمّل؟",
   "reflectionDeleteExplanation": "سيُزال التأمّل من هذه الحكمة التي أبقيتها.",
+  "removeKeptQuestion": "إزالة من «ما بقي»؟",
+  "keptDeleteExplanation": "ستُزال هذه الحكمة وتأمّلها.",
   "cancelUpper": "إلغاء",
   "continueAction": "متابعة",
   "onlyKeptOnThisDevice": "محفوظة على هذا الجهاز فقط.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "لا شيء لإزالته.",
   "reflectionSaveFailed": "تعذّر حفظ التأمل. حاول مرة أخرى.",
   "reflectionAutosaveFailed": "تعذّر حفظ التأمل. ستتم المحاولة مجددًا أثناء مواصلة الكتابة.",
-  "reflectionDeleteFailed": "تعذّر حذف التأمل. حاول مرة أخرى."
+  "reflectionDeleteFailed": "تعذّر حذف التأمل. حاول مرة أخرى.",
+  "remainingDurationHoursMinutes": "{hours, plural, zero{} one{ساعة واحدة} two{ساعتان} few{{hours} ساعات} many{{hours} ساعة} other{{hours} ساعة}} {minutes, plural, zero{} one{ودقيقة واحدة} two{ودقيقتان} few{و{minutes} دقائق} many{و{minutes} دقيقة} other{و{minutes} دقيقة}} متبقية",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours, plural, zero{لا وقت متبقٍ} one{ساعة واحدة متبقية} two{ساعتان متبقيتان} few{{hours} ساعات متبقية} many{{hours} ساعة متبقية} other{{hours} ساعة متبقية}}",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes, plural, zero{أقل من دقيقة متبقية} one{دقيقة واحدة متبقية} two{دقيقتان متبقيتان} few{{minutes} دقائق متبقية} many{{minutes} دقيقة متبقية} other{{minutes} دقيقة متبقية}}",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

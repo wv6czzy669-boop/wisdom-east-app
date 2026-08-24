@@ -33,6 +33,27 @@ void main() {
     );
   }
 
+  test('body uses the compact EAST editorial hierarchy', () {
+    expect(JournalBodyLayout.marginLeft, 59.53);
+    expect(JournalBodyLayout.marginRight, 59.53);
+    expect(JournalBodyLayout.entryGap, 46.0);
+    expect(JournalBodyLayout.entryLineGap, 14.5);
+    expect(JournalBodyLayout.reflectionIndent, 29.0);
+    expect(JournalBodyLayout.dateFontSize, 12.5);
+    expect(JournalBodyLayout.dateLetterSpacing, 3.2);
+    expect(JournalBodyLayout.wisdomFontSize, 24.0);
+    expect(JournalBodyLayout.reflectionFontSize, 18.5);
+    expect(
+      JournalBodyLayout.dateFontSize,
+      lessThan(JournalBodyLayout.reflectionFontSize),
+    );
+    expect(
+      JournalBodyLayout.reflectionFontSize,
+      lessThan(JournalBodyLayout.wisdomFontSize),
+    );
+    expect(JournalBodyLayout.reflectionTone.toInt(), 0xFF625D54);
+  });
+
   group('ordering', () {
     test('orders oldest to newest by keptAt, never by wisdom text', () {
       const planner = JournalLayoutPlanner();
@@ -117,9 +138,8 @@ void main() {
   });
 
   group('adaptive pagination', () {
-    test('no group ever exceeds the configured max entries per page', () {
+    test('entry count has no artificial cap when every measured item fits', () {
       const planner = JournalLayoutPlanner(
-        maxEntriesPerPage: 3,
         pageContentHeightOverridePt: 10000,
       );
       final items = List.generate(
@@ -134,17 +154,14 @@ void main() {
 
       final groups = planner.plan(items, font: font);
 
-      for (final group in groups) {
-        expect(group.entries.length, lessThanOrEqualTo(3));
-      }
-      expect(groups.expand((g) => g.entries), hasLength(10));
+      expect(groups, hasLength(1));
+      expect(groups.single.entries, hasLength(10));
     });
 
-    test('short entries share a page rather than being forced one-per-page',
-        () {
+    test('four short entries share a real A4 page when they fit', () {
       const planner = JournalLayoutPlanner();
       final items = List.generate(
-        3,
+        4,
         (i) => item(
           id: 'id-$i',
           revealId: 'r-$i',
@@ -156,7 +173,7 @@ void main() {
       final groups = planner.plan(items, font: font);
 
       expect(groups, hasLength(1));
-      expect(groups.single.entries, hasLength(3));
+      expect(groups.single.entries, hasLength(4));
     });
 
     test('moves the third complete entry to the next page when it will not fit',

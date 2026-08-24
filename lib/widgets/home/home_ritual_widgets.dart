@@ -7,7 +7,6 @@ TextStyle _homeWisdomStyle(
   bool glow = false,
   bool brand = false,
   double height = 1.28,
-  FontStyle fontStyle = FontStyle.normal,
 }) {
   final typography = EastTypography.planFor(context);
   final palette = EastColors.of(context);
@@ -18,7 +17,6 @@ TextStyle _homeWisdomStyle(
     fontFamily: brand ? EastTypography.fontFamily : typography.family,
     fontFamilyFallback:
         brand ? EastTypography.fontFamilyFallback : typography.fallbacks,
-    fontStyle: fontStyle,
     height: height,
     letterSpacing: 0.5,
     shadows: glow
@@ -117,9 +115,52 @@ class _HomeMainRitualGesture extends StatelessWidget {
   }
 }
 
+/// The one shared visual countdown widget used at both render sites (the
+/// locked-countdown main ritual state via [_HomeRitualContent], and the
+/// post-reveal message beneath revealed wisdom via [_HomePostRevealMessage])
+/// -- renders the localized sentence in the ambient text direction and the
+/// fixed `HH:MM` token isolated to LTR, with tabular figures applied only
+/// to the token. Never parses [presentation]'s `hhmm`/`plainText` -- reads
+/// only its structured `duration`.
+class _HomeCountdownText extends StatelessWidget {
+  const _HomeCountdownText({
+    required this.presentation,
+    required this.style,
+  });
+
+  final CountdownPresentation presentation;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          presentation.sentence,
+          textAlign: TextAlign.center,
+          style: style,
+        ),
+        Text(
+          presentation.duration.hhmm,
+          key: const ValueKey('home-countdown-hhmm'),
+          textAlign: TextAlign.center,
+          // Isolates only this Text's paragraph direction to LTR so the
+          // digits never mirror under an RTL locale (e.g. Arabic); the
+          // sentence above keeps the ambient `Directionality`.
+          textDirection: TextDirection.ltr,
+          style: style.copyWith(
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _HomeRitualContent extends StatelessWidget {
   const _HomeRitualContent({
-    required this.screenStep,
+    required this.phase,
     required this.currentText,
     required this.textOpacity,
     required this.textScale,
@@ -132,13 +173,15 @@ class _HomeRitualContent extends StatelessWidget {
     required this.onHeartScreen,
     required this.wisdomRevealed,
     required this.onLockedCountdown,
+    this.countdownPresentation,
     required this.wisdomShareEnabled,
     required this.wisdomShareOriginKey,
     required this.onWisdomLongPress,
   });
 
-  final int screenStep;
+  final RitualPhase phase;
   final String currentText;
+  final CountdownPresentation? countdownPresentation;
   final double textOpacity;
   final double textScale;
   final double pauseFeelOpacity;
@@ -188,7 +231,7 @@ class _HomeRitualContent extends StatelessWidget {
           (ritualTextWidth - narrowRevealedWisdomWidth) *
               wisdomWidthScaleProgress,
     );
-    final textSize = screenStep == 0
+    final textSize = phase == RitualPhase.launch
         ? 42.0
         : wisdomRevealed
             ? 38.0
@@ -209,21 +252,29 @@ class _HomeRitualContent extends StatelessWidget {
       finalColor,
       textOpacity,
     )!;
-    final currentRitualText = Text(
-      currentText,
-      textAlign: TextAlign.center,
-      style: _homeWisdomStyle(
-        context,
-        textSize,
-        color: wisdomRevealed ? animatedTextColor : finalColor,
-        glow: wisdomRevealed || onHeartScreen,
-        height: wisdomRevealed
-            ? 1.48
-            : onLockedCountdown
-                ? 1.5
-                : 1.28,
-      ),
+    final ritualTextStyle = _homeWisdomStyle(
+      context,
+      textSize,
+      color: wisdomRevealed ? animatedTextColor : finalColor,
+      glow: wisdomRevealed || onHeartScreen,
+      height: wisdomRevealed
+          ? 1.48
+          : onLockedCountdown
+              ? 1.5
+              : 1.28,
     );
+    final lockedCountdownPresentation = countdownPresentation;
+    final Widget currentRitualText =
+        onLockedCountdown && lockedCountdownPresentation != null
+            ? _HomeCountdownText(
+                presentation: lockedCountdownPresentation,
+                style: ritualTextStyle,
+              )
+            : Text(
+                currentText,
+                textAlign: TextAlign.center,
+                style: ritualTextStyle,
+              );
 
     return AnimatedBuilder(
       animation: pulseController,
@@ -252,7 +303,9 @@ class _HomeRitualContent extends StatelessWidget {
         // aspect of ritual progression, timing, and copy is unaffected.
         // The decorative pulse/breath animations already gate the same way
         // (see `reduceMotion` checks elsewhere in this file).
-        scale: reduceMotion ? 1.0 : (screenStep == 0 ? 1.0 : textScale),
+        scale: reduceMotion
+            ? 1.0
+            : (phase == RitualPhase.launch ? 1.0 : textScale),
         duration: const Duration(
           milliseconds: 1000,
         ),
@@ -260,7 +313,7 @@ class _HomeRitualContent extends StatelessWidget {
         child: AnimatedOpacity(
           key: const ValueKey('ritual-content-opacity'),
           duration: Duration(
-            milliseconds: screenStep == 0
+            milliseconds: phase == RitualPhase.launch
                 ? 750
                 : wisdomRevealed
                     ? 0
@@ -268,7 +321,7 @@ class _HomeRitualContent extends StatelessWidget {
           ),
           curve: Curves.easeOutCubic,
           opacity: textOpacity,
-          child: screenStep == 0
+          child: phase == RitualPhase.launch
               ? const _HomeLaunchMark()
               : onPauseScreen
                   ? _HomePauseFeelText(
@@ -948,10 +1001,14 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
   const _HomeKeptDiscoveryHint({
     required this.opacity,
     required this.text,
+    required this.showBreath,
+    this.onPressed,
   });
 
   final double opacity;
   final String text;
+  final bool showBreath;
+  final VoidCallback? onPressed;
 
   /// Matches `_HomeSaveControl`'s own ring geometry (the default
   /// `IconButton` minimum interactive dimension) and vertical anchor
@@ -965,28 +1022,61 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final textWidget = Text(
+      text,
+      textAlign: TextAlign.start,
+      style: EastTypography.localized(
+        context,
+        size: 14.5,
+        color: eastMutedTextColor(context).withValues(alpha: 0.70),
+        height: 1.3,
+        letterSpacing: 0.4,
+      ),
+    );
+    final breathingText = showBreath && !reduceMotion
+        ? TweenAnimationBuilder<double>(
+            key: const ValueKey('keep-discovery-hint-breath'),
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 1200),
+            curve: Curves.easeOut,
+            builder: (context, t, child) {
+              final breath = sin(t * pi).clamp(0.0, 1.0);
+              return Opacity(
+                opacity: 0.82 + (breath * 0.18),
+                child: Transform.scale(
+                  alignment: AlignmentDirectional.centerStart,
+                  scale: 1.0 + (breath * 0.018),
+                  child: child,
+                ),
+              );
+            },
+            child: textWidget,
+          )
+        : textWidget;
     return PositionedDirectional(
       top: size.height / 2 + 72,
       height: _ringDiameter,
       start: size.width / 2 + (_ringDiameter / 2) + _ringGap,
       end: 24,
       child: ExcludeSemantics(
-        child: IgnorePointer(
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-              opacity: opacity,
-              child: Text(
-                text,
-                textAlign: TextAlign.start,
-                style: EastTypography.localized(
-                  context,
-                  size: 14.5,
-                  color: eastMutedTextColor(context).withValues(alpha: 0.70),
-                  height: 1.3,
-                  letterSpacing: 0.4,
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: GestureDetector(
+            key: const ValueKey('keep-discovery-hint-action'),
+            behavior: HitTestBehavior.translucent,
+            excludeFromSemantics: true,
+            onTap: onPressed,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: _ringDiameter),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  opacity: opacity,
+                  child: breathingText,
                 ),
               ),
             ),
@@ -1001,18 +1091,29 @@ class _HomePostRevealMessage extends StatelessWidget {
   const _HomePostRevealMessage({
     required this.opacity,
     required this.message,
+    this.countdownPresentation,
   });
 
   final double opacity;
   final String message;
+  final CountdownPresentation? countdownPresentation;
 
   @override
   Widget build(BuildContext context) {
+    final presentation = countdownPresentation;
+    final style = _homeWisdomStyle(
+      context,
+      15,
+      color: eastMutedTextColor(context),
+    );
+
     return Positioned(
       left: 0,
       right: 0,
       top: MediaQuery.of(context).size.height / 2 + 156,
       child: ExcludeSemantics(
+        // Retains the existing opacity gate: no semantics from this
+        // subtree (countdown or plain message) while invisible.
         excluding: opacity <= 0.0,
         child: IgnorePointer(
           ignoring: opacity < 1.0,
@@ -1022,15 +1123,27 @@ class _HomePostRevealMessage extends StatelessWidget {
             opacity: opacity,
             child: Column(
               children: [
-                if (message.isNotEmpty) ...[
+                if (presentation != null)
+                  // Exactly one natural-language countdown semantics node
+                  // here, composed from the same `CountdownDuration`
+                  // integers the visible `HH:MM` token renders from --
+                  // never the raw token. `excludeSemantics: true`
+                  // suppresses the two inner Text children so they never
+                  // contribute duplicate nodes.
+                  Semantics(
+                    label: '${presentation.sentence} '
+                        '${_naturalCountdownDuration(context, presentation.duration)}',
+                    excludeSemantics: true,
+                    child: _HomeCountdownText(
+                      presentation: presentation,
+                      style: style,
+                    ),
+                  )
+                else if (message.isNotEmpty) ...[
                   Text(
                     message,
                     textAlign: TextAlign.center,
-                    style: _homeWisdomStyle(
-                      context,
-                      15,
-                      color: eastMutedTextColor(context),
-                    ),
+                    style: style,
                   ),
                 ],
               ],

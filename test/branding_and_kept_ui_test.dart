@@ -20,7 +20,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('application and settings use EAST. branding', (tester) async {
+  testWidgets('application keeps EAST. branding and Settings uses its title',
+      (tester) async {
     // Correction: `WisdomApp` mounts a real `HomeScreen`, whose `initState`
     // falls through to `app_services.savedReflectionsService` (a `late
     // final` production global only ever populated by production's own
@@ -46,22 +47,16 @@ void main() {
       const MaterialApp(home: SettingsScreen()),
     );
 
-    expect(find.text('EAST.'), findsOneWidget);
-    expect(find.text('Where silence speaks.'), findsOneWidget);
-    expect(
-      tester.widget<Text>(find.text('Where silence speaks.')).style?.color,
-      eastMutedTextColor(tester.element(find.text('Where silence speaks.'))),
-    );
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('EAST.'), findsNothing);
+    expect(find.text('Where silence speaks.'), findsNothing);
     expect(
       find.text('Support the circle, keep what stays.'),
       findsOneWidget,
     );
-    expect(
-      find.text('Restore what belongs with you.'),
-      findsOneWidget,
-    );
-    expect(find.text('What stays private.'), findsOneWidget);
-    expect(find.text('For thoughts and questions.'), findsOneWidget);
+    expect(find.text('Restore what belongs with you.'), findsNothing);
+    expect(find.text('What stays private.'), findsNothing);
+    expect(find.text('For thoughts and questions.'), findsNothing);
     expect(find.text('Reach Out'), findsOneWidget);
     expect(find.text('Notifications'), findsNothing);
     expect(find.text('Daily Reminder'), findsNothing);
@@ -83,7 +78,8 @@ void main() {
           .alignment,
       Alignment.topCenter,
     );
-    expect(tester.getTopLeft(find.text('EAST.')).dy, lessThan(100));
+    expect(tester.getTopLeft(find.text('Settings')).dy, lessThan(100));
+    expect(tester.getTopLeft(find.text('Keeper')).dy, lessThan(110));
     expect(find.byType(ListView), findsNothing);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byType(Scrollable), findsOneWidget);
@@ -112,21 +108,17 @@ void main() {
   });
 
   testWidgets(
-      'Approved EAST Settings direction: exactly two hairlines mark three '
-      'groups, and the row order is exactly Keeper, Restore Purchases, '
-      'iCloud Sync, Remove from iCloud, EAST. Productions, Privacy Policy, '
-      'Reach Out — with no Daily Reminder row', (tester) async {
+      'Approved EAST Settings direction: exactly three hairlines mark four '
+      'invisible groups and every row keeps the approved order',
+      (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
 
-    // Approved direction: "Settings — complete, one screen" replaces the
-    // old seven-row/eight-divider menu with three groups (what you can
-    // own, what holds your data, the world outside) separated by exactly
-    // two hairlines -- air groups siblings within a group, never a rule
-    // between them.
+    // Four invisible groups: Keeper, iCloud & Data, Preferences, and About.
+    // Hairlines separate groups; sibling rows remain separated only by air.
     final dividers = tester.widgetList<Divider>(find.byType(Divider)).toList();
-    expect(dividers, hasLength(2));
+    expect(dividers, hasLength(3));
 
     final expectedDividerColor = eastMutedTextColor(
       tester.element(find.byType(SettingsScreen)),
@@ -141,6 +133,9 @@ void main() {
       'Restore Purchases',
       'iCloud Sync',
       'Remove from iCloud',
+      'Export My Data',
+      'Language',
+      'Appearance',
       'EAST. Productions',
       'Privacy Policy',
       'Reach Out',
@@ -159,12 +154,7 @@ void main() {
       findsNothing,
     );
 
-    // "Where silence speaks." keeps its already-approved color untouched by
-    // the new shared divider color.
-    expect(
-      tester.widget<Text>(find.text('Where silence speaks.')).style?.color,
-      eastMutedTextColor(tester.element(find.text('Where silence speaks.'))),
-    );
+    expect(find.text('Where silence speaks.'), findsNothing);
   });
 
   testWidgets(

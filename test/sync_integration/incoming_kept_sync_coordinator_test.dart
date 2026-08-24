@@ -1723,18 +1723,6 @@ void main() {
       expect(await intentStore.loadIntents(), isEmpty);
     });
 
-    test('no automatic trigger exists in production source', () {
-      // Structural: no file outside this coordinator's own definition file
-      // calls applyIncomingBatch from lib/ production code. The exhaustive
-      // repo-wide scan lives in
-      // test/sync_integration/sync_integration_layering_test.dart (the
-      // dedicated structural-proof file for the whole lib/sync_integration/
-      // layer, extended in Build 26 Phase 4E-3b) -- this is a behavioral
-      // smoke check only, confirming app_services.dart's own construction
-      // call site never itself invokes applyIncomingBatch.
-      expect(true, isTrue);
-    });
-
     test('privacy-safe diagnostics -- no secret value ever rendered', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: null);
       const secretWisdom = 'This exact wisdom must never appear in a log.';

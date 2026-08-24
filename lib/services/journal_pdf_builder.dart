@@ -14,16 +14,96 @@ import '../localization/east_locale_registry.dart';
 import '../localization/east_typography_resolver.dart';
 import 'journal_layout.dart';
 
+/// Removes invisible emoji sequence controls that package:pdf would
+/// otherwise paint as missing-glyph boxes. The visible base emoji remains and
+/// is rendered by the bundled Noto Color Emoji fallback. Stored Reflection
+/// text is never changed.
+String normalizeJournalPdfText(String text) {
+  final output = StringBuffer();
+  for (final rune in text.runes) {
+    final isVariationSelector = rune == 0xFE0E || rune == 0xFE0F;
+    final isJoiner = rune == 0x200D;
+    final isKeycapCombiner = rune == 0x20E3;
+    final isSkinToneModifier = rune >= 0x1F3FB && rune <= 0x1F3FF;
+    final isEmojiTag = rune >= 0xE0020 && rune <= 0xE007F;
+    if (isVariationSelector ||
+        isJoiner ||
+        isKeycapCombiner ||
+        isSkinToneModifier ||
+        isEmojiTag) {
+      continue;
+    }
+    output.writeCharCode(rune);
+  }
+  return output.toString();
+}
+
 /// Explicit future presentation input for PDF generation. It deliberately
 /// carries no app state and never changes Journal pagination or source data.
 class JournalPdfPresentation {
   const JournalPdfPresentation({
     this.locale = const Locale('en'),
     this.textDirection,
+    this.brightness = Brightness.light,
   });
 
   final Locale locale;
   final TextDirection? textDirection;
+  final Brightness brightness;
+
+  JournalPdfPalette get palette => brightness == Brightness.dark
+      ? JournalPdfPalette.dark
+      : JournalPdfPalette.light;
+}
+
+/// PDF-native equivalents of EAST.'s Light and Dark appearance tokens.
+/// Both follow the app's warm editorial field and ink hierarchy.
+class JournalPdfPalette {
+  const JournalPdfPalette({
+    required this.background,
+    required this.ink,
+    required this.yearMuted,
+    required this.ownerMuted,
+    required this.coverRingTone,
+    required this.finalRingTone,
+    required this.dateMuted,
+    required this.reflectionTone,
+    required this.folioTone,
+  });
+
+  final PdfColor background;
+  final PdfColor ink;
+  final PdfColor yearMuted;
+  final PdfColor ownerMuted;
+  final PdfColor coverRingTone;
+  final PdfColor finalRingTone;
+  final PdfColor dateMuted;
+  final PdfColor reflectionTone;
+  final PdfColor folioTone;
+
+  static const light = JournalPdfPalette(
+    background: PdfColor.fromInt(0xFFE2E0D9),
+    ink: PdfColor.fromInt(0xFF2C2924),
+    yearMuted: PdfColor.fromInt(0xFF777167),
+    ownerMuted: PdfColor.fromInt(0xFF807A70),
+    coverRingTone: PdfColor.fromInt(0xFF9C9589),
+    finalRingTone: PdfColor.fromInt(0xFF807A70),
+    dateMuted: PdfColor.fromInt(0xFF625D54),
+    reflectionTone: PdfColor.fromInt(0xFF625D54),
+    folioTone: PdfColor.fromInt(0xFFB5AFA4),
+  );
+
+  static const dark = JournalPdfPalette(
+    background: PdfColor.fromInt(0xFF1C1B18),
+    ink: PdfColor.fromInt(0xFFD8D4CB),
+    yearMuted: PdfColor.fromInt(0xFFA9A49B),
+    ownerMuted: PdfColor.fromInt(0xFFCAC6BD),
+    coverRingTone: PdfColor.fromInt(0xFF6F6B63),
+    finalRingTone: PdfColor.fromInt(0xFF8D8981),
+    dateMuted: PdfColor.fromInt(0xFFA9A49B),
+    reflectionTone: PdfColor.fromInt(0xFFA9A49B),
+    folioTone: PdfColor.fromInt(0xFF6F6B63),
+  );
 }
 
 class _JournalPdfFonts {
@@ -70,18 +150,7 @@ class JournalPdfBuilder {
   /// The quiet title-page date is intentionally only the publication year.
   static String headerYear(DateTime generatedAt) => '${generatedAt.year}';
 
-  // EAST.'s printed-page visual system, matching the Flutter surfaces.
-  static const PdfColor _background = PdfColor.fromInt(0xFFE2E0D9);
-  static const PdfColor _ink = PdfColor.fromInt(0xFF2C2924);
-
-  // Design's own muted hierarchy: the title-page year and owner sit in
-  // quiet secondary tiers. Body tones live in [JournalBodyLayout] so their
-  // measurement and rendering cannot diverge.
-  static const PdfColor _yearMuted = PdfColor.fromInt(0xFF777167);
-  static const PdfColor _ownerMuted = PdfColor.fromInt(0xFF807A70);
-  // The cover ring is a quiet hairline; the final ring is gentler still.
-  static const PdfColor _coverRingTone = PdfColor.fromInt(0xFF9C9589);
-  static const PdfColor _faintTone = PdfColor.fromInt(0xFFB5AFA4);
+  JournalPdfPalette get _palette => _presentation.palette;
 
   // ---- Cover (physical page 1) ----
   static const double _coverRingDiameter = 154.07;
@@ -110,7 +179,7 @@ class JournalPdfBuilder {
 
   // ---- Final page ----
   static const double _finalRingDiameter = 70.03;
-  static const double _finalRingBorder = 0.9;
+  static const double _finalRingBorder = 1.2;
   static const double _finalRingCenterYFraction = 221 / 481; // same as cover
 
   /// Builds the full Journal PDF for [items] (any order; sorted internally
@@ -156,7 +225,8 @@ class JournalPdfBuilder {
     document.addPage(
       _buildTitlePage(
         fonts,
-        ownerName: ownerName,
+        ownerName:
+            ownerName == null ? null : normalizeJournalPdfText(ownerName),
         generatedAt: generatedAt,
         textDirection: textDirection,
       ),
@@ -165,15 +235,22 @@ class JournalPdfBuilder {
     final localizedItems = items
         .map(
           (item) => item.copyWith(
-            text: _wisdomPresentation.resolveItem(item, _presentation.locale),
+            text: normalizeJournalPdfText(
+              _wisdomPresentation.resolveItem(item, _presentation.locale),
+            ),
+            reflection: item.reflection == null
+                ? null
+                : normalizeJournalPdfText(item.reflection!),
           ),
         )
         .toList(growable: false);
-    String dateFormatter(FavoriteItem item) => formatLocalizedDateOrLegacy(
-          timestamp:
-              item.keptAt == null ? null : DateTime.tryParse(item.keptAt!),
-          legacyDisplay: item.date,
-          localeTag: localeTagForDate(_presentation.locale),
+    String dateFormatter(FavoriteItem item) => normalizeJournalPdfText(
+          formatLocalizedDateOrLegacy(
+            timestamp:
+                item.keptAt == null ? null : DateTime.tryParse(item.keptAt!),
+            legacyDisplay: item.date,
+            localeTag: localeTagForDate(_presentation.locale),
+          ),
         );
     final groups = _planner.plan(
       localizedItems,
@@ -225,7 +302,7 @@ class JournalPdfBuilder {
       margin: pw.EdgeInsets.zero,
       build: (context) {
         return pw.Container(
-          color: _background,
+          color: _palette.background,
           width: double.infinity,
           height: double.infinity,
           alignment: pw.FractionalOffset(0.5, _coverRingCenterYFraction),
@@ -235,8 +312,10 @@ class JournalPdfBuilder {
             alignment: pw.Alignment.center,
             decoration: pw.BoxDecoration(
               shape: pw.BoxShape.circle,
-              border:
-                  pw.Border.all(color: _coverRingTone, width: _coverRingBorder),
+              border: pw.Border.all(
+                color: _palette.coverRingTone,
+                width: _coverRingBorder,
+              ),
             ),
             // Optical-centering correction: the PDF character-spacing
             // operator this text's `letterSpacing` compiles to (`Tc`) adds
@@ -258,7 +337,7 @@ class JournalPdfBuilder {
                 style: pw.TextStyle(
                   font: font,
                   fontSize: _coverEastFontSize,
-                  color: _ink,
+                  color: _palette.ink,
                   letterSpacing: _coverEastLetterSpacing,
                 ),
               ),
@@ -292,7 +371,7 @@ class JournalPdfBuilder {
       textDirection: textDirection,
       build: (context) {
         return pw.Container(
-          color: _background,
+          color: _palette.background,
           width: double.infinity,
           height: double.infinity,
           child: pw.Stack(
@@ -308,7 +387,7 @@ class JournalPdfBuilder {
                     font: fonts.primary,
                     fontFallback: fonts.fallback,
                     fontSize: _titleFontSize,
-                    color: _ink,
+                    color: _palette.ink,
                   ),
                 ),
               ),
@@ -323,7 +402,7 @@ class JournalPdfBuilder {
                     font: fonts.primary,
                     fontFallback: fonts.fallback,
                     fontSize: _yearFontSize,
-                    color: _yearMuted,
+                    color: _palette.yearMuted,
                     letterSpacing: _yearLetterSpacing,
                   ),
                 ),
@@ -340,7 +419,7 @@ class JournalPdfBuilder {
                       font: fonts.primary,
                       fontFallback: fonts.fallback,
                       fontSize: _ownerFontSize,
-                      color: _ownerMuted,
+                      color: _palette.ownerMuted,
                     ),
                   ),
                 ),
@@ -354,8 +433,8 @@ class JournalPdfBuilder {
   // ---------------------------------------------------------------------
   // Physical pages 3+ — the Journal body. One `pw.MultiPage` so the `pdf`
   // package's own layout engine places each occurrence. The planner measures
-  // these exact widgets first, keeping one to three complete entries on each
-  // normal page without squeezing or splitting an entry.
+  // these exact widgets first, keeping every complete entry that genuinely
+  // fits on each normal page without squeezing or splitting an entry.
   // ---------------------------------------------------------------------
   pw.Page _buildBody(
     _JournalPdfFonts fonts,
@@ -379,11 +458,13 @@ class JournalPdfBuilder {
           fontFallback: fonts.fallback,
         ),
         textDirection: textDirection,
-        // The entire PDF uses the warm-stone field -- every body page's own stone background,
+        // Every body page uses the active Journal appearance field,
         // painted full-bleed behind the margin area too, exactly like the
         // cover/title/final pages.
         buildBackground: (context) => pw.FullPage(
-            ignoreMargins: true, child: pw.Container(color: _background)),
+          ignoreMargins: true,
+          child: pw.Container(color: _palette.background),
+        ),
       ),
       maxPages: 20000,
       footer: (context) => _buildFooter(fonts.brand, context),
@@ -418,6 +499,9 @@ class JournalPdfBuilder {
         fontFallback: fonts.fallback,
         textDirection: textDirection,
         dateFormatter: dateFormatter,
+        dateColor: _palette.dateMuted,
+        wisdomColor: _palette.ink,
+        reflectionColor: _palette.reflectionTone,
       );
     }
 
@@ -431,6 +515,9 @@ class JournalPdfBuilder {
           fontFallback: fonts.fallback,
           textDirection: textDirection,
           dateFormatter: dateFormatter,
+          dateColor: _palette.dateMuted,
+          wisdomColor: _palette.ink,
+          reflectionColor: _palette.reflectionTone,
         ),
       );
     }
@@ -447,7 +534,11 @@ class JournalPdfBuilder {
     final printedPageNumber = context.pageNumber - 2;
     if (printedPageNumber < 1) return pw.SizedBox();
 
-    return JournalBodyLayout.buildFolio(font, printedPageNumber);
+    return JournalBodyLayout.buildFolio(
+      font,
+      printedPageNumber,
+      color: _palette.folioTone,
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -462,7 +553,7 @@ class JournalPdfBuilder {
       margin: pw.EdgeInsets.zero,
       build: (context) {
         return pw.Container(
-          color: _background,
+          color: _palette.background,
           width: double.infinity,
           height: double.infinity,
           alignment: pw.FractionalOffset(0.5, _finalRingCenterYFraction),
@@ -471,7 +562,10 @@ class JournalPdfBuilder {
             height: _finalRingDiameter,
             decoration: pw.BoxDecoration(
               shape: pw.BoxShape.circle,
-              border: pw.Border.all(color: _faintTone, width: _finalRingBorder),
+              border: pw.Border.all(
+                color: _palette.finalRingTone,
+                width: _finalRingBorder,
+              ),
             ),
           ),
         );

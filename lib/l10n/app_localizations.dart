@@ -162,6 +162,24 @@ abstract class AppLocalizations {
   /// **'Kept'**
   String get kept;
 
+  /// No description provided for @searchKept.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get searchKept;
+
+  /// No description provided for @clearSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get clearSearch;
+
+  /// No description provided for @noKeptSearchResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found.'**
+  String get noKeptSearchResults;
+
   /// No description provided for @keptUpper.
   ///
   /// In en, this message translates to:
@@ -600,6 +618,18 @@ abstract class AppLocalizations {
   /// **'The reflection will be removed from this kept wisdom.'**
   String get reflectionDeleteExplanation;
 
+  /// No description provided for @removeKeptQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from Kept?'**
+  String get removeKeptQuestion;
+
+  /// No description provided for @keptDeleteExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This wisdom and its Reflection will be removed.'**
+  String get keptDeleteExplanation;
+
   /// No description provided for @cancelUpper.
   ///
   /// In en, this message translates to:
@@ -929,6 +959,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reflection could not be deleted. Please try again.'**
   String get reflectionDeleteFailed;
+
+  /// Accessibility duration when both hours and minutes remain.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, one{1 hour} other{{hours} hours}} {minutes, plural, one{1 minute} other{{minutes} minutes}} remaining'**
+  String remainingDurationHoursMinutes(int hours, int minutes);
+
+  /// Accessibility duration when whole hours remain and minutes are zero.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, one{1 hour remaining} other{{hours} hours remaining}}'**
+  String remainingDurationHoursOnly(int hours);
+
+  /// Accessibility duration when fewer than 60 minutes remain.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, one{1 minute remaining} other{{minutes} minutes remaining}}'**
+  String remainingDurationMinutesOnly(int minutes);
 }
 
 class _AppLocalizationsDelegate

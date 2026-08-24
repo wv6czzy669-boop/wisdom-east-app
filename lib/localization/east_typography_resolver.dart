@@ -51,13 +51,22 @@ class EastTypographyPlan {
 /// losing characters. Source hashes, build instructions, and the OFL license
 /// are retained under `assets/fonts/`.
 abstract final class EastTypographyResolver {
+  /// PDF-only bitmap emoji fallback. Kept separate from the Flutter type
+  /// family registry so EAST.'s on-screen editorial typography is unchanged.
+  static const String pdfEmojiFontAsset = 'assets/fonts/NotoColorEmoji.ttf';
+  static const int pdfEmojiFontByteLength = 10673480;
+  static const String pdfEmojiSourceVersion =
+      'Noto Color Emoji 2.051; noto-emoji e92753bfa55f';
+  static const String pdfEmojiLicenseAsset =
+      'assets/fonts/licenses/OFL-NotoEmoji.txt';
+
   static const EastProductionFont latinFont = EastProductionFont(
     family: 'EBGaramond',
     asset: 'assets/fonts/EBGaramond-Variable.ttf',
     script: EastScript.latin,
     byteLength: 851176,
-    sourceVersion: 'existing EAST. production asset',
-    licenseAsset: null,
+    sourceVersion: 'google/fonts EB Garamond; upstream 106a4a6d3779',
+    licenseAsset: 'assets/fonts/licenses/OFL-EBGaramond.txt',
   );
   static const EastProductionFont japaneseFont = EastProductionFont(
     family: 'NotoSerifJP',
@@ -124,8 +133,10 @@ abstract final class EastTypographyResolver {
         'Georgia',
         'serif',
       ],
-      pdfFallbackAssets:
-          fallbackFonts.map((font) => font.asset).toList(growable: false),
+      pdfFallbackAssets: <String>[
+        pdfEmojiFontAsset,
+        ...fallbackFonts.map((font) => font.asset),
+      ],
       script: primary.script,
     );
   }

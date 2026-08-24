@@ -6,12 +6,10 @@
 /// exact wire contract this parses.
 library;
 
-/// Normalized CloudKit account availability, as reported by the native
-/// bridge. A superset of `lib/sync/sync_status.dart`'s `CloudAccountStatus`
-/// in exactly one respect: [unknown] exists here specifically so a
-/// genuinely unrecognized wire value (a future native-side case this
-/// build's Dart code does not yet know about, or a malformed value) always
-/// has a safe place to land -- it is never silently coerced to [available].
+/// Normalized CloudKit account availability reported by the native bridge.
+/// [unknown] exists so a genuinely unrecognized wire value (a future native
+/// case this build does not yet know about, or malformed input) always has a
+/// safe place to land -- it is never silently coerced to [available].
 enum CloudKitAccountAvailability {
   available,
   noAccount,

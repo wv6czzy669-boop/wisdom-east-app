@@ -27,6 +27,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get kept => '残したもの';
 
   @override
+  String get searchKept => '検索';
+
+  @override
+  String get clearSearch => '検索をクリア';
+
+  @override
+  String get noKeptSearchResults => '見つかりませんでした。';
+
+  @override
   String get keptUpper => '残したもの';
 
   @override
@@ -258,6 +267,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reflectionDeleteExplanation => 'この残した知恵から内省が削除されます。';
 
   @override
+  String get removeKeptQuestion => '残したものから削除しますか？';
+
+  @override
+  String get keptDeleteExplanation => 'この知恵と内省が削除されます。';
+
+  @override
   String get cancelUpper => 'キャンセル';
 
   @override
@@ -427,4 +442,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get reflectionDeleteFailed => 'リフレクションを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return '残り$hours時間$minutes分';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return '残り$hours時間';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return '残り$minutes分';
+  }
 }

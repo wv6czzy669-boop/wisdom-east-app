@@ -6,6 +6,9 @@
   "askFromYourHeart": "Hỏi bằng tấm lòng.",
   "east": "EAST.",
   "kept": "Điều còn lại",
+  "searchKept": "Tìm kiếm",
+  "clearSearch": "Xóa tìm kiếm",
+  "noKeptSearchResults": "Không tìm thấy.",
   "keptUpper": "ĐIỀU CÒN LẠI",
   "reflectedUpper": "SUY NGẪM",
   "addReflectionUpper": "THÊM SUY NGẪM",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "Bạn muốn mang theo điều gì?",
   "deleteReflectionQuestion": "Xóa suy ngẫm?",
   "reflectionDeleteExplanation": "Suy ngẫm sẽ bị xóa khỏi điều minh triết đã giữ này.",
+  "removeKeptQuestion": "Xóa khỏi Điều còn lại?",
+  "keptDeleteExplanation": "Điều minh triết này và suy ngẫm của nó sẽ bị xóa.",
   "cancelUpper": "HỦY",
   "continueAction": "Tiếp tục",
   "onlyKeptOnThisDevice": "Chỉ được giữ trên thiết bị này.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "Không có gì để xóa.",
   "reflectionSaveFailed": "Không thể lưu Suy ngẫm. Vui lòng thử lại.",
   "reflectionAutosaveFailed": "Không thể lưu Suy ngẫm. Hệ thống sẽ thử lại khi bạn tiếp tục viết.",
-  "reflectionDeleteFailed": "Không thể xóa Suy ngẫm. Vui lòng thử lại."
+  "reflectionDeleteFailed": "Không thể xóa Suy ngẫm. Vui lòng thử lại.",
+  "remainingDurationHoursMinutes": "Còn {hours} giờ {minutes} phút",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "Còn {hours} giờ",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "Còn {minutes} phút",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

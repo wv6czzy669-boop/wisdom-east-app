@@ -53,6 +53,7 @@ class _FakeCloudKitPlatformBridge implements CloudKitPlatformBridge {
   CloudKitModifyRecordsResult Function(CloudKitModifyRecordsRequest)?
       modifyProvider;
   CloudKitZoneChangesResult Function(CloudKitZoneChangesRequest)? fetchProvider;
+  CloudKitSyncStateEpochResult Function()? syncStateEpochProvider;
 
   /// When set, `fetchPrivateZoneChanges` awaits this completer before
   /// resolving -- used to hold a fetch open so a test can prove other work
@@ -71,6 +72,7 @@ class _FakeCloudKitPlatformBridge implements CloudKitPlatformBridge {
   int configurePrivateZoneCallCount = 0;
   int modifyPrivateRecordsCallCount = 0;
   int fetchPrivateZoneChangesCallCount = 0;
+  int fetchSyncStateEpochCallCount = 0;
   final List<CloudKitModifyRecordsRequest> modifyRequests = [];
   final List<CloudKitZoneChangesRequest> fetchRequests = [];
 
@@ -128,12 +130,12 @@ class _FakeCloudKitPlatformBridge implements CloudKitPlatformBridge {
     return fetchProvider!.call(request);
   }
 
-  // Build 26 Phase 5 (slice 2): the three deletion-runner-only bridge
-  // methods -- never used by KeptSyncBootstrapCoordinator (only
-  // CloudKitRemoteDeletionRunner calls them).
   @override
-  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() =>
-      throw UnimplementedError('Not used by KeptSyncBootstrapCoordinator.');
+  Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() async {
+    fetchSyncStateEpochCallCount += 1;
+    callOrder.add('fetchSyncStateEpoch');
+    return syncStateEpochProvider!.call();
+  }
 
   @override
   Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() =>
@@ -306,6 +308,12 @@ void main() {
     // the `CloudKitZoneConfigurationResult(...)` call's closing paren would
     // bind to *that* result object, not to `bridge` itself.
     bridge.fetchProvider = (_) => successResult();
+    bridge.syncStateEpochProvider = () => CloudKitSyncStateEpochResult.found(
+          dataEpoch: epoch,
+          systemFields: systemFieldsFor(
+            CloudEastSyncStateProjection.recordName,
+          ),
+        );
     bridge.modifyProvider =
         (request) => CloudKitModifyRecordsResult.allSucceeded([
               for (final _ in request.records)
@@ -1548,17 +1556,11 @@ void main() {
     test('50. matching remote epoch -> alreadyComplete, no mutation', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
-      bridge.fetchProvider = (_) => successResult(
-            syncState: [
-              CloudEastSyncStateProjection.current(
-                dataEpoch: epoch,
-                mutationId: mutationIdFor(revealIdA),
-              ),
-            ],
-          );
       final result = await bootstrapCoordinator.runBootstrap();
       expect(result.status, BootstrapRunStatus.alreadyComplete);
       expect(bridge.modifyPrivateRecordsCallCount, 0);
+      expect(bridge.fetchSyncStateEpochCallCount, 1);
+      expect(bridge.fetchPrivateZoneChangesCallCount, 0);
     });
 
     test(
@@ -1566,13 +1568,11 @@ void main() {
         'Required, zero mutation, no bootstrap transition', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
-      bridge.fetchProvider = (_) => successResult(
-            syncState: [
-              CloudEastSyncStateProjection.current(
-                dataEpoch: otherEpoch,
-                mutationId: mutationIdFor(revealIdA),
-              ),
-            ],
+      bridge.syncStateEpochProvider = () => CloudKitSyncStateEpochResult.found(
+            dataEpoch: otherEpoch,
+            systemFields: systemFieldsFor(
+              CloudEastSyncStateProjection.recordName,
+            ),
           );
       final before = await syncStore.loadAccountState(fingerprintA);
       final result = await bootstrapCoordinator.runBootstrap();
@@ -1585,6 +1585,37 @@ void main() {
       expect(after!.bootstrapState, AccountBootstrapState.complete);
       expect(bridge.modifyPrivateRecordsCallCount, 0);
       expect(await keptRepository.loadAllRecords(), isEmpty);
+    });
+
+    test(
+        'a missing remote control record fails closed as epoch recovery '
+        'required without changing local Kept or checkpoint state', () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
+      syncStore.seedAssociatedAccountFingerprint(fingerprintA);
+      bridge.syncStateEpochProvider = CloudKitSyncStateEpochResult.notFound;
+      final before = await syncStore.loadAccountState(fingerprintA);
+
+      final result = await bootstrapCoordinator.runBootstrap();
+
+      expect(
+        result.status,
+        BootstrapRunStatus.remoteEpochChangedRecoveryRequired,
+      );
+      expect(await syncStore.loadAccountState(fingerprintA), before);
+      expect(bridge.fetchPrivateZoneChangesCallCount, 0);
+    });
+
+    test('a malformed direct epoch result fails closed as fetchFailed',
+        () async {
+      seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
+      syncStore.seedAssociatedAccountFingerprint(fingerprintA);
+      bridge.syncStateEpochProvider = () =>
+          CloudKitSyncStateEpochResult.tryParse(const {'outcome': 'future'});
+
+      final result = await bootstrapCoordinator.runBootstrap();
+
+      expect(result.status, BootstrapRunStatus.fetchFailed);
+      expect(bridge.fetchPrivateZoneChangesCallCount, 0);
     });
   });
 
@@ -1621,13 +1652,11 @@ void main() {
       // once via the same DataEpoch.generate() factory the runner itself
       // uses -- this device (Device B) has not observed that rotation yet.
       final replacementEpochFromDeletionRunner = DataEpoch.generate();
-      bridge.fetchProvider = (_) => successResult(
-            syncState: [
-              CloudEastSyncStateProjection.current(
-                dataEpoch: replacementEpochFromDeletionRunner,
-                mutationId: mutationIdFor(revealIdA),
-              ),
-            ],
+      bridge.syncStateEpochProvider = () => CloudKitSyncStateEpochResult.found(
+            dataEpoch: replacementEpochFromDeletionRunner,
+            systemFields: systemFieldsFor(
+              CloudEastSyncStateProjection.recordName,
+            ),
           );
 
       final before = await syncStore.loadAccountState(fingerprintA);
@@ -1656,24 +1685,24 @@ void main() {
 
   group(
       '55-57. Build 26 Phase 4H real-device regression: the resume-path '
-      'incremental fetch (_checkAlreadyCompleteForEpochChange) fails '
+      'direct epoch read (_checkAlreadyCompleteForEpochChange) fails '
       'closed to fetchFailed on a genuine transport failure -- never a '
       'crash, never a local mutation, never a bucket/token change. This is '
       'the exact call path a physical-device localMutation-triggered sync '
       'pass takes once bootstrap has ever reached AccountBootstrapState'
-      '.complete: `resumeAssociation` -> this incremental check -> either '
+      '.complete: `resumeAssociation` -> this direct epoch check -> either '
       '`alreadyComplete`/`remoteEpochChangedRecoveryRequired` (both already '
       'covered above) or `fetchFailed` (previously uncovered by this suite '
       'entirely).', () {
     test(
         '55. the bridge throwing CloudKitPlatformException during the '
-        'incremental fetch -> fetchFailed, zero mutation, bucket/token '
+        'direct epoch read -> fetchFailed, zero mutation, bucket/token '
         'unchanged', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
       final before = await syncStore.loadAccountState(fingerprintA);
-      bridge.fetchProvider =
-          (_) => throw const CloudKitPlatformException('networkFailure');
+      bridge.syncStateEpochProvider =
+          () => throw const CloudKitPlatformException('networkFailure');
 
       final result = await bootstrapCoordinator.runBootstrap();
 
@@ -1688,14 +1717,14 @@ void main() {
 
     test(
         '56. the bridge returning a non-throwing '
-        'CloudKitZoneChangesOutcome.failure result during the incremental '
-        'fetch -> fetchFailed, zero mutation, bucket/token unchanged -- '
+        'CloudKitSyncStateEpochOutcome.failure result during the direct '
+        'epoch read -> fetchFailed, zero mutation, bucket/token unchanged -- '
         'proving this is not merely a thrown-exception-only path', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
       final before = await syncStore.loadAccountState(fingerprintA);
-      bridge.fetchProvider =
-          (_) => CloudKitZoneChangesResult.failure('zoneBusy');
+      bridge.syncStateEpochProvider =
+          () => CloudKitSyncStateEpochResult.failure('zoneBusy');
 
       final result = await bootstrapCoordinator.runBootstrap();
 
@@ -1714,18 +1743,16 @@ void main() {
         'state a subsequent success needs to work around', () async {
       seedBucket(AccountBootstrapState.complete, serverChangeToken: 'dG9rZW4=');
       syncStore.seedAssociatedAccountFingerprint(fingerprintA);
-      bridge.fetchProvider =
-          (_) => throw const CloudKitPlatformException('networkFailure');
+      bridge.syncStateEpochProvider =
+          () => throw const CloudKitPlatformException('networkFailure');
       final firstAttempt = await bootstrapCoordinator.runBootstrap();
       expect(firstAttempt.status, BootstrapRunStatus.fetchFailed);
 
-      bridge.fetchProvider = (_) => successResult(
-            syncState: [
-              CloudEastSyncStateProjection.current(
-                dataEpoch: epoch,
-                mutationId: mutationIdFor(revealIdA),
-              ),
-            ],
+      bridge.syncStateEpochProvider = () => CloudKitSyncStateEpochResult.found(
+            dataEpoch: epoch,
+            systemFields: systemFieldsFor(
+              CloudEastSyncStateProjection.recordName,
+            ),
           );
       final retry = await bootstrapCoordinator.runBootstrap();
 

@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 
 import '../persistence/file_protection_bridge.dart';
 import '../persistence/persistence_operation_coordinator.dart';
+import '../persistence/protected_file_recovery.dart';
+import '../persistence/protected_file_rollback.dart';
 import '../sync/data_epoch.dart';
 import '../sync/sync_change.dart';
 import '../utils/kept_diagnostics.dart';
@@ -1000,209 +1002,28 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
   Future<SyncPersistenceEnvelope?> _recoverFromBackupIfFinalAbsent(
     String dirPath,
   ) async {
-    final List<File> backups;
     try {
-      backups = await _listFilesWithPrefix(dirPath, '.$_baseName.backup-');
-    } catch (error) {
-      // A raw filesystem exception (e.g. the directory became unreadable
-      // between _resolveAndProtectDirectory and here) must never escape a
-      // public SyncPersistenceStore operation either. Nothing has been
-      // read, moved, or written yet at this point, so there is nothing to
-      // roll back -- the caller simply never receives an envelope for this
-      // call.
+      final recovered = await recoverProtectedBackup<SyncPersistenceEnvelope>(
+        directoryPath: dirPath,
+        backupFilePrefix: '.$_baseName.backup-',
+        finalFile: File(_finalPath(dirPath)),
+        fileDescription: 'sync-state',
+        recoveryPathForToken: (token) => _recoveryTempPath(dirPath, token),
+        tokenFactory: _tokenFactory,
+        decode: SyncPersistenceEnvelope.decodeString,
+        fileProtectionBridge: _fileProtectionBridge,
+      );
+      if (recovered != null) {
+        await _cleanupStaleTransactionFilesBestEffort(dirPath);
+      }
+      return recovered;
+    } on ProtectedFileRecoveryException catch (error) {
       throw SyncPersistenceStoreException(
-        'load-recover-list',
-        'Could not list candidate backup files while recovering the '
-            'authoritative sync-state file.',
-        error,
+        error.stage,
+        error.message,
+        error.cause ?? error,
       );
     }
-    if (backups.isEmpty) return null;
-
-    final withModifiedTime = <MapEntry<File, DateTime>>[];
-    for (final file in backups) {
-      try {
-        final stat = await file.stat();
-        withModifiedTime.add(MapEntry(file, stat.modified));
-      } catch (_) {
-        // Unreadable stat: treat as unusable, skip.
-      }
-    }
-    withModifiedTime.sort((a, b) => b.value.compareTo(a.value));
-
-    for (final entry in withModifiedTime) {
-      final backupFile = entry.key;
-
-      final String raw;
-      try {
-        raw = await backupFile.readAsString();
-      } catch (_) {
-        continue;
-      }
-
-      final SyncPersistenceEnvelope envelope;
-      try {
-        envelope = SyncPersistenceEnvelope.decodeString(raw);
-      } catch (_) {
-        continue;
-      }
-
-      // From here on, `backupFile` is a genuinely valid, selected
-      // candidate. It must remain byte-for-byte untouched at its own
-      // backup path until a restored authoritative final has been written,
-      // protected, read back, and confirmed to decode to exactly this same
-      // envelope. The backup is never renamed directly into the final
-      // path -- a dedicated recovery-temporary file, inside this same
-      // protected sync-state directory (never a system/cache temp
-      // directory), is staged and verified first, and only *that* file is
-      // ever renamed into place.
-      final recoverToken = _tokenFactory();
-      final recoveryTempPath = _recoveryTempPath(dirPath, recoverToken);
-      final recoveryTempFile = File(recoveryTempPath);
-      final finalPath = _finalPath(dirPath);
-      final finalFile = File(finalPath);
-
-      try {
-        final raf = await recoveryTempFile.open(mode: FileMode.write);
-        try {
-          await raf.writeString(raw);
-          await raf.flush();
-        } finally {
-          await raf.close();
-        }
-      } catch (error) {
-        await _deleteBestEffort(recoveryTempFile);
-        throw SyncPersistenceStoreException(
-          'load-recover-write-temp',
-          'Could not write the recovery temporary file while restoring '
-              'from backup.',
-          error,
-        );
-      }
-
-      try {
-        await _fileProtectionBridge.protectAndVerifyComplete(recoveryTempPath);
-      } catch (error) {
-        await _deleteBestEffort(recoveryTempFile);
-        throw SyncPersistenceStoreException(
-          'load-recover-protect-temp',
-          'Could not protect the recovery temporary file while restoring '
-              'from backup.',
-          error,
-        );
-      }
-
-      try {
-        final rawRecoveryTemp = await recoveryTempFile.readAsString();
-        final decodedRecoveryTemp =
-            SyncPersistenceEnvelope.decodeString(rawRecoveryTemp);
-        if (decodedRecoveryTemp != envelope) {
-          throw const SyncPersistenceStoreException(
-            'load-recover-verify-temp',
-            'Recovery temporary file did not match the selected backup '
-                'envelope.',
-          );
-        }
-      } catch (error) {
-        await _deleteBestEffort(recoveryTempFile);
-        if (error is SyncPersistenceStoreException) rethrow;
-        throw SyncPersistenceStoreException(
-          'load-recover-verify-temp',
-          'Could not verify the recovery temporary file while restoring '
-              'from backup.',
-          error,
-        );
-      }
-
-      try {
-        await recoveryTempFile.rename(finalPath);
-      } catch (error) {
-        // The rename itself never moved the *backup* -- only the separate
-        // recovery-temp file -- so the backup remains exactly where it
-        // was, untouched.
-        await _deleteBestEffort(recoveryTempFile);
-        throw SyncPersistenceStoreException(
-          'load-recover-rename',
-          'Could not restore a valid backup to the authoritative path.',
-          error,
-        );
-      }
-
-      // The post-rename final check is deliberately split into two
-      // distinct, separately-staged steps -- protecting/verifying the file
-      // itself (an infrastructure/bridge concern) versus reading it back,
-      // decoding it, and confirming it matches the selected backup's own
-      // envelope (a content/correctness concern) -- so a caller can tell
-      // which kind of failure actually occurred, exactly as
-      // `load-recover-protect-temp` and `load-recover-verify-temp` are
-      // already kept distinct for the earlier recovery-temp file above.
-      try {
-        await _fileProtectionBridge.protectAndVerifyComplete(finalPath);
-      } catch (error) {
-        // The authoritative final produced by this attempt is not trusted
-        // -- it is removed where safely possible so the next load retries
-        // recovery from the still-untouched, still-valid backup file.
-        // Deleting the final here never touches `backupFile`, which is
-        // only ever deleted below, after full success.
-        await _deleteBestEffort(finalFile);
-        throw SyncPersistenceStoreException(
-          'load-recover-protect-final',
-          'Could not verify protection of the restored authoritative '
-              'sync-state file after recovering it from backup.',
-          error,
-        );
-      }
-
-      try {
-        final rawFinal = await finalFile.readAsString();
-        final decodedFinal = SyncPersistenceEnvelope.decodeString(rawFinal);
-        if (decodedFinal != envelope) {
-          throw const SyncPersistenceStoreException(
-            'load-recover-verify-final',
-            'Restored authoritative sync-state file did not match the '
-                'selected backup envelope.',
-          );
-        }
-      } catch (error) {
-        // Same reasoning as the protection-failure branch above: the
-        // untrusted final is removed, never the still-valid backup.
-        await _deleteBestEffort(finalFile);
-        if (error is SyncPersistenceStoreException) rethrow;
-        throw SyncPersistenceStoreException(
-          'load-recover-verify-final',
-          'Could not verify the restored authoritative sync-state file '
-              'after recovering it from backup.',
-          error,
-        );
-      }
-
-      // Only now -- after the authoritative final has been written,
-      // protected, read back, and confirmed to decode to exactly the
-      // selected backup's envelope -- may the now-redundant backup be
-      // removed.
-      await _deleteBestEffort(backupFile);
-      await _cleanupStaleTransactionFilesBestEffort(dirPath);
-
-      return envelope;
-    }
-
-    // Build 26 Phase 5 (slice 1, safety correction): reaching here means one
-    // or more backup files existed (the early `if (backups.isEmpty) return
-    // null;` above already handles the case where none ever did) but every
-    // single one of them failed to read or decode. That is evidence of prior
-    // durable state having existed and now being lost to corruption -- not
-    // the same thing as this device never having any sync state at all --
-    // and the two must not be conflated. A caller (e.g.
-    // `loadPendingDeletionTransaction`) that receives a plain `null` here
-    // cannot tell them apart, and could otherwise silently proceed as though
-    // no deletion transaction (or account state) had ever existed. Fails
-    // the whole load closed instead, exactly like the "final file exists but
-    // is undecodable" case just above in `_loadEnvelope`.
-    throw const SyncPersistenceStoreException(
-      'load-recover-exhausted',
-      'The authoritative sync-state file is missing, and every candidate '
-          'backup failed to read or decode.',
-    );
   }
 
   Future<void> _preserveCorrupt(String dirPath, String rawBytes) async {
@@ -1412,19 +1233,23 @@ final class ProtectedSyncPersistenceStore implements SyncPersistenceStore {
 
     final backupFile = File(backupPath);
     try {
-      await _deleteBestEffort(finalFile);
-      await backupFile.rename(finalFile.path);
-      await _fileProtectionBridge.protectAndVerifyComplete(finalFile.path);
-      final rawRestored = await finalFile.readAsString();
-      final restoredEnvelope = SyncPersistenceEnvelope.decodeString(
-        rawRestored,
-      );
-      if (restoredEnvelope != previousEnvelope) {
+      final expectedEnvelope = previousEnvelope;
+      if (expectedEnvelope == null) {
         throw const SyncPersistenceStoreException(
           'replace-rollback-verify',
-          'Restored sync-state file did not match the prior envelope.',
+          'The verified prior sync-state envelope was unavailable.',
         );
       }
+      await restoreProtectedBackup<SyncPersistenceEnvelope>(
+        backupFile: backupFile,
+        finalFile: finalFile,
+        recoveryFile: File(
+          _recoveryTempPath(finalFile.parent.path, _tokenFactory()),
+        ),
+        expectedValue: expectedEnvelope,
+        decode: SyncPersistenceEnvelope.decodeString,
+        fileProtectionBridge: _fileProtectionBridge,
+      );
     } catch (rollbackError) {
       throw SyncPersistenceStoreException(
         'replace-rollback',

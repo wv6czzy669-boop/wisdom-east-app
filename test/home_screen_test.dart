@@ -23,14 +23,12 @@ import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/kept_discovery_hint_service.dart';
 import 'package:wisdom_app/services/rating_request_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
-import 'package:wisdom_app/services/storage_service.dart';
-import 'package:wisdom_app/services/widget_snapshot_service.dart';
+import 'package:wisdom_app/services/widget_presentation_sync_coordinator.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 import 'package:wisdom_app/utils/legacy_kept_identity.dart';
-import 'package:wisdom_app/widgets/grain_painter.dart';
 import 'package:wisdom_app/widgets/home/top_nav_ring.dart';
 
 import 'persistence_test_helpers.dart';
@@ -58,7 +56,6 @@ void main() {
     expect(markFinder, findsOneWidget);
     expect(find.byKey(const ValueKey('top-navigation')), findsNothing);
     expect(find.byKey(const ValueKey('settings-menu-control')), findsNothing);
-    expect(_grainPainters(tester), isEmpty);
     expect(find.text(removedLaunchSubtitle), findsNothing);
     expect(_ritualOpacity(tester), 1.0);
 
@@ -361,7 +358,9 @@ void main() {
       pushesBeforeSettings + 1,
       reason: 'Settings tap must produce exactly one didPush.',
     );
-    expect(find.text('Where silence speaks.'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('EAST.'), findsNothing);
+    expect(find.text('Where silence speaks.'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('east-back-button')));
     await _settleRoutePop(
       tester,
@@ -854,7 +853,6 @@ void main() {
       persistedRecord.unlockAt.millisecondsSinceEpoch,
       originalRecord.unlockAt.millisecondsSinceEpoch,
     );
-    expect(prefs.getStringList('daily_wisdom_archive'), isNull);
   });
 
   testWidgets(
@@ -1078,6 +1076,14 @@ void main() {
       find.byKey(const ValueKey('kept-remove-from-kept-delete-action')),
     );
     await tester.pumpAndSettle();
+    expect(find.text(wisdom), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('DELETE'),
+      ),
+    );
+    await tester.pumpAndSettle();
     expect(find.text(wisdom), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('east-back-button')));
@@ -1143,24 +1149,20 @@ void main() {
     expect(find.byKey(const ValueKey('home-save-control-unsaved')),
         findsOneWidget);
 
-    final countdown = tester.widget<Text>(
+    final countdownSentence = tester.widget<Text>(
       find.textContaining('Return when the silence opens again.'),
     );
-    final countdownLines = countdown.data!.split('\n');
-    expect(countdownLines.first, 'Return when the silence opens again.');
-    expect(countdownLines, hasLength(2));
-    expect(
-      countdownLines.last,
-      anyOf(
-        matches(RegExp(r'^\d+h \d+m$')),
-        matches(RegExp(r'^\d+ min$')),
-      ),
+    expect(countdownSentence.data, 'Return when the silence opens again.');
+    final countdownHhmm = tester.widget<Text>(
+      find.byKey(const ValueKey('home-countdown-hhmm')),
     );
+    expect(countdownHhmm.data, matches(RegExp(r'^\d{2}:\d{2}$')));
     final mutedColor = eastMutedTextColor(
       tester
           .element(find.textContaining('Return when the silence opens again.')),
     );
-    expect(countdown.style?.color, mutedColor);
+    expect(countdownSentence.style?.color, mutedColor);
+    expect(countdownHhmm.style?.color, mutedColor);
     expect(
       tester.widget<Text>(find.text('Keeper one daily wisdom')).style?.color,
       isNot(mutedColor),
@@ -1713,13 +1715,14 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 600));
     expect(revealFade.opacity.value, 1.0);
-    final countdown = tester.widget<Text>(
+    final countdownSentence = tester.widget<Text>(
       find.textContaining('Return when the silence opens again.'),
     );
-    final countdownLines = countdown.data!.split('\n');
-    expect(countdownLines.first, 'Return when the silence opens again.');
-    expect(countdownLines, hasLength(2));
-    expect(countdownLines.last, matches(RegExp(r'^\d+h \d+m$')));
+    expect(countdownSentence.data, 'Return when the silence opens again.');
+    final countdownHhmm = tester.widget<Text>(
+      find.byKey(const ValueKey('home-countdown-hhmm')),
+    );
+    expect(countdownHhmm.data, matches(RegExp(r'^\d{2}:\d{2}$')));
     expect(_keptGuard(tester).ignoring, isTrue);
     expect(tester.takeException(), isNull);
 
@@ -2530,10 +2533,10 @@ void main() {
 
   testWidgets(
       'P13: the first genuinely completed ritual never requests native '
-      'notification permission at the existing timing (the first-use Keep '
-      'discovery begins there instead); the second ritual requests it '
-      'exactly once, at that same existing timing; a third ritual repeats '
-      'neither', (tester) async {
+      'notification permission (the first-use Keep discovery begins after '
+      'three seconds instead); the second ritual requests permission once '
+      'at its retained six-second timing; a third ritual repeats neither',
+      (tester) async {
     var now = DateTime.utc(2041, 7, 23, 8);
     final dailyGraph = DailyAccessTestGraph(clock: () => now);
     final notificationPlatform = _HomeNotificationPlatform(enabled: false);
@@ -2551,18 +2554,19 @@ void main() {
       ),
     );
     await _completeFreshRitual(tester);
-    // Well past the existing trigger delay (revealController.duration + 6s)
-    // -- and well past the old discovery hint's retired 7.5s timeout, too:
-    // ritual 1 must never reach the native prompt.
-    await _pumpInSteps(tester, const Duration(seconds: 10));
+    // The first-use Keep discovery now begins three seconds after the
+    // wisdom has fully appeared. It must not arrive early.
+    await _pumpInSteps(tester, const Duration(milliseconds: 2999));
+    expect(find.text('Keep this wisdom.'), findsNothing);
+    await _pumpInSteps(tester, const Duration(milliseconds: 2));
     await tester.pump();
 
     expect(notificationPlatform.permissionRequests, 0);
     expect(find.text('Not now'), findsNothing);
     expect(find.text('Allow'), findsNothing);
     expect(find.byType(AlertDialog), findsNothing);
-    // The first-use Keep discovery begins at that exact timing slot
-    // instead, and does not time out.
+    // The first-use Keep discovery begins at its new three-second timing
+    // slot and does not time out.
     expect(find.text('Keep this wisdom.'), findsOneWidget);
     await _pumpInSteps(tester, const Duration(seconds: 10));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
@@ -2591,11 +2595,12 @@ void main() {
     );
     await _completeFreshRitual(tester);
     await _pumpInSteps(tester, const Duration(milliseconds: 5999));
-    // Not yet at the existing trigger delay: no request fired.
+    // The Keep-discovery timing slot has elapsed, but ritual 2 retains the
+    // established six-second notification timing: no request yet.
     expect(notificationPlatform.permissionRequests, 0);
     await _pumpInSteps(tester, const Duration(milliseconds: 2));
-    // At the existing trigger delay: the native request fires directly,
-    // with no application-owned dialog and no Keep-discovery replay.
+    // At the existing six-second notification timing, the native request
+    // fires directly with no application-owned dialog or Keep replay.
     expect(notificationPlatform.permissionRequests, 1);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Keep this wisdom.'), findsNothing);
@@ -2749,8 +2754,8 @@ void main() {
 
     // Ritual 2: reveal completes (so the ordinal-2 bookkeeping is
     // recorded), but the app is killed immediately -- well before its own
-    // notification-timing slot (revealController.duration + 6s) ever
-    // fires, so ritual 2's own native request never actually happens.
+    // six-second notification-timing slot ever fires, so ritual 2's own
+    // native request never actually happens.
     now = now.add(const Duration(hours: 25));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -2762,7 +2767,7 @@ void main() {
       ),
     );
     await _completeFreshRitual(tester);
-    // Deliberately much less than the ~7.2s trigger delay.
+    // Deliberately much less than the six-second post-reveal timing.
     await _pumpInSteps(tester, const Duration(milliseconds: 500));
     expect(notificationPlatform.permissionRequests, 0);
     // Kill the app now, mid-ritual-2, before its own offer ever fires.
@@ -2981,40 +2986,6 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('archive failure cannot replace a persisted daily wisdom',
-      (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'daily_wisdom_archive': 1,
-    });
-
-    await tester.pumpWidget(
-      _homeApp(),
-    );
-    await _finishOpeningIntro(tester);
-    await _advanceToQuestion(tester);
-
-    await _tapCenter(tester);
-    await tester.pump(const Duration(milliseconds: 1250));
-    await tester.pump(const Duration(milliseconds: 550));
-    await tester.pump();
-
-    final prefs = await SharedPreferences.getInstance();
-    final persisted = DailyWisdomRecord.decode(
-      prefs.getString('daily_wisdom_access')!,
-    );
-
-    expect(find.text(persisted.text), findsOneWidget);
-    expect(
-      find.text('Silence is still available.'),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 950));
-    await tester.pump(const Duration(milliseconds: 1100));
   });
 
   testWidgets('rapid save taps persist one consistent reflection',
@@ -3376,9 +3347,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 850));
 
-    expect(_grainPainters(tester), isEmpty);
     await tester.pump(const Duration(milliseconds: 600));
-    expect(_grainPainters(tester), isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -3731,8 +3700,8 @@ void main() {
 
   testWidgets(
       'P13: the first-use Keep discovery never times out -- it (and its '
-      'ring breathing) remains present and actionable indefinitely -- and '
-      'tapping the ring saves exactly once, transitions to "Kept.", ends '
+      'synchronized text/ring breathing) remains actionable indefinitely; '
+      'tapping the text saves once, transitions to "Kept.", ends '
       'the central discovery, and begins the top-right Kept-nav discovery '
       'with no fixed breath count of its own', (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
@@ -3753,14 +3722,27 @@ void main() {
     expect(find.text('Keep this wisdom.'), findsOneWidget);
 
     // No timeout: wait far longer than the old (now-retired) 7.5s
-    // auto-hide window, well past several full breath cycles. The text
-    // and the ring's breathing both remain, calmly, the whole time.
+    // auto-hide window, well past several full breath cycles. The text and
+    // ring must enter and leave every breath together.
     await _pumpInSteps(tester, const Duration(seconds: 20));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-save-control-unsaved')),
         findsOneWidget);
+    var sawSynchronizedBreath = false;
+    for (var i = 0; i < 20; i++) {
+      final ringIsBreathing =
+          find.byKey(const ValueKey('save-ring-breath')).evaluate().isNotEmpty;
+      final textIsBreathing = find
+          .byKey(const ValueKey('keep-discovery-hint-breath'))
+          .evaluate()
+          .isNotEmpty;
+      expect(textIsBreathing, ringIsBreathing);
+      sawSynchronizedBreath = sawSynchronizedBreath || ringIsBreathing;
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(sawSynchronizedBreath, isTrue);
 
-    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.tap(find.byKey(const ValueKey('keep-discovery-hint-action')));
     await tester.pump(const Duration(milliseconds: 50));
 
     // Saving ends the central discovery immediately and transitions
@@ -3768,6 +3750,12 @@ void main() {
     expect(find.text('Kept'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('kept-icon-emphasis-pulse')),
+      findsOneWidget,
+      reason: 'The top-right Kept breath must begin immediately after the '
+          'successful first Keep.',
+    );
     final saved = await keptGraph.service.load();
     expect(saved, hasLength(1));
 
@@ -3957,9 +3945,8 @@ void main() {
     await _completeFreshRitual(tester);
 
     // Save as soon as the ring becomes interactive (~1.9s: the save ring's
-    // own fade-in) — well before the existing notification-timing slot
-    // (revealController.duration + 6s) is ever reached, so the discovery
-    // has never become visible for this reveal.
+    // own fade-in) — before the new three-second Keep-discovery timing is
+    // ever reached, so the discovery has never become visible here.
     await _pumpInSteps(tester, const Duration(milliseconds: 2000));
     expect(_keptGuard(tester).ignoring, isFalse);
     expect(find.text('Keep this wisdom.'), findsNothing);
@@ -4094,9 +4081,9 @@ void main() {
     await tester.pump();
     await _pumpUntilWisdomFullyAppeared(tester);
 
-    // Save control's own onFullyVisible fires well before the 7s native
-    // trigger delay elapses, so both call paths are exercised for this one
-    // reveal.
+    // Save control's own onFullyVisible fires well before the three-second
+    // Keep-discovery delay elapses, so both call paths are exercised for
+    // this one reveal.
     await _pumpInSteps(tester, const Duration(seconds: 7));
     await _pumpInSteps(tester, const Duration(milliseconds: 1100));
 
@@ -4706,33 +4693,43 @@ void main() {
   testWidgets(
       'Items 5/7/8: currentFavorite matches strictly by revealId, never by '
       'wisdom text', (tester) async {
-    await tester.pumpWidget(_homeApp());
+    const sharedText = 'A wisdom the pool repeats across two distinct days';
+    final keptGraph = KeptRepositoryTestGraph();
+    keptGraph.seed([
+      _testKeptRecord(
+        id: 'match-by-id',
+        revealId: '123e4567-e89b-42d3-a456-426614174001',
+        wisdomText: sharedText,
+        revealedAt: DateTime.utc(2026, 1, 1),
+      ),
+      _testKeptRecord(
+        id: 'same-text-different-reveal',
+        revealId: '123e4567-e89b-42d3-a456-426614174002',
+        wisdomText: sharedText,
+        revealedAt: DateTime.utc(2026, 1, 2),
+      ),
+    ]);
+
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _finishOpeningIntro(tester);
 
     final dynamic homeState = tester.state(find.byType(HomeScreen));
-
-    const sharedText = 'A wisdom the pool repeats across two distinct days';
     const matchingItem = FavoriteItem(
       id: 'match-by-id',
-      revealId: 'reveal-aaaa',
+      revealId: '123e4567-e89b-42d3-a456-426614174001',
       text: sharedText,
       date: 'Jan 1, 2026',
     );
     const sameTextDifferentRevealItem = FavoriteItem(
       id: 'same-text-different-reveal',
-      revealId: 'reveal-bbbb',
+      revealId: '123e4567-e89b-42d3-a456-426614174002',
       text: sharedText,
       date: 'Jan 2, 2026',
     );
 
-    homeState.favorites = <FavoriteItem>[
-      matchingItem,
-      sameTextDifferentRevealItem,
-    ];
-
     // Item 8: identical text on screen, but the current revealId matches
     // neither seeded record — never treated as already kept.
-    homeState.currentRevealId = 'reveal-cccc';
+    homeState.currentRevealId = '123e4567-e89b-42d3-a456-426614174003';
     homeState.currentText = sharedText;
     expect(homeState.isCurrentFavorite(), isFalse);
     expect(homeState.currentFavorite(), isNull);
@@ -4740,16 +4737,21 @@ void main() {
     // Items 5/7: currentRevealId matches `matchingItem`'s revealId exactly,
     // even though the text currently on screen is completely different —
     // the match is by identity, never by text.
-    homeState.currentRevealId = 'reveal-aaaa';
+    homeState.currentRevealId = '123e4567-e89b-42d3-a456-426614174001';
     homeState.currentText = 'A completely different piece of text on screen';
     expect(homeState.isCurrentFavorite(), isTrue);
-    expect(homeState.currentFavorite(), same(matchingItem));
+    expect(homeState.currentFavorite()?.id, matchingItem.id);
+    expect(homeState.currentFavorite()?.revealId, matchingItem.revealId);
 
     // The other record shares identical text with `matchingItem` but a
     // distinct revealId — it remains its own distinct, separately matched
     // identity, proving identical text never collapses two occurrences.
-    homeState.currentRevealId = 'reveal-bbbb';
-    expect(homeState.currentFavorite(), same(sameTextDifferentRevealItem));
+    homeState.currentRevealId = '123e4567-e89b-42d3-a456-426614174002';
+    expect(homeState.currentFavorite()?.id, sameTextDifferentRevealItem.id);
+    expect(
+      homeState.currentFavorite()?.revealId,
+      sameTextDifferentRevealItem.revealId,
+    );
   });
 
   testWidgets(
@@ -5439,20 +5441,26 @@ void main() {
     expect(transport.tracked, isEmpty);
   });
 
-  // EAST. Phase 11 -- Medium Widget snapshot wiring.
-  group('widget snapshot publication', () {
+  // EAST. Phase 11, updated in 1.2 Slice 3 -- Medium Widget snapshot
+  // wiring. HomeScreen's own responsibility is now exactly one thing: call
+  // `notifyFreshReveal` with its own already-authoritative inputs for a
+  // genuinely committed fresh reveal, and never otherwise. Cold-start/
+  // resume reconciliation against the current authoritative status is no
+  // longer a Home-owned responsibility at all -- it is fully covered by
+  // `test/services/widget_presentation_sync_coordinator_test.dart` instead.
+  group('widget presentation sync notification', () {
     testWidgets(
-        'a genuinely completed ritual publishes the exact revealed text and '
-        'authoritative unlockAt to the widget', (tester) async {
+        'a genuinely completed ritual notifies the coordinator with exactly '
+        'the wisdomId, text, and authoritative unlockAt', (tester) async {
       final now = DateTime.utc(2041, 7, 23, 8);
       final dailyGraph = DailyAccessTestGraph(clock: () => now);
-      final widgetService = _RecordingWidgetSnapshotService();
+      final coordinator = _RecordingWidgetPresentationSyncCoordinator();
 
       await tester.pumpWidget(
         _homeApp(
           dailyGraph: dailyGraph,
           clock: () => now,
-          widgetSnapshotService: widgetService,
+          widgetPresentationSyncCoordinator: coordinator,
           wisdomNotificationService: WisdomNotificationService(
             platform: _HomeNotificationPlatform(enabled: true),
           ),
@@ -5460,11 +5468,8 @@ void main() {
       );
       await _finishOpeningIntro(tester);
 
-      // Cold-start reconciliation (nothing locked yet) published silence
-      // once already -- reset the log so only the reveal call is asserted
-      // below.
-      widgetService.calls.clear();
-
+      // Cold-start reconciliation is no longer a Home responsibility at all
+      // (see the group doc comment above), so nothing needs clearing here.
       await _advanceFromLaunchToPause(tester);
       await _tapCenter(tester);
       await tester.pump(const Duration(milliseconds: 1300));
@@ -5477,15 +5482,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 550));
       await _pumpUntilWisdomFullyAppeared(tester);
 
-      final revealedCalls =
-          widgetService.calls.whereType<_RecordedPublishRevealed>().toList();
-      expect(revealedCalls, hasLength(1));
+      expect(coordinator.calls, hasLength(1));
 
       final persistedDailyRecord =
           await dailyGraph.repository.loadDailyWisdomRecord();
-      expect(revealedCalls.single.text, persistedDailyRecord!.text);
+      expect(coordinator.calls.single.text, persistedDailyRecord!.text);
+      expect(coordinator.calls.single.wisdomId, persistedDailyRecord.wisdomId);
       expect(
-        revealedCalls.single.unlockAt.millisecondsSinceEpoch,
+        coordinator.calls.single.unlockAt.millisecondsSinceEpoch,
         now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
       );
 
@@ -5493,117 +5497,24 @@ void main() {
     });
 
     testWidgets(
-        'an interrupted ritual that never reaches reveal never publishes to '
-        'the widget', (tester) async {
-      final widgetService = _RecordingWidgetSnapshotService();
+        'an interrupted ritual that never reaches reveal never notifies the '
+        'coordinator', (tester) async {
+      final coordinator = _RecordingWidgetPresentationSyncCoordinator();
 
       await tester.pumpWidget(
         _homeApp(
-          widgetSnapshotService: widgetService,
+          widgetPresentationSyncCoordinator: coordinator,
           wisdomNotificationService: WisdomNotificationService(
             platform: _HomeNotificationPlatform(enabled: true),
           ),
         ),
       );
       await _finishOpeningIntro(tester);
-      widgetService.calls.clear();
 
       await _advanceFromLaunchToPause(tester);
       expect(find.text('Pause.'), findsOneWidget);
 
-      expect(
-        widgetService.calls.whereType<_RecordedPublishRevealed>(),
-        isEmpty,
-      );
-    });
-
-    testWidgets(
-        'cold start with an already-locked reveal reconciles the widget to '
-        'that exact occurrence, without treating it as a fresh reveal',
-        (tester) async {
-      final now = DateTime.utc(2041, 7, 23, 8);
-      final unlockAt = now.add(const Duration(hours: 24));
-      final prefs = <String, Object>{
-        'daily_wisdom_access': DailyWisdomRecord(
-          text: 'Already revealed wisdom',
-          revealedAt: now,
-          unlockAt: unlockAt,
-        ).encode(),
-      };
-      SharedPreferences.setMockInitialValues(prefs);
-      final widgetService = _RecordingWidgetSnapshotService();
-
-      await tester.pumpWidget(
-        _homeApp(
-          dailyGraph: DailyAccessTestGraph(clock: () => now),
-          clock: () => now,
-          widgetSnapshotService: widgetService,
-          wisdomNotificationService: WisdomNotificationService(
-            platform: _HomeNotificationPlatform(enabled: true),
-          ),
-        ),
-      );
-      await _finishOpeningIntro(tester);
-
-      final revealedCalls =
-          widgetService.calls.whereType<_RecordedPublishRevealed>().toList();
-      expect(revealedCalls, isNotEmpty);
-      expect(revealedCalls.last.text, 'Already revealed wisdom');
-      expect(
-        revealedCalls.last.unlockAt.millisecondsSinceEpoch,
-        unlockAt.millisecondsSinceEpoch,
-      );
-      expect(widgetService.calls.whereType<_RecordedPublishSilence>(), isEmpty);
-    });
-
-    testWidgets(
-        'cold start with nothing locked (ready to reveal) reconciles the '
-        'widget to silence', (tester) async {
-      final widgetService = _RecordingWidgetSnapshotService();
-
-      await tester.pumpWidget(
-        _homeApp(
-          widgetSnapshotService: widgetService,
-          wisdomNotificationService: WisdomNotificationService(
-            platform: _HomeNotificationPlatform(enabled: true),
-          ),
-        ),
-      );
-      await _finishOpeningIntro(tester);
-
-      expect(widgetService.calls, [isA<_RecordedPublishSilence>()]);
-    });
-
-    testWidgets(
-        'a foreground resume re-reconciles the widget against the current '
-        'authoritative status', (tester) async {
-      final now = DateTime.utc(2041, 7, 23, 8);
-      final dailyGraph = DailyAccessTestGraph(clock: () => now);
-      final widgetService = _RecordingWidgetSnapshotService();
-
-      await tester.pumpWidget(
-        _homeApp(
-          dailyGraph: dailyGraph,
-          clock: () => now,
-          widgetSnapshotService: widgetService,
-          wisdomNotificationService: WisdomNotificationService(
-            platform: _HomeNotificationPlatform(enabled: true),
-          ),
-        ),
-      );
-      await _finishOpeningIntro(tester);
-      widgetService.calls.clear();
-
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.resumed,
-      );
-      await tester.pump(const Duration(milliseconds: 50));
-
-      // Still nothing locked -- resume reconciliation republishes silence,
-      // never a fabricated reveal.
-      expect(widgetService.calls, [isA<_RecordedPublishSilence>()]);
+      expect(coordinator.calls, isEmpty);
     });
   });
 
@@ -5799,38 +5710,368 @@ void main() {
       expect(shareService.wisdoms.single, expectedTurkish);
     });
   });
+
+  group('EAST. 1.2 HH:MM countdown', () {
+    // Site A (the locked-countdown main ritual state, screenStep == 5) and
+    // Site B (the post-reveal message beneath revealed wisdom, screenStep
+    // == 4) are mutually exclusive by construction -- `screenStep` is a
+    // single `int` field, and `onLockedCountdown`/`wisdomRevealed` are
+    // distinct values of it (5 vs 4). They are therefore proven here in
+    // separate states, never simultaneously, using the identical
+    // underlying 5h30m duration at both sites so the same HH:MM token
+    // ("05:30") independently confirms both render sites derive from the
+    // same `CountdownFormatter.resolve` source of truth.
+    const countdownDuration = Duration(hours: 5, minutes: 30);
+    const expectedHhmm = '05:30';
+
+    String expectedNaturalDuration(
+        AppLocalizations l10n, int hours, int minutes) {
+      if (hours == 0) return l10n.remainingDurationMinutesOnly(minutes);
+      if (minutes == 0) return l10n.remainingDurationHoursOnly(hours);
+      return l10n.remainingDurationHoursMinutes(hours, minutes);
+    }
+
+    testWidgets(
+        'Site A: locked countdown renders HH:MM and exposes exactly one '
+        'natural-language semantics label, never the raw token',
+        (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final unlockAt = now.add(countdownDuration);
+      SharedPreferences.setMockInitialValues({
+        'daily_wisdom_access': DailyWisdomRecord(
+          text: DailyWisdomAccessService.corruptRecordRecoveryText,
+          revealedAt: unlockAt.subtract(DailyWisdomRecord.lockDuration),
+          unlockAt: unlockAt,
+        ).encode(),
+      });
+
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(_homeApp(clock: () => now));
+        await _finishOpeningIntro(tester);
+        await _openExistingWisdom(tester);
+
+        // Exactly one HH:MM token in the whole tree -- Site B's post-reveal
+        // message is not even built while `wisdomRevealed` is false.
+        expect(
+            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
+        final hhmmText = tester.widget<Text>(
+          find.byKey(const ValueKey('home-countdown-hhmm')),
+        );
+        expect(hhmmText.data, expectedHhmm);
+        expect(hhmmText.textDirection, TextDirection.ltr);
+
+        final sentenceText = tester.widget<Text>(
+          find.text('Return when the silence opens again.'),
+        );
+        expect(sentenceText.data, 'Return when the silence opens again.');
+
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        final expectedLabel = 'Return when the silence opens again. '
+            '${expectedNaturalDuration(l10n, 5, 30)}';
+
+        // Site A's outer ritual Semantics is the sole owner: exactly one
+        // node carries the composed sentence + natural duration label, and
+        // it never contains the raw HH:MM token.
+        expect(find.semantics.byLabel(expectedLabel), findsOneWidget);
+        expect(expectedLabel.contains(expectedHhmm), isFalse);
+        expect(find.semantics.byLabel(expectedHhmm), findsNothing);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets(
+        'Site B: post-reveal message renders the same HH:MM token beneath '
+        'revealed wisdom, with its own separate natural-language semantics '
+        'node distinct from the revealed-wisdom node', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      const wisdomText = 'Site B countdown wisdom';
+      final unlockAt = now.add(countdownDuration);
+      SharedPreferences.setMockInitialValues({
+        'daily_wisdom_access': DailyWisdomRecord(
+          text: wisdomText,
+          revealedAt: unlockAt.subtract(DailyWisdomRecord.lockDuration),
+          unlockAt: unlockAt,
+        ).encode(),
+      });
+
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(_homeApp(clock: () => now));
+        await _finishOpeningIntro(tester);
+        await _openExistingWisdom(tester);
+        await _pumpInSteps(tester, const Duration(milliseconds: 900));
+
+        expect(find.text(wisdomText), findsOneWidget);
+        expect(
+            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
+        final hhmmText = tester.widget<Text>(
+          find.byKey(const ValueKey('home-countdown-hhmm')),
+        );
+        expect(hhmmText.data, expectedHhmm);
+        expect(hhmmText.textDirection, TextDirection.ltr);
+
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        final expectedLabel = 'Return when the silence opens again. '
+            '${expectedNaturalDuration(l10n, 5, 30)}';
+
+        // The revealed wisdom keeps its own semantics node, and the
+        // countdown beneath it gets exactly one *separate* natural-language
+        // node -- two nodes for two genuinely different pieces of visible
+        // content, never a duplicate of either.
+        expect(find.semantics.byLabel(wisdomText), findsOneWidget);
+        expect(find.semantics.byLabel(expectedLabel), findsOneWidget);
+        expect(find.semantics.byLabel(expectedHhmm), findsNothing);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets(
+        'Site B countdown semantics are excluded while the post-reveal '
+        'message is still invisible, and appear once it becomes visible',
+        (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      const wisdomText = 'Invisible-window countdown wisdom';
+      final unlockAt = now.add(countdownDuration);
+      SharedPreferences.setMockInitialValues({
+        'daily_wisdom_access': DailyWisdomRecord(
+          text: wisdomText,
+          revealedAt: unlockAt.subtract(DailyWisdomRecord.lockDuration),
+          unlockAt: unlockAt,
+        ).encode(),
+      });
+
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(_homeApp(clock: () => now));
+        await _finishOpeningIntro(tester);
+
+        // `transitionToExistingWisdom`'s own timing (see
+        // `lib/screens/home_screen.dart`): screenStep flips to 4 (wisdom
+        // revealed) after an 820ms fade-out, but `postRevealMessageOpacity`
+        // does not reach 1.0 until 900ms + 520ms later. This window --
+        // revealed but not yet visible -- is the natural place to prove
+        // the existing opacity gate still suppresses the countdown's
+        // semantics, unchanged by this feature.
+        await _tapCenter(tester);
+        await tester.pump(const Duration(milliseconds: 850));
+        await tester.pump();
+
+        expect(find.text(wisdomText), findsOneWidget);
+        // Structurally present (AnimatedOpacity never unmounts its child)
+        // but not yet semantically exposed.
+        expect(
+            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        final expectedLabel = 'Return when the silence opens again. '
+            '${expectedNaturalDuration(l10n, 5, 30)}';
+        expect(find.semantics.byLabel(expectedLabel), findsNothing);
+
+        await tester.pump(const Duration(milliseconds: 900));
+        await tester.pump(const Duration(milliseconds: 520));
+        await _pumpInSteps(tester, const Duration(milliseconds: 900));
+
+        expect(find.semantics.byLabel(expectedLabel), findsOneWidget);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets(
+        'Site B falls back to dailyWisdomReady with unchanged default Text '
+        'semantics once status() reports ready, never a duplicate '
+        'countdown announcement', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+      final statusService = _OverrideableStatusDailyWisdomAccessService(
+        repository: dailyGraph.repository,
+        clock: () => now,
+      );
+      final keptGraph = KeptRepositoryTestGraph();
+
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: HomeScreen(
+              savedReflectionsService: keptGraph.service,
+              dailyWisdomAccessService: statusService,
+              keptDiscoveryHintService: KeptDiscoveryHintService(),
+              ratingRequestService: RatingRequestService(),
+              clock: () => now,
+            ),
+          ),
+        );
+        await _completeFreshRitual(tester);
+        await _pumpInSteps(tester, const Duration(milliseconds: 1600));
+
+        expect(
+            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
+
+        // Exercise the existing non-null-unlockAt ready-status branch while
+        // the freshly revealed wisdom remains on screen
+        // (`_showingLockedWisdom` is false). All reveal/finalization work
+        // above still used the real service behavior; only this one status
+        // response is overridden.
+        statusService.overrideStatus = DailyWisdomStatus(
+          isReady: true,
+          unlockAt: now.add(DailyWisdomRecord.lockDuration),
+        );
+        await tester.pump(const Duration(minutes: 1));
+        await _pumpUntilCondition(
+          tester,
+          () => find.text('A new wisdom is ready.').evaluate().isNotEmpty,
+        );
+
+        expect(find.byKey(const ValueKey('home-countdown-hhmm')), findsNothing);
+        expect(find.text('A new wisdom is ready.'), findsOneWidget);
+        // Unchanged default `Text` semantics -- no explicit countdown
+        // `Semantics` node is introduced for this non-countdown message.
+        expect(
+          find.semantics.byLabel('A new wisdom is ready.'),
+          findsOneWidget,
+        );
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets(
+        'live locale switching updates the sentence and natural duration '
+        'while the HH:MM token stays byte-identical, and Arabic keeps the '
+        'token LTR', (tester) async {
+      final now = DateTime.utc(2041, 7, 23, 8);
+      final localeController = LocalePreferenceController(
+        storage: StoragePreferencesAdapter(),
+      );
+      await localeController.load();
+      final dailyGraph = DailyAccessTestGraph(clock: () => now);
+
+      await tester.pumpWidget(
+        _localeAwareHomeApp(
+          localeController: localeController,
+          dailyGraph: dailyGraph,
+          clock: () => now,
+        ),
+      );
+      await _completeFreshRitual(tester);
+      await _pumpInSteps(tester, const Duration(milliseconds: 1600));
+
+      final hhmmFinder = find.byKey(const ValueKey('home-countdown-hhmm'));
+      expect(hhmmFinder, findsOneWidget);
+      // A fresh reveal locks for exactly 24h -- an exact ceiling boundary,
+      // so this stays fixed at "24:00" across every locale switch below.
+      const expectedHhmmFresh = '24:00';
+      expect(tester.widget<Text>(hhmmFinder).data, expectedHhmmFresh);
+
+      for (final locale in [
+        const Locale('en'),
+        const Locale('tr'),
+        const Locale('ar'),
+      ]) {
+        await localeController.setExplicitLocale(locale);
+        await tester.pump();
+        await tester.pump();
+
+        final hhmmText = tester.widget<Text>(hhmmFinder);
+        expect(hhmmText.data, expectedHhmmFresh, reason: 'locale=$locale');
+        expect(
+          hhmmText.textDirection,
+          TextDirection.ltr,
+          reason: 'locale=$locale (must stay LTR even under Arabic)',
+        );
+
+        final l10n = AppLocalizations.of(tester.element(hhmmFinder))!;
+        final expectedSentence = l10n.returnWhenSilenceOpensAgain;
+        expect(
+          find.text(expectedSentence),
+          findsOneWidget,
+          reason: 'locale=$locale',
+        );
+        // 24h exactly => minutes == 0 => the hours-only natural phrase.
+        final expectedLabel =
+            '$expectedSentence ${l10n.remainingDurationHoursOnly(24)}';
+        expect(
+          find.semantics.byLabel(expectedLabel),
+          findsOneWidget,
+          reason: 'locale=$locale',
+        );
+
+        if (locale.languageCode == 'ar') {
+          expect(
+            Directionality.of(tester.element(find.text(expectedSentence))),
+            TextDirection.rtl,
+          );
+        }
+      }
+    });
+  });
 }
 
-class _RecordedPublishRevealed {
-  _RecordedPublishRevealed(this.text, this.unlockAt);
+class _OverrideableStatusDailyWisdomAccessService
+    extends DailyWisdomAccessService {
+  _OverrideableStatusDailyWisdomAccessService({
+    required super.repository,
+    required super.clock,
+  });
+
+  DailyWisdomStatus? overrideStatus;
+
+  @override
+  Future<DailyWisdomStatus> status() async =>
+      overrideStatus ?? await super.status();
+}
+
+class _RecordedNotifyFreshReveal {
+  _RecordedNotifyFreshReveal({
+    required this.wisdomId,
+    required this.text,
+    required this.unlockAt,
+  });
+  final String wisdomId;
   final String text;
   final DateTime unlockAt;
 }
 
-class _RecordedPublishSilence {
-  const _RecordedPublishSilence();
-}
-
-/// Records every call instead of crossing a platform channel -- used by
-/// HomeScreen-level tests above to assert exactly when/what Home publishes,
-/// mirroring `_FakeAnalyticsTransport`/`_FakeRatingPlatform`'s role for their
-/// own services. `WidgetSnapshotService`'s own channel contract (argument
-/// shape, UTC conversion, failure containment) is covered directly in
-/// `test/services/widget_snapshot_service_test.dart`.
-class _RecordingWidgetSnapshotService implements WidgetSnapshotService {
-  final List<Object> calls = [];
+/// EAST. 1.2 Slice 3 -- records every `notifyFreshReveal` call instead of
+/// doing real reconciliation/publication work, used by HomeScreen-level
+/// tests above to assert exactly when/what Home notifies, mirroring
+/// `_FakeAnalyticsTransport`/`_FakeRatingPlatform`'s role for their own
+/// services. The coordinator's own reconciliation/ordering/presentation-
+/// resolution behavior is covered directly in
+/// `test/services/widget_presentation_sync_coordinator_test.dart`.
+///
+/// Implements `WidgetPresentationSyncCoordinator`'s minimal public contract
+/// directly rather than extending the real class, since the real class no
+/// longer exposes any preference/service collaborator publicly -- this fake
+/// needs no real `AppearancePreferenceController`, `LocalePreferenceController`,
+/// `DailyWisdomAccessService`, or `WidgetSnapshotService`, and no
+/// platform-channel collaborator of any kind. `start()`/`dispose()` are
+/// harmless no-ops; only `notifyFreshReveal` is ever exercised by these
+/// tests.
+class _RecordingWidgetPresentationSyncCoordinator
+    implements WidgetPresentationSyncCoordinator {
+  final List<_RecordedNotifyFreshReveal> calls = [];
 
   @override
-  Future<void> publishRevealed({
+  void start() {}
+
+  @override
+  void dispose() {}
+
+  @override
+  void notifyFreshReveal({
+    required String wisdomId,
     required String text,
     required DateTime unlockAt,
-  }) async {
-    calls.add(_RecordedPublishRevealed(text, unlockAt));
-  }
-
-  @override
-  Future<void> publishSilence() async {
-    calls.add(const _RecordedPublishSilence());
+  }) {
+    calls.add(_RecordedNotifyFreshReveal(
+      wisdomId: wisdomId,
+      text: text,
+      unlockAt: unlockAt,
+    ));
   }
 }
 
@@ -5928,7 +6169,6 @@ KeptRecord _testKeptRecord({
 
 Widget _homeApp({
   DailyAccessTestGraph? dailyGraph,
-  StorageService? storageService,
   KeptRepositoryTestGraph? keptGraph,
   SavedReflectionsService? savedReflectionsService,
   WisdomShareHandler? wisdomShareService,
@@ -5936,7 +6176,7 @@ Widget _homeApp({
   KeptDiscoveryHintService? keptDiscoveryHintService,
   RatingRequestService? ratingRequestService,
   AnalyticsService? analyticsService,
-  WidgetSnapshotService? widgetSnapshotService,
+  WidgetPresentationSyncCoordinator? widgetPresentationSyncCoordinator,
   WisdomClock? clock,
   Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
   Duration dailyWisdomStatusTimeout =
@@ -5955,7 +6195,6 @@ Widget _homeApp({
   return MaterialApp(
     navigatorObservers: navigatorObservers,
     home: HomeScreen(
-      storageService: storageService ?? StorageService(),
       savedReflectionsService:
           savedReflectionsService ?? resolvedKeptGraph.service,
       dailyWisdomAccessService: resolvedDailyGraph.service,
@@ -5981,7 +6220,7 @@ Widget _homeApp({
       // process-wide `app_services` singleton is used instead.
       ratingRequestService: ratingRequestService ?? RatingRequestService(),
       analyticsService: analyticsService,
-      widgetSnapshotService: widgetSnapshotService,
+      widgetPresentationSyncCoordinator: widgetPresentationSyncCoordinator,
       clock: clock,
       dailyWisdomOperationTimeout: dailyWisdomOperationTimeout,
       dailyWisdomStatusTimeout: dailyWisdomStatusTimeout,
@@ -6018,7 +6257,6 @@ Widget _localeAwareHomeApp({
           );
         },
         home: HomeScreen(
-          storageService: StorageService(),
           savedReflectionsService: resolvedKeptGraph.service,
           dailyWisdomAccessService: resolvedDailyGraph.service,
           keptDiscoveryHintService: KeptDiscoveryHintService(),
@@ -6133,13 +6371,6 @@ IgnorePointer _keptGuard(WidgetTester tester) {
   return tester.widget<IgnorePointer>(
     find.byKey(const ValueKey('kept-interaction-guard')),
   );
-}
-
-Iterable<GrainPainter> _grainPainters(WidgetTester tester) {
-  return tester
-      .widgetList<CustomPaint>(find.byType(CustomPaint))
-      .map((widget) => widget.painter)
-      .whereType<GrainPainter>();
 }
 
 /// Locates a top-nav ring `CustomPaint` directly by its own stable key

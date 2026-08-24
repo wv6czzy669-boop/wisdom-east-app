@@ -13,6 +13,7 @@ import '../services/journal_pdf_builder.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
+import '../widgets/journal_pdf_reader.dart';
 import 'keeper_screen.dart';
 
 enum _JournalStage { resolving, namePrompt, generating, preview, error }
@@ -86,6 +87,8 @@ class _JournalScreenState extends State<JournalScreen> {
   // second one and stomp it back onto screen (real-device requirement:
   // "only the newest valid publication replaces the visible preview").
   int _generation = 0;
+  Brightness? _generatedBrightness;
+  Brightness? _brightnessGenerationInFlight;
 
   // Real-device repair: the Name edit flow is now the approved full-field
   // decision takeover (same visual system as Reflection's Delete
@@ -128,6 +131,19 @@ class _JournalScreenState extends State<JournalScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final brightness = Theme.of(context).brightness;
+    if (_pdfBytes != null &&
+        _injectedPdfBuilder == null &&
+        brightness != _generatedBrightness &&
+        brightness != _brightnessGenerationInFlight) {
+      _brightnessGenerationInFlight = brightness;
+      unawaited(_generate());
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _nameEditController?.dispose();
@@ -156,6 +172,8 @@ class _JournalScreenState extends State<JournalScreen> {
 
   Future<void> _generate() async {
     final generation = ++_generation;
+    final brightness = Theme.of(context).brightness;
+    _brightnessGenerationInFlight = brightness;
     // Only the very first generation (no publication has ever existed yet)
     // shows the reserved-but-empty "generating" shape -- a regeneration
     // with a prior good preview never reverts away from `preview`, so the
@@ -171,7 +189,10 @@ class _JournalScreenState extends State<JournalScreen> {
       final pdfBuilder = _injectedPdfBuilder ??
           JournalPdfBuilder(
             localizations: eastLocalizations(context),
-            presentation: JournalPdfPresentation(locale: locale),
+            presentation: JournalPdfPresentation(
+              locale: locale,
+              brightness: brightness,
+            ),
           );
       bytes = await pdfBuilder.build(
         items: widget.items,
@@ -183,6 +204,7 @@ class _JournalScreenState extends State<JournalScreen> {
       // if a good preview already exists, it is left exactly as-is rather
       // than being replaced by an error state.
       if (!mounted || generation != _generation) return;
+      _brightnessGenerationInFlight = null;
       if (_pdfBytes == null) {
         setState(() => _stage = _JournalStage.error);
       }
@@ -190,9 +212,17 @@ class _JournalScreenState extends State<JournalScreen> {
     }
 
     if (!mounted || generation != _generation) return;
+    if (_injectedPdfBuilder == null &&
+        Theme.of(context).brightness != brightness) {
+      _brightnessGenerationInFlight = null;
+      unawaited(_generate());
+      return;
+    }
     setState(() {
       _pdfBytes = bytes;
       _previewBuild = (format) async => bytes;
+      _generatedBrightness = brightness;
+      _brightnessGenerationInFlight = null;
       _stage = _JournalStage.preview;
     });
   }
@@ -554,11 +584,6 @@ class _JournalScreenState extends State<JournalScreen> {
     }
   }
 
-  static const _previewPageMargin = EdgeInsets.symmetric(
-    horizontal: 20,
-    vertical: 14,
-  );
-
   // Real-device repair: the `printing` package's own default page widget
   // (`PdfPreviewPage`) decorates every page with a white, drop-shadowed
   // card -- meant for its light default theme, never overridden by this
@@ -576,24 +601,10 @@ class _JournalScreenState extends State<JournalScreen> {
   // stays painted until the new one finishes decoding, instead of the
   // `Image` widget clearing to nothing in between.
   Widget _pagesBuilder(BuildContext context, List<PdfPreviewPageData> pages) {
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      itemCount: pages.length,
-      itemBuilder: (context, index) {
-        final page = pages[index];
-        return Container(
-          margin: _previewPageMargin,
-          color: EastColors.of(context).background,
-          child: AspectRatio(
-            aspectRatio: page.aspectRatio,
-            child: Image(
-              image: page.image,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            ),
-          ),
-        );
-      },
+    return JournalPdfReader(
+      key: const ValueKey('journal-pdf-reader'),
+      pages: pages,
+      journalLabel: eastLocalizations(context).journal,
     );
   }
 
@@ -603,12 +614,10 @@ class _JournalScreenState extends State<JournalScreen> {
 
     return Column(
       children: [
-        // Real-device repair: "Gather what you kept." removed entirely
-        // (approved direction: nothing outranks the publication, and a
-        // line that only describes the object beneath it is noise) --
-        // a deliberate 28pt of air replaces it rather than leaving a
-        // dead gap, so the page itself sits closer to the title.
-        const SizedBox(height: 28),
+        // The publication begins close to the title. A small breath remains,
+        // but the former 28pt dead band is removed so the PDF can occupy the
+        // visual field with the confidence of a real reading surface.
+        const SizedBox(height: 8),
         // The real A4 Journal preview is the visual hero of this screen --
         // no file-manager chrome, no built-in share/print controls
         // (`useActions: false` removes the entire action bar): the single
@@ -650,7 +659,7 @@ class _JournalScreenState extends State<JournalScreen> {
               : const SizedBox.shrink(),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
           child: AnimatedOpacity(
             key: const ValueKey('journal-take-action-reveal'),
             duration: const Duration(milliseconds: 420),

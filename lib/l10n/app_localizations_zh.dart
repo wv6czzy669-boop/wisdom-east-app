@@ -27,6 +27,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get kept => '留下的';
 
   @override
+  String get searchKept => '搜尋';
+
+  @override
+  String get clearSearch => '清除搜尋';
+
+  @override
+  String get noKeptSearchResults => '找不到結果。';
+
+  @override
   String get keptUpper => '留下的';
 
   @override
@@ -258,6 +267,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reflectionDeleteExplanation => '這則留下的智慧將移除其省思。';
 
   @override
+  String get removeKeptQuestion => '從「留下的」移除？';
+
+  @override
+  String get keptDeleteExplanation => '這則智慧及其省思將被移除。';
+
+  @override
   String get cancelUpper => '取消';
 
   @override
@@ -426,6 +441,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reflectionDeleteFailed => '無法刪除反思，請再試一次。';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return '還剩$hours小時$minutes分鐘';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return '還剩$hours小時';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return '還剩$minutes分鐘';
+  }
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -449,6 +479,15 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get kept => '留下的';
+
+  @override
+  String get searchKept => '搜尋';
+
+  @override
+  String get clearSearch => '清除搜尋';
+
+  @override
+  String get noKeptSearchResults => '找不到結果。';
 
   @override
   String get keptUpper => '留下的';
@@ -682,6 +721,12 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get reflectionDeleteExplanation => '這則留下的智慧將移除其省思。';
 
   @override
+  String get removeKeptQuestion => '從「留下的」移除？';
+
+  @override
+  String get keptDeleteExplanation => '這則智慧及其省思將被移除。';
+
+  @override
   String get cancelUpper => '取消';
 
   @override
@@ -850,4 +895,19 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get reflectionDeleteFailed => '無法刪除反思，請再試一次。';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return '還剩$hours小時$minutes分鐘';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return '還剩$hours小時';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return '還剩$minutes分鐘';
+  }
 }

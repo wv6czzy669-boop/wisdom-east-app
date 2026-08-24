@@ -4,11 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/data/wisdoms.dart';
 import 'package:wisdom_app/data/wisdoms_tr.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
-import 'package:wisdom_app/localization/visual_fit.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/services/wisdom_localization_resolver.dart';
 import 'package:wisdom_app/theme/east_design.dart';
+
+import 'test_support/visual_fit.dart';
 
 Map<String, String> get _englishById => <String, String>{
       for (final wisdom in wisdoms)

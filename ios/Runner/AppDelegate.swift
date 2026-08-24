@@ -17,20 +17,10 @@ import UserNotifications
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    // TEMPORARY Phase 3D-D diagnostic: NSLog (unlike assertionFailure below,
-    // NSLog is not compiled out in Release/optimized builds — the
-    // configuration used for physical-device installs) records exactly
-    // when this callback runs relative to Dart's main()/
-    // initializeKeptStorage(), to help rule in or out a registration-timing
-    // race against the first native file-protection channel call. Never
-    // logs any user content, only this fixed string. Remove once the
-    // real-device failure is conclusively diagnosed.
-    NSLog("EAST_KEPT_DIAGNOSTIC didInitializeImplicitFlutterEngine-begin")
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     registerFileProtectionChannel(with: engineBridge.pluginRegistry)
     registerCloudKitSyncChannel(with: engineBridge.pluginRegistry)
     registerWidgetSnapshotChannel(with: engineBridge.pluginRegistry)
-    NSLog("EAST_KEPT_DIAGNOSTIC didInitializeImplicitFlutterEngine-end")
   }
 
   /// EAST. Phase 11: registers the Home Screen widget's snapshot bridge
@@ -42,7 +32,6 @@ import UserNotifications
   /// reachable condition under a native-test-host launch.
   private func registerWidgetSnapshotChannel(with registry: FlutterPluginRegistry) {
     guard let registrar = registry.registrar(forPlugin: "EastWidgetSnapshotChannel") else {
-      NSLog("EAST_WIDGET_DIAGNOSTIC widget-snapshot-registrar-nil -- channel left unregistered")
       return
     }
 
@@ -67,24 +56,15 @@ import UserNotifications
   /// when Dart first listens to the event channel) is never deallocated
   /// out from under an active registration.
   ///
-  /// Build 26 Phase 4B-1 native-test-host correction: a missing registrar
-  /// must never abort the process. Under a native-test-host launch (the
-  /// Runner app running as the XCTest `TEST_HOST`), or under any other
-  /// unusual launch context, `registry.registrar(forPlugin:)` returning
-  /// `nil` is a real, reachable condition, not a "this can never happen"
-  /// invariant -- `assertionFailure` (which aborts in exactly the
-  /// Debug/testable configuration `xcodebuild test` uses, since
-  /// `ENABLE_NS_ASSERTIONS` is only disabled in Release) previously turned
-  /// that reachable condition into a launch-time crash before Dart or
-  /// XCTest could ever establish a connection. This channel simply stays
-  /// unregistered instead: any later Dart call surfaces as an ordinary,
+  /// A missing registrar under a native test-host or unusual launch context
+  /// leaves this channel unregistered rather than aborting the process. Any
+  /// later Dart call surfaces as an ordinary,
   /// already-handled `MissingPluginException` /
   /// `CloudKitPlatformException.noNativeHandlerCode`
   /// (`lib/sync_platform/method_channel_cloud_kit_platform_bridge.dart`),
   /// never a process abort.
   private func registerCloudKitSyncChannel(with registry: FlutterPluginRegistry) {
     guard let registrar = registry.registrar(forPlugin: "EastCloudKitSyncChannel") else {
-      NSLog("EAST_CLOUDKIT_DIAGNOSTIC cloudkit-sync-registrar-nil -- channel left unregistered")
       return
     }
 
@@ -120,17 +100,9 @@ import UserNotifications
   /// pattern would not apply here.
   private func registerFileProtectionChannel(with registry: FlutterPluginRegistry) {
     guard let registrar = registry.registrar(forPlugin: "EastFileProtectionChannel") else {
-      // TEMPORARY Phase 3D-D diagnostic: assertionFailure below is a
-      // documented no-op in Release/optimized builds, so a real-device
-      // Release install hitting this branch would otherwise leave zero
-      // visible evidence. NSLog is not compiled out, so this line is this
-      // turn's single most direct way to conclusively prove or rule out
-      // "the file-protection channel registrar could not be created" as
-      // the real-device failure cause.
-      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-registrar-nil channel=%@", EastFileProtection.channelName)
-      assertionFailure(
-        "EAST file-protection registrar could not be created."
-      )
+      // A native test-host launch can legitimately have no registrar. Match
+      // the CloudKit/widget bridges: leave the channel unavailable and let
+      // Dart surface its already-handled MissingPluginException if called.
       return
     }
     let channel = FlutterMethodChannel(
@@ -140,7 +112,6 @@ import UserNotifications
     channel.setMethodCallHandler { call, result in
       EastFileProtection.handle(call, result: result)
     }
-    NSLog("EAST_KEPT_DIAGNOSTIC file-protection-registrar-ok channel=%@", EastFileProtection.channelName)
   }
 }
 
@@ -172,10 +143,6 @@ enum EastFileProtection {
   static let unsupportedMethodCode = "unsupported_method"
 
   static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    // TEMPORARY Phase 3D-D diagnostic: proves the native handler was
-    // actually invoked at all (as distinct from MissingPluginException on
-    // the Dart side, where this line would never appear in the device log).
-    NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-begin method=%@", call.method)
     guard call.method == methodName else {
       result(
         FlutterError(
@@ -216,7 +183,6 @@ enum EastFileProtection {
     let fileManager = FileManager.default
     var isDirectory: ObjCBool = false
     guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {
-      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", pathNotFoundCode)
       result(
         FlutterError(
           code: pathNotFoundCode,
@@ -233,7 +199,6 @@ enum EastFileProtection {
         ofItemAtPath: path
       )
     } catch {
-      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", applyFailedCode)
       result(
         FlutterError(
           code: applyFailedCode,
@@ -266,7 +231,6 @@ enum EastFileProtection {
       // the Simulator Data Protection gap this fix addresses -- that gap is
       // a *reported value* mismatch below, never a thrown error here) --
       // unchanged on both platforms.
-      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", verificationFailedCode)
       result(
         FlutterError(
           code: verificationFailedCode,
@@ -294,15 +258,10 @@ enum EastFileProtection {
       // variable, or filesystem-path sniff -- this branch does not exist at
       // all in a physical-device build, so it can never be reached there.
       // A real device build takes the `#else` branch below, unchanged.
-      NSLog(
-        "EAST_KEPT_DIAGNOSTIC file-protection-handle-ok-simulator-compat "
-          + "reportedProtection=%@",
-        appliedProtection ?? "nil"
-      )
+      _ = appliedProtection
       result(true)
     #else
       guard appliedProtection == FileProtectionType.complete.rawValue else {
-        NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-failed code=%@", verificationFailedCode)
         result(
           FlutterError(
             code: verificationFailedCode,
@@ -313,7 +272,6 @@ enum EastFileProtection {
         return
       }
 
-      NSLog("EAST_KEPT_DIAGNOSTIC file-protection-handle-ok")
       result(true)
     #endif
   }

@@ -28,7 +28,7 @@ enum CloudKitAccountStatusMapper {
   /// now builds with), the compiler correctly still requires it listed
   /// explicitly ("switch must be exhaustive / add missing case:
   /// .temporarilyUnavailable"), and it compiles cleanly on this project's
-  /// iOS 13 deployment target: matching against an existing enum case in a
+  /// iOS 15 deployment target: matching against an existing enum case in a
   /// `switch` never constructs a new value of that case, so no `#available`
   /// guard is required here, and the app can never actually receive
   /// `.temporarilyUnavailable` at runtime on an OS old enough to lack it in

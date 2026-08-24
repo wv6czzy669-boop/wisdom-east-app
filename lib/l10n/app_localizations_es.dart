@@ -27,6 +27,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get kept => 'Lo que queda';
 
   @override
+  String get searchKept => 'Buscar';
+
+  @override
+  String get clearSearch => 'Borrar búsqueda';
+
+  @override
+  String get noKeptSearchResults => 'No se encontró nada.';
+
+  @override
   String get keptUpper => 'LO QUE QUEDA';
 
   @override
@@ -265,6 +274,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'La reflexión se eliminará de esta sabiduría guardada.';
 
   @override
+  String get removeKeptQuestion => '¿Quitar de «Lo que queda»?';
+
+  @override
+  String get keptDeleteExplanation =>
+      'Esta sabiduría y su reflexión se eliminarán.';
+
+  @override
   String get cancelUpper => 'CANCELAR';
 
   @override
@@ -450,4 +466,43 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'No se pudo eliminar la Reflexión. Inténtalo de nuevo.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Quedan $hours horas',
+      one: 'Queda 1 hora',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'y $minutes minutos',
+      one: 'y 1 minuto',
+    );
+    return '$_temp0 $_temp1';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Quedan $hours horas',
+      one: 'Queda 1 hora',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Quedan $minutes minutos',
+      one: 'Queda 1 minuto',
+    );
+    return '$_temp0';
+  }
 }

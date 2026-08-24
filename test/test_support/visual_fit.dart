@@ -1,11 +1,12 @@
 import 'package:flutter/widgets.dart';
+import 'package:wisdom_app/localization/east_locale_registry.dart';
+import 'package:wisdom_app/localization/east_typography_resolver.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 
-import 'east_locale_registry.dart';
-import 'east_typography_resolver.dart';
-import '../theme/east_design.dart';
-
-/// Production Home revealed-wisdom metrics, centralized for future catalog
-/// validation. This measures rendered height, never characters or words.
+/// Home revealed-wisdom metrics shared by localization and font QA tests.
+///
+/// This measures rendered height, never characters or words. It lives under
+/// `test/` because the production app does not call these measurement helpers.
 abstract final class EastVisualFit {
   static const double wisdomFontSize = 38;
   static const double wisdomHeight = 1.48;
@@ -45,15 +46,17 @@ abstract final class EastVisualFit {
     return painter.height;
   }
 
-  static double measureTextHeight(String text,
-      {required TextStyle style,
-      required double width,
-      TextDirection direction = TextDirection.ltr}) {
+  static double measureTextHeight(
+    String text, {
+    required TextStyle style,
+    required double width,
+    TextDirection direction = TextDirection.ltr,
+  }) {
     final painter = TextPainter(
-        text: TextSpan(text: text, style: style),
-        textDirection: direction,
-        textScaler: TextScaler.noScaling)
-      ..layout(maxWidth: width);
+      text: TextSpan(text: text, style: style),
+      textDirection: direction,
+      textScaler: TextScaler.noScaling,
+    )..layout(maxWidth: width);
     return painter.height;
   }
 }

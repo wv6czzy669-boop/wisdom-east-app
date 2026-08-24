@@ -3,6 +3,7 @@
   "strings" : {
     "A quiet space for the day's wisdom." : {
       "comment" : "EastWidget gallery description (WidgetKit configurationDisplayName sibling). Reuses each locale's already-reviewed \"daily wisdom\" (appTitle) and \"quiet/silent\" (notificationPermissionTitle) vocabulary from lib/l10n.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -96,103 +97,9 @@
         }
       }
     },
-    "Begin EAST." : {
-      "comment" : "BeginEastIntent.title and EastAppShortcutsProvider.shortTitle. Entry point label only -- never bypasses the ritual.",
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ابدأ EAST."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EAST. beginnen."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begin EAST."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Empieza EAST."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Commencer EAST."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inizia EAST."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EAST.を始める。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EAST. 시작"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begin EAST."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rozpocznij EAST."
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comece o EAST."
-          }
-        },
-        "th" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "เริ่ม EAST."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EAST.'i başlat."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bắt đầu EAST."
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "開始 EAST."
-          }
-        }
-      }
-    },
     "Begin ${applicationName}" : {
       "comment" : "AppShortcut Siri/Shortcuts invocation phrase 1. ${applicationName} resolves to the app's display name (\"EAST.\") at runtime -- never translate the placeholder itself.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -286,8 +193,105 @@
         }
       }
     },
+    "Begin EAST." : {
+      "comment" : "BeginEastIntent.title and EastAppShortcutsProvider.shortTitle. Entry point label only -- never bypasses the ritual.",
+      "extractionState" : "stale",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ابدأ EAST."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. beginnen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begin EAST."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empieza EAST."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commencer EAST."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inizia EAST."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST.を始める。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. 시작"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begin EAST."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rozpocznij EAST."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comece o EAST."
+          }
+        },
+        "th" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "เริ่ม EAST."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST.'i başlat."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bắt đầu EAST."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始 EAST."
+          }
+        }
+      }
+    },
     "Open ${applicationName}" : {
       "comment" : "AppShortcut Siri/Shortcuts invocation phrase 2. ${applicationName} resolves to the app's display name (\"EAST.\") at runtime -- never translate the placeholder itself.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -383,6 +387,7 @@
     },
     "Opens EAST." : {
       "comment" : "BeginEastIntent's IntentDescription -- describes the action to the Shortcuts editor/Siri, never shown as a ritual state.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -478,6 +483,7 @@
     },
     "Something waits in silence." : {
       "comment" : "EastWidgetView's pre-reveal silence copy. Verbatim reuse of lib/l10n/app_*.arb's already-reviewed \"notificationBody\" per locale -- never independently retranslated.",
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {

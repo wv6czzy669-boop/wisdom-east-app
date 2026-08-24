@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/persistence/file_protection_bridge.dart';
+import 'package:wisdom_app/sync/cloud_east_sync_state_projection.dart';
 import 'package:wisdom_app/sync/cloud_kept_wisdom_projection.dart';
 import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync/sync_change.dart';
@@ -1281,6 +1282,81 @@ void main() {
     expect(batch.pendingServerChangeToken, 'cHJvcG9zZWR0b2tlbg==');
     // 2. the batch carries the opaque account fingerprint internally.
     expect(batch.accountFingerprint, fingerprintA);
+  });
+
+  test(
+      'a known same-epoch control record is validated then omitted from the '
+      'incoming content batch', () async {
+    final store = buildStore();
+    await store.replaceAccountState(
+      fingerprintA,
+      AccountSyncState(
+        dataEpoch: epoch,
+        bootstrapState: AccountBootstrapState.complete,
+      ),
+    );
+    final bridge = _FakeCloudKitPlatformBridge();
+    bridge.accountSnapshotSequence = [availableSnapshot()];
+    bridge.zoneConfigurationProvider = () => successZoneResult;
+    bridge.modifyProvider =
+        (_) => CloudKitModifyRecordsResult.allSucceeded(const []);
+    bridge.fetchProvider = (_) => CloudKitZoneChangesResult.success(
+          changedKeptWisdomRecords: const [],
+          changedSyncStateRecords: [
+            CloudEastSyncStateProjection.current(
+              dataEpoch: epoch,
+              mutationId: 'aaaaaaaa-1111-4111-8111-111111111111',
+            ),
+          ],
+          serverToken: 'cHJvcG9zZWR0b2tlbg==',
+        );
+
+    final result = await SyncOrchestrator(
+      bridge: bridge,
+      persistenceStore: store,
+    ).runSyncPass();
+
+    expect(result.status, SyncPassStatus.completed);
+    expect(result.pendingIncomingBatch!.incomingSyncStateProjections, isEmpty);
+  });
+
+  test(
+      'a control record that changes epoch after bootstrap fails closed '
+      'before any incoming content can be applied', () async {
+    final store = buildStore();
+    await store.replaceAccountState(
+      fingerprintA,
+      AccountSyncState(
+        dataEpoch: epoch,
+        bootstrapState: AccountBootstrapState.complete,
+      ),
+    );
+    final changedEpoch = DataEpoch.parse(
+      '34343434-3434-4434-8434-343434343434',
+    );
+    final bridge = _FakeCloudKitPlatformBridge();
+    bridge.accountSnapshotSequence = [availableSnapshot()];
+    bridge.zoneConfigurationProvider = () => successZoneResult;
+    bridge.modifyProvider =
+        (_) => CloudKitModifyRecordsResult.allSucceeded(const []);
+    bridge.fetchProvider = (_) => CloudKitZoneChangesResult.success(
+          changedKeptWisdomRecords: const [],
+          changedSyncStateRecords: [
+            CloudEastSyncStateProjection.current(
+              dataEpoch: changedEpoch,
+              mutationId: 'bbbbbbbb-2222-4222-8222-222222222222',
+            ),
+          ],
+          serverToken: 'cHJvcG9zZWR0b2tlbg==',
+        );
+
+    final result = await SyncOrchestrator(
+      bridge: bridge,
+      persistenceStore: store,
+    ).runSyncPass();
+
+    expect(result.status, SyncPassStatus.permanentFailure);
+    expect(result.pendingIncomingBatch, isNull);
   });
 
   test(

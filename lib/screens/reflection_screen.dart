@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../controllers/reflection_autosave_coordinator.dart';
 import '../models/favorite_item.dart';
 import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
@@ -52,10 +53,11 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   // bug (text-change/debounce-scheduled/debounce-fired/persist-requested/
   // flush-awaiting-inflight/persist-complete, and the extra debug-only
   // authoritative-readback disk read) has been removed now that the bug
-  // is fixed and verified -- see the fix itself, `_persist`/
-  // `_runPersistLoop`, for why correctness no longer depends on it.
+  // is fixed and verified. Persistence ownership now lives in
+  // [ReflectionAutosaveCoordinator].
   late final TextEditingController _controller;
   late final SavedReflectionsService _service;
+  late final ReflectionAutosaveCoordinator _autosave;
   late final int _promptIndex;
 
   /// Phase 5G: resolved every `build()` (never cached), exactly like this
@@ -67,33 +69,14 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   String get _prompt =>
       localizedReflectionPrompts(eastLocalizations(context))[_promptIndex];
 
-  Timer? _debounceTimer;
-
-  /// The active drain loop, if one is currently running -- represents
-  /// "keep attempting persistence until every edit revision requested so
-  /// far is durably committed," never merely "one attempt is in flight."
-  /// Cleared exclusively via the `.whenComplete()` callback attached in
-  /// [_persist] (see that method's own doc comment for why this ordering
-  /// is load-bearing), never from inside [_runPersistLoop]'s own body --
-  /// that is precisely the ordering bug root-cause repair below fixes.
-  Future<void>? _inFlightPersist;
-  bool _persistPending = false;
-  String? _lastPersistedText;
   bool _deleteInProgress = false;
   bool _confirmingDelete = false;
+  bool _popInProgress = false;
+  double _backSwipeDistance = 0;
 
-  /// Root-cause repair: monotonic revision accounting so "persistence
-  /// succeeded" has one precise, unambiguous meaning -- "every edit up to
-  /// the revision this specific caller requested is durably committed to
-  /// the authoritative local repository" -- never merely "a drain loop
-  /// existed and finished" or "an earlier revision succeeded." [_editRevision]
-  /// increments on every real text change; [_persistedRevision] only ever
-  /// advances to a revision [_runPersistLoop] has itself just confirmed is
-  /// either genuinely unchanged (nothing to persist) or freshly, durably
-  /// written. A caller's own success is `_persistedRevision >=` the
-  /// revision it captured at its own call time -- see [_persist].
-  int _editRevision = 0;
-  int _persistedRevision = 0;
+  static const double _backSwipeWidth = 24;
+  static const double _backSwipeDistanceThreshold = 64;
+  static const double _backSwipeVelocityThreshold = 700;
 
   bool get _isKeeper =>
       widget.isKeeper || app_services.purchaseService.isKeeper;
@@ -125,15 +108,31 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     // and never re-derived from anything that can change across a save.
     _promptIndex =
         reflectionPromptIndexFor(widget.item.revealId ?? widget.item.id);
-    _lastPersistedText = widget.item.reflection?.trim();
     _controller = TextEditingController(text: widget.item.reflection)
       ..addListener(_handleTextChanged);
+    _autosave = ReflectionAutosaveCoordinator(
+      debounce: widget.autosaveDebounce,
+      readText: () => _controller.text,
+      initialPersistedText: widget.item.reflection,
+      persistText: _persistReflection,
+      onLimitReached: () {
+        if (mounted) {
+          _showMessage(eastLocalizations(context).reflectionSaveFailed);
+        }
+      },
+      onPersistFailure: () {
+        if (mounted) {
+          _showMessage(eastLocalizations(context).reflectionAutosaveFailed);
+        }
+      },
+      onDiagnostic: keptDiagnostic,
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _debounceTimer?.cancel();
+    _autosave.dispose();
     _controller
       ..removeListener(_handleTextChanged)
       ..dispose();
@@ -144,24 +143,20 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      unawaited(_flushPendingSave());
+      unawaited(_autosave.flush());
     }
   }
 
   void _handleTextChanged() {
+    // Record the edit before scheduling the rebuild. This guarantees that the
+    // rebuilt PopScope immediately protects the new, unpersisted revision.
+    _autosave.handleTextChanged();
+
     // Only for the character counter below the field, which reads
     // `_controller.text` directly in `build()` -- the hint text itself
     // already hides/shows on its own the moment the field stops being
     // empty, with no state of this widget's own involved.
     if (mounted) setState(() {});
-
-    _editRevision += 1;
-
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(widget.autosaveDebounce, () {
-      _debounceTimer = null;
-      unawaited(_persist());
-    });
   }
 
   void _showMessage(String message) {
@@ -176,199 +171,15 @@ class _ReflectionScreenState extends State<ReflectionScreen>
       );
   }
 
-  /// Cancels any pending debounce and waits for whatever save that pending
-  /// (or already in-flight) text change ultimately performs. Called before
-  /// this screen is actually allowed to pop, and on the app being
-  /// backgrounded, so leaving quickly right after typing never drops the
-  /// latest text.
-  ///
-  /// Returns `true` once the current text is durably persisted (or there
-  /// was genuinely nothing new to persist); returns `false` only when a
-  /// real, exhausted-retry local-write failure occurred -- see
-  /// [_handlePopAttempt], the one caller that acts on this: it must never
-  /// let the pop proceed on `false`, since that would silently discard
-  /// text the user can no longer recover.
-  ///
-  /// Real-device repair (Phase 8 follow-up): unlike an ordinary
-  /// typing-triggered autosave (where a failure can safely wait for the
-  /// user's next keystroke to retry -- they are still on the screen), a
-  /// flush has no "next keystroke" to fall back on: the user is actively
-  /// leaving. A single transient local-write failure here (momentary disk/
-  /// lock contention on a real device -- something no in-memory test double
-  /// ever reproduces) must not silently let [_handlePopAttempt] pop the
-  /// screen as if nothing needed saving, so this path alone retries before
-  /// giving up.
-  Future<bool> _flushPendingSave() {
-    keptDiagnostic('reflection-screen: flush-begin');
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
-    return _persist(retryOnFailure: true);
-  }
-
-  /// The one local-first autosave entry point. Local persistence (via
-  /// [SavedReflectionsService.saveReflection], which writes Kept storage
-  /// before it ever touches sync state) always happens before the debounce
-  /// that gates the *next* attempt -- this method itself never runs on a
-  /// timer shorter than [_handleTextChanged]'s own debounce, and
-  /// [_flushPendingSave] always cancels that debounce first so a flush
-  /// never waits on it. A save already in flight is joined, never
-  /// duplicated: a text change that arrives while one is running is folded
-  /// into that same drain loop's next pass, so only the latest text is
-  /// ever attempted next -- never a queue of stale intermediate values, and
-  /// never a mutation per keystroke.
-  ///
-  /// Root-cause repair (false-success / broken in-flight Future ownership):
-  /// this method's own returned `bool` now has one precise meaning --
-  /// "every edit up to the revision captured *at this call* is durably
-  /// committed" -- computed from [_persistedRevision] *after* the relevant
-  /// drain activity settles, never merely "some Future resolved." The
-  /// previous version returned [_runPersistLoop]'s own `Future<bool>`
-  /// directly and stored that exact object in [_inFlightPersist] one
-  /// statement later; when the loop's very first check found nothing to
-  /// persist (no real `await` reached), its `finally` block -- which is
-  /// ordinary synchronous Dart control flow, unaffected by `async` -- had
-  /// already cleared [_inFlightPersist] back to `null` *before* this
-  /// method's own next line unconditionally overwrote it right back to
-  /// that same, already-finished Future. From that point on
-  /// [_inFlightPersist] was permanently non-null for the rest of this
-  /// screen's lifetime: every later call took the "join" branch and
-  /// resolved instantly against that stale, already-completed Future --
-  /// [_attemptPersist] was never invoked again, no matter how much further
-  /// text the user typed. [_inFlightPersist] is now `Future<void>` (a pure
-  /// "is a drain active" marker) and is cleared *exclusively* via the
-  /// `.whenComplete()` callback attached below, from *outside*
-  /// [_runPersistLoop] -- `Future` callbacks are never invoked
-  /// synchronously in Dart, so that clear can only ever run on a later
-  /// microtask, strictly after this method's own `_inFlightPersist = run;`
-  /// assignment has already completed. The stale-overwrite race is
-  /// therefore structurally impossible, not merely less likely.
-  Future<bool> _persist({bool retryOnFailure = false}) {
-    final requestedRevision = _editRevision;
-    final existing = _inFlightPersist;
-    if (existing != null) {
-      _persistPending = true;
-      return existing.then((_) => _persistedRevision >= requestedRevision);
-    }
-
-    late final Future<void> run;
-    run = _runPersistLoop(retryOnFailure: retryOnFailure).whenComplete(() {
-      // Race-safe by construction (see this method's own doc comment): a
-      // `Future` callback is never invoked synchronously, so this can only
-      // run after `_inFlightPersist = run;` below has already executed.
-      // The `identical` check is defense in depth, not the load-bearing
-      // guarantee itself -- it protects against `_inFlightPersist` having
-      // since moved on to a genuinely newer run.
-      if (identical(_inFlightPersist, run)) {
-        _inFlightPersist = null;
-      }
-    });
-    _inFlightPersist = run;
-    return run.then((_) => _persistedRevision >= requestedRevision);
-  }
-
-  static const int _maxPersistAttempts = 3;
-  static const Duration _persistRetryDelay = Duration(milliseconds: 120);
-
-  /// Drains every pending edit revision through authoritative local
-  /// persistence -- not "one attempt," but "keep attempting, with the
-  /// freshest text each time, until nothing new remains." Advances
-  /// [_persistedRevision] itself, exactly once per revision it personally
-  /// confirms is either genuinely unchanged (nothing to persist) or freshly
-  /// durably written -- never on a failed attempt, so a caller waiting on a
-  /// revision that only ever failed correctly computes failure (see
-  /// [_persist]).
-  Future<void> _runPersistLoop({required bool retryOnFailure}) async {
-    while (true) {
-      _persistPending = false;
-      final revisionBeingAttempted = _editRevision;
-      final text = _controller.text;
-      final trimmed = text.trim();
-      if (trimmed.isNotEmpty && trimmed != _lastPersistedText) {
-        final succeeded = await _attemptPersist(
-          text: text,
-          trimmed: trimmed,
-          retryOnFailure: retryOnFailure,
-        );
-        if (succeeded) {
-          _persistedRevision = _persistedRevision > revisionBeingAttempted
-              ? _persistedRevision
-              : revisionBeingAttempted;
-        }
-      } else {
-        // Nothing new relative to `_lastPersistedText` -- the text as of
-        // this exact revision is already durably reflected (or was always
-        // empty), so this revision counts as caught up too.
-        _persistedRevision = _persistedRevision > revisionBeingAttempted
-            ? _persistedRevision
-            : revisionBeingAttempted;
-      }
-      if (!_persistPending) return;
-    }
-  }
-
-  /// Attempts to persist [text]. When [retryOnFailure] is `false` (an
-  /// ordinary typing-triggered autosave), behavior is exactly as before:
-  /// one attempt, and a thrown failure surfaces its message immediately --
-  /// the user is still on the screen and their next keystroke naturally
-  /// retries. When `true` (a pop/backgrounding-triggered flush), a thrown
-  /// failure is retried up to [_maxPersistAttempts] times first. Neither
-  /// path ever retries a `reflectionLimitReached` rejection -- a permanent
-  /// business-rule outcome no retry can change, and that outcome counts as
-  /// handled (returns `true`): the text was deliberately not saved by
-  /// design, not lost to a write failure.
-  ///
-  /// Returns `true` on success (including the limit-reached no-op above);
-  /// returns `false` only once every attempt has genuinely failed.
-  Future<bool> _attemptPersist({
-    required String text,
-    required String trimmed,
-    required bool retryOnFailure,
-  }) async {
-    final attempts = retryOnFailure ? _maxPersistAttempts : 1;
-    for (var attempt = 1; attempt <= attempts; attempt++) {
-      keptDiagnostic(
-        'reflection-screen: local-write-begin attempt=$attempt/$attempts',
-      );
-      try {
-        final result = await _service.saveReflection(
-          itemId: widget.item.id,
-          reflection: text,
-          isKeeper: _isKeeper,
-        );
-        if (result.reflectionLimitReached) {
-          keptDiagnostic(
-            'reflection-screen: local-write-limit-reached attempt=$attempt',
-          );
-          if (mounted) {
-            _showMessage(eastLocalizations(context).reflectionSaveFailed);
-          }
-        } else {
-          keptDiagnostic(
-            'reflection-screen: local-write-success attempt=$attempt',
-          );
-          _lastPersistedText = trimmed;
-        }
-        return true;
-      } catch (error) {
-        keptDiagnostic(
-          'reflection-screen: local-write-failed attempt=$attempt/$attempts '
-          'errorType=${error.runtimeType}',
-        );
-        if (attempt == attempts) {
-          keptDiagnostic('reflection-screen: local-write-exhausted');
-          if (mounted) {
-            _showMessage(eastLocalizations(context).reflectionAutosaveFailed);
-          }
-          return false;
-        }
-        // A brief, imperceptible pause before retrying a genuinely
-        // transient failure -- never a visible loading state, and short
-        // enough that even the worst case (every attempt failing) stays
-        // well under a second before the flush this backs gives up.
-        await Future<void>.delayed(_persistRetryDelay);
-      }
-    }
-    return false;
+  Future<ReflectionPersistResult> _persistReflection(String text) async {
+    final result = await _service.saveReflection(
+      itemId: widget.item.id,
+      reflection: text,
+      isKeeper: _isKeeper,
+    );
+    return result.reflectionLimitReached
+        ? ReflectionPersistResult.limitReached
+        : ReflectionPersistResult.saved;
   }
 
   // Approved Ritual direction: the decision to delete is a full-field
@@ -393,8 +204,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   Future<void> _confirmDelete() async {
     if (_deleteInProgress || !mounted) return;
 
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
+    _autosave.cancelPending();
     setState(() {
       _deleteInProgress = true;
     });
@@ -513,12 +323,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     );
   }
 
-  /// [PopScope] below deliberately keeps `canPop` `false` forever -- never
-  /// flipped -- so it only ever needs to veto the automatic system/gesture
-  /// pop while a flush might still be pending. Calling [Navigator.pop]
-  /// directly here (never [Navigator.maybePop]) bypasses that veto
-  /// unconditionally once the flush has actually finished, with no
-  /// setState/rebuild round-trip (and its timing risk) required in between.
+  /// [PopScope] continues to veto an immediate route pop so a same-frame edit
+  /// can never slip past persistence. A narrow iOS leading-edge gesture below
+  /// requests the exact same flush-before-pop path as the visible back button.
   ///
   /// Root-cause repair: a flush that genuinely, persistently fails (every
   /// retry exhausted -- a real on-device disk/file-protection failure, not
@@ -529,14 +336,47 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   /// promise true: the text remains in the field, and the very next
   /// keystroke (or another back attempt) is a fresh, real retry.
   Future<void> _handlePopAttempt() async {
-    final flushed = await _flushPendingSave();
-    if (!mounted) return;
-    if (!flushed) {
-      keptDiagnostic('reflection-screen: pop-blocked');
-      return;
+    if (_popInProgress) return;
+    _popInProgress = true;
+    try {
+      final flushed = await _autosave.flush();
+      if (!mounted) return;
+      if (!flushed) {
+        keptDiagnostic('reflection-screen: pop-blocked');
+        return;
+      }
+      keptDiagnostic('reflection-screen: pop-allowed');
+      Navigator.pop(context);
+    } finally {
+      _popInProgress = false;
     }
-    keptDiagnostic('reflection-screen: pop-allowed');
-    Navigator.pop(context);
+  }
+
+  double _backSwipeDirectionFactor(BuildContext context) =>
+      Directionality.of(context) == TextDirection.rtl ? -1 : 1;
+
+  void _handleBackSwipeStart(DragStartDetails details) {
+    _backSwipeDistance = 0;
+  }
+
+  void _handleBackSwipeUpdate(
+    BuildContext context,
+    DragUpdateDetails details,
+  ) {
+    final forwardDelta = details.delta.dx * _backSwipeDirectionFactor(context);
+    _backSwipeDistance =
+        (_backSwipeDistance + forwardDelta).clamp(0, double.infinity);
+  }
+
+  void _handleBackSwipeEnd(BuildContext context, DragEndDetails details) {
+    final forwardVelocity = details.velocity.pixelsPerSecond.dx *
+        _backSwipeDirectionFactor(context);
+    final shouldPop = _backSwipeDistance >= _backSwipeDistanceThreshold ||
+        forwardVelocity >= _backSwipeVelocityThreshold;
+    _backSwipeDistance = 0;
+    if (!shouldPop || _popInProgress) return;
+    keptDiagnostic('reflection-screen: pop-requested-by-edge-swipe');
+    unawaited(_handlePopAttempt());
   }
 
   @override
@@ -545,8 +385,13 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     final characterCount = _controller.text.characters.length;
     const counterThreshold = 220;
 
+    final hasUnpersistedChanges = _autosave.hasUnpersistedChanges;
+
     return PopScope(
-      canPop: false,
+      // A clean Reflection must keep iOS's real interactive back gesture.
+      // Only a genuinely unpersisted edit needs the guarded custom edge
+      // gesture below so its local write can finish before the route pops.
+      canPop: !hasUnpersistedChanges,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         keptDiagnostic('reflection-screen: pop-requested');
@@ -560,7 +405,12 @@ class _ReflectionScreenState extends State<ReflectionScreen>
           surfaceTintColor: Colors.transparent,
           shadowColor: Colors.transparent,
           elevation: 0,
-          leading: Navigator.canPop(context) ? const EastBackButton() : null,
+          // The visible Back control always uses the durable exit path. This
+          // also closes the same-frame gap where text has changed but the
+          // PopScope rebuild has not yet reached the element tree.
+          leading: Navigator.canPop(context)
+              ? EastBackButton(onPressed: () => unawaited(_handlePopAttempt()))
+              : null,
           title: Text(l10n.reflection, style: _style(24)),
           actions: [
             if (widget.item.hasReflection)
@@ -687,6 +537,27 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                 ),
               ),
             ),
+            if (Theme.of(context).platform == TargetPlatform.iOS &&
+                hasUnpersistedChanges)
+              PositionedDirectional(
+                key: const ValueKey('reflection-back-swipe-region'),
+                start: 0,
+                top: 0,
+                bottom: 0,
+                width: _backSwipeWidth,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  excludeFromSemantics: true,
+                  onHorizontalDragStart: _handleBackSwipeStart,
+                  onHorizontalDragUpdate: (details) =>
+                      _handleBackSwipeUpdate(context, details),
+                  onHorizontalDragEnd: (details) =>
+                      _handleBackSwipeEnd(context, details),
+                  onHorizontalDragCancel: () {
+                    _backSwipeDistance = 0;
+                  },
+                ),
+              ),
             _deleteDecisionOverlay(),
           ],
         ),

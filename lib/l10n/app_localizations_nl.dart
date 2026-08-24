@@ -27,6 +27,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get kept => 'Wat blijft';
 
   @override
+  String get searchKept => 'Zoeken';
+
+  @override
+  String get clearSearch => 'Zoekopdracht wissen';
+
+  @override
+  String get noKeptSearchResults => 'Niets gevonden.';
+
+  @override
   String get keptUpper => 'WAT BLIJFT';
 
   @override
@@ -265,6 +274,13 @@ class AppLocalizationsNl extends AppLocalizations {
       'De reflectie wordt uit deze bewaarde wijsheid verwijderd.';
 
   @override
+  String get removeKeptQuestion => 'Verwijderen uit ‘Wat blijft’?';
+
+  @override
+  String get keptDeleteExplanation =>
+      'Deze wijsheid en de reflectie worden verwijderd.';
+
+  @override
   String get cancelUpper => 'ANNULEER';
 
   @override
@@ -450,4 +466,43 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'Reflectie kon niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Nog $hours uur',
+      one: 'Nog 1 uur',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'en $minutes minuten',
+      one: 'en 1 minuut',
+    );
+    return '$_temp0 $_temp1';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Nog $hours uur',
+      one: 'Nog 1 uur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Nog $minutes minuten',
+      one: 'Nog 1 minuut',
+    );
+    return '$_temp0';
+  }
 }

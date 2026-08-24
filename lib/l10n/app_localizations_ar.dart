@@ -27,6 +27,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get kept => 'ما بقي';
 
   @override
+  String get searchKept => 'بحث';
+
+  @override
+  String get clearSearch => 'مسح البحث';
+
+  @override
+  String get noKeptSearchResults => 'لم يُعثر على شيء.';
+
+  @override
   String get keptUpper => 'ما بقي';
 
   @override
@@ -263,6 +272,12 @@ class AppLocalizationsAr extends AppLocalizations {
       'سيُزال التأمّل من هذه الحكمة التي أبقيتها.';
 
   @override
+  String get removeKeptQuestion => 'إزالة من «ما بقي»؟';
+
+  @override
+  String get keptDeleteExplanation => 'ستُزال هذه الحكمة وتأمّلها.';
+
+  @override
   String get cancelUpper => 'إلغاء';
 
   @override
@@ -442,4 +457,59 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get reflectionDeleteFailed => 'تعذّر حذف التأمل. حاول مرة أخرى.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours ساعة',
+      many: '$hours ساعة',
+      few: '$hours ساعات',
+      two: 'ساعتان',
+      one: 'ساعة واحدة',
+      zero: '',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'و$minutes دقيقة',
+      many: 'و$minutes دقيقة',
+      few: 'و$minutes دقائق',
+      two: 'ودقيقتان',
+      one: 'ودقيقة واحدة',
+      zero: '',
+    );
+    return '$_temp0 $_temp1 متبقية';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours ساعة متبقية',
+      many: '$hours ساعة متبقية',
+      few: '$hours ساعات متبقية',
+      two: 'ساعتان متبقيتان',
+      one: 'ساعة واحدة متبقية',
+      zero: 'لا وقت متبقٍ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes دقيقة متبقية',
+      many: '$minutes دقيقة متبقية',
+      few: '$minutes دقائق متبقية',
+      two: 'دقيقتان متبقيتان',
+      one: 'دقيقة واحدة متبقية',
+      zero: 'أقل من دقيقة متبقية',
+    );
+    return '$_temp0';
+  }
 }

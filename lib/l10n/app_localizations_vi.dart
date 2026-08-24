@@ -27,6 +27,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get kept => 'Điều còn lại';
 
   @override
+  String get searchKept => 'Tìm kiếm';
+
+  @override
+  String get clearSearch => 'Xóa tìm kiếm';
+
+  @override
+  String get noKeptSearchResults => 'Không tìm thấy.';
+
+  @override
   String get keptUpper => 'ĐIỀU CÒN LẠI';
 
   @override
@@ -266,6 +275,13 @@ class AppLocalizationsVi extends AppLocalizations {
       'Suy ngẫm sẽ bị xóa khỏi điều minh triết đã giữ này.';
 
   @override
+  String get removeKeptQuestion => 'Xóa khỏi Điều còn lại?';
+
+  @override
+  String get keptDeleteExplanation =>
+      'Điều minh triết này và suy ngẫm của nó sẽ bị xóa.';
+
+  @override
   String get cancelUpper => 'HỦY';
 
   @override
@@ -449,4 +465,19 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'Không thể xóa Suy ngẫm. Vui lòng thử lại.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return 'Còn $hours giờ $minutes phút';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return 'Còn $hours giờ';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return 'Còn $minutes phút';
+  }
 }

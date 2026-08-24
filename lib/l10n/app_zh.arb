@@ -6,6 +6,9 @@
   "askFromYourHeart": "從心裡提問。",
   "east": "EAST.",
   "kept": "留下的",
+  "searchKept": "搜尋",
+  "clearSearch": "清除搜尋",
+  "noKeptSearchResults": "找不到結果。",
   "keptUpper": "留下的",
   "reflectedUpper": "已省思",
   "addReflectionUpper": "新增省思",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "你想帶著什麼前行？",
   "deleteReflectionQuestion": "刪除省思？",
   "reflectionDeleteExplanation": "這則留下的智慧將移除其省思。",
+  "removeKeptQuestion": "從「留下的」移除？",
+  "keptDeleteExplanation": "這則智慧及其省思將被移除。",
   "cancelUpper": "取消",
   "continueAction": "繼續",
   "onlyKeptOnThisDevice": "僅留存在此裝置上。",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "沒有可移除的內容。",
   "reflectionSaveFailed": "無法儲存反思，請再試一次。",
   "reflectionAutosaveFailed": "無法儲存反思；你繼續書寫時會再試一次。",
-  "reflectionDeleteFailed": "無法刪除反思，請再試一次。"
+  "reflectionDeleteFailed": "無法刪除反思，請再試一次。",
+  "remainingDurationHoursMinutes": "還剩{hours}小時{minutes}分鐘",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "還剩{hours}小時",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "還剩{minutes}分鐘",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

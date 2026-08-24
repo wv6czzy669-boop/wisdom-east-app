@@ -10,24 +10,24 @@ typedef JournalDateFormatter = String Function(FavoriteItem item);
 class JournalBodyLayout {
   const JournalBodyLayout._();
 
-  static const double marginLeft = 70.03;
-  static const double marginRight = 70.03;
+  static const double marginLeft = 59.53;
+  static const double marginRight = 59.53;
   static const double marginTop = 98.05;
   static const double marginBottom = 78.0;
-  static const double entryGap = 59.53;
-  static const double entryLineGap = 17.51;
-  static const double reflectionIndent = 38.52;
-  static const double dateFontSize = 14.01;
-  static const double dateLetterSpacing = 3.64;
-  static const double wisdomFontSize = 26.26;
-  static const double reflectionFontSize = 21.01;
+  static const double entryGap = 46.0;
+  static const double entryLineGap = 14.5;
+  static const double reflectionIndent = 29.0;
+  static const double dateFontSize = 12.5;
+  static const double dateLetterSpacing = 3.2;
+  static const double wisdomFontSize = 24.0;
+  static const double reflectionFontSize = 18.5;
   static const double folioFontSize = 15.76;
   static const double folioLetterSpacing = 3.78;
   static const double folioTopGap = 14;
 
   static const PdfColor dateMuted = PdfColor.fromInt(0xFF625D54);
   static const PdfColor ink = PdfColor.fromInt(0xFF2C2924);
-  static const PdfColor reflectionTone = PdfColor.fromInt(0xFF5D584F);
+  static const PdfColor reflectionTone = PdfColor.fromInt(0xFF625D54);
   static const PdfColor folioTone = PdfColor.fromInt(0xFFB5AFA4);
 
   static const pw.Alignment folioAlignment = pw.Alignment.centerRight;
@@ -67,6 +67,9 @@ class JournalBodyLayout {
     List<pw.Font> fontFallback = const <pw.Font>[],
     pw.TextDirection textDirection = pw.TextDirection.ltr,
     JournalDateFormatter? dateFormatter,
+    PdfColor dateColor = dateMuted,
+    PdfColor wisdomColor = ink,
+    PdfColor reflectionColor = reflectionTone,
   }) {
     final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -78,7 +81,7 @@ class JournalBodyLayout {
             font: font,
             fontFallback: fontFallback,
             fontSize: dateFontSize,
-            color: dateMuted,
+            color: dateColor,
             letterSpacing: dateLetterSpacing,
           ),
         ),
@@ -91,7 +94,7 @@ class JournalBodyLayout {
               font: font,
               fontFallback: fontFallback,
               fontSize: wisdomFontSize,
-              color: ink,
+              color: wisdomColor,
               height: 1.5,
             ),
           ),
@@ -120,8 +123,8 @@ class JournalBodyLayout {
               font: font,
               fontFallback: fontFallback,
               fontSize: reflectionFontSize,
-              color: reflectionTone,
-              height: 1.6,
+              color: reflectionColor,
+              height: 1.55,
             ),
           ),
         ),
@@ -138,6 +141,9 @@ class JournalBodyLayout {
     List<pw.Font> fontFallback = const <pw.Font>[],
     pw.TextDirection textDirection = pw.TextDirection.ltr,
     JournalDateFormatter? dateFormatter,
+    PdfColor dateColor = dateMuted,
+    PdfColor wisdomColor = ink,
+    PdfColor reflectionColor = reflectionTone,
   }) {
     final header = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -149,7 +155,7 @@ class JournalBodyLayout {
             font: font,
             fontFallback: fontFallback,
             fontSize: dateFontSize,
-            color: dateMuted,
+            color: dateColor,
             letterSpacing: dateLetterSpacing,
           ),
         ),
@@ -162,7 +168,7 @@ class JournalBodyLayout {
               font: font,
               fontFallback: fontFallback,
               fontSize: wisdomFontSize,
-              color: ink,
+              color: wisdomColor,
               height: 1.5,
             ),
           ),
@@ -182,15 +188,19 @@ class JournalBodyLayout {
           font: font,
           fontFallback: fontFallback,
           fontSize: reflectionFontSize,
-          color: reflectionTone,
-          height: 1.6,
+          color: reflectionColor,
+          height: 1.55,
         ),
         overflow: pw.TextOverflow.span,
       ),
     ];
   }
 
-  static pw.Widget buildFolio(pw.Font font, int pageNumber) {
+  static pw.Widget buildFolio(
+    pw.Font font,
+    int pageNumber, {
+    PdfColor color = folioTone,
+  }) {
     return pw.Container(
       alignment: folioAlignment,
       margin: const pw.EdgeInsets.only(top: folioTopGap),
@@ -199,7 +209,7 @@ class JournalBodyLayout {
         style: pw.TextStyle(
           font: font,
           fontSize: folioFontSize,
-          color: folioTone,
+          color: color,
           letterSpacing: folioLetterSpacing,
         ),
       ),
@@ -210,11 +220,8 @@ class JournalBodyLayout {
 /// Plans Journal body pages from actual PDF layout measurements.
 class JournalLayoutPlanner {
   const JournalLayoutPlanner({
-    this.maxEntriesPerPage = 3,
     this.pageContentHeightOverridePt,
   });
-
-  final int maxEntriesPerPage;
 
   /// Test-only deterministic override. Production always uses the measured
   /// A4 body area, including reserved footer space.
@@ -255,7 +262,7 @@ class JournalLayoutPlanner {
       var usedHeight = height;
       index += 1;
 
-      while (index < ordered.length && entries.length < maxEntriesPerPage) {
+      while (index < ordered.length) {
         final next = ordered[index];
         final nextHeight = _measureEntry(
           next,

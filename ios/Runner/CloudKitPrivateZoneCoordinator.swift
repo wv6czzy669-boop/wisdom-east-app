@@ -13,7 +13,7 @@ import Foundation
 protocol CloudKitZoneOperationDatabase {
   func fetch(
     withRecordZoneID zoneID: CKRecordZone.ID,
-    completionHandler: @escaping (CKRecordZone?, Error?) -> Void
+    completionHandler: @escaping @Sendable (CKRecordZone?, Error?) -> Void
   )
   func add(_ operation: CKDatabaseOperation)
 }
@@ -128,9 +128,8 @@ final class CloudKitPrivateZoneCoordinator {
     let zone = CKRecordZone(zoneID: zoneID)
     let operation = CKModifyRecordZonesOperation(
       recordZonesToSave: [zone], recordZoneIDsToDelete: nil)
-    operation.modifyRecordZonesCompletionBlock = {
-      (_ savedZones: [CKRecordZone]?, _ deletedZoneIDs: [CKRecordZone.ID]?, _ error: Error?) in
-      if let error = error {
+    operation.modifyRecordZonesResultBlock = { result in
+      if case .failure(let error) = result {
         completion(
           ConfigurationResult(
             success: false,

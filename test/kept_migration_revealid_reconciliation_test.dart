@@ -355,12 +355,10 @@ void main() {
       'and a second reconciliation attempt preserves the filled state and '
       'creates no duplicate -- the exact scenario that failed under the '
       'round-2, Kept-mutating design', () async {
-    // Diagnostic-only (this turn): captures the identity state relevant to
-    // this test at a single instant, prints one EAST_RECON_DIAGNOSTIC line,
-    // and returns the values so the assertions below can compare stage to
-    // stage. Never prints wisdom or Reflection content -- identifiers and
-    // counts only. Test-local: not used outside this test.
-    Future<_IdentityStageSnapshot> captureIdentityStage(String label) async {
+    // Captures the identity state relevant to this test at a single instant
+    // so the assertions below can compare stage to stage. Test-local: not
+    // used outside this test.
+    Future<_IdentityStageSnapshot> captureIdentityStage() async {
       // Captured *before* this helper's own diagnostic reads below, so
       // these two counts reflect only production-path activity since the
       // previous stage was captured -- never this helper's own
@@ -399,18 +397,6 @@ void main() {
         replaceCountAtStage: replaceCountAtStage,
       );
 
-      // ignore: avoid_print
-      print(
-        'EAST_RECON_DIAGNOSTIC stage=$label '
-        'dailyRevealId=${snapshot.dailyRevealId} '
-        'envelopeRevealId=${snapshot.envelopeRevealId} '
-        'favoriteRevealId=${snapshot.favoriteRevealId} '
-        'resolvedRevealId=${snapshot.resolvedRevealId} '
-        'activeCount=${snapshot.activeCount} '
-        'loadCount=${snapshot.loadCountAtStage} '
-        'replaceCount=${snapshot.replaceCountAtStage}',
-      );
-
       return snapshot;
     }
 
@@ -419,7 +405,7 @@ void main() {
     await migrationCoordinator.migrateIfNeeded();
 
     // -- Stage A: after first migration -----------------------------------
-    final stageA = await captureIdentityStage('after-first-migration');
+    final stageA = await captureIdentityStage();
     expect(
       stageA.activeCount,
       1,
@@ -455,7 +441,7 @@ void main() {
     await reconcileDailyIdentity(dailyRecord);
 
     // -- Stage B: after first Daily Access reconciliation ------------------
-    final stageB = await captureIdentityStage('after-first-reconcile');
+    final stageB = await captureIdentityStage();
     expect(
       stageB.dailyRevealId,
       stageB.envelopeRevealId,
@@ -497,7 +483,7 @@ void main() {
     expect(secondMigration.status, KeptMigrationStatus.alreadyComplete);
 
     // -- Stage C: after second migrateIfNeeded() / alreadyComplete ---------
-    final stageC = await captureIdentityStage('after-second-migration');
+    final stageC = await captureIdentityStage();
     expect(
       stageC.envelopeRevealId,
       stageB.envelopeRevealId,
@@ -533,7 +519,7 @@ void main() {
     await reconcileDailyIdentity(correctedDailyRecord);
 
     // -- Stage D: after second Daily Access reconciliation -----------------
-    final stageD = await captureIdentityStage('after-second-reconcile');
+    final stageD = await captureIdentityStage();
     expect(
       stageD.envelopeRevealId,
       stageC.envelopeRevealId,

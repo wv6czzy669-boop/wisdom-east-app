@@ -6,10 +6,70 @@ import XCTest
 @testable import Runner
 
 class RunnerTests: XCTestCase {
+  // MARK: - Release privacy-manifest coverage
 
-  func testExample() {
-    // If you add code to the Runner application, consider adding tests here.
-    // See https://developer.apple.com/documentation/xctest for more information about using XCTest.
+  private func loadPrivacyManifest(at url: URL) throws -> [String: Any] {
+    let data = try Data(contentsOf: url)
+    return try XCTUnwrap(
+      PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+    )
+  }
+
+  private func assertAppGroupUserDefaultsDeclaration(
+    _ manifest: [String: Any],
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) throws {
+    XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false, file: file, line: line)
+    XCTAssertEqual(
+      (manifest["NSPrivacyTrackingDomains"] as? [String])?.count,
+      0,
+      file: file,
+      line: line
+    )
+    XCTAssertEqual(
+      (manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])?.count,
+      0,
+      file: file,
+      line: line
+    )
+
+    let accessedTypes = try XCTUnwrap(
+      manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]],
+      file: file,
+      line: line
+    )
+    XCTAssertEqual(accessedTypes.count, 1, file: file, line: line)
+    let userDefaults = try XCTUnwrap(accessedTypes.first, file: file, line: line)
+    XCTAssertEqual(
+      userDefaults["NSPrivacyAccessedAPIType"] as? String,
+      "NSPrivacyAccessedAPICategoryUserDefaults",
+      file: file,
+      line: line
+    )
+    XCTAssertEqual(
+      userDefaults["NSPrivacyAccessedAPITypeReasons"] as? [String],
+      ["1C8F.1"],
+      file: file,
+      line: line
+    )
+  }
+
+  func testRunnerBundlesItsAppGroupPrivacyManifest() throws {
+    let url = try XCTUnwrap(
+      Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy")
+    )
+    try assertAppGroupUserDefaultsDeclaration(loadPrivacyManifest(at: url))
+  }
+
+  func testWidgetBundlesItsAppGroupPrivacyManifest() throws {
+    let plugInsURL = try XCTUnwrap(Bundle.main.builtInPlugInsURL)
+    let extensionURL = plugInsURL.appendingPathComponent("EastWidgetExtension.appex")
+    let bundle = try XCTUnwrap(Bundle(url: extensionURL))
+    let manifestURL = try XCTUnwrap(
+      bundle.url(forResource: "PrivacyInfo", withExtension: "xcprivacy")
+    )
+    try assertAppGroupUserDefaultsDeclaration(loadPrivacyManifest(at: manifestURL))
   }
 
   // MARK: - Build 26 Phase 4B-1: CloudKit bridge pure-mapping unit tests
@@ -130,7 +190,7 @@ class RunnerTests: XCTestCase {
 
     func fetch(
       withRecordZoneID zoneID: CKRecordZone.ID,
-      completionHandler: @escaping (CKRecordZone?, Error?) -> Void
+      completionHandler: @escaping @Sendable (CKRecordZone?, Error?) -> Void
     ) {
       fetchCallCount += 1
       switch fetchOutcome {
@@ -147,9 +207,9 @@ class RunnerTests: XCTestCase {
         return
       }
       if let error = createOutcome {
-        modifyOperation.modifyRecordZonesCompletionBlock?(nil, nil, error)
+        modifyOperation.modifyRecordZonesResultBlock?(.failure(error))
       } else {
-        modifyOperation.modifyRecordZonesCompletionBlock?([], nil, nil)
+        modifyOperation.modifyRecordZonesResultBlock?(.success(()))
       }
     }
   }
@@ -1054,7 +1114,7 @@ class RunnerTests: XCTestCase {
 
   // 9l. Cross-device flow at the exact archive-then-decode sequence
   // `CloudKitRecordTransportCoordinator.fetchZoneChanges`'s own
-  // `recordChangedBlock` runs for a `CKKeptWisdom` record (see this file's
+  // `recordWasChangedBlock` runs for a `CKKeptWisdom` record (see this file's
   // own disclosed `FakeRecordTransportDatabase` limitation earlier --
   // `CKServerChangeToken` cannot be constructed offline, and neither a
   // genuinely successful fetch nor this specific decode-success case can
@@ -1070,7 +1130,7 @@ class RunnerTests: XCTestCase {
       revealId: phase4CRevealIdA, deletedAtMs: 1, updatedAtMs: 1,
       mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
 
-    // "Device B": exactly `recordChangedBlock`'s own sequence for a
+    // "Device B": exactly `recordWasChangedBlock`'s own sequence for a
     // CKKeptWisdom record.
     guard let systemFields = CloudKitOpaqueArchive.archiveSystemFields(of: record) else {
       return XCTFail("Expected archiveSystemFields to succeed for a well-formed tombstone record")
@@ -1294,13 +1354,14 @@ class RunnerTests: XCTestCase {
     var modifyOverallError: Error?
 
     var zoneChangesRecordsToReport: [CKRecord] = []
+    var zoneChangesRecordErrorsToReport: [(CKRecord.ID, Error)] = []
     var zoneChangesDeletedRecordIDs: [(CKRecord.ID, String)] = []
     var zoneChangesFetchError: Error?
     var zoneChangesOverallError: Error?
 
     func fetch(
       withRecordZoneID zoneID: CKRecordZone.ID,
-      completionHandler: @escaping (CKRecordZone?, Error?) -> Void
+      completionHandler: @escaping @Sendable (CKRecordZone?, Error?) -> Void
     ) {
       completionHandler(fetchOutcome.0, fetchOutcome.1)
     }
@@ -1312,22 +1373,39 @@ class RunnerTests: XCTestCase {
         let records = modifyOperation.recordsToSave ?? []
         for (index, record) in records.enumerated() {
           guard index < perRecordModifyErrors.count else { continue }
-          modifyOperation.perRecordCompletionBlock?(record, perRecordModifyErrors[index])
+          if let error = perRecordModifyErrors[index] {
+            modifyOperation.perRecordSaveBlock?(record.recordID, .failure(error))
+          } else {
+            modifyOperation.perRecordSaveBlock?(record.recordID, .success(record))
+          }
         }
-        modifyOperation.modifyRecordsCompletionBlock?(nil, nil, modifyOverallError)
+        if let modifyOverallError {
+          modifyOperation.modifyRecordsResultBlock?(.failure(modifyOverallError))
+        } else {
+          modifyOperation.modifyRecordsResultBlock?(.success(()))
+        }
         return
       }
 
       if let fetchOperation = operation as? CKFetchRecordZoneChangesOperation {
         for record in zoneChangesRecordsToReport {
-          fetchOperation.recordChangedBlock?(record)
+          fetchOperation.recordWasChangedBlock?(record.recordID, .success(record))
+        }
+        for (recordID, error) in zoneChangesRecordErrorsToReport {
+          fetchOperation.recordWasChangedBlock?(recordID, .failure(error))
         }
         for (recordID, recordType) in zoneChangesDeletedRecordIDs {
           fetchOperation.recordWithIDWasDeletedBlock?(recordID, recordType)
         }
-        fetchOperation.recordZoneFetchCompletionBlock?(
-          CloudKitRecordIdentity.zoneID, nil, nil, false, zoneChangesFetchError)
-        fetchOperation.fetchRecordZoneChangesCompletionBlock?(zoneChangesOverallError)
+        if let zoneChangesFetchError {
+          fetchOperation.recordZoneFetchResultBlock?(
+            CloudKitRecordIdentity.zoneID, .failure(zoneChangesFetchError))
+        }
+        if let zoneChangesOverallError {
+          fetchOperation.fetchRecordZoneChangesResultBlock?(.failure(zoneChangesOverallError))
+        } else {
+          fetchOperation.fetchRecordZoneChangesResultBlock?(.success(()))
+        }
         return
       }
     }
@@ -1625,6 +1703,24 @@ class RunnerTests: XCTestCase {
     waitForExpectations(timeout: 1)
   }
 
+  func testFetchZoneChangesFailsClosedOnPerRecordCallbackFailure() throws {
+    let recordID = try CloudKitRecordIdentity.keptWisdomRecordID(revealId: phase4CRevealIdA)
+    let fakeDatabase = FakeRecordTransportDatabase()
+    fakeDatabase.zoneChangesRecordErrorsToReport = [(recordID, CKError(.networkFailure))]
+    let coordinator = CloudKitRecordTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.fetchZoneChanges(previousServerToken: nil) { result in
+      XCTAssertEqual(result.outcome, .failure)
+      XCTAssertEqual(result.errorCode, CloudKitErrorClassifier.networkFailure)
+      XCTAssertTrue(result.changedKeptWisdomRecords.isEmpty)
+      XCTAssertTrue(result.changedSyncStateRecords.isEmpty)
+      XCTAssertNil(result.serverToken)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
   // 11b. Build 26 Phase 4H-2: a changed record legitimately carrying a
   // Reflection added *after* this device's own last fetch (e.g. by another
   // device) decodes successfully -- the mere presence of
@@ -1637,9 +1733,7 @@ class RunnerTests: XCTestCase {
   // report a genuine `.success` outcome for `fetchZoneChanges` at all --
   // `CKServerChangeToken` has no public initializer anywhere in the
   // CloudKit SDK, so `FakeRecordTransportDatabase.add(_:)` always invokes
-  // `recordZoneFetchCompletionBlock` with a `nil` token
-  // (`fetchOperation.recordZoneFetchCompletionBlock?(CloudKitRecordIdentity.zoneID,
-  // nil, nil, false, zoneChangesFetchError)`), which fails the
+  // no successful zone-fetch result carrying a token, which fails the
   // coordinator's own `guard let finalToken = finalToken, let archivedToken
   // = ...` closed with `unrecognizedNativeError`, regardless of whether
   // every changed record decoded perfectly. Asserting `.success` through
@@ -1654,7 +1748,7 @@ class RunnerTests: XCTestCase {
   // by calling `CloudKitOpaqueArchive.archiveSystemFields(of:)` followed by
   // `CloudKitKeptWisdomCodec.decode(_:systemFields:)` directly -- exactly
   // the same two calls, in the same order, that `fetchZoneChanges`'s own
-  // `recordChangedBlock` makes for a `CKKeptWisdom` record. Named
+  // `recordWasChangedBlock` makes for a `CKKeptWisdom` record. Named
   // `testKeptWisdomCodec...` (not `testFetchZoneChanges...`) to match: this
   // test exercises the codec's archive-then-decode path directly, never
   // `fetchZoneChanges` itself.
@@ -2136,9 +2230,10 @@ class RunnerTests: XCTestCase {
     private(set) var fetchedRecordIDs: [CKRecord.ID] = []
 
     // CKQueryOperation -- listKeptWisdomRecordNames. A single configured
-    // page: the record names reported via `recordFetchedBlock` before
-    // `queryCompletionBlock` fires with a `nil` cursor (i.e. "last page").
+    // page: the record names reported via `recordMatchedBlock` before
+    // `queryResultBlock` fires with a `nil` cursor (i.e. "last page").
     var queryPageRecordNames: [String] = []
+    var queryRecordMatchErrors: [(CKRecord.ID, Error)] = []
     var queryError: Error?
     private(set) var queryOperationsAdded: [CKQueryOperation] = []
 
@@ -2149,7 +2244,7 @@ class RunnerTests: XCTestCase {
 
     func fetch(
       withRecordID recordID: CKRecord.ID,
-      completionHandler: @escaping (CKRecord?, Error?) -> Void
+      completionHandler: @escaping @Sendable (CKRecord?, Error?) -> Void
     ) {
       fetchedRecordIDs.append(recordID)
       completionHandler(fetchRecordResult.0, fetchRecordResult.1)
@@ -2161,14 +2256,35 @@ class RunnerTests: XCTestCase {
         for name in queryPageRecordNames {
           let recordID = CKRecord.ID(recordName: name, zoneID: CloudKitRecordIdentity.zoneID)
           let record = CKRecord(recordType: CloudKitRecordSchema.keptWisdomRecordType, recordID: recordID)
-          queryOperation.recordFetchedBlock?(record)
+          queryOperation.recordMatchedBlock?(recordID, .success(record))
         }
-        queryOperation.queryCompletionBlock?(nil, queryError)
+        for (recordID, error) in queryRecordMatchErrors {
+          queryOperation.recordMatchedBlock?(recordID, .failure(error))
+        }
+        if let queryError {
+          queryOperation.queryResultBlock?(.failure(queryError))
+        } else {
+          queryOperation.queryResultBlock?(.success(nil))
+        }
         return
       }
       if let modifyOperation = operation as? CKModifyRecordsOperation {
         modifyOperationsAdded.append(modifyOperation)
-        modifyOperation.modifyRecordsCompletionBlock?(nil, deletedRecordIDsToReport, deleteCompletionError)
+        let successfulIDs = Set(deletedRecordIDsToReport)
+        let perItemErrors =
+          (deleteCompletionError as? CKError)?.partialErrorsByItemID as? [CKRecord.ID: Error]
+        for recordID in modifyOperation.recordIDsToDelete ?? [] {
+          if successfulIDs.contains(recordID) {
+            modifyOperation.perRecordDeleteBlock?(recordID, .success(()))
+          } else if let error = perItemErrors?[recordID] {
+            modifyOperation.perRecordDeleteBlock?(recordID, .failure(error))
+          }
+        }
+        if let deleteCompletionError {
+          modifyOperation.modifyRecordsResultBlock?(.failure(deleteCompletionError))
+        } else {
+          modifyOperation.modifyRecordsResultBlock?(.success(()))
+        }
         return
       }
     }
@@ -2264,10 +2380,10 @@ class RunnerTests: XCTestCase {
   // 5. Pagination/continuation: structural proof only, not dynamic --
   // `CKQueryOperation.Cursor` has no public initializer, so no fake can
   // synthesize a real non-nil cursor to drive a genuine second page through
-  // `queryCompletionBlock`. This inspects the coordinator's own source text
+  // `queryResultBlock`. This inspects the coordinator's own source text
   // to confirm the recursive continuation path
   // (`runQuery(cursor: nextCursor)` guarded by `if let nextCursor = ...`)
-  // is present exactly once and reachable from `queryCompletionBlock`,
+  // is present exactly once and reachable from `queryResultBlock`,
   // mirroring this codebase's own established precedent (the Dart layering
   // tests) of a structural source check standing in for a dynamic one where
   // the platform itself makes dynamic testing impossible.
@@ -2279,7 +2395,7 @@ class RunnerTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(
-      source.contains("if let nextCursor = nextCursor {"),
+      source.contains("if let nextCursor {"),
       "Expected the coordinator to check for a non-nil next cursor before deciding a query is complete")
     XCTAssertTrue(
       source.contains("runQuery(cursor: nextCursor)"),
@@ -2297,6 +2413,24 @@ class RunnerTests: XCTestCase {
     coordinator.listKeptWisdomRecordNames { result in
       XCTAssertEqual(result.outcome, .success)
       XCTAssertTrue(result.recordNames.isEmpty)
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+  }
+
+  func testListKeptWisdomRecordNamesFailsClosedOnPerRecordMatchFailure() {
+    let fakeDatabase = FakeDeletionTransportDatabase()
+    fakeDatabase.queryPageRecordNames = ["east-kept-valid"]
+    let failedID = CKRecord.ID(
+      recordName: "east-kept-failed", zoneID: CloudKitRecordIdentity.zoneID)
+    fakeDatabase.queryRecordMatchErrors = [(failedID, CKError(.networkFailure))]
+    let coordinator = CloudKitDeletionTransportCoordinator(database: fakeDatabase)
+
+    let calledOnce = expectation(description: "completion called")
+    coordinator.listKeptWisdomRecordNames { result in
+      XCTAssertEqual(result.outcome, .failure)
+      XCTAssertTrue(result.recordNames.isEmpty)
+      XCTAssertEqual(result.errorCode, CloudKitErrorClassifier.networkFailure)
       calledOnce.fulfill()
     }
     waitForExpectations(timeout: 1)

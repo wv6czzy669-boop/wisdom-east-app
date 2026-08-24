@@ -479,14 +479,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      final eastMark = tester.widget<Text>(find.text('EAST.').first);
+      final settingsHeading = tester.widget<Text>(find.text('設定').first);
       // For `ja`, `EastTypographyResolver` makes NotoSerifJP the *primary*
       // family (every other production font, including Latin, is the
       // fallback chain) -- see `east_typography_resolver.dart`.
-      expect(eastMark.style?.fontFamily, 'NotoSerifJP');
+      expect(settingsHeading.style?.fontFamily, 'NotoSerifJP');
       // Dark Mode's locked ink -- confirms the glyph itself is actually
       // theme-reactive, not merely present.
-      expect(eastMark.style?.color, EastColorScheme.dark.ink);
+      expect(settingsHeading.style?.color, EastColorScheme.dark.ink);
     });
   });
 

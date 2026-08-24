@@ -146,13 +146,12 @@ class E2ECloudKitPlatformBridge implements CloudKitPlatformBridge {
     return server.fetch(request);
   }
 
-  // Build 26 Phase 5 (slice 2): the three deletion-runner-only bridge
-  // methods -- never used by the Phase 4E-5 E2E harness's own
-  // outgoing/incoming sync-pass scenarios (SyncOrchestrator/
-  // IncomingKeptSyncCoordinator never call them).
   @override
   Future<CloudKitSyncStateEpochResult> fetchSyncStateEpoch() =>
-      throw UnimplementedError('Not used by the Phase 4E-5 E2E harness.');
+      server.fetchSyncStateEpoch();
+
+  // Physical listing/deletion remain deletion-runner-only and are not used
+  // by this normal-sync harness.
 
   @override
   Future<CloudKitKeptWisdomRecordNamesResult> listKeptWisdomRecordNames() =>

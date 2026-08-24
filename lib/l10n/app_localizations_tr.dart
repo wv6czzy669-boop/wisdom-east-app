@@ -27,6 +27,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get kept => 'Kalanlar';
 
   @override
+  String get searchKept => 'Ara';
+
+  @override
+  String get clearSearch => 'Aramayı temizle';
+
+  @override
+  String get noKeptSearchResults => 'Hiçbir şey bulunamadı.';
+
+  @override
   String get keptUpper => 'KALANLAR';
 
   @override
@@ -265,6 +274,12 @@ class AppLocalizationsTr extends AppLocalizations {
       'Yansıma bu bilgelikten kaldırılacak.';
 
   @override
+  String get removeKeptQuestion => 'Kalanlardan kaldırılsın mı?';
+
+  @override
+  String get keptDeleteExplanation => 'Bu bilgelik ve Yansıması kaldırılacak.';
+
+  @override
   String get cancelUpper => 'İPTAL';
 
   @override
@@ -448,4 +463,19 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'Yansıma silinemedi. Lütfen tekrar dene.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return '$hours saat $minutes dakika kaldı';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return '$hours saat kaldı';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return '$minutes dakika kaldı';
+  }
 }

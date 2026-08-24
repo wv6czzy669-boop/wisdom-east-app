@@ -9,9 +9,11 @@ import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/repositories/kept_repository.dart';
 import 'package:wisdom_app/screens/journal_screen.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
+import 'package:wisdom_app/screens/reflection_screen.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 import 'package:wisdom_app/utils/reflection_prompt.dart';
 
@@ -102,7 +104,7 @@ void main() {
 
     expect(find.text('July 22, 2026'), findsOneWidget);
     expect(find.text('July 23, 2026'), findsOneWidget);
-    expect(find.text('KEPT'), findsOneWidget);
+    expect(find.text('KEPT'), findsNothing);
     expect(find.text('REFLECTED'), findsOneWidget);
     expect(find.text('ADD REFLECTION'), findsOneWidget);
     expect(find.text('This remains private.'), findsNothing);
@@ -112,13 +114,207 @@ void main() {
     );
     expect(first.hasReflection, isFalse);
 
-    final kept = tester.widget<Text>(find.text('KEPT'));
-    final reflected = tester.widget<Text>(find.text('REFLECTED'));
-    expect(reflected.style?.fontFamily, kept.style?.fontFamily);
-    expect(reflected.style?.fontSize, kept.style?.fontSize);
-    expect(reflected.style?.fontWeight, kept.style?.fontWeight);
-    expect(reflected.style?.letterSpacing, kept.style?.letterSpacing);
-    expect(reflected.style?.color, kept.style?.color);
+    expect(
+      tester.widget<Text>(find.text('REFLECTED')).style?.fontFamily,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+      'Kept sorts newest to oldest by durable keptAt even when sync/list '
+      'arrival order is shuffled', (tester) async {
+    final oldest = await keep(
+      service,
+      text: 'Oldest dated wisdom',
+      date: DateTime.utc(2026, 8, 19, 8),
+    );
+    final newest = await keep(
+      service,
+      text: 'Newest dated wisdom',
+      date: DateTime.utc(2026, 8, 22, 8),
+    );
+    final middle = await keep(
+      service,
+      text: 'Middle dated wisdom',
+      date: DateTime.utc(2026, 8, 21, 8),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          // Deliberately neither ascending nor descending: simulates an
+          // envelope whose record order changed during sync reconciliation.
+          reflections: [newest, oldest, middle],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    final newestY = tester.getTopLeft(find.text(newest.text)).dy;
+    final middleY = tester.getTopLeft(find.text(middle.text)).dy;
+    final oldestY = tester.getTopLeft(find.text(oldest.text)).dy;
+    expect(newestY, lessThan(middleY));
+    expect(middleY, lessThan(oldestY));
+  });
+
+  testWidgets(
+      'permanent search filters localized wisdom and private Reflection text '
+      'without mutating Kept data', (tester) async {
+    final doorway = await keep(
+      service,
+      text: 'A quiet doorway remains open',
+      date: DateTime.utc(2026, 7, 20),
+    );
+    final reflected = await keep(
+      service,
+      text: 'Listen without reaching',
+      date: DateTime.utc(2026, 7, 21),
+    );
+    final unrelated = await keep(
+      service,
+      text: 'The river keeps its pace',
+      date: DateTime.utc(2026, 7, 22),
+    );
+    await service.saveReflection(
+      itemId: reflected.id,
+      reflection: 'A private seed became visible.',
+      isKeeper: true,
+    );
+    final items = await service.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: eastTheme(),
+        home: SavedReflectionsScreen(
+          reflections: items,
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    final searchField = find.byKey(const ValueKey('kept-search-field'));
+    expect(searchField, findsOneWidget);
+    expect(find.text('Search'), findsOneWidget);
+
+    await tester.enterText(searchField, 'doorway');
+    await tester.pump();
+    expect(find.text(doorway.text), findsOneWidget);
+    expect(find.text(reflected.text), findsNothing);
+    expect(find.text(unrelated.text), findsNothing);
+
+    await tester.enterText(searchField, 'private seed');
+    await tester.pump();
+    expect(find.text(doorway.text), findsNothing);
+    expect(find.text(reflected.text), findsOneWidget);
+    expect(find.text('A private seed became visible.'), findsNothing);
+    expect(find.text(unrelated.text), findsNothing);
+
+    await tester.enterText(searchField, 'missing');
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('kept-search-empty-state')),
+      findsOneWidget,
+    );
+    expect(find.text('Nothing found.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('kept-search-clear')));
+    await tester.pump();
+    expect(find.text(doorway.text), findsOneWidget);
+    expect(find.text(reflected.text), findsOneWidget);
+    expect(find.text(unrelated.text), findsOneWidget);
+    expect(find.byKey(const ValueKey('kept-search-empty-state')), findsNothing);
+    expect(await service.load(), hasLength(3));
+  });
+
+  testWidgets('search uses EAST light and dark palette tokens', (tester) async {
+    final item = await keep(
+      service,
+      text: 'A searchable wisdom',
+      date: DateTime.utc(2026, 7, 23),
+    );
+
+    for (final brightness in Brightness.values) {
+      final palette = brightness == Brightness.dark
+          ? EastColorScheme.dark
+          : EastColorScheme.light;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: eastTheme(brightness: brightness),
+          home: SavedReflectionsScreen(
+            key: ValueKey(brightness),
+            reflections: [item],
+            savedReflectionsService: service,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final shellFinder = find.byKey(const ValueKey('kept-search-shell'));
+      final fieldFinder = find.byKey(const ValueKey('kept-search-field'));
+      final shell = tester.widget<AnimatedContainer>(shellFinder);
+      final decoration = shell.decoration! as BoxDecoration;
+      final border = decoration.border! as Border;
+      final field = tester.widget<TextField>(fieldFinder);
+      final searchIcon = tester.widget<Icon>(find.byIcon(Icons.search));
+
+      expect(border.bottom.color, palette.divider);
+      expect(field.cursorColor, palette.ink);
+      expect(field.decoration!.hintStyle!.color, palette.hint);
+      expect(searchIcon.color, palette.secondary);
+      expect(
+        Theme.of(tester.element(fieldFinder)).scaffoldBackgroundColor,
+        palette.background,
+      );
+
+      await tester.tap(fieldFinder);
+      await tester.pump(const Duration(milliseconds: 160));
+      final focusedShell = tester.widget<AnimatedContainer>(shellFinder);
+      final focusedDecoration = focusedShell.decoration! as BoxDecoration;
+      final focusedBorder = focusedDecoration.border! as Border;
+      expect(focusedBorder.bottom.color, palette.ink);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+  });
+
+  testWidgets('search and clear expose localized accessible controls',
+      (tester) async {
+    final item = await keep(
+      service,
+      text: 'Accessible search',
+      date: DateTime.utc(2026, 7, 23),
+    );
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: eastTheme(),
+        home: SavedReflectionsScreen(
+          reflections: [item],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    final searchField = find.byKey(const ValueKey('kept-search-field'));
+    final searchSemantics = tester
+        .getSemantics(find.byKey(const ValueKey('kept-search-semantics')))
+        .getSemanticsData();
+    expect(searchSemantics.label, contains('Search'));
+    expect(searchSemantics.flagsCollection.isTextField, isTrue);
+
+    await tester.enterText(searchField, 'accessible');
+    await tester.pump();
+    final clearSemantics = tester
+        .getSemantics(
+          find.byKey(const ValueKey('kept-search-clear-semantics')),
+        )
+        .getSemanticsData();
+    expect(clearSemantics.label, 'Clear search');
+    expect(clearSemantics.hasAction(SemanticsAction.tap), isTrue);
+
+    semantics.dispose();
   });
 
   // EAST. Phase 8 real-device repair: the real production navigation path
@@ -234,6 +430,68 @@ void main() {
     expect(find.text(reflected.text), findsOneWidget);
   });
 
+  testWidgets('tapping an unreflected wisdom opens its Reflection editor',
+      (tester) async {
+    final item = await keep(
+      service,
+      text: 'The wisdom itself opens reflection',
+      date: DateTime.utc(2026, 7, 23),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [item],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(ValueKey('kept-${item.id}-wisdom-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReflectionScreen), findsOneWidget);
+    expect(find.text(item.text), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reflection-writing-area')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('tapping a reflected wisdom opens its existing Reflection',
+      (tester) async {
+    final item = await keep(
+      service,
+      text: 'Open the existing reflection from the wisdom',
+      date: DateTime.utc(2026, 7, 23),
+    );
+    await service.saveReflection(
+      itemId: item.id,
+      reflection: 'Existing reflection opened from wisdom.',
+      isKeeper: false,
+    );
+    final reflected = (await service.load()).single;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [reflected],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(ValueKey('kept-${reflected.id}-wisdom-action')),
+    );
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('reflection-writing-area')),
+    );
+    expect(field.controller!.text, 'Existing reflection opened from wisdom.');
+  });
+
   testWidgets('deleting a reflection returns REFLECTED wisdom to KEPT',
       (tester) async {
     final item = await keep(
@@ -272,7 +530,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('REFLECTED'), findsNothing);
-    expect(find.text('KEPT'), findsOneWidget);
+    expect(find.text('KEPT'), findsNothing);
     expect(find.text('ADD REFLECTION'), findsOneWidget);
     expect((await service.load()).single.hasReflection, isFalse);
   });
@@ -395,11 +653,40 @@ void main() {
     await tester.pumpAndSettle();
 
     // A tap at the DELETE action's own rendered location must actually
-    // reach it and invoke deletion — proving the foreground row is no
-    // longer covering that region once the row is open. This uses the
-    // real widget location (no `warnIfMissed: false`, no arbitrary
+    // reach it and open the decision overlay — proving the foreground row
+    // is no longer covering that region once the row is open. This uses
+    // the real widget location (no `warnIfMissed: false`, no arbitrary
     // coordinates, no bypassing the UI).
     await tester.tap(deleteAction);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('kept-delete-decision')), findsOneWidget);
+    expect(find.text(item.text), findsOneWidget);
+    expect(await service.load(), hasLength(1));
+
+    final semantics = tester.ensureSemantics();
+    final cancel = tester.getSemantics(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('CANCEL'),
+      ),
+    );
+    final delete = tester.getSemantics(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('DELETE'),
+      ),
+    );
+    expect(cancel.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    expect(delete.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('DELETE'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text(item.text), findsNothing);
@@ -431,15 +718,18 @@ void main() {
     await tester.pumpAndSettle();
 
     // Tap the now-open row (not DELETE) to close the revealed action.
-    await tester.tap(find.text(item.text));
+    await tester.tap(
+      find.byKey(ValueKey('kept-${item.id}-swipe-foreground')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text(item.text), findsOneWidget);
+    expect(find.byType(ReflectionScreen), findsNothing);
     expect(await service.load(), hasLength(1));
   });
 
   testWidgets(
-      'tapping the DELETE action after swiping removes the item immediately with no dialog, snackbar, or Undo',
+      'tapping the DELETE action requires the EAST full-field decision and Cancel preserves the item',
       (tester) async {
     final item = await keep(
       service,
@@ -456,6 +746,8 @@ void main() {
       ),
     );
 
+    final closedWisdomX = tester.getTopLeft(find.text(item.text)).dx;
+
     await tester.drag(
       find.byKey(ValueKey('kept-${item.id}')),
       const Offset(-500, 0),
@@ -464,12 +756,34 @@ void main() {
     await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
     await tester.pumpAndSettle();
 
-    expect(find.text(item.text), findsNothing);
+    expect(find.byKey(const ValueKey('kept-delete-decision')), findsOneWidget);
+    expect(find.text('Remove from Kept?'), findsOneWidget);
+    expect(
+      find.text('This wisdom and its Reflection will be removed.'),
+      findsOneWidget,
+    );
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
     expect(find.text('Removed from Kept.'), findsNothing);
     expect(find.text('Undo'), findsNothing);
-    expect(await service.load(), isEmpty);
+    expect(find.text(item.text), findsOneWidget);
+    expect(await service.load(), hasLength(1));
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('CANCEL'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('kept-delete-decision')), findsNothing);
+    expect(find.text(item.text), findsOneWidget);
+    expect(tester.getTopLeft(find.text(item.text)).dx, closedWisdomX);
+    final semantics = tester.ensureSemantics();
+    expect(find.semantics.byLabel('DELETE'), findsNothing);
+    semantics.dispose();
+    expect(await service.load(), hasLength(1));
   });
 
   testWidgets(
@@ -504,6 +818,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('DELETE'),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text(item.text), findsNothing);
     expect(find.text('REFLECTED'), findsNothing);
@@ -537,6 +858,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('kept-delete-decision')),
+        matching: find.text('DELETE'),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text(item.text), findsOneWidget);
     expect(
@@ -545,6 +873,39 @@ void main() {
     );
     expect(find.text('Undo'), findsNothing);
     expect(await service.load(), hasLength(1));
+  });
+
+  testWidgets('Kept delete decision stays usable at 200% text scale',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+    final item = await keep(
+      service,
+      text: 'A wisdom protected by confirmation',
+      date: DateTime.utc(2026, 7, 23),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [item],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(ValueKey('kept-${item.id}')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('kept-${item.id}-delete-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('kept-delete-decision')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Kept remains usable on small iPhone with large text',
@@ -954,7 +1315,7 @@ void main() {
       );
       expect(find.textContaining('KEEPER'), findsNothing);
       expect(find.text('Kept'), findsOneWidget);
-      expect(find.text('KEPT'), findsOneWidget);
+      expect(find.text('KEPT'), findsNothing);
       expect(find.text('ADD REFLECTION'), findsOneWidget);
       expect(find.text(item.text), findsOneWidget);
     });

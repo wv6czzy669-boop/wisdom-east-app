@@ -27,6 +27,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get kept => '남은 것';
 
   @override
+  String get searchKept => '검색';
+
+  @override
+  String get clearSearch => '검색 지우기';
+
+  @override
+  String get noKeptSearchResults => '찾을 수 없습니다.';
+
+  @override
   String get keptUpper => '남은 것';
 
   @override
@@ -258,6 +267,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reflectionDeleteExplanation => '이 남은 지혜에서 성찰이 제거됩니다.';
 
   @override
+  String get removeKeptQuestion => '남은 것에서 삭제할까요?';
+
+  @override
+  String get keptDeleteExplanation => '이 지혜와 성찰이 삭제됩니다.';
+
+  @override
   String get cancelUpper => '취소';
 
   @override
@@ -430,4 +445,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get reflectionDeleteFailed => '성찰을 삭제하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return '$hours시간 $minutes분 남음';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return '$hours시간 남음';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return '$minutes분 남음';
+  }
 }

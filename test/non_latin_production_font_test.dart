@@ -7,16 +7,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:wisdom_app/data/localized_wisdoms.dart';
-import 'package:wisdom_app/data/wisdom_localization_review.dart';
 import 'package:wisdom_app/data/wisdoms.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/localization/east_typography_resolver.dart';
-import 'package:wisdom_app/localization/visual_fit.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/services/journal_layout.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
+
+import 'test_support/visual_fit.dart';
+import 'test_support/wisdom_localization_review.dart';
 
 const _nonLatinTags = <String>['ja', 'ko', 'zh-Hant', 'ar', 'th'];
 const _allFitTags = <String>[
@@ -83,7 +84,12 @@ void main() {
     for (final target in EastLocaleRegistry.targets) {
       final plan = EastTypographyResolver.forLocale(target.locale);
       expect(plan.hasEmbeddedPdfFont, isTrue, reason: target.tag);
-      expect(plan.pdfFallbackAssets, hasLength(5), reason: target.tag);
+      expect(plan.pdfFallbackAssets, hasLength(6), reason: target.tag);
+      expect(
+        plan.pdfFallbackAssets.first,
+        EastTypographyResolver.pdfEmojiFontAsset,
+        reason: target.tag,
+      );
       expect(
         <String>[plan.family, ...plan.fallbacks],
         contains('EBGaramond'),
@@ -95,11 +101,15 @@ void main() {
 
   test('bundled assets, OFL, source documentation, and inventories exist',
       () async {
+    expect(
+      EastTypographyResolver.productionFonts.map((font) => font.licenseAsset),
+      everyElement(isNotNull),
+    );
     final licenseAssets = EastTypographyResolver.productionFonts
         .map((font) => font.licenseAsset)
         .whereType<String>()
         .toSet();
-    expect(licenseAssets, hasLength(3));
+    expect(licenseAssets, hasLength(4));
     for (final asset in licenseAssets) {
       final license = await rootBundle.loadString(asset);
       expect(license, contains('SIL OPEN FONT LICENSE'));
@@ -110,6 +120,22 @@ void main() {
     expect(documentation, contains('| ar | Noto Naskh Arabic'));
     expect(documentation, contains('2.021'));
     expect(documentation, contains('Noto Serif Thai'));
+    expect(documentation, contains('Noto Color Emoji 2.051'));
+    expect(documentation, contains('OFL-EBGaramond.txt'));
+    expect(documentation, contains('ef9512f92f6d'));
+
+    final emojiLicense = await rootBundle.loadString(
+      EastTypographyResolver.pdfEmojiLicenseAsset,
+    );
+    expect(emojiLicense, contains('SIL OPEN FONT LICENSE'));
+    expect(emojiLicense, contains('Version 1.1'));
+    final emojiData = await rootBundle.load(
+      EastTypographyResolver.pdfEmojiFontAsset,
+    );
+    expect(
+      emojiData.lengthInBytes,
+      EastTypographyResolver.pdfEmojiFontByteLength,
+    );
 
     for (final font in EastTypographyResolver.productionFonts) {
       final data = await rootBundle.load(font.asset);
@@ -125,9 +151,8 @@ void main() {
       final plan = EastTypographyResolver.forLocale(locale);
       final fontBytes = await rootBundle.load(plan.asset);
       final font = _TrueTypeFont(fontBytes);
-      final inventory = await rootBundle.loadString(
-        'assets/fonts/glyphs/$tag.txt',
-      );
+      final inventory =
+          await File('assets/fonts/glyphs/$tag.txt').readAsString();
       final missing = inventory.runes
           .where((rune) => String.fromCharCode(rune).trim().isNotEmpty)
           .where((rune) => !font.supports(rune))
@@ -148,8 +173,6 @@ void main() {
       final locale = _localeForTag(tag);
       final catalog = reviewedLocalizedWisdomCatalogs[tag]!;
       expect(catalog, hasLength(603), reason: tag);
-      var maximumHeight = 0.0;
-      var maximumId = '';
       final suspicious = <String>[];
       for (final entry in catalog.entries) {
         final sourceHeight = EastVisualFit.measureWisdomHeight(
@@ -159,10 +182,6 @@ void main() {
           entry.value,
           locale: locale,
         );
-        if (targetHeight > maximumHeight) {
-          maximumHeight = targetHeight;
-          maximumId = entry.key;
-        }
         expect(
           targetHeight,
           lessThanOrEqualTo(EastVisualFit.englishWisdomMaximumHeight),
@@ -179,9 +198,6 @@ void main() {
           );
         }
       }
-      debugPrint(
-        'PHASE5B_NON_LATIN_FIT $tag maxHeight=$maximumHeight id=$maximumId',
-      );
       expect(
         suspicious,
         isEmpty,
@@ -198,26 +214,17 @@ void main() {
       final catalog =
           tag == 'en' ? _englishById : reviewedLocalizedWisdomCatalogs[tag]!;
       expect(catalog, hasLength(603), reason: tag);
-      var maximumHeight = 0.0;
-      var maximumId = '';
       for (final entry in catalog.entries) {
         final height = EastVisualFit.measureWisdomHeight(
           entry.value,
           locale: locale,
         );
-        if (height > maximumHeight) {
-          maximumHeight = height;
-          maximumId = entry.key;
-        }
         expect(
           height,
           lessThanOrEqualTo(EastVisualFit.englishWisdomMaximumHeight),
           reason: '$tag/${entry.key}',
         );
       }
-      debugPrint(
-        'PHASE5B_ALL_LOCALE_FIT $tag maxHeight=$maximumHeight id=$maximumId',
-      );
     }
   });
 

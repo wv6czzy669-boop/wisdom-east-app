@@ -1,7 +1,8 @@
 /// Build 26 Phase 5 (slice 2): the platform-channel result contract for
 /// `fetchSyncStateEpoch` -- a narrow, single-record, content-minimal read of
-/// the `CKEastSyncState` singleton, used only by the Phase 5 remote
-/// deletion runner's epoch-barrier step (`lib/sync_deletion/`). Deliberately
+/// the `CKEastSyncState` singleton, used by the Phase 5 remote deletion
+/// runner's epoch-barrier step (`lib/sync_deletion/`) and the completed-
+/// bootstrap epoch guard. Deliberately
 /// distinct from `fetchPrivateZoneChanges`: that method is a change-token
 /// delta fetch that also returns every changed `CKKeptWisdom` record's full
 /// content, and advances/returns a server token tied to Phase 4's own

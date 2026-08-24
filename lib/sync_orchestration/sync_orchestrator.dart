@@ -396,13 +396,32 @@ final class SyncOrchestrator {
         // baseline it came from before ever applying or committing it. See
         // `PendingIncomingSyncBatch`'s own doc comment for the full
         // validation contract this scope metadata exists to support.
+        final incomingControlRecords = fetchResult.changedSyncStateRecords;
+        if (bucket != null &&
+            (incomingControlRecords.length > 1 ||
+                (incomingControlRecords.length == 1 &&
+                    incomingControlRecords.single.dataEpoch !=
+                        bucket.dataEpoch))) {
+          // Bootstrap checks the remote epoch immediately before this pass,
+          // but the singleton can still change between those two network
+          // reads. Never let content fetched under a different/ambiguous
+          // epoch reach the incoming applier.
+          keptDiagnostic('sync-orchestrator: control-record-mismatch');
+          return SyncPassResult.permanentFailure(cause: fetchResult);
+        }
+
         final pendingBatch = PendingIncomingSyncBatch(
           accountFingerprint: fingerprint,
           baseDataEpoch: bucket?.dataEpoch,
           previousServerChangeToken: previousTokenUsedForFetch,
           pendingServerChangeToken: fetchResult.serverToken,
           incomingKeptWisdomProjections: fetchResult.changedKeptWisdomRecords,
-          incomingSyncStateProjections: fetchResult.changedSyncStateRecords,
+          // A full refetch after token expiry legitimately returns the
+          // already-known singleton. Once independently matched above, omit
+          // it: IncomingKeptSyncCoordinator accepts content records only and
+          // must continue rejecting unvalidated control-record input.
+          incomingSyncStateProjections:
+              bucket == null ? incomingControlRecords : const [],
           // Build 26 Phase 4E-3a: plumbed through unchanged -- this phase
           // never validates, applies, or checkpoints it. See
           // `PendingIncomingSyncBatch.incomingKeptWisdomRecordSystemFields`'s

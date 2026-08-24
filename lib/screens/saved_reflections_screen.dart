@@ -15,6 +15,7 @@ import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
 import '../utils/date_formatter.dart';
+import '../utils/kept_search_matcher.dart';
 import '../widgets/east_back_button.dart';
 import 'journal_screen.dart';
 import 'keeper_screen.dart';
@@ -44,6 +45,14 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   late final SavedReflectionsService _service;
   late final PurchaseService _purchaseService;
   bool _navigationInProgress = false;
+  bool _deleteInProgress = false;
+  FavoriteItem? _pendingDeleteItem;
+  int _deleteDismissRevision = 0;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
+
+  bool get _confirmingDelete => _pendingDeleteItem != null;
 
   /// Build 26 Phase 4H-6: guards the silent background reload triggered by
   /// [app_services.keptStateRevisionNotifier] (an incoming CloudKit sync
@@ -88,13 +97,22 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     // existing `app_services.purchaseService.addListener(...)` pattern
     // `home_screen.dart` already uses for its own cross-cutting listener.
     app_services.keptStateRevisionNotifier.addListener(_onKeptStateChanged);
+    _searchFocusNode.addListener(_onSearchFocusChanged);
   }
 
   @override
   void dispose() {
     app_services.keptStateRevisionNotifier.removeListener(_onKeptStateChanged);
     _incomingKeptRefreshGuard.invalidate();
+    _searchController.dispose();
+    _searchFocusNode
+      ..removeListener(_onSearchFocusChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onSearchFocusChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Build 26 Phase 4H-6: invoked synchronously by
@@ -244,18 +262,147 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     }
   }
 
-  Future<void> _deleteItem(FavoriteItem item) async {
+  void _requestDelete(FavoriteItem item) {
+    if (_deleteInProgress || !mounted) return;
+    setState(() {
+      _pendingDeleteItem = item;
+    });
+  }
+
+  void _cancelDelete() {
+    if (_deleteInProgress || !mounted) return;
+    setState(() {
+      _pendingDeleteItem = null;
+      // Cancel means abandoning the complete destructive interaction, not
+      // merely hiding its confirmation. Advancing this signal returns any
+      // revealed swipe action to the ordinary closed Kept-row state.
+      _deleteDismissRevision += 1;
+    });
+  }
+
+  Future<void> _confirmDelete() async {
+    final item = _pendingDeleteItem;
+    if (_deleteInProgress || item == null || !mounted) return;
+
+    setState(() {
+      _deleteInProgress = true;
+    });
+
     try {
       final removed = await _service.remove(itemId: item.id);
-      if (!mounted || removed == null) return;
+      if (!mounted) return;
       setState(() {
-        _items = removed.items;
+        if (removed != null) {
+          _items = removed.items;
+        }
+        _deleteInProgress = false;
+        _pendingDeleteItem = null;
       });
     } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _deleteInProgress = false;
+        _pendingDeleteItem = null;
+      });
       _showMessage(
         eastLocalizations(context).wisdomCouldNotBeRemoved,
       );
     }
+  }
+
+  Widget _deleteDecisionLabel(
+    String label, {
+    required VoidCallback? onTap,
+    required Color color,
+  }) {
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            child: Center(
+              child: Text(
+                label,
+                style: EastTypography.localized(
+                  context,
+                  size: 11,
+                  color: color,
+                  letterSpacing: 3.0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _deleteDecisionOverlay() {
+    final l10n = eastLocalizations(context);
+    if (!_confirmingDelete) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_confirmingDelete,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: _confirmingDelete ? 1.0 : 0.0,
+          child: Container(
+            key: const ValueKey('kept-delete-decision'),
+            color: EastColors.of(context).overlay,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.removeKeptQuestion,
+                  textAlign: TextAlign.center,
+                  style: _style(28, height: 1.1),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.keptDeleteExplanation,
+                  textAlign: TextAlign.center,
+                  style: _style(
+                    15,
+                    color: EastColors.of(context).secondary,
+                    height: 1.45,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 44),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _deleteDecisionLabel(
+                      l10n.cancelUpper,
+                      onTap: _deleteInProgress ? null : _cancelDelete,
+                      color: EastColors.of(context).secondary,
+                    ),
+                    const SizedBox(width: 56),
+                    _deleteDecisionLabel(
+                      l10n.deleteUpper,
+                      onTap: _deleteInProgress
+                          ? null
+                          : () => unawaited(_confirmDelete()),
+                      color: EastColors.of(context).ink,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // Build 33 real-device Voice Control repair: `itemNumber` (1-based,
@@ -265,17 +412,9 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   // control name and dates are not guaranteed unique. The static date/
   // wisdom content remains unnumbered and VoiceOver-readable via ordinary
   // Text auto-semantics -- only the actionable control's name changes.
-  Widget _status(FavoriteItem item, int itemNumber) {
+  Widget? _status(FavoriteItem item, int itemNumber) {
     final l10n = eastLocalizations(context);
-    if (!item.hasReflection) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        child: Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: Text(l10n.keptUpper, style: _statusStyle),
-        ),
-      );
-    }
+    if (!item.hasReflection) return null;
 
     // Build 33 real-device Voice Control repair: the outer `Semantics`
     // previously carried a `label` and `button: true` but no `onTap` of
@@ -324,15 +463,16 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     return Semantics(
       customSemanticsActions: {
         CustomSemanticsAction(label: eastLocalizations(context).delete): () {
-          unawaited(_deleteItem(item));
+          _requestDelete(item);
         },
       },
       child: _KeptSwipeToDeleteRow(
         key: ValueKey('kept-${item.id}'),
         itemId: item.id,
+        dismissRevision: _deleteDismissRevision,
         deleteLabelStyle: _statusStyle,
         deleteLabel: eastLocalizations(context).deleteUpper,
-        onDelete: () => unawaited(_deleteItem(item)),
+        onDelete: () => _requestDelete(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -342,10 +482,24 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                   color: eastMutedTextColor(context),
                   letterSpacing: 0.4,
                 )),
-            const SizedBox(height: 5),
-            _status(item, itemNumber),
-            const SizedBox(height: 7),
-            Text(_displayWisdom(item), style: _style(24)),
+            if (_status(item, itemNumber) case final status?) ...[
+              const SizedBox(height: 5),
+              status,
+              const SizedBox(height: 7),
+            ] else
+              const SizedBox(height: 12),
+            // The wisdom itself is also a natural entry point into its
+            // Reflection. The explicit ADD REFLECTION / REFLECTED control
+            // below remains the accessible named action; excluding only
+            // this gesture from semantics avoids announcing two identical
+            // controls while preserving the wisdom Text's reading semantics.
+            GestureDetector(
+              key: ValueKey('kept-${item.id}-wisdom-action'),
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: () => unawaited(_openReflection(item)),
+              child: Text(_displayWisdom(item), style: _style(24)),
+            ),
             if (!item.hasReflection) ...[
               const SizedBox(height: 12),
               // `container: true` -- see `_status` above for why this is
@@ -383,10 +537,153 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     );
   }
 
+  void _updateSearch(String value) {
+    if (value == _searchQuery || !mounted) return;
+    setState(() => _searchQuery = value);
+  }
+
+  void _clearSearch() {
+    if (_searchQuery.isEmpty || !mounted) return;
+    _searchController.clear();
+    setState(() => _searchQuery = '');
+  }
+
+  /// Kept is a chronological reading surface, so its order must come from
+  /// each record's durable timestamp rather than envelope/list arrival order
+  /// (which can change after CloudKit reconciliation). Records produced by
+  /// the current repository always carry `keptAt`; the index fallback keeps
+  /// legacy/injected records deterministic and preserves the screen's former
+  /// newest-appended-first behavior when no reliable timestamp exists.
+  List<FavoriteItem> _newestFirstItems() {
+    final indexed = _items.asMap().entries.toList(growable: false);
+    indexed.sort((a, b) {
+      final aKeptAt = _parseKeptAt(a.value);
+      final bKeptAt = _parseKeptAt(b.value);
+      if (aKeptAt != null && bKeptAt != null) {
+        final byKeptAt = bKeptAt.compareTo(aKeptAt);
+        if (byKeptAt != 0) return byKeptAt;
+      } else if (aKeptAt != bKeptAt) {
+        return aKeptAt == null ? 1 : -1;
+      }
+      return b.key.compareTo(a.key);
+    });
+    return indexed.map((entry) => entry.value).toList(growable: false);
+  }
+
+  DateTime? _parseKeptAt(FavoriteItem item) {
+    final raw = item.keptAt;
+    return raw == null ? null : DateTime.tryParse(raw)?.toUtc();
+  }
+
+  Widget _searchField() {
+    final l10n = eastLocalizations(context);
+    final palette = EastColors.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
+      child: AnimatedContainer(
+        key: const ValueKey('kept-search-shell'),
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: _searchFocusNode.hasFocus ? palette.ink : palette.divider,
+              width: _searchFocusNode.hasFocus ? 0.8 : 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: 34,
+                  minHeight: 44,
+                ),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Icon(
+                    Icons.search,
+                    size: 19,
+                    color: palette.secondary,
+                    weight: 300,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: MergeSemantics(
+                child: Semantics(
+                  key: const ValueKey('kept-search-semantics'),
+                  label: l10n.searchKept,
+                  child: TextField(
+                    key: const ValueKey('kept-search-field'),
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    onChanged: _updateSearch,
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
+                    onSubmitted: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
+                    cursorColor: palette.ink,
+                    keyboardAppearance: Theme.of(context).brightness,
+                    textInputAction: TextInputAction.search,
+                    style: _style(19, height: 1.2),
+                    decoration: InputDecoration(
+                      hintText: l10n.searchKept,
+                      hintStyle: _style(
+                        18,
+                        color: palette.hint,
+                        height: 1.2,
+                        letterSpacing: 0.4,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_searchQuery.isNotEmpty)
+              Semantics(
+                key: const ValueKey('kept-search-clear-semantics'),
+                button: true,
+                label: l10n.clearSearch,
+                onTap: _clearSearch,
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    key: const ValueKey('kept-search-clear'),
+                    onPressed: _clearSearch,
+                    icon: Icon(
+                      Icons.close,
+                      size: 18,
+                      color: palette.secondary,
+                      weight: 300,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = eastLocalizations(context);
-    final visibleItems = _items.reversed.toList(growable: false);
+    final visibleItems = _newestFirstItems().where((item) {
+      return KeptSearchMatcher.matches(
+        wisdom: _displayWisdom(item),
+        reflection: item.reflection,
+        query: _searchQuery,
+      );
+    }).toList(growable: false);
+    final hasQuery = KeptSearchMatcher.normalize(_searchQuery).isNotEmpty;
 
     return Scaffold(
       key: const ValueKey('kept-screen-root'),
@@ -420,32 +717,74 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
           ),
         ],
       ),
-      body: visibleItems.isEmpty
-          ? Center(
-              child: Text(
-                l10n.nothingHasStayedYet,
-                style: _style(
-                  21,
-                  color: eastMutedTextColor(context),
-                ),
-              ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
-              itemCount: visibleItems.length,
-              separatorBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  child: Divider(
-                    color: EastColors.of(context).divider,
-                    thickness: 0.5,
-                  ),
-                );
-              },
-              itemBuilder: (context, index) {
-                return _keptItem(visibleItems[index], index);
-              },
+      body: Stack(
+        children: [
+          IgnorePointer(
+            ignoring: _confirmingDelete,
+            child: ExcludeSemantics(
+              excluding: _confirmingDelete,
+              child: _items.isEmpty
+                  ? Center(
+                      child: Text(
+                        l10n.nothingHasStayedYet,
+                        style: _style(
+                          21,
+                          color: eastMutedTextColor(context),
+                        ),
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        _searchField(),
+                        Expanded(
+                          child: visibleItems.isEmpty && hasQuery
+                              ? Center(
+                                  child: Text(
+                                    l10n.noKeptSearchResults,
+                                    key: const ValueKey(
+                                      'kept-search-empty-state',
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    style: _style(
+                                      21,
+                                      color: eastMutedTextColor(context),
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    24,
+                                    14,
+                                    24,
+                                    32,
+                                  ),
+                                  itemCount: visibleItems.length,
+                                  separatorBuilder: (context, index) {
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 18,
+                                      ),
+                                      child: Divider(
+                                        color: EastColors.of(context).divider,
+                                        thickness: 0.5,
+                                      ),
+                                    );
+                                  },
+                                  itemBuilder: (context, index) {
+                                    return _keptItem(
+                                      visibleItems[index],
+                                      index,
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
             ),
+          ),
+          _deleteDecisionOverlay(),
+        ],
+      ),
     );
   }
 }
@@ -455,8 +794,9 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 ///
 /// Swiping alone never deletes anything: it only slides [child] aside to
 /// expose the DELETE action, which stays exposed until the user explicitly
-/// taps it, taps the row again, or swipes the row back closed. Only an
-/// explicit tap on the DELETE action invokes [onDelete].
+/// taps it, taps the row again, or swipes the row back closed. Tapping the
+/// DELETE action invokes [onDelete], which requests the full-field decision;
+/// the durable removal runs only after that separate confirmation.
 ///
 /// Both the sliding foreground and the revealed DELETE action are built so
 /// that their *hit-test* regions move/appear exactly where they are
@@ -467,6 +807,7 @@ class _KeptSwipeToDeleteRow extends StatefulWidget {
   const _KeptSwipeToDeleteRow({
     super.key,
     required this.itemId,
+    required this.dismissRevision,
     required this.onDelete,
     required this.deleteLabelStyle,
     required this.deleteLabel,
@@ -474,6 +815,7 @@ class _KeptSwipeToDeleteRow extends StatefulWidget {
   });
 
   final String itemId;
+  final int dismissRevision;
   final VoidCallback onDelete;
   final TextStyle deleteLabelStyle;
   final String deleteLabel;
@@ -499,6 +841,14 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
       duration: const Duration(milliseconds: 200),
       value: 0,
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant _KeptSwipeToDeleteRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.dismissRevision != oldWidget.dismissRevision) {
+      _closeIfOpen();
+    }
   }
 
   @override
@@ -595,6 +945,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
             animation: _controller,
             builder: (context, child) {
               final direction = Directionality.of(context);
+              final isRevealed = _controller.value > 0;
               return Transform.translate(
                 offset: Offset(
                   (direction == TextDirection.rtl ? 1 : -1) *
@@ -603,11 +954,18 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
                   0,
                 ),
                 child: GestureDetector(
+                  key: ValueKey('kept-${widget.itemId}-swipe-foreground'),
                   behavior: HitTestBehavior.opaque,
                   onHorizontalDragUpdate: _handleHorizontalDragUpdate,
                   onHorizontalDragEnd: _handleHorizontalDragEnd,
-                  onTap: _isOpen ? _closeIfOpen : null,
-                  child: child,
+                  // A revealed DELETE action always gets the first tap:
+                  // close the row without allowing an interior wisdom or
+                  // Reflection control to navigate in the same gesture.
+                  onTap: isRevealed ? _closeIfOpen : null,
+                  child: AbsorbPointer(
+                    absorbing: isRevealed,
+                    child: child,
+                  ),
                 ),
               );
             },

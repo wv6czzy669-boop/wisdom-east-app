@@ -6,6 +6,9 @@
   "askFromYourHeart": "Ask from your heart.",
   "east": "EAST.",
   "kept": "Kept",
+  "searchKept": "Search",
+  "clearSearch": "Clear search",
+  "noKeptSearchResults": "Nothing found.",
   "keptUpper": "KEPT",
   "reflectedUpper": "REFLECTED",
   "addReflectionUpper": "ADD REFLECTION",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "What would you like to carry forward?",
   "deleteReflectionQuestion": "Delete Reflection?",
   "reflectionDeleteExplanation": "The reflection will be removed from this kept wisdom.",
+  "removeKeptQuestion": "Remove from Kept?",
+  "keptDeleteExplanation": "This wisdom and its Reflection will be removed.",
   "cancelUpper": "CANCEL",
   "continueAction": "Continue",
   "onlyKeptOnThisDevice": "Only kept on this device.",
@@ -141,5 +146,35 @@
   "icloudRemovalNone": "Nothing to remove.",
   "reflectionSaveFailed": "Reflection could not be saved. Please try again.",
   "reflectionAutosaveFailed": "Reflection could not be saved. It will try again as you keep writing.",
-  "reflectionDeleteFailed": "Reflection could not be deleted. Please try again."
+  "reflectionDeleteFailed": "Reflection could not be deleted. Please try again.",
+  "remainingDurationHoursMinutes": "{hours, plural, one{1 hour} other{{hours} hours}} {minutes, plural, one{1 minute} other{{minutes} minutes}} remaining",
+  "@remainingDurationHoursMinutes": {
+    "description": "Accessibility duration when both hours and minutes remain.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingDurationHoursOnly": "{hours, plural, one{1 hour remaining} other{{hours} hours remaining}}",
+  "@remainingDurationHoursOnly": {
+    "description": "Accessibility duration when whole hours remain and minutes are zero.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingDurationMinutesOnly": "{minutes, plural, one{1 minute remaining} other{{minutes} minutes remaining}}",
+  "@remainingDurationMinutesOnly": {
+    "description": "Accessibility duration when fewer than 60 minutes remain.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  }
 }

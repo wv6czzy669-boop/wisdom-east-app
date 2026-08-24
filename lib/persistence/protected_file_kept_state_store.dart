@@ -8,6 +8,8 @@ import '../utils/kept_diagnostics.dart';
 import 'file_protection_bridge.dart';
 import 'kept_state_store.dart';
 import 'persistence_operation_coordinator.dart';
+import 'protected_file_recovery.dart';
+import 'protected_file_rollback.dart';
 
 /// Thrown by [ProtectedFileKeptStateStore] on any failure to load or
 /// replace the protected envelope.
@@ -25,11 +27,7 @@ class KeptStateStoreException implements Exception {
   final Object? cause;
 
   @override
-  String toString() {
-    final cause = this.cause;
-    if (cause == null) return 'KeptStateStoreException[$stage]: $message';
-    return 'KeptStateStoreException[$stage]: $message ($cause)';
-  }
+  String toString() => 'KeptStateStoreException[$stage]: $message';
 }
 
 /// Bundles an original failure with a subsequent rollback failure, for
@@ -146,7 +144,16 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
       );
     }
 
-    await _fileProtectionBridge.protectAndVerifyComplete(finalPath);
+    try {
+      await _fileProtectionBridge.protectAndVerifyComplete(finalPath);
+    } catch (error) {
+      throw KeptStateStoreException(
+        'load-protect',
+        'Could not verify protection of the authoritative kept-state file '
+            'after reading it.',
+        error,
+      );
+    }
     await _cleanupStaleTransactionFilesBestEffort(dirPath);
 
     return envelope;
@@ -155,55 +162,28 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
   Future<KeptStateEnvelope?> _recoverFromBackupIfFinalAbsent(
     String dirPath,
   ) async {
-    final backups = await _listFilesWithPrefix(dirPath, '.$_baseName.backup-');
-    if (backups.isEmpty) return null;
-
-    final withModifiedTime = <MapEntry<File, DateTime>>[];
-    for (final file in backups) {
-      try {
-        final stat = await file.stat();
-        withModifiedTime.add(MapEntry(file, stat.modified));
-      } catch (_) {
-        // Unreadable stat: treat as unusable, skip.
+    try {
+      final recovered = await recoverProtectedBackup<KeptStateEnvelope>(
+        directoryPath: dirPath,
+        backupFilePrefix: '.$_baseName.backup-',
+        finalFile: File(_finalPath(dirPath)),
+        fileDescription: 'kept-state',
+        recoveryPathForToken: (token) => _recoveryTempPath(dirPath, token),
+        tokenFactory: _tokenFactory,
+        decode: KeptStateEnvelope.decodeString,
+        fileProtectionBridge: _fileProtectionBridge,
+      );
+      if (recovered != null) {
+        await _cleanupStaleTransactionFilesBestEffort(dirPath);
       }
+      return recovered;
+    } on ProtectedFileRecoveryException catch (error) {
+      throw KeptStateStoreException(
+        error.stage,
+        error.message,
+        error.cause ?? error,
+      );
     }
-    withModifiedTime.sort((a, b) => b.value.compareTo(a.value));
-
-    for (final entry in withModifiedTime) {
-      final backupFile = entry.key;
-
-      final String raw;
-      try {
-        raw = await backupFile.readAsString();
-      } catch (_) {
-        continue;
-      }
-
-      final KeptStateEnvelope envelope;
-      try {
-        envelope = KeptStateEnvelope.decodeString(raw);
-      } catch (_) {
-        continue;
-      }
-
-      final finalPath = _finalPath(dirPath);
-      try {
-        await backupFile.rename(finalPath);
-      } catch (error) {
-        throw KeptStateStoreException(
-          'load-recover-rename',
-          'Could not restore a valid backup to the authoritative path.',
-          error,
-        );
-      }
-
-      await _fileProtectionBridge.protectAndVerifyComplete(finalPath);
-      await _cleanupStaleTransactionFilesBestEffort(dirPath);
-
-      return envelope;
-    }
-
-    return null;
   }
 
   Future<void> _preserveCorrupt(String dirPath, String rawBytes) async {
@@ -226,9 +206,11 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
   Future<void> _cleanupStaleTransactionFilesBestEffort(String dirPath) async {
     try {
       final tempFiles = await _listFilesWithPrefix(dirPath, '.$_baseName.tmp-');
+      final recoveryTempFiles =
+          await _listFilesWithPrefix(dirPath, '.$_baseName.recover-');
       final backupFiles =
           await _listFilesWithPrefix(dirPath, '.$_baseName.backup-');
-      for (final file in [...tempFiles, ...backupFiles]) {
+      for (final file in [...tempFiles, ...recoveryTempFiles, ...backupFiles]) {
         await _deleteBestEffort(file);
       }
     } catch (_) {
@@ -428,17 +410,23 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
 
     final backupFile = File(backupPath);
     try {
-      await _deleteBestEffort(finalFile);
-      await backupFile.rename(finalFile.path);
-      await _fileProtectionBridge.protectAndVerifyComplete(finalFile.path);
-      final rawRestored = await finalFile.readAsString();
-      final restoredEnvelope = KeptStateEnvelope.decodeString(rawRestored);
-      if (restoredEnvelope != previousEnvelope) {
+      final expectedEnvelope = previousEnvelope;
+      if (expectedEnvelope == null) {
         throw const KeptStateStoreException(
           'replace-rollback-verify',
-          'Restored kept-state file did not match the prior envelope.',
+          'The verified prior kept-state envelope was unavailable.',
         );
       }
+      await restoreProtectedBackup<KeptStateEnvelope>(
+        backupFile: backupFile,
+        finalFile: finalFile,
+        recoveryFile: File(
+          _recoveryTempPath(finalFile.parent.path, _tokenFactory()),
+        ),
+        expectedValue: expectedEnvelope,
+        decode: KeptStateEnvelope.decodeString,
+        fileProtectionBridge: _fileProtectionBridge,
+      );
     } catch (rollbackError) {
       throw KeptStateStoreException(
         'replace-rollback',
@@ -526,6 +514,9 @@ final class ProtectedFileKeptStateStore implements KeptStateStore {
 
   String _tempPath(String dirPath, String token) =>
       '$dirPath/.$_baseName.tmp-$token.json';
+
+  String _recoveryTempPath(String dirPath, String token) =>
+      '$dirPath/.$_baseName.recover-$token.json';
 
   String _backupPath(String dirPath, String token) =>
       '$dirPath/.$_baseName.backup-$token.json';

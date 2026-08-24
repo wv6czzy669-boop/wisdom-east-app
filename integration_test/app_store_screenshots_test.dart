@@ -1,3 +1,25 @@
+// TEST-ONLY -- never the app's entrypoint. This file is a
+// `flutter_test`/`integration_test` target; it is reachable only via
+// `flutter drive --driver=test_driver/app_store_screenshots_driver.dart
+// --target=integration_test/app_store_screenshots_test.dart` (or an
+// equivalent `flutter test integration_test/...` invocation). It is never
+// imported by `lib/main.dart` or anything it depends on, so it cannot be
+// compiled into `Runner`/a Release archive or a TestFlight/App Store build
+// -- Dart's AOT compiler only includes code reachable from the declared
+// entrypoint, and no production entrypoint references this file.
+//
+// Build 31 incident (Phase 5F-B): running this file *as if it were the
+// app* -- e.g. via an IDE's "Run"/▶ button while this file (not
+// `lib/main.dart`) is the active editor tab/launch target -- looks exactly
+// like the app acting autonomously: `IntegrationTestWidgetsFlutterBinding`
+// drives real `tester.tap()` calls through the ritual with no human touch,
+// pushes the real `SavedReflectionsScreen`/`JournalScreen` routes, and the
+// final `tester.pumpWidget(const SizedBox.shrink())` below intentionally
+// blanks the whole widget tree (a black screen) as test teardown. If you
+// see this sequence on a real device/simulator, you are looking at this
+// file being driven, not the shipped app -- always launch EAST. itself via
+// the `Runner` scheme / `flutter run`/`flutter build` targeting
+// `lib/main.dart`, never this one.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,7 +37,6 @@ import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
 import 'package:wisdom_app/services/journal_owner_service.dart';
 import 'package:wisdom_app/services/kept_discovery_hint_service.dart';
-import 'package:wisdom_app/services/storage_service.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 
 import '../test/persistence_test_helpers.dart';
@@ -333,7 +354,6 @@ Widget _homeApp({
     theme: _eastTheme(),
     home: HomeScreen(
       clock: clock,
-      storageService: StorageService(),
       dailyWisdomAccessService: dailyGraph.service,
       savedReflectionsService: keptGraph.service,
       wisdomNotificationService: notificationService,

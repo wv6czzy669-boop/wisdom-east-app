@@ -206,12 +206,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? semanticLabel,
     Key? rowKey,
     Widget? trailing,
-    // Build 26 Phase 6 (approved EAST Settings direction): Restore
-    // Purchases sits as a subordinate row directly under Keeper -- title
-    // only, one tier smaller -- rather than a full-weight row of its own.
-    // Content/semantics/behavior are entirely unchanged; only the title's
-    // own size differs from the standard 21pt.
-    double titleSize = 21,
     // Approved direction: iCloud Sync's state reads as a ledger entry on
     // the trailing margin, not a second subtitle line -- every other row
     // keeps its explanatory subtitle.
@@ -246,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Text(
                           title,
-                          style: eastStyle(titleSize),
+                          style: eastStyle(21),
                         ),
                         if (showSubtitle) ...[
                           const SizedBox(height: 4),
@@ -1085,6 +1079,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${l10n.removeFromIcloud}. $_icloudRemovalSubtitle';
   }
 
+  /// The ordinary explanatory subtitle is intentionally absent from the
+  /// compact Settings layout. A live operation or observed outcome remains
+  /// visible because it is status, not descriptive copy.
+  bool get _showICloudRemovalStatus =>
+      _icloudRemovalActionInProgress ||
+      _icloudRemovalJustCompleted ||
+      _icloudRemovalStatus == ICloudRemovalDisplayStatus.pending;
+
   /// `null` (disabling the row) whenever an action is already in flight, or
   /// whenever no controller is available yet or the status is
   /// [ICloudRemovalDisplayStatus.notApplicable] (nothing to remove and
@@ -1201,6 +1203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = eastLocalizations(context);
     return Scaffold(
       backgroundColor: EastColors.of(context).background,
       appBar: AppBar(
@@ -1216,6 +1219,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         scrolledUnderElevation: 0,
         elevation: 0,
         leading: Navigator.canPop(context) ? const EastBackButton() : null,
+        centerTitle: true,
+        title: Semantics(
+          header: true,
+          child: Text(l10n.settings, style: eastStyle(24)),
+        ),
       ),
       body: Stack(
         children: [
@@ -1260,26 +1268,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      l10n.east,
-                      textAlign: TextAlign.center,
-                      style: eastStyle(27),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.whereSilenceSpeaks,
-                      textAlign: TextAlign.center,
-                      style: eastStyle(
-                        17,
-                        color: eastMutedTextColor(context),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Group 1 — what you can own: Keeper, with Restore
-                    // Purchases sitting directly beneath it as a
-                    // subordinate, findable row (never a full-weight row
-                    // of its own).
+                    // Group 1 — what you can own: Keeper and Restore
+                    // Purchases. Every Settings title shares the same
+                    // iCloud Sync typographic tier; subtitles retain their
+                    // existing independent hierarchy.
                     settingsItem(
                       rowKey: const ValueKey('settings-keeper-row'),
                       title: l10n.keeper,
@@ -1293,7 +1285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle: l10n.restoreBelongs,
                       semanticLabel: restoreSemanticLabel,
                       onTap: restoreAction,
-                      titleSize: 15,
+                      showSubtitle: false,
                     ),
 
                     _settingsGroupDivider(),
@@ -1310,15 +1302,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: cloudKitSyncAction,
                       trailing: _settingsTrailingState(_cloudKitSyncSubtitle),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
                     settingsItem(
                       rowKey: const ValueKey('settings-remove-from-icloud-row'),
                       title: l10n.removeFromIcloud,
                       subtitle: _icloudRemovalSubtitle,
                       semanticLabel: _icloudRemovalSemanticLabel,
                       onTap: icloudRemovalAction,
+                      showSubtitle: _showICloudRemovalStatus,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
                     settingsItem(
                       rowKey: const ValueKey('settings-export-data-row'),
                       title: l10n.exportMyData,
@@ -1357,15 +1350,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _settingsTrailingState(appearancePreferenceLabel),
                     ),
 
-                    // The world outside: a tight cluster, one
-                    // tier quieter, of everything that leaves EAST.
+                    _settingsGroupDivider(),
+
+                    // The world outside: a tight cluster of everything that
+                    // leaves EAST., using the same title tier as every other
+                    // Settings row.
                     settingsItem(
                       rowKey: const ValueKey('settings-east-productions-row'),
                       title: l10n.eastProductions,
                       subtitle: l10n.worldBeyondRitual,
                       semanticLabel: eastProductionsSemanticLabel,
                       onTap: eastProductionsAction,
-                      titleSize: 17,
                     ),
                     const SizedBox(height: 10),
                     settingsItem(
@@ -1374,7 +1369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle: l10n.whatStaysPrivate,
                       semanticLabel: privacyPolicySemanticLabel,
                       onTap: privacyPolicyAction,
-                      titleSize: 17,
+                      showSubtitle: false,
                     ),
                     const SizedBox(height: 10),
                     settingsItem(
@@ -1383,7 +1378,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle: l10n.thoughtsAndQuestions,
                       semanticLabel: reachOutSemanticLabel,
                       onTap: reachOutAction,
-                      titleSize: 17,
+                      showSubtitle: false,
                     ),
                   ],
                 ),

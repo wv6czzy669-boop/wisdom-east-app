@@ -6,6 +6,9 @@
   "askFromYourHeart": "마음으로 묻다.",
   "east": "EAST.",
   "kept": "남은 것",
+  "searchKept": "검색",
+  "clearSearch": "검색 지우기",
+  "noKeptSearchResults": "찾을 수 없습니다.",
   "keptUpper": "남은 것",
   "reflectedUpper": "성찰",
   "addReflectionUpper": "성찰 추가",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "무엇을 간직하고 싶나요?",
   "deleteReflectionQuestion": "성찰을 삭제할까요?",
   "reflectionDeleteExplanation": "이 남은 지혜에서 성찰이 제거됩니다.",
+  "removeKeptQuestion": "남은 것에서 삭제할까요?",
+  "keptDeleteExplanation": "이 지혜와 성찰이 삭제됩니다.",
   "cancelUpper": "취소",
   "continueAction": "계속",
   "onlyKeptOnThisDevice": "이 기기에만 간직되어 있습니다.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "제거할 항목이 없습니다.",
   "reflectionSaveFailed": "성찰을 저장하지 못했습니다. 다시 시도해 주세요.",
   "reflectionAutosaveFailed": "성찰을 저장하지 못했습니다. 계속 작성하는 동안 다시 시도합니다.",
-  "reflectionDeleteFailed": "성찰을 삭제하지 못했습니다. 다시 시도해 주세요."
+  "reflectionDeleteFailed": "성찰을 삭제하지 못했습니다. 다시 시도해 주세요.",
+  "remainingDurationHoursMinutes": "{hours}시간 {minutes}분 남음",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours}시간 남음",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes}분 남음",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import '../controllers/icloud_removal_controller.dart';
 import '../controllers/sync_association_controller.dart';
-import '../models/kept_bootstrap_result.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/protected_file_kept_state_store.dart';
 import '../persistence/protected_kept_migration_artifact_store.dart';
@@ -32,7 +31,6 @@ import 'kept_storage_bootstrap.dart';
 import 'purchase_service.dart';
 import 'rating_request_service.dart';
 import 'saved_reflections_service.dart';
-import 'storage_service.dart';
 import 'widget_snapshot_service.dart';
 import 'wisdom_notification_service.dart';
 import 'wisdom_share_service.dart';
@@ -41,7 +39,6 @@ final AnalyticsService analyticsService = AnalyticsService();
 final PurchaseService purchaseService = PurchaseService(
   analyticsService: analyticsService,
 );
-final StorageService storageService = StorageService();
 final WisdomShareHandler wisdomShareService = WisdomShareService();
 final WisdomNotificationService wisdomNotificationService =
     WisdomNotificationService();
@@ -99,9 +96,9 @@ DailyWisdomAccessService createDailyWisdomAccessService({
 // ---------------------------------------------------------------------
 // Protected Kept storage bootstrap (Build 26 Phase 3D-C production cutover).
 //
-// `main()` must `await initializeKeptStorage()` before `runApp()`, so every
-// `late final` global below is populated before any screen can ever read
-// `savedReflectionsService` or `keptRepository`. Idempotent: concurrent or
+// `main()` must `await initializeKeptStorage()` before `runApp()`, so the
+// `late final` service below is populated before any screen can ever read
+// `savedReflectionsService`. Idempotent: concurrent or
 // repeated calls all await the exact same single underlying bootstrap
 // attempt — migration never runs twice, and the bootstrap result is never
 // remapped a second time.
@@ -171,9 +168,9 @@ final ProtectedSyncPersistenceStore syncPersistenceStore =
     ProtectedSyncPersistenceStore();
 
 /// Populated exactly once, as a side effect of `buildService` below, inside
-/// the same single bootstrap attempt that populates [keptRepository]/
+/// the same single bootstrap attempt that populates
 /// [savedReflectionsService] — never constructed a second time. Exposed as
-/// its own global (mirroring [keptRepository]) so a future phase's explicit
+/// its own global so the explicit
 /// account-association/bootstrap flow has a single, already-correctly-wired
 /// instance to call [KeptSyncIntegrationCoordinator
 /// .reconcileForAssociatedAccount] on; nothing in this phase calls it.
@@ -469,8 +466,6 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
   },
 );
 
-late final KeptBootstrapResult keptBootstrapResult;
-late final KeptRepository keptRepository;
 late final SavedReflectionsService savedReflectionsService;
 
 Future<void>? _keptStorageInitialization;
@@ -486,7 +481,5 @@ Future<void> initializeKeptStorage() {
 
 Future<void> _applyKeptStorageBootstrap() async {
   final result = await _keptStorageBootstrapper.run();
-  keptBootstrapResult = result.bootstrap;
-  keptRepository = result.repository;
   savedReflectionsService = result.service;
 }

@@ -27,6 +27,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String get kept => 'Zachowane';
 
   @override
+  String get searchKept => 'Szukaj';
+
+  @override
+  String get clearSearch => 'Wyczyść wyszukiwanie';
+
+  @override
+  String get noKeptSearchResults => 'Niczego nie znaleziono.';
+
+  @override
   String get keptUpper => 'ZACHOWANE';
 
   @override
@@ -265,6 +274,13 @@ class AppLocalizationsPl extends AppLocalizations {
       'Refleksja zostanie usunięta z tej zachowanej mądrości.';
 
   @override
+  String get removeKeptQuestion => 'Usunąć z „Zachowanych”?';
+
+  @override
+  String get keptDeleteExplanation =>
+      'Ta mądrość i jej refleksja zostaną usunięte.';
+
+  @override
   String get cancelUpper => 'ANULUJ';
 
   @override
@@ -450,4 +466,51 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'Nie udało się usunąć Refleksji. Spróbuj ponownie.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Zostało $hours godziny',
+      many: 'Zostało $hours godzin',
+      few: 'Zostały $hours godziny',
+      one: 'Została 1 godzina',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'i $minutes minuty',
+      many: 'i $minutes minut',
+      few: 'i $minutes minuty',
+      one: 'i 1 minuta',
+    );
+    return '$_temp0 $_temp1';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Zostało $hours godziny',
+      many: 'Zostało $hours godzin',
+      few: 'Zostały $hours godziny',
+      one: 'Została 1 godzina',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Zostało $minutes minuty',
+      many: 'Zostało $minutes minut',
+      few: 'Zostały $minutes minuty',
+      one: 'Została 1 minuta',
+    );
+    return '$_temp0';
+  }
 }

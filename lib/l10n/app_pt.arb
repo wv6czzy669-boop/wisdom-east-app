@@ -6,6 +6,9 @@
   "askFromYourHeart": "Pergunte com o coração.",
   "east": "EAST.",
   "kept": "O que ficou",
+  "searchKept": "Buscar",
+  "clearSearch": "Limpar busca",
+  "noKeptSearchResults": "Nada encontrado.",
   "keptUpper": "O QUE FICOU",
   "reflectedUpper": "REFLEXÃO",
   "addReflectionUpper": "ADICIONAR REFLEXÃO",
@@ -85,6 +88,8 @@
   "reflectionPromptCarryForward": "O que você gostaria de levar com você?",
   "deleteReflectionQuestion": "Excluir reflexão?",
   "reflectionDeleteExplanation": "A reflexão será removida desta sabedoria guardada.",
+  "removeKeptQuestion": "Remover de “O que ficou”?",
+  "keptDeleteExplanation": "Esta sabedoria e sua reflexão serão removidas.",
   "cancelUpper": "CANCELAR",
   "continueAction": "Continuar",
   "onlyKeptOnThisDevice": "Guardada somente neste dispositivo.",
@@ -141,5 +146,11 @@
   "icloudRemovalNone": "Não há nada para remover.",
   "reflectionSaveFailed": "Não foi possível salvar a Reflexão. Tente novamente.",
   "reflectionAutosaveFailed": "Não foi possível salvar a Reflexão. Uma nova tentativa será feita enquanto você escreve.",
-  "reflectionDeleteFailed": "Não foi possível excluir a Reflexão. Tente novamente."
+  "reflectionDeleteFailed": "Não foi possível excluir a Reflexão. Tente novamente.",
+  "remainingDurationHoursMinutes": "{hours, plural, one{Falta 1 hora} other{Faltam {hours} horas}} {minutes, plural, one{e 1 minuto} other{e {minutes} minutos}}",
+  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "remainingDurationHoursOnly": "{hours, plural, one{Falta 1 hora} other{Faltam {hours} horas}}",
+  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "remainingDurationMinutesOnly": "{minutes, plural, one{Falta 1 minuto} other{Faltam {minutes} minutos}}",
+  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
 }

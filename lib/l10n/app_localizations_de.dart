@@ -27,6 +27,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get kept => 'Bewahrt';
 
   @override
+  String get searchKept => 'Suchen';
+
+  @override
+  String get clearSearch => 'Suche löschen';
+
+  @override
+  String get noKeptSearchResults => 'Nichts gefunden.';
+
+  @override
   String get keptUpper => 'BEWAHRT';
 
   @override
@@ -265,6 +274,13 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Reflexion wird von dieser bewahrten Weisheit entfernt.';
 
   @override
+  String get removeKeptQuestion => 'Aus „Bewahrt“ entfernen?';
+
+  @override
+  String get keptDeleteExplanation =>
+      'Diese Weisheit und ihre Reflexion werden entfernt.';
+
+  @override
   String get cancelUpper => 'ABBRECHEN';
 
   @override
@@ -450,4 +466,43 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'Reflexion konnte nicht gelöscht werden. Bitte versuche es erneut.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Noch $hours Stunden',
+      one: 'Noch 1 Stunde',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'und $minutes Minuten',
+      one: 'und 1 Minute',
+    );
+    return '$_temp0 $_temp1';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Noch $hours Stunden',
+      one: 'Noch 1 Stunde',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Noch $minutes Minuten',
+      one: 'Noch 1 Minute',
+    );
+    return '$_temp0';
+  }
 }

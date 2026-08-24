@@ -108,22 +108,11 @@ class KeptStorageBootstrapper<R, S> {
         'bootstrap-result: isReady=false errorCode=${error.stage} '
         'errorType=${error.runtimeType} message=${error.message}',
       );
-      await persistKeptDiagnosticLast(
-        stage: 'bootstrap',
-        errorType: error.runtimeType.toString(),
-        errorCode: error.stage,
-        message: error.message,
-      );
       return KeptBootstrapResult.unavailable(error.stage);
     } catch (error) {
       keptDiagnostic(
         'bootstrap-result: isReady=false errorCode=unknown '
         'errorType=${error.runtimeType}',
-      );
-      await persistKeptDiagnosticLast(
-        stage: 'bootstrap',
-        errorType: error.runtimeType.toString(),
-        errorCode: 'unknown',
       );
       return KeptBootstrapResult.unavailable('unknown');
     }

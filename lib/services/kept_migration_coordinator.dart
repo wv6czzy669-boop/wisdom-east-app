@@ -992,23 +992,12 @@ final class KeptMigrationCoordinator {
         'stage-failed: $stage (already-wrapped at stage=${error.stage}) '
         'errorType=${error.runtimeType} message=${error.message}',
       );
-      await persistKeptDiagnosticLast(
-        stage: stage,
-        errorType: error.runtimeType.toString(),
-        errorCode: error.stage,
-        message: error.message,
-      );
       rethrow;
     } catch (error) {
       final safeMessage = _safeDiagnosticMessageFor(error);
       keptDiagnostic(
         'stage-failed: $stage errorType=${error.runtimeType} '
         'message=$safeMessage',
-      );
-      await persistKeptDiagnosticLast(
-        stage: stage,
-        errorType: error.runtimeType.toString(),
-        message: safeMessage,
       );
       throw KeptMigrationException(
         stage,

@@ -27,6 +27,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get kept => 'Kept';
 
   @override
+  String get searchKept => 'Search';
+
+  @override
+  String get clearSearch => 'Clear search';
+
+  @override
+  String get noKeptSearchResults => 'Nothing found.';
+
+  @override
   String get keptUpper => 'KEPT';
 
   @override
@@ -264,6 +273,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'The reflection will be removed from this kept wisdom.';
 
   @override
+  String get removeKeptQuestion => 'Remove from Kept?';
+
+  @override
+  String get keptDeleteExplanation =>
+      'This wisdom and its Reflection will be removed.';
+
+  @override
   String get cancelUpper => 'CANCEL';
 
   @override
@@ -448,4 +464,43 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get reflectionDeleteFailed =>
       'Reflection could not be deleted. Please try again.';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours hours',
+      one: '1 hour',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutes',
+      one: '1 minute',
+    );
+    return '$_temp0 $_temp1 remaining';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours hours remaining',
+      one: '1 hour remaining',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutes remaining',
+      one: '1 minute remaining',
+    );
+    return '$_temp0';
+  }
 }

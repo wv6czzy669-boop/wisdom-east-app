@@ -24,6 +24,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wisdom_app/controllers/icloud_removal_controller.dart';
 import 'package:wisdom_app/controllers/sync_association_controller.dart';
+import 'package:wisdom_app/l10n/app_localizations.dart';
+import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
 import 'package:wisdom_app/services/data_export_service.dart';
@@ -221,6 +223,84 @@ void main() {
   });
 
   testWidgets(
+      'Settings uses the localized centered app-screen heading and no longer '
+      'repeats the EAST brand block', (tester) async {
+    await pumpSettings(tester);
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('EAST.'), findsNothing);
+    expect(find.text('Where silence speaks.'), findsNothing);
+    expect(find.byType(Divider), findsNWidgets(3));
+
+    final title = tester.widget<Text>(find.text('Settings'));
+    expect(title.style?.fontSize, 24);
+    expect(tester.widget<AppBar>(find.byType(AppBar)).centerTitle, isTrue);
+
+    final semantics = tester.ensureSemantics();
+    final titleNode = tester.getSemantics(find.text('Settings'));
+    expect(titleNode.getSemanticsData().flagsCollection.isHeader, isTrue);
+    semantics.dispose();
+  });
+
+  testWidgets(
+      'every Settings row title uses the exact iCloud Sync typography while '
+      'subtitle hierarchy stays independent', (tester) async {
+    await pumpSettings(tester);
+
+    const titles = [
+      'Keeper',
+      'Restore Purchases',
+      'iCloud Sync',
+      'Remove from iCloud',
+      'Export My Data',
+      'Language',
+      'Appearance',
+      'EAST. Productions',
+      'Privacy Policy',
+      'Reach Out',
+    ];
+    final reference = tester.widget<Text>(find.text('iCloud Sync')).style!;
+    for (final title in titles) {
+      final style = tester.widget<Text>(find.text(title)).style!;
+      expect(style.fontSize, reference.fontSize, reason: title);
+      expect(style.fontFamily, reference.fontFamily, reason: title);
+      expect(style.fontWeight, reference.fontWeight, reason: title);
+      expect(style.letterSpacing, reference.letterSpacing, reason: title);
+      expect(style.height, reference.height, reason: title);
+    }
+
+    expect(reference.fontSize, 21);
+    expect(find.text('Support the circle, keep what stays.'), findsOneWidget);
+    expect(
+      find.text('Take your Kept wisdoms and Reflections with you.'),
+      findsOneWidget,
+    );
+    expect(find.text('The world beyond the ritual.'), findsOneWidget);
+  });
+
+  testWidgets('Settings heading resolves in every product locale',
+      (tester) async {
+    for (final target in EastLocaleRegistry.targets) {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: target.locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: EastLocaleRegistry.runtimeSupported,
+          home: const SettingsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final expected = lookupAppLocalizations(target.locale).settings;
+      expect(
+        find.text(expected),
+        findsOneWidget,
+        reason: 'locale=${target.tag}',
+      );
+    }
+  });
+
+  testWidgets(
       'B. tapping Cancel in the confirmation sheet never authorizes '
       'association', (tester) async {
     await pumpSettings(tester);
@@ -384,7 +464,7 @@ void main() {
           fingerprintA,
           reason: 'the association marker is untouched by Cancel.');
       expect(requestRemovalSyncCallCount, 0);
-      expect(find.text('Remove your iCloud copies.'), findsOneWidget);
+      expect(find.text('Remove your iCloud copies.'), findsNothing);
     });
 
     testWidgets(
@@ -623,7 +703,7 @@ void main() {
       );
       // The row reverts to its honest, still-actionable idle state -- never
       // silently stuck, never claiming success.
-      expect(find.text('Remove your iCloud copies.'), findsOneWidget);
+      expect(find.text('Remove your iCloud copies.'), findsNothing);
     });
 
     testWidgets(

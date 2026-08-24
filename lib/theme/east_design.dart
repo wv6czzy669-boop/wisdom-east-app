@@ -181,7 +181,6 @@ abstract final class EastTypography {
     Color? color,
     double height = 1.35,
     double letterSpacing = 0.35,
-    FontStyle fontStyle = FontStyle.normal,
   }) {
     final typography = planFor(context);
     return TextStyle(
@@ -190,7 +189,6 @@ abstract final class EastTypography {
       fontWeight: FontWeight.w400,
       fontFamily: typography.family,
       fontFamilyFallback: typography.fallbacks,
-      fontStyle: fontStyle,
       height: height,
       letterSpacing: letterSpacing,
     );
@@ -201,7 +199,6 @@ abstract final class EastTypography {
     Color color = EastColors.ink,
     double height = 1.35,
     double letterSpacing = 0.35,
-    FontStyle fontStyle = FontStyle.normal,
   }) {
     return TextStyle(
       color: color,
@@ -209,7 +206,6 @@ abstract final class EastTypography {
       fontWeight: FontWeight.w400,
       fontFamily: fontFamily,
       fontFamilyFallback: fontFamilyFallback,
-      fontStyle: fontStyle,
       height: height,
       letterSpacing: letterSpacing,
     );

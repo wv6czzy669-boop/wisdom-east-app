@@ -149,6 +149,109 @@ void main() {
   });
 
   testWidgets(
+      'iOS leading-edge swipe flushes a pending Reflection before returning',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.iOS),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (context) => ReflectionScreen(
+                    item: item,
+                    isKeeper: false,
+                    savedReflectionsService: service,
+                    autosaveDebounce: const Duration(seconds: 5),
+                  ),
+                ),
+              );
+            },
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ReflectionScreen), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('reflection-writing-area')),
+      'Saved safely by the edge gesture. 🙂',
+    );
+    await tester.pump();
+
+    final swipeRegion =
+        find.byKey(const ValueKey('reflection-back-swipe-region'));
+    expect(swipeRegion, findsOneWidget);
+
+    await tester.drag(swipeRegion, const Offset(120, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReflectionScreen), findsNothing);
+    expect(
+      (await service.load()).single.reflection,
+      'Saved safely by the edge gesture. 🙂',
+    );
+  });
+
+  testWidgets(
+      'an untouched iOS Reflection keeps the native interactive back swipe',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.iOS),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (context) => ReflectionScreen(
+                    item: item,
+                    isKeeper: false,
+                    savedReflectionsService: service,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Open untouched'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open untouched'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ReflectionScreen), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reflection-back-swipe-region')),
+      findsNothing,
+      reason: 'A clean route must be owned by iOS native back navigation.',
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is PopScope && widget.canPop,
+      ),
+      findsOneWidget,
+      reason: 'An untouched route must permit CupertinoRouteTransitionMixin '
+          'to install and own the native interactive pop gesture.',
+    );
+
+    final reflectionContext = tester.element(find.byType(ReflectionScreen));
+    expect(await Navigator.of(reflectionContext).maybePop(), isTrue);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReflectionScreen), findsNothing);
+    expect((await service.load()).single.reflection, item.reflection);
+  });
+
+  testWidgets(
       'no separate Edit mode is required -- a fresh and an already-'
       'reflected item both open straight into the same editable field',
       (tester) async {

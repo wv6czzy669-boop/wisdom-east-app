@@ -35,7 +35,7 @@ class DebugLogAnalyticsTransport implements AnalyticsTransport {
 /// account fingerprints, or daily-access timestamps to an event — there is
 /// no parameter for any of those values to travel through. Each method is
 /// called from its event's one authoritative "this already succeeded"
-/// point (`HomeScreen.finishCommittedDailyWisdom`'s durable-new-reveal
+/// point (`RitualCompletionCoordinator`'s durable-new-reveal
 /// branch; `SavedReflectionsService.toggle`/`saveReflection`'s
 /// not-limit-blocked branches; `PurchaseService`'s purchase-attempt-started,
 /// persisted-purchase, and persisted-restore points) — never duplicated

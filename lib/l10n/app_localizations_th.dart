@@ -27,6 +27,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get kept => 'สิ่งที่เก็บไว้';
 
   @override
+  String get searchKept => 'ค้นหา';
+
+  @override
+  String get clearSearch => 'ล้างการค้นหา';
+
+  @override
+  String get noKeptSearchResults => 'ไม่พบสิ่งที่ค้นหา';
+
+  @override
   String get keptUpper => 'สิ่งที่เก็บไว้';
 
   @override
@@ -262,6 +271,12 @@ class AppLocalizationsTh extends AppLocalizations {
       'การไตร่ตรองจะถูกนำออกจากข้อคิดที่เก็บไว้นี้.';
 
   @override
+  String get removeKeptQuestion => 'นำออกจากสิ่งที่เก็บไว้?';
+
+  @override
+  String get keptDeleteExplanation => 'ข้อคิดนี้และการไตร่ตรองจะถูกนำออก.';
+
+  @override
   String get cancelUpper => 'ยกเลิก';
 
   @override
@@ -442,4 +457,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get reflectionDeleteFailed => 'ลบการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง';
+
+  @override
+  String remainingDurationHoursMinutes(int hours, int minutes) {
+    return 'เหลืออีก $hours ชั่วโมง $minutes นาที';
+  }
+
+  @override
+  String remainingDurationHoursOnly(int hours) {
+    return 'เหลืออีก $hours ชั่วโมง';
+  }
+
+  @override
+  String remainingDurationMinutesOnly(int minutes) {
+    return 'เหลืออีก $minutes นาที';
+  }
 }
