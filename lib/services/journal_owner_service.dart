@@ -1,3 +1,5 @@
+import '../persistence/journal_owner_store.dart';
+import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/storage_preferences_adapter.dart';
 
 /// EAST. Phase 10 — Journal's own device-local "whose journal is this"
@@ -7,26 +9,56 @@ import '../persistence/storage_preferences_adapter.dart';
 /// model, no CloudKit sync, no analytics. See each method's own doc
 /// comment for the exact privacy contract.
 class JournalOwnerService {
-  JournalOwnerService({StoragePreferencesAdapter? preferencesAdapter})
-      : _preferencesAdapter = preferencesAdapter ?? StoragePreferencesAdapter();
+  JournalOwnerService({
+    StoragePreferencesAdapter? preferencesAdapter,
+    JournalOwnerStore? ownerStore,
+    PersistenceOperationCoordinator? operationCoordinator,
+  })  : _preferencesAdapter = preferencesAdapter ?? StoragePreferencesAdapter(),
+        _ownerStore = ownerStore ?? ProtectedJournalOwnerStore(),
+        _operationCoordinator =
+            operationCoordinator ?? PersistenceOperationCoordinator();
 
   static const String nameKey = 'east_journal_owner_name';
   static const String promptHandledKey = 'east_journal_name_prompt_handled';
 
   final StoragePreferencesAdapter _preferencesAdapter;
+  final JournalOwnerStore _ownerStore;
+  final PersistenceOperationCoordinator _operationCoordinator;
+  static const String _resourceKey = 'journal_owner_service';
 
   /// The saved owner name, already trimmed, or `null` if none is saved.
   /// Device-local only -- never read from or written to CloudKit, and
   /// never logged. A persistence failure fails safe to `null`: Journal
   /// generation always proceeds, with or without a name.
   Future<String?> loadName() async {
-    try {
-      final raw = await _preferencesAdapter.getString(nameKey);
-      final trimmed = raw?.trim();
-      return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-    } catch (_) {
-      return null;
-    }
+    return _operationCoordinator.runExclusive<String?>(
+      resourceKey: _resourceKey,
+      operation: () async {
+        try {
+          final protectedName = await _ownerStore.loadName();
+          if (protectedName != null) {
+            await _removeLegacyNameBestEffort();
+            return protectedName;
+          }
+        } catch (_) {
+          // Fall through to the legacy value. A protected-store outage must
+          // never make a previously-saved Journal owner disappear.
+        }
+
+        final legacy = await _loadLegacyNameBestEffort();
+        if (legacy == null) return null;
+        try {
+          await _ownerStore.writeName(legacy);
+          if (await _ownerStore.loadName() == legacy) {
+            await _removeLegacyNameBestEffort();
+          }
+        } catch (_) {
+          // Keep and return the legacy value until a later load can migrate
+          // it safely. Never delete the only durable copy first.
+        }
+        return legacy;
+      },
+    );
   }
 
   /// Whether the first-run "whose journal is this" step has already been
@@ -49,11 +81,15 @@ class JournalOwnerService {
   Future<void> saveName(String name) async {
     final trimmed = name.trim();
     try {
-      if (trimmed.isEmpty) {
-        await _preferencesAdapter.remove(nameKey);
-      } else {
-        await _preferencesAdapter.setString(nameKey, trimmed);
-      }
+      await _operationCoordinator.runExclusive<void>(
+        resourceKey: _resourceKey,
+        operation: () async {
+          await _ownerStore.writeName(trimmed.isEmpty ? null : trimmed);
+          if (trimmed.isEmpty || await _ownerStore.loadName() == trimmed) {
+            await _removeLegacyNameBestEffort();
+          }
+        },
+      );
       await _preferencesAdapter.setBool(promptHandledKey, true);
     } catch (_) {
       // Best-effort only -- see the doc comment above.
@@ -75,9 +111,33 @@ class JournalOwnerService {
   /// Journal itself, never by the first-run step.
   Future<void> clearName() async {
     try {
-      await _preferencesAdapter.remove(nameKey);
+      await _operationCoordinator.runExclusive<void>(
+        resourceKey: _resourceKey,
+        operation: () async {
+          await _ownerStore.writeName(null);
+          await _removeLegacyNameBestEffort();
+        },
+      );
     } catch (_) {
       // Best-effort only.
+    }
+  }
+
+  Future<String?> _loadLegacyNameBestEffort() async {
+    try {
+      final raw = await _preferencesAdapter.getString(nameKey);
+      final trimmed = raw?.trim();
+      return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _removeLegacyNameBestEffort() async {
+    try {
+      await _preferencesAdapter.remove(nameKey);
+    } catch (_) {
+      // A duplicate legacy value is safer than deleting before verification.
     }
   }
 }

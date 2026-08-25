@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
@@ -9,6 +10,7 @@ import 'package:wisdom_app/models/daily_wisdom_record.dart';
 import 'package:wisdom_app/services/analytics_event.dart';
 import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
+import 'package:wisdom_app/services/keeper_entitlement_authority.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 
 import 'persistence_test_helpers.dart';
@@ -18,14 +20,30 @@ void main() {
 
   late _FakeInAppPurchasePlatform platform;
   late PurchaseService service;
+  late bool nativeEntitled;
+  late bool entitlementAuthorityUnavailable;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    nativeEntitled = false;
+    entitlementAuthorityUnavailable = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      MethodChannelKeeperEntitlementAuthority.channel,
+      (_) async {
+        if (entitlementAuthorityUnavailable) {
+          throw PlatformException(code: 'unavailable');
+        }
+        return nativeEntitled;
+      },
+    );
 
     // Ensure the facade exists before replacing its platform implementation.
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     InAppPurchase.instance;
-    platform = _FakeInAppPurchasePlatform();
+    platform = _FakeInAppPurchasePlatform(
+      onVerifiedPurchase: () => nativeEntitled = true,
+    );
     InAppPurchasePlatform.instance = platform;
     service = PurchaseService();
     await service.init();
@@ -34,6 +52,11 @@ void main() {
   tearDown(() async {
     service.dispose();
     await platform.dispose();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      MethodChannelKeeperEntitlementAuthority.channel,
+      null,
+    );
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -88,8 +111,7 @@ void main() {
     expect(platform.completedPurchases, 1);
   });
 
-  test('failed entitlement persistence leaves transaction unfinished',
-      () async {
+  test('verified entitlement survives cache persistence failure', () async {
     service.dispose();
     service = PurchaseService(entitlementWriter: () async => false);
     await service.init();
@@ -101,10 +123,10 @@ void main() {
     );
     await _flushEvents();
 
-    expect(service.isKeeper, isFalse);
+    expect(service.isKeeper, isTrue);
     expect(service.entitlementPersistenceFailed, isTrue);
     expect(service.isLoading, isFalse);
-    expect(platform.completedPurchases, 0);
+    expect(platform.completedPurchases, 1);
     expect(await service.buyKeeper(), isFalse);
   });
 
@@ -414,7 +436,9 @@ void main() {
       () async {
     service.dispose();
     await platform.dispose();
-    platform = _FakeInAppPurchasePlatform();
+    platform = _FakeInAppPurchasePlatform(
+      onVerifiedPurchase: () => nativeEntitled = true,
+    );
     InAppPurchasePlatform.instance = platform;
     platform.productQueryCompleter = Completer<ProductDetailsResponse>();
     service = PurchaseService();
@@ -436,9 +460,81 @@ void main() {
     expect(platform.purchaseStreamSubscriptions, 1);
   });
 
+  test('subscribes to StoreKit updates before entitlement reconciliation',
+      () async {
+    service.dispose();
+    final authorityResult = Completer<KeeperEntitlementAuthorityResult>();
+    final subscriptionsBefore = platform.purchaseStreamSubscriptions;
+    service = PurchaseService(
+      entitlementAuthority: _CallbackKeeperEntitlementAuthority(
+        () => authorityResult.future,
+      ),
+      entitlementQueryTimeout: const Duration(seconds: 5),
+    );
+
+    final initialization = service.init();
+
+    expect(
+      platform.purchaseStreamSubscriptions,
+      subscriptionsBefore + 1,
+    );
+    authorityResult.complete(KeeperEntitlementAuthorityResult.notEntitled);
+    await initialization;
+    expect(service.isInitialized, isTrue);
+  });
+
+  test('hung entitlement authority times out without clearing cached access',
+      () async {
+    service.dispose();
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+    service = PurchaseService(
+      entitlementAuthority: _CallbackKeeperEntitlementAuthority(
+        () => Completer<KeeperEntitlementAuthorityResult>().future,
+      ),
+      entitlementQueryTimeout: Duration.zero,
+    );
+
+    await service.init();
+
+    expect(service.isInitialized, isTrue);
+    expect(service.isKeeper, isTrue);
+  });
+
+  test('hung verification cannot stall the purchase stream event tail',
+      () async {
+    service.dispose();
+    var authorityCalls = 0;
+    service = PurchaseService(
+      entitlementAuthority: _CallbackKeeperEntitlementAuthority(() {
+        authorityCalls += 1;
+        if (authorityCalls == 1) {
+          return Future.value(
+            KeeperEntitlementAuthorityResult.notEntitled,
+          );
+        }
+        return Completer<KeeperEntitlementAuthorityResult>().future;
+      }),
+      entitlementQueryTimeout: Duration.zero,
+    );
+    await service.init();
+
+    expect(await service.buyKeeper(), isTrue);
+    platform.emitPurchase(
+      PurchaseStatus.purchased,
+      pendingCompletePurchase: true,
+    );
+    await _flushEvents();
+
+    expect(service.isKeeper, isFalse);
+    expect(service.isLoading, isFalse);
+    expect(service.status, PurchaseServiceStatus.failed);
+    expect(platform.completedPurchases, 0);
+  });
+
   test('persisted Keeper loads even when product query fails', () async {
     service.dispose();
     SharedPreferences.setMockInitialValues({'is_premium': true});
+    nativeEntitled = true;
     platform.productQueryError = StateError('Products unavailable.');
     service = PurchaseService();
     await service.init();
@@ -446,6 +542,42 @@ void main() {
     expect(service.isKeeper, isTrue);
     expect(service.keeperProduct, isNull);
     expect(service.status, PurchaseServiceStatus.failed);
+  });
+
+  test('unavailable StoreKit authority falls back to the last-known cache',
+      () async {
+    service.dispose();
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+    entitlementAuthorityUnavailable = true;
+    service = PurchaseService();
+    await service.init();
+
+    expect(service.isKeeper, isTrue);
+  });
+
+  test('verified missing entitlement clears a stale Keeper cache', () async {
+    service.dispose();
+    SharedPreferences.setMockInitialValues({'is_premium': true});
+    nativeEntitled = false;
+    service = PurchaseService();
+    await service.init();
+
+    expect(service.isKeeper, isFalse);
+    expect(
+      (await SharedPreferences.getInstance()).containsKey('is_premium'),
+      isFalse,
+    );
+  });
+
+  test('foreground reconciliation reflects refund or revoke', () async {
+    nativeEntitled = true;
+    await service.reconcileKeeperEntitlement();
+    expect(service.isKeeper, isTrue);
+
+    nativeEntitled = false;
+    await service.reconcileKeeperEntitlement();
+
+    expect(service.isKeeper, isFalse);
   });
 
   test('wrong-type persisted Keeper preference fails closed', () async {
@@ -795,6 +927,7 @@ void main() {
       () async {
     service.dispose();
     SharedPreferences.setMockInitialValues({'is_premium': true});
+    nativeEntitled = true;
     service = PurchaseService(
       restoreInitiationTimeout: Duration.zero,
       restoreOperationRecoveryTimeout: Duration.zero,
@@ -815,6 +948,7 @@ void main() {
       () async {
     service.dispose();
     SharedPreferences.setMockInitialValues({'is_premium': true});
+    nativeEntitled = true;
     service = PurchaseService(
       restoreInitiationTimeout: Duration.zero,
       restoreResponseWindow: Duration.zero,
@@ -1036,6 +1170,7 @@ void main() {
       () async {
     service.dispose();
     SharedPreferences.setMockInitialValues({'is_premium': true});
+    nativeEntitled = true;
     service = PurchaseService(
       restoreResponseWindow: const Duration(milliseconds: 20),
     );
@@ -1067,6 +1202,7 @@ void main() {
   test('existing Keeper cannot repurchase', () async {
     service.dispose();
     SharedPreferences.setMockInitialValues({'is_premium': true});
+    nativeEntitled = true;
     service = PurchaseService();
     await service.init();
 
@@ -1364,7 +1500,20 @@ Future<void> _flushEvents() async {
   await Future<void>.delayed(Duration.zero);
 }
 
+final class _CallbackKeeperEntitlementAuthority
+    implements KeeperEntitlementAuthority {
+  const _CallbackKeeperEntitlementAuthority(this._query);
+
+  final Future<KeeperEntitlementAuthorityResult> Function() _query;
+
+  @override
+  Future<KeeperEntitlementAuthorityResult> currentEntitlement() => _query();
+}
+
 class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
+  _FakeInAppPurchasePlatform({required this.onVerifiedPurchase});
+
+  final VoidCallback onVerifiedPurchase;
   late final StreamController<List<PurchaseDetails>> _purchaseController =
       StreamController<List<PurchaseDetails>>.broadcast(
     onListen: () => purchaseStreamSubscriptions++,
@@ -1457,6 +1606,10 @@ class _FakeInAppPurchasePlatform extends InAppPurchasePlatform {
     String productID = PurchaseService.keeperProductId,
     bool pendingCompletePurchase = false,
   }) {
+    if (status == PurchaseStatus.purchased ||
+        status == PurchaseStatus.restored) {
+      onVerifiedPurchase();
+    }
     final purchase = PurchaseDetails(
       purchaseID: purchaseID,
       productID: productID,

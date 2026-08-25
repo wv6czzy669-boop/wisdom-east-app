@@ -29,6 +29,7 @@ import 'kept_migration_coordinator.dart';
 import 'kept_state_revision_notifier.dart';
 import 'kept_storage_bootstrap.dart';
 import 'purchase_service.dart';
+import 'production_diagnostics_service.dart';
 import 'rating_request_service.dart';
 import 'saved_reflections_service.dart';
 import 'widget_snapshot_service.dart';
@@ -45,6 +46,8 @@ final WisdomNotificationService wisdomNotificationService =
 final RatingRequestService ratingRequestService = RatingRequestService();
 final WidgetSnapshotService widgetSnapshotService = WidgetSnapshotService();
 final JournalOwnerService journalOwnerService = JournalOwnerService();
+final ProductionDiagnosticsService productionDiagnosticsService =
+    ProductionDiagnosticsService();
 
 /// Free-for-everyone user data export. `savedReflectionsServiceProvider` is
 /// a closure over the `late final savedReflectionsService` global declared
@@ -96,9 +99,10 @@ DailyWisdomAccessService createDailyWisdomAccessService({
 // ---------------------------------------------------------------------
 // Protected Kept storage bootstrap (Build 26 Phase 3D-C production cutover).
 //
-// `main()` must `await initializeKeptStorage()` before `runApp()`, so the
-// `late final` service below is populated before any screen can ever read
-// `savedReflectionsService`. Idempotent: concurrent or
+// `main()` gives initializeKeptStorage() to BootstrapGate, which never builds
+// WisdomApp until this Future completes, so the `late final` service below
+// is populated before any screen can ever read `savedReflectionsService`.
+// Idempotent: concurrent or
 // repeated calls all await the exact same single underlying bootstrap
 // attempt — migration never runs twice, and the bootstrap result is never
 // remapped a second time.
@@ -302,10 +306,10 @@ ICloudRemovalController? icloudRemovalController;
 /// Build 26 (Sync Diagnostics / Safe Recovery core): the pure, read-only
 /// health-classification composition over [keptSyncBootstrapCoordinator]'s/
 /// [cloudKitSyncRuntimeCoordinator]'s own already-canonical state -- never a
-/// new source of truth, never wired to any Settings/debug screen in this
-/// phase (see `lib/sync_diagnostics/sync_health_evaluator.dart`'s own doc
-/// comment). Populated in the same single bootstrap attempt as every other
-/// sync coordinator above, alongside [syncRecoveryCoordinator].
+/// new source of truth. Settings reads this evaluator directly to report the
+/// real state; it never re-derives health from a cosmetic local flag.
+/// Populated in the same single bootstrap attempt as every other sync
+/// coordinator above, alongside [syncRecoveryCoordinator].
 ///
 /// Deliberately **nullable**, never `late final` -- mirrors
 /// [cloudKitAssociationController]'s own identical reasoning: safe to read
@@ -328,9 +332,9 @@ SyncHealthEvaluator? syncHealthEvaluator;
 /// automatically by any lifecycle hook in this phase -- `lib/main.dart`'s
 /// existing startup/foreground triggers, plus this coordinator's own
 /// account-change/retry triggers, already resume every recoverable state
-/// [syncHealthEvaluator] can classify; this coordinator exists as an
-/// already-tested, already-wired seam for a future explicit caller, not a
-/// new automatic poll.
+/// [syncHealthEvaluator] can classify. Settings invokes this coordinator
+/// only for states its own decision table declares safely resumable; an
+/// explicit `recoveryRequired` state remains non-actionable.
 ///
 /// Deliberately **nullable**, never `late final` -- mirrors
 /// [syncHealthEvaluator]'s own identical reasoning.
@@ -361,8 +365,8 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       // even though it is not assigned until later in this same closure --
       // this callback is never invoked until a real user mutation commits,
       // and `initializeKeptStorage()` (which runs this entire closure) is
-      // always awaited to completion in `main()` before `runApp()`, so
-      // `cloudKitSyncRuntimeCoordinator` is guaranteed already assigned by
+      // always completed by `main()`'s BootstrapGate before WisdomApp is
+      // built, so `cloudKitSyncRuntimeCoordinator` is guaranteed assigned by
       // the time any mutation can occur. Never awaited, and any error the
       // returned `Future` carries is swallowed here so it can never surface
       // as an unhandled async error.
@@ -412,6 +416,7 @@ final KeptStorageBootstrapper<KeptRepository, SavedReflectionsService>
       // that class's own constructor).
       localSyncIntentStore: localSyncIntentStore,
       bridge: cloudKitPlatformBridge,
+      onPassFinished: productionDiagnosticsService.recordSyncOutcome,
     );
     cloudKitAssociationController = SyncAssociationController(
       bootstrapCoordinator: keptSyncBootstrapCoordinator,

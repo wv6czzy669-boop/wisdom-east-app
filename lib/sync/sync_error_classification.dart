@@ -45,6 +45,7 @@ const String syncErrorCodeInvalidArguments = 'invalidArguments';
 const String syncErrorCodeUnknownItem = 'unknownItem';
 const String syncErrorCodeIncompatibleVersion = 'incompatibleVersion';
 const String syncErrorCodeQuotaExceeded = 'quotaExceeded';
+const String syncErrorCodeLimitExceeded = 'limitExceeded';
 
 /// Pure lookup from [code] to its handling category. An unrecognized code
 /// is classified as [SyncErrorCategory.permanent] — a code this client does
@@ -59,6 +60,7 @@ SyncErrorCategory classifySyncErrorCode(String code) {
     case syncErrorCodeZoneBusy:
     case syncErrorCodeServerRecordChanged:
     case syncErrorCodeQuotaExceeded:
+    case syncErrorCodeLimitExceeded:
       return SyncErrorCategory.retryable;
     case syncErrorCodeAccountTemporarilyUnavailable:
     case syncErrorCodeNotAuthenticated:

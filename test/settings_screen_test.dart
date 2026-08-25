@@ -32,6 +32,8 @@ import 'package:wisdom_app/services/data_export_service.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync/sync_change.dart';
+import 'package:wisdom_app/sync_diagnostics/sync_health_snapshot.dart';
+import 'package:wisdom_app/sync_diagnostics/sync_recovery_coordinator.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_bootstrap_coordinator.dart';
 import 'package:wisdom_app/sync_persistence/account_sync_state.dart';
 import 'package:wisdom_app/sync_persistence/associated_account_fingerprint_commit.dart';
@@ -51,6 +53,7 @@ import 'package:wisdom_app/sync_platform/cloud_kit_platform_bridge.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
+import 'package:wisdom_app/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
 
 import 'persistence_test_helpers.dart';
 import 'sync_integration/in_memory_sync_test_doubles.dart';
@@ -200,6 +203,8 @@ void main() {
     WidgetTester tester, {
     ICloudRemovalController? removalController,
     DataExportService? dataExportService,
+    SettingsSyncHealthReader? syncHealthReader,
+    SettingsSyncRecoveryAction? syncRecoveryAction,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -208,11 +213,31 @@ void main() {
           cloudKitAssociationController: controller,
           icloudRemovalController: removalController ?? icloudRemovalController,
           dataExportService: dataExportService,
+          syncHealthReader: syncHealthReader,
+          syncRecoveryAction: syncRecoveryAction,
         ),
       ),
     );
     await tester.pumpAndSettle();
   }
+
+  SyncHealthSnapshot healthSnapshot(SyncHealthState state) =>
+      SyncHealthSnapshot(
+        state: state,
+        syncEnabled: state != SyncHealthState.disabled,
+        accountAvailability: state == SyncHealthState.iCloudUnavailable
+            ? CloudKitAccountAvailability.noAccount
+            : CloudKitAccountAvailability.available,
+        outboxPendingCount: state == SyncHealthState.pending ? 1 : 0,
+        hasUnresolvedOutboxEntries: state == SyncHealthState.recoveryRequired,
+        deletionRecoveryPending: state == SyncHealthState.recovering,
+        runtimeStatus: const CloudKitSyncRuntimeStatus(
+          isRunning: false,
+          followUpRequested: false,
+          retryScheduled: false,
+          retryAttempt: 0,
+        ),
+      );
 
   testWidgets('associationRequired: the row shows Not enabled and is tappable',
       (tester) async {
@@ -365,6 +390,75 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Enable iCloud Sync?'), findsNothing);
+  });
+
+  testWidgets('sync health states are reported honestly', (tester) async {
+    syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
+    for (final scenario in <SyncHealthState, String>{
+      SyncHealthState.healthy: 'Enabled',
+      SyncHealthState.pending: 'Syncing',
+      SyncHealthState.recovering: 'Syncing',
+      SyncHealthState.temporaryFailure: 'Syncing',
+      SyncHealthState.iCloudUnavailable: 'iCloud unavailable',
+      SyncHealthState.recoveryRequired: 'Needs attention',
+    }.entries) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpSettings(
+        tester,
+        syncHealthReader: () async => healthSnapshot(scenario.key),
+      );
+      expect(find.text(scenario.value), findsOneWidget,
+          reason: scenario.key.name);
+    }
+  });
+
+  testWidgets('safe sync recovery uses only the injected coordinator action',
+      (tester) async {
+    syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
+    var state = SyncHealthState.pending;
+    var recoveryCalls = 0;
+    await pumpSettings(
+      tester,
+      syncHealthReader: () async => healthSnapshot(state),
+      syncRecoveryAction: () async {
+        recoveryCalls += 1;
+        state = SyncHealthState.healthy;
+        return const SyncRecoveryResult(
+          outcome: SyncRecoveryOutcome.resumeTriggered,
+          healthStateAtDecision: SyncHealthState.pending,
+        );
+      },
+    );
+
+    await tester.tap(find.byKey(rowKey));
+    await tester.pumpAndSettle();
+
+    expect(recoveryCalls, 1);
+    expect(find.text('Enabled'), findsOneWidget);
+  });
+
+  testWidgets('Needs attention never attempts unsafe automatic recovery',
+      (tester) async {
+    syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
+    var recoveryCalls = 0;
+    await pumpSettings(
+      tester,
+      syncHealthReader: () async =>
+          healthSnapshot(SyncHealthState.recoveryRequired),
+      syncRecoveryAction: () async {
+        recoveryCalls += 1;
+        return const SyncRecoveryResult(
+          outcome: SyncRecoveryOutcome.notSafeToAutoRecover,
+          healthStateAtDecision: SyncHealthState.recoveryRequired,
+        );
+      },
+    );
+
+    await tester.tap(find.byKey(rowKey));
+    await tester.pumpAndSettle();
+
+    expect(recoveryCalls, 0);
+    expect(find.text('Needs attention'), findsOneWidget);
   });
 
   testWidgets(

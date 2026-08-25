@@ -17,6 +17,7 @@ class RunnerTests: XCTestCase {
 
   private func assertAppGroupUserDefaultsDeclaration(
     _ manifest: [String: Any],
+    expectsFileTimestamp: Bool,
     file: StaticString = #filePath,
     line: UInt = #line
   ) throws {
@@ -39,14 +40,36 @@ class RunnerTests: XCTestCase {
       file: file,
       line: line
     )
-    XCTAssertEqual(accessedTypes.count, 1, file: file, line: line)
-    let userDefaults = try XCTUnwrap(accessedTypes.first, file: file, line: line)
+    XCTAssertEqual(accessedTypes.count, expectsFileTimestamp ? 2 : 1, file: file, line: line)
+    let typesByCategory = Dictionary(
+      uniqueKeysWithValues: accessedTypes.compactMap { entry in
+        (entry["NSPrivacyAccessedAPIType"] as? String).map { ($0, entry) }
+      }
+    )
+    let userDefaults = try XCTUnwrap(
+      typesByCategory["NSPrivacyAccessedAPICategoryUserDefaults"],
+      file: file,
+      line: line
+    )
     XCTAssertEqual(
       userDefaults["NSPrivacyAccessedAPIType"] as? String,
       "NSPrivacyAccessedAPICategoryUserDefaults",
       file: file,
       line: line
     )
+    if expectsFileTimestamp {
+      let fileTimestamp = try XCTUnwrap(
+        typesByCategory["NSPrivacyAccessedAPICategoryFileTimestamp"],
+        file: file,
+        line: line
+      )
+      XCTAssertEqual(
+        fileTimestamp["NSPrivacyAccessedAPITypeReasons"] as? [String],
+        ["C617.1"],
+        file: file,
+        line: line
+      )
+    }
     XCTAssertEqual(
       userDefaults["NSPrivacyAccessedAPITypeReasons"] as? [String],
       ["1C8F.1"],
@@ -59,7 +82,10 @@ class RunnerTests: XCTestCase {
     let url = try XCTUnwrap(
       Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy")
     )
-    try assertAppGroupUserDefaultsDeclaration(loadPrivacyManifest(at: url))
+    try assertAppGroupUserDefaultsDeclaration(
+      loadPrivacyManifest(at: url),
+      expectsFileTimestamp: true
+    )
   }
 
   func testWidgetBundlesItsAppGroupPrivacyManifest() throws {
@@ -69,7 +95,10 @@ class RunnerTests: XCTestCase {
     let manifestURL = try XCTUnwrap(
       bundle.url(forResource: "PrivacyInfo", withExtension: "xcprivacy")
     )
-    try assertAppGroupUserDefaultsDeclaration(loadPrivacyManifest(at: manifestURL))
+    try assertAppGroupUserDefaultsDeclaration(
+      loadPrivacyManifest(at: manifestURL),
+      expectsFileTimestamp: false
+    )
   }
 
   // MARK: - Build 26 Phase 4B-1: CloudKit bridge pure-mapping unit tests
@@ -107,6 +136,9 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(
       CloudKitErrorClassifier.symbolicCode(for: CKError(.zoneBusy)),
       CloudKitErrorClassifier.zoneBusy)
+    XCTAssertEqual(
+      CloudKitErrorClassifier.symbolicCode(for: CKError(.limitExceeded)),
+      CloudKitErrorClassifier.limitExceeded)
   }
 
   func testErrorClassifierMapsNonCKErrorToUnrecognized() {
@@ -114,6 +146,68 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(
       CloudKitErrorClassifier.symbolicCode(for: SomeOtherError()),
       CloudKitErrorClassifier.unrecognizedNativeError)
+  }
+
+  func testKeeperEntitlementAcceptsOnlyCurrentKeeperProduct() {
+    XCTAssertTrue(
+      EastKeeperEntitlement.isCurrentKeeperTransaction(
+        productID: EastKeeperEntitlement.keeperProductID,
+        revocationDate: nil
+      )
+    )
+    XCTAssertFalse(
+      EastKeeperEntitlement.isCurrentKeeperTransaction(
+        productID: "another.product",
+        revocationDate: nil
+      )
+    )
+    XCTAssertFalse(
+      EastKeeperEntitlement.isCurrentKeeperTransaction(
+        productID: EastKeeperEntitlement.keeperProductID,
+        revocationDate: Date()
+      )
+    )
+  }
+
+  private func invokeProductionDiagnostics(
+    method: String = EastProductionDiagnostics.methodName,
+    arguments: Any?
+  ) -> Any? {
+    let call = FlutterMethodCall(methodName: method, arguments: arguments)
+    let calledOnce = expectation(description: "EastProductionDiagnostics result called")
+    var capturedResult: Any?
+    EastProductionDiagnostics().handle(call) { value in
+      capturedResult = value
+      calledOnce.fulfill()
+    }
+    waitForExpectations(timeout: 1)
+    return capturedResult
+  }
+
+  func testProductionDiagnosticsAcceptsClosedSignal() {
+    XCTAssertNil(
+      invokeProductionDiagnostics(arguments: ["signal": "syncTerminalFailure"])
+    )
+  }
+
+  func testProductionDiagnosticsRejectsUnknownSignal() {
+    let result = invokeProductionDiagnostics(arguments: ["signal": "private-data"])
+    XCTAssertEqual((result as? FlutterError)?.code, "invalid_arguments")
+  }
+
+  func testProductionDiagnosticsRejectsExtraPayloadFields() {
+    let result = invokeProductionDiagnostics(
+      arguments: ["signal": "syncCompleted", "details": "must-not-cross"]
+    )
+    XCTAssertEqual((result as? FlutterError)?.code, "invalid_arguments")
+  }
+
+  func testProductionDiagnosticsRejectsUnsupportedMethod() {
+    let result = invokeProductionDiagnostics(
+      method: "recordDetails",
+      arguments: ["signal": "syncCompleted"]
+    )
+    XCTAssertTrue((result as AnyObject) === FlutterMethodNotImplemented)
   }
 
   func testAccountFingerprintUtilityIsDeterministicAndDistinct() {
@@ -363,6 +457,7 @@ class RunnerTests: XCTestCase {
       CloudKitErrorClassifier.unknownItem,
       CloudKitErrorClassifier.incompatibleVersion,
       CloudKitErrorClassifier.quotaExceeded,
+      CloudKitErrorClassifier.limitExceeded,
       CloudKitErrorClassifier.serverRejectedRequest,
       CloudKitErrorClassifier.unrecognizedNativeError,
     ]
@@ -2027,6 +2122,7 @@ class RunnerTests: XCTestCase {
       CloudKitErrorClassifier.unknownItem,
       CloudKitErrorClassifier.incompatibleVersion,
       CloudKitErrorClassifier.quotaExceeded,
+      CloudKitErrorClassifier.limitExceeded,
       CloudKitErrorClassifier.serverRejectedRequest,
       CloudKitErrorClassifier.permissionFailure,
       CloudKitErrorClassifier.zoneNotFound,
@@ -2679,6 +2775,7 @@ class RunnerTests: XCTestCase {
       CloudKitErrorClassifier.unknownItem,
       CloudKitErrorClassifier.incompatibleVersion,
       CloudKitErrorClassifier.quotaExceeded,
+      CloudKitErrorClassifier.limitExceeded,
       CloudKitErrorClassifier.serverRejectedRequest,
       CloudKitErrorClassifier.unrecognizedNativeError,
     ]

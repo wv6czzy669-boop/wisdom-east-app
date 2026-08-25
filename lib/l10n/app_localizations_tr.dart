@@ -398,6 +398,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get opening => 'Açılıyor.';
 
   @override
+  String get bootstrapRecovery =>
+      'Açılış beklenenden uzun sürüyor. Lütfen EAST.’i kapatıp yeniden açın.';
+
+  @override
   String get supportEmailSubject => 'EAST. Destek';
 
   @override
@@ -432,6 +436,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get icloudEnabled => 'Etkin';
+
+  @override
+  String get icloudSyncing => 'Eşzamanlanıyor';
+
+  @override
+  String get icloudUnavailable => 'iCloud kullanılamıyor';
+
+  @override
+  String get icloudNeedsAttention => 'İşlem gerekiyor';
 
   @override
   String get icloudNotEnabled => 'Etkin değil';

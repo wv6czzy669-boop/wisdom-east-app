@@ -1,4 +1,7 @@
 import Flutter
+import MetricKit
+import OSLog
+import StoreKit
 import UIKit
 import UserNotifications
 
@@ -7,12 +10,14 @@ import UserNotifications
   /// Build 26 Phase 4B-1: retains `CloudKitSyncBridge` for the app's
   /// lifetime -- see `registerCloudKitSyncChannel` below.
   private var cloudKitSyncBridge: CloudKitSyncBridge?
+  private let productionDiagnostics = EastProductionDiagnostics()
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    productionDiagnostics.start()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -21,6 +26,44 @@ import UserNotifications
     registerFileProtectionChannel(with: engineBridge.pluginRegistry)
     registerCloudKitSyncChannel(with: engineBridge.pluginRegistry)
     registerWidgetSnapshotChannel(with: engineBridge.pluginRegistry)
+    registerKeeperEntitlementChannel(with: engineBridge.pluginRegistry)
+    registerProductionDiagnosticsChannel(with: engineBridge.pluginRegistry)
+  }
+
+  private func registerProductionDiagnosticsChannel(with registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "EastProductionDiagnosticsChannel") else {
+      return
+    }
+    let channel = FlutterMethodChannel(
+      name: EastProductionDiagnostics.channelName,
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(
+          FlutterError(
+            code: "unavailable",
+            message: "Production diagnostics is unavailable.",
+            details: nil
+          )
+        )
+        return
+      }
+      self.productionDiagnostics.handle(call, result: result)
+    }
+  }
+
+  private func registerKeeperEntitlementChannel(with registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "EastKeeperEntitlementChannel") else {
+      return
+    }
+    let channel = FlutterMethodChannel(
+      name: EastKeeperEntitlement.channelName,
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      EastKeeperEntitlement.handle(call, result: result)
+    }
   }
 
   /// EAST. Phase 11: registers the Home Screen widget's snapshot bridge
@@ -111,6 +154,117 @@ import UserNotifications
     )
     channel.setMethodCallHandler { call, result in
       EastFileProtection.handle(call, result: result)
+    }
+  }
+}
+
+/// Content-free production health telemetry. MetricKit payload bodies are
+/// never persisted or forwarded; only category counts reach Apple's unified
+/// logger. Flutter may submit only one of the closed sync outcome names below,
+/// with no arbitrary fields or exception details.
+final class EastProductionDiagnostics: NSObject, MXMetricManagerSubscriber {
+  static let channelName = "com.dogukan.dailywisdom/production_diagnostics"
+  static let methodName = "recordSignal"
+
+  private static let allowedSignals: Set<String> = [
+    "syncCompleted",
+    "syncRetryableFailure",
+    "syncTerminalFailure",
+    "syncWaitingForICloud",
+    "syncDeletionProgressed",
+    "syncDeletionCompleted",
+    "syncDeletionStateCorrupted",
+  ]
+
+  private let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.dogukan.dailywisdom",
+    category: "ProductionHealth"
+  )
+  private var started = false
+
+  func start() {
+    guard !started else { return }
+    started = true
+    MXMetricManager.shared.add(self)
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard call.method == Self.methodName else {
+      result(FlutterMethodNotImplemented)
+      return
+    }
+    guard
+      let arguments = call.arguments as? [String: Any],
+      let signal = arguments["signal"] as? String,
+      Self.allowedSignals.contains(signal),
+      arguments.count == 1
+    else {
+      result(
+        FlutterError(
+          code: "invalid_arguments",
+          message: "Expected one allow-listed production health signal.",
+          details: nil
+        )
+      )
+      return
+    }
+
+    logger.notice("sync outcome=\(signal, privacy: .public)")
+    result(nil)
+  }
+
+  func didReceive(_ payloads: [MXMetricPayload]) {
+    logger.notice("MetricKit metric payloads=\(payloads.count, privacy: .public)")
+  }
+
+  func didReceive(_ payloads: [MXDiagnosticPayload]) {
+    let crashes = payloads.reduce(0) { $0 + ($1.crashDiagnostics?.count ?? 0) }
+    let hangs = payloads.reduce(0) { $0 + ($1.hangDiagnostics?.count ?? 0) }
+    let cpuExceptions = payloads.reduce(0) {
+      $0 + ($1.cpuExceptionDiagnostics?.count ?? 0)
+    }
+    let diskWrites = payloads.reduce(0) {
+      $0 + ($1.diskWriteExceptionDiagnostics?.count ?? 0)
+    }
+    logger.error("MetricKit diagnostics payloads=\(payloads.count, privacy: .public) crashes=\(crashes, privacy: .public) hangs=\(hangs, privacy: .public) cpu=\(cpuExceptions, privacy: .public) disk=\(diskWrites, privacy: .public)")
+  }
+}
+
+/// StoreKit 2 is the entitlement authority. Flutter's persisted boolean is
+/// deliberately only a last-known cache for an unavailable native query.
+enum EastKeeperEntitlement {
+  static let channelName = "com.dogukan.dailywisdom/keeper_entitlement"
+  static let methodName = "currentKeeperEntitlement"
+  static let keeperProductID = "com.dailywisdomeast.keeper"
+
+  static func isCurrentKeeperTransaction(
+    productID: String,
+    revocationDate: Date?
+  ) -> Bool {
+    productID == keeperProductID && revocationDate == nil
+  }
+
+  static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard call.method == methodName else {
+      result(FlutterMethodNotImplemented)
+      return
+    }
+
+    Task { @MainActor in
+      var isEntitled = false
+      for await verification in Transaction.currentEntitlements {
+        guard case .verified(let transaction) = verification else {
+          continue
+        }
+        if isCurrentKeeperTransaction(
+          productID: transaction.productID,
+          revocationDate: transaction.revocationDate
+        ) {
+          isEntitled = true
+          break
+        }
+      }
+      result(isEntitled)
     }
   }
 }

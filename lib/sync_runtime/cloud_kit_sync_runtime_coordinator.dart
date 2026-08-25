@@ -55,7 +55,7 @@
 /// prevents two full runtime *pipelines* from running concurrently.
 ///
 /// **Retry.** Bounded exponential backoff (30s, 60s, 120s, 240s, ... capped
-/// at 30 minutes, no jitter) scheduled only for genuinely transient
+/// at 30 minutes) with ±15% production jitter, scheduled only for genuinely transient
 /// failures, through the small injectable [SyncRetryScheduler] seam so tests
 /// never need a real `Timer` or a sleep. Reset to zero after any fully
 /// [SyncRuntimeOutcome.completed] pass. At most one retry timer ever exists;
@@ -102,6 +102,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math';
 
 import '../sync_deletion/cloud_kit_remote_deletion_runner.dart';
 import '../sync_deletion/local_deletion_finalizer.dart';
@@ -382,6 +383,8 @@ final class CloudKitSyncRuntimeCoordinator {
     required CloudKitPlatformBridge bridge,
     SyncRetryScheduler? scheduler,
     Duration Function(int attempt)? backoffForAttempt,
+    double Function()? randomUnit,
+    void Function(SyncRuntimeOutcome outcome)? onPassFinished,
     CloudKitRemoteDeletionRunner? deletionRunner,
     LocalDeletionFinalizer? deletionFinalizer,
   })  : _bootstrapCoordinator = bootstrapCoordinator,
@@ -390,7 +393,9 @@ final class CloudKitSyncRuntimeCoordinator {
         _orchestrator = orchestrator,
         _syncPersistenceStore = syncPersistenceStore,
         _scheduler = scheduler ?? const TimerSyncRetryScheduler(),
-        _backoffForAttempt = backoffForAttempt ?? defaultBackoffForAttempt,
+        _backoffForAttempt = backoffForAttempt ??
+            _jitteredBackoff(randomUnit ?? Random().nextDouble),
+        _onPassFinished = onPassFinished,
         // Build 26 Phase 5 (slice 3): defaulted here, not left to a bare
         // no-arg constructor call inside `_runOnce`, so a test (or a future
         // caller) can always inject a fully-controlled fake instead --
@@ -417,7 +422,7 @@ final class CloudKitSyncRuntimeCoordinator {
   static const Duration _maxBackoff = Duration(minutes: 30);
 
   /// The locked-decision bounded exponential backoff: 30s, 60s, 120s, 240s,
-  /// ... doubling per consecutive attempt, capped at 30 minutes, no jitter.
+  /// ... doubling per consecutive attempt, capped at 30 minutes.
   /// [attempt] is 1-based -- the first retryable failure since the last
   /// success/construction is attempt `1`.
   static Duration defaultBackoffForAttempt(int attempt) {
@@ -430,6 +435,27 @@ final class CloudKitSyncRuntimeCoordinator {
     return scaled > _maxBackoff ? _maxBackoff : scaled;
   }
 
+  /// Applies EAST.'s production ±15% jitter to the deterministic base.
+  ///
+  /// [randomUnit] is clamped into `0...1`, making this method safe and fully
+  /// deterministic in tests. The result never exceeds the existing
+  /// 30-minute cap; at the cap the distribution is intentionally one-sided.
+  static Duration jitteredBackoffForAttempt(int attempt, double randomUnit) {
+    final unit = randomUnit.clamp(0.0, 1.0);
+    final factor = 0.85 + (0.30 * unit);
+    final baseMicroseconds = defaultBackoffForAttempt(attempt).inMicroseconds;
+    final jitteredMicroseconds = (baseMicroseconds * factor).round();
+    return Duration(
+      microseconds: min(jitteredMicroseconds, _maxBackoff.inMicroseconds),
+    );
+  }
+
+  static Duration Function(int attempt) _jitteredBackoff(
+    double Function() randomUnit,
+  ) {
+    return (attempt) => jitteredBackoffForAttempt(attempt, randomUnit());
+  }
+
   final KeptSyncBootstrapCoordinator _bootstrapCoordinator;
   final KeptSyncIntegrationCoordinator _integrationCoordinator;
   final IncomingKeptSyncCoordinator _incomingCoordinator;
@@ -437,6 +463,7 @@ final class CloudKitSyncRuntimeCoordinator {
   final SyncPersistenceStore _syncPersistenceStore;
   final SyncRetryScheduler _scheduler;
   final Duration Function(int attempt) _backoffForAttempt;
+  final void Function(SyncRuntimeOutcome outcome)? _onPassFinished;
   final CloudKitRemoteDeletionRunner _deletionRunner;
   final LocalDeletionFinalizer _deletionFinalizer;
 
@@ -745,6 +772,12 @@ final class CloudKitSyncRuntimeCoordinator {
 
   void _finishPass(SyncRuntimeOutcome outcome) {
     _lastOutcome = outcome;
+    try {
+      _onPassFinished?.call(outcome);
+    } catch (_) {
+      // Production diagnostics are observational only and can never alter
+      // retry classification or escape into the sync pipeline.
+    }
     switch (outcome) {
       case SyncRuntimeOutcome.completed:
       case SyncRuntimeOutcome.deletionCompleted:

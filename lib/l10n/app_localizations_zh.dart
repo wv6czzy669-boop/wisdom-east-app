@@ -383,6 +383,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get opening => '正在開啟。';
 
   @override
+  String get bootstrapRecovery => '開啟時間比預期更久。請關閉 EAST.，然後重新開啟。';
+
+  @override
   String get supportEmailSubject => 'EAST. 支援';
 
   @override
@@ -414,6 +417,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get icloudEnabled => '已啟用';
+
+  @override
+  String get icloudSyncing => '同步中';
+
+  @override
+  String get icloudUnavailable => 'iCloud 無法使用';
+
+  @override
+  String get icloudNeedsAttention => '需要留意';
 
   @override
   String get icloudNotEnabled => '未啟用';
@@ -837,6 +849,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get opening => '正在開啟。';
 
   @override
+  String get bootstrapRecovery => '開啟時間比預期更久。請關閉 EAST.，然後重新開啟。';
+
+  @override
   String get supportEmailSubject => 'EAST. 支援';
 
   @override
@@ -868,6 +883,15 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get icloudEnabled => '已啟用';
+
+  @override
+  String get icloudSyncing => '同步中';
+
+  @override
+  String get icloudUnavailable => 'iCloud 無法使用';
+
+  @override
+  String get icloudNeedsAttention => '需要留意';
 
   @override
   String get icloudNotEnabled => '未啟用';

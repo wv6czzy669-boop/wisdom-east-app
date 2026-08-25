@@ -263,7 +263,9 @@ void main() {
       // keptDeleteExplanation), matching Reflection's full-field decision.
       // Kept search: +3 keys (searchKept, clearSearch,
       // noKeptSearchResults), kept entirely on-device.
-      expect(expectedKeys, hasLength(142));
+      // Honest Settings sync health: +3 keys (icloudSyncing,
+      // icloudUnavailable, icloudNeedsAttention).
+      expect(expectedKeys, hasLength(146));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');

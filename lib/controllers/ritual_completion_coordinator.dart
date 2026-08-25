@@ -50,31 +50,49 @@ class RitualCompletionCoordinator {
   }) {
     if (access.isNew) {
       unawaited(
-        _recordCompletedRitual().then(onRitualOrdinalResolved),
+        Future<int?>.sync(_recordCompletedRitual)
+            .then(onRitualOrdinalResolved)
+            .catchError((_) {
+          // Rating prompts are best-effort after the reveal is committed.
+        }),
       );
 
-      _trackRitualCompletion();
+      try {
+        _trackRitualCompletion();
+      } catch (_) {
+        // Analytics must never interrupt the committed ritual.
+      }
 
       final unlockAt = access.unlockAt;
       final wisdomId = access.wisdomId;
       if (unlockAt != null && wisdomId != null) {
-        _publishFreshWidgetReveal?.call(
-          wisdomId: wisdomId,
-          text: access.text,
-          unlockAt: unlockAt,
-        );
+        try {
+          _publishFreshWidgetReveal?.call(
+            wisdomId: wisdomId,
+            text: access.text,
+            unlockAt: unlockAt,
+          );
+        } catch (_) {
+          // Widget presentation is independent of the persisted reveal.
+        }
       }
     }
 
     unawaited(
-      _refreshDailyAccessPresentation().catchError((_) {
+      Future<void>.sync(_refreshDailyAccessPresentation).catchError((_) {
         // Countdown copy is noncritical after the wisdom is persisted.
       }),
     );
 
     final unlockAt = access.unlockAt;
     if (unlockAt != null) {
-      unawaited(_scheduleWisdomUnlock(unlockAt));
+      unawaited(
+        Future<void>.sync(() => _scheduleWisdomUnlock(unlockAt)).catchError(
+          (_) {
+            // Notification scheduling cannot invalidate the reveal.
+          },
+        ),
+      );
     }
 
     return RitualCompletionResult(

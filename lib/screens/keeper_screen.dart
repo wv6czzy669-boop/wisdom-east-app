@@ -57,7 +57,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
             SnackBar(
               backgroundColor: EastColors.of(context).surface,
               content: Text(
-                "Keeper access could not be saved. Please try Restore Purchases.",
+                eastLocalizations(context).keeperPersistenceError,
                 style: keeperStyle(17),
               ),
             ),
@@ -100,14 +100,15 @@ class _KeeperScreenState extends State<KeeperScreen> {
     if (!mounted) return;
 
     if (!started) {
+      final l10n = eastLocalizations(context);
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: EastColors.of(context).surface,
           content: Text(
             _purchaseService.purchaseNeedsRecovery
-                ? "Purchase status is still updating. Please use Restore Purchases in Settings."
-                : "Purchase is not ready yet. Please try again shortly.",
+                ? l10n.purchaseUpdating
+                : l10n.purchaseNotReady,
             style: keeperStyle(17),
           ),
         ),

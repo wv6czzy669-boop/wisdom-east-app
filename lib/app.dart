@@ -36,12 +36,12 @@ class WisdomApp extends StatefulWidget {
   /// instance `HomeScreen` receives, nothing about when or how it is built.
   final SavedReflectionsService? savedReflectionsService;
 
-  /// Production supplies one controller loaded before `runApp`, while
-  /// isolated widget hosts may safely use the screen-local fallback.
+  /// Production supplies one controller loaded before BootstrapGate builds
+  /// WisdomApp, while isolated widget hosts may use the screen-local fallback.
   final LocalePreferenceController? localePreferenceController;
 
-  /// Production supplies one controller loaded before `runApp`, mirroring
-  /// [localePreferenceController] exactly -- the two are otherwise fully
+  /// Production supplies one controller loaded before BootstrapGate builds
+  /// WisdomApp, mirroring [localePreferenceController] exactly -- the two are otherwise fully
   /// independent (Appearance and Language never read or gate each other).
   final AppearancePreferenceController? appearancePreferenceController;
 

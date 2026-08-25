@@ -401,6 +401,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get opening => 'Abrindo.';
 
   @override
+  String get bootstrapRecovery =>
+      'A abertura está demorando mais do que o esperado. Feche o EAST. e abra-o novamente.';
+
+  @override
   String get supportEmailSubject => 'Suporte EAST.';
 
   @override
@@ -436,6 +440,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get icloudEnabled => 'Ativada';
+
+  @override
+  String get icloudSyncing => 'Sincronizando';
+
+  @override
+  String get icloudUnavailable => 'iCloud indisponível';
+
+  @override
+  String get icloudNeedsAttention => 'Requer atenção';
 
   @override
   String get icloudNotEnabled => 'Não ativada';
@@ -905,6 +918,10 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get opening => 'Abrindo.';
 
   @override
+  String get bootstrapRecovery =>
+      'A abertura está demorando mais do que o esperado. Feche o EAST. e abra-o novamente.';
+
+  @override
   String get supportEmailSubject => 'Suporte EAST.';
 
   @override
@@ -940,6 +957,15 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get icloudEnabled => 'Ativada';
+
+  @override
+  String get icloudSyncing => 'Sincronizando';
+
+  @override
+  String get icloudUnavailable => 'iCloud indisponível';
+
+  @override
+  String get icloudNeedsAttention => 'Requer atenção';
 
   @override
   String get icloudNotEnabled => 'Não ativada';

@@ -383,6 +383,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get opening => '開いています。';
 
   @override
+  String get bootstrapRecovery => '起動に時間がかかっています。EAST.を閉じて、もう一度開いてください。';
+
+  @override
   String get supportEmailSubject => 'EAST. サポート';
 
   @override
@@ -415,6 +418,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get icloudEnabled => '有効';
+
+  @override
+  String get icloudSyncing => '同期中';
+
+  @override
+  String get icloudUnavailable => 'iCloudを利用できません';
+
+  @override
+  String get icloudNeedsAttention => '確認が必要';
 
   @override
   String get icloudNotEnabled => '無効';

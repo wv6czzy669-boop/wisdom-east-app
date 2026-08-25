@@ -385,6 +385,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get opening => '여는 중입니다.';
 
   @override
+  String get bootstrapRecovery =>
+      '여는 데 예상보다 오래 걸리고 있습니다. EAST.를 닫았다가 다시 열어 주세요.';
+
+  @override
   String get supportEmailSubject => 'EAST. 지원';
 
   @override
@@ -417,6 +421,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get icloudEnabled => '활성화됨';
+
+  @override
+  String get icloudSyncing => '동기화 중';
+
+  @override
+  String get icloudUnavailable => 'iCloud를 사용할 수 없음';
+
+  @override
+  String get icloudNeedsAttention => '확인 필요';
 
   @override
   String get icloudNotEnabled => '활성화되지 않음';

@@ -399,6 +399,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get opening => 'Đang mở.';
 
   @override
+  String get bootstrapRecovery =>
+      'Quá trình mở đang mất nhiều thời gian hơn dự kiến. Hãy đóng EAST. rồi mở lại.';
+
+  @override
   String get supportEmailSubject => 'Hỗ trợ EAST.';
 
   @override
@@ -434,6 +438,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get icloudEnabled => 'Đã bật';
+
+  @override
+  String get icloudSyncing => 'Đang đồng bộ';
+
+  @override
+  String get icloudUnavailable => 'iCloud không khả dụng';
+
+  @override
+  String get icloudNeedsAttention => 'Cần chú ý';
 
   @override
   String get icloudNotEnabled => 'Chưa bật';

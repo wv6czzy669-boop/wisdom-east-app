@@ -14,6 +14,11 @@ void main() {
       expect(error.category, SyncErrorCategory.retryable);
     });
 
+    test('limitExceeded is retryable after the batch is adaptively split', () {
+      const error = CloudKitPlatformException(syncErrorCodeLimitExceeded);
+      expect(error.category, SyncErrorCategory.retryable);
+    });
+
     test('a known account-issue code classifies as accountIssue', () {
       const error = CloudKitPlatformException(syncErrorCodeNotAuthenticated);
       expect(error.category, SyncErrorCategory.accountIssue);

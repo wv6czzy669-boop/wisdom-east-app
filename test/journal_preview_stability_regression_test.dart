@@ -11,6 +11,8 @@ import 'package:wisdom_app/screens/journal_screen.dart';
 import 'package:wisdom_app/services/journal_owner_service.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
 
+import 'journal_owner_test_helpers.dart';
+
 /// Real-device repair: the Journal preview must never blank/flash back to
 /// an empty or default-white state while a regeneration (Name Save with a
 /// changed owner, etc) is in flight -- the previous publication has to stay
@@ -112,7 +114,8 @@ void main() {
       'regeneration is in flight, and PdfPreview is never unmounted to '
       'reach the replacement', (tester) async {
     final builder = _SequencedPdfBuilder();
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -169,7 +172,8 @@ void main() {
       'CASE 3 -- opening and cancelling Journal Name never calls the PDF '
       'builder again', (tester) async {
     final builder = _SequencedPdfBuilder();
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -204,7 +208,8 @@ void main() {
       'SAVE with the unchanged name does not regenerate the publication',
       (tester) async {
     final builder = _SequencedPdfBuilder();
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -240,7 +245,8 @@ void main() {
       'in a row leaves the preview mounted throughout, with no blank leak',
       (tester) async {
     final builder = _SequencedPdfBuilder();
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.skip();
 
     await tester.pumpWidget(
@@ -280,7 +286,8 @@ void main() {
       'CASE 6 -- a slow, superseded generation cannot race back onto '
       'screen after a newer one has already completed', (tester) async {
     final builder = _SequencedPdfBuilder();
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -329,7 +336,8 @@ void main() {
       'CASE 1 -- first entry never exposes a spinner or default loading '
       'widget while the very first publication is generating', (tester) async {
     final builder = _SequencedPdfBuilder();
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.skip();
 
     await tester.pumpWidget(

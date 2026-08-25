@@ -57,6 +57,8 @@
 /// nothing beyond what it already committed before this phase.
 library;
 
+import 'dart:collection';
+
 import '../sync/sync_error_classification.dart';
 import '../sync_persistence/account_sync_state.dart';
 import '../sync_persistence/persisted_outbox_mutation.dart';
@@ -81,6 +83,8 @@ import 'sync_pass_result.dart';
 /// fully testable with fakes and never touches a real `MethodChannel` or a
 /// real CloudKit container.
 final class SyncOrchestrator {
+  static const int maxRecordsPerUploadBatch = 300;
+
   SyncOrchestrator({
     required CloudKitPlatformBridge bridge,
     required SyncPersistenceStore persistenceStore,
@@ -205,146 +209,165 @@ final class SyncOrchestrator {
         return SyncPassResult.persistenceFailure(cause: error);
       }
 
-      // Translate persisted sync-domain mutations into the existing Phase
-      // 4C transport request shape only at this orchestration boundary --
-      // never a parallel DTO. Deterministic queue order preserved exactly
-      // as `readPendingMutations` returned it. No batch-size limit is
-      // documented anywhere in the Phase 4C-2 transport contract
-      // (`CloudKitModifyRecordsRequest`/native coordinator), so this pass
-      // uses one single, deterministically-ordered batch rather than
-      // inventing an undocumented limit.
-      final inputs = <CloudKitRecordChangeInput>[];
-      final mutationIdByRecordName = <String, String>{};
-      for (final mutation in pending) {
-        final projection = mutation.change.projection;
-        inputs.add(
-          CloudKitRecordChangeInput.keptWisdom(
-            projection,
-            previousSystemFields:
-                bucket.recordSystemFields[projection.recordName],
-          ),
-        );
-        mutationIdByRecordName[mutation.recordName] = mutation.mutationId;
-      }
-      uploadedRecordCount = inputs.length;
-
-      final CloudKitModifyRecordsResult modifyResult;
-      try {
-        modifyResult = await _bridge.modifyPrivateRecords(
-          CloudKitModifyRecordsRequest(records: inputs),
-        );
-      } on CloudKitPlatformException catch (error) {
-        keptDiagnostic('sync-orchestrator: upload-threw');
-        return _classifiedFailure(error.category, cause: error);
+      // Keep requests well below CloudKit's operation-size ceiling. A
+      // top-level `limitExceeded` means CloudKit could not provide any
+      // trustworthy per-record outcome, so split that exact batch in half
+      // and retry it in the same deterministic order. Every successful
+      // batch is made durable before the next begins; an app termination can
+      // therefore only replay still-pending, idempotent mutations.
+      uploadedRecordCount = pending.length;
+      final uploadQueue = ListQueue<List<PersistedOutboxMutation>>();
+      for (var start = 0;
+          start < pending.length;
+          start += maxRecordsPerUploadBatch) {
+        final end = (start + maxRecordsPerUploadBatch < pending.length)
+            ? start + maxRecordsPerUploadBatch
+            : pending.length;
+        uploadQueue.add(pending.sublist(start, end));
       }
 
-      switch (modifyResult.overallStatus) {
-        case CloudKitModifyRecordsOverallStatus.transportFailure:
-          keptDiagnostic('sync-orchestrator: upload-transport-failure');
-          // No per-record outcome was ever attempted -- the outbox is left
-          // completely unchanged: no applyMutationOutcomes call at all,
-          // and no fetch.
-          final category = modifyResult.errorCode == null
-              ? SyncErrorCategory.retryable
-              : classifySyncErrorCode(modifyResult.errorCode!);
-          return _classifiedFailure(category, cause: modifyResult);
+      while (uploadQueue.isNotEmpty) {
+        final batch = uploadQueue.removeFirst();
+        final inputs = <CloudKitRecordChangeInput>[];
+        final mutationIdByRecordName = <String, String>{};
+        for (final mutation in batch) {
+          final projection = mutation.change.projection;
+          inputs.add(
+            CloudKitRecordChangeInput.keptWisdom(
+              projection,
+              previousSystemFields:
+                  bucket.recordSystemFields[projection.recordName],
+            ),
+          );
+          mutationIdByRecordName[mutation.recordName] = mutation.mutationId;
+        }
 
-        case CloudKitModifyRecordsOverallStatus.unknown:
-          keptDiagnostic('sync-orchestrator: upload-unknown-result');
-          return SyncPassResult.permanentFailure(cause: modifyResult);
+        late final CloudKitModifyRecordsResult modifyResult;
+        try {
+          modifyResult = await _bridge.modifyPrivateRecords(
+            CloudKitModifyRecordsRequest(records: inputs),
+          );
+        } on CloudKitPlatformException catch (error) {
+          if (error.code == syncErrorCodeLimitExceeded && batch.length > 1) {
+            _prependSplitBatch(uploadQueue, batch);
+            continue;
+          }
+          keptDiagnostic('sync-orchestrator: upload-threw');
+          return _classifiedFailure(error.category, cause: error);
+        }
 
-        case CloudKitModifyRecordsOverallStatus.allSucceeded:
-        case CloudKitModifyRecordsOverallStatus.partialFailure:
-          final acknowledgedMutationIds = <String>{};
-          final updatedStatusByMutationId =
-              <String, PersistedOutboxMutationStatus>{};
-          final systemFieldsToStore = <String, String>{};
+        if (modifyResult.overallStatus ==
+                CloudKitModifyRecordsOverallStatus.transportFailure &&
+            modifyResult.errorCode == syncErrorCodeLimitExceeded &&
+            batch.length > 1) {
+          _prependSplitBatch(uploadQueue, batch);
+          continue;
+        }
 
-          for (final outcome in modifyResult.outcomes) {
-            final mutationId = mutationIdByRecordName[outcome.recordName];
-            if (mutationId == null) {
-              // An outcome for a record this pass never requested -- never
-              // trusted, never acted on.
-              continue;
-            }
-            if (outcome.success) {
-              acknowledgedMutationIds.add(mutationId);
-              acknowledgedCount += 1;
-              final systemFields = outcome.systemFields;
-              if (systemFields != null) {
-                systemFieldsToStore[outcome.recordName] = systemFields;
+        switch (modifyResult.overallStatus) {
+          case CloudKitModifyRecordsOverallStatus.transportFailure:
+            keptDiagnostic('sync-orchestrator: upload-transport-failure');
+            // No per-record outcome was ever attempted -- this batch stays
+            // queued, while any earlier completed batch remains durable.
+            final category = modifyResult.errorCode == null
+                ? SyncErrorCategory.retryable
+                : classifySyncErrorCode(modifyResult.errorCode!);
+            return _classifiedFailure(category, cause: modifyResult);
+
+          case CloudKitModifyRecordsOverallStatus.unknown:
+            keptDiagnostic('sync-orchestrator: upload-unknown-result');
+            return SyncPassResult.permanentFailure(cause: modifyResult);
+
+          case CloudKitModifyRecordsOverallStatus.allSucceeded:
+          case CloudKitModifyRecordsOverallStatus.partialFailure:
+            final acknowledgedMutationIds = <String>{};
+            final updatedStatusByMutationId =
+                <String, PersistedOutboxMutationStatus>{};
+            final systemFieldsToStore = <String, String>{};
+
+            for (final outcome in modifyResult.outcomes) {
+              final mutationId = mutationIdByRecordName[outcome.recordName];
+              if (mutationId == null) {
+                // An outcome for a record this pass never requested -- never
+                // trusted, never acted on.
+                continue;
               }
-            } else {
-              final errorCode = outcome.errorCode ?? '';
-              if (errorCode == syncErrorCodeServerRecordChanged) {
-                updatedStatusByMutationId[mutationId] =
-                    PersistedOutboxMutationStatus.conflicted;
-                conflictedCount += 1;
-              } else {
-                final category = classifySyncErrorCode(errorCode);
-                if (category == SyncErrorCategory.retryable) {
-                  // Leave this exact mutation untouched -- neither
-                  // acknowledged nor marked -- the per-record retryable
-                  // representation §13.6/ADR-007 already defines.
-                  continue;
+              if (outcome.success) {
+                acknowledgedMutationIds.add(mutationId);
+                acknowledgedCount += 1;
+                final systemFields = outcome.systemFields;
+                if (systemFields != null) {
+                  systemFieldsToStore[outcome.recordName] = systemFields;
                 }
-                updatedStatusByMutationId[mutationId] =
-                    PersistedOutboxMutationStatus.failed;
-                failedCount += 1;
+              } else {
+                final errorCode = outcome.errorCode ?? '';
+                if (errorCode == syncErrorCodeServerRecordChanged) {
+                  updatedStatusByMutationId[mutationId] =
+                      PersistedOutboxMutationStatus.conflicted;
+                  conflictedCount += 1;
+                } else {
+                  final category = classifySyncErrorCode(errorCode);
+                  if (category == SyncErrorCategory.retryable) {
+                    // Leave this exact mutation untouched -- neither
+                    // acknowledged nor marked -- the per-record retryable
+                    // representation §13.6/ADR-007 already defines.
+                    continue;
+                  }
+                  updatedStatusByMutationId[mutationId] =
+                      PersistedOutboxMutationStatus.failed;
+                  failedCount += 1;
+                }
               }
             }
-          }
 
-          // Account isolation checkpoint 2: re-verify before any
-          // upload-result persistence mutation, now that the transport call
-          // has actually completed (and, if the account changed while that
-          // call was in flight, before ever writing this fingerprint's
-          // outcome into its bucket).
-          if (!await _fingerprintStillMatches(fingerprint)) {
-            keptDiagnostic('sync-orchestrator: account-changed-mid-pass');
-            return SyncPassResult.permanentFailure();
-          }
-
-          // Durable-effect-before-checkpoint ordering: a successful save's
-          // returned system fields are persisted *first*, one record at a
-          // time, and only once every one of them has durably landed is the
-          // corresponding mutationId acknowledged in the single
-          // applyMutationOutcomes call below. If persisting a system-fields
-          // value fails partway, no mutationId has yet been acknowledged or
-          // marked -- every mutation this pass touched, including ones
-          // whose own system-fields write already succeeded, simply remains
-          // queued exactly as it was; a future pass's upload is still
-          // conflict-safe and idempotent using whatever system fields did
-          // land. The pass stops here and never reaches the fetch step.
-          try {
-            for (final entry in systemFieldsToStore.entries) {
-              await _store.replaceRecordSystemFields(
-                fingerprint,
-                entry.key,
-                entry.value,
-              );
+            // Account isolation checkpoint 2: re-verify after every
+            // transport call and before persisting that batch's outcomes.
+            if (!await _fingerprintStillMatches(fingerprint)) {
+              keptDiagnostic('sync-orchestrator: account-changed-mid-pass');
+              return SyncPassResult.permanentFailure();
             }
-          } on SyncPersistenceStoreException catch (error) {
-            keptDiagnostic('sync-orchestrator: system-fields-persist-failed');
-            return SyncPassResult.persistenceFailure(cause: error);
-          }
 
-          // Only after every returned system-fields value is durable does
-          // this pass commit acknowledgment/marking. If this call itself
-          // fails, the affected mutations remain queued -- already carrying
-          // their newly-persisted system fields from the step above, so the
-          // next upload attempt for them is still conflict-safe and
-          // idempotent -- and this pass still never reaches the fetch step.
-          try {
-            await _store.applyMutationOutcomes(
-              fingerprint,
-              acknowledgedMutationIds: acknowledgedMutationIds,
-              updatedStatusByMutationId: updatedStatusByMutationId,
-            );
-          } on SyncPersistenceStoreException catch (error) {
-            keptDiagnostic('sync-orchestrator: apply-outcomes-failed');
-            return SyncPassResult.persistenceFailure(cause: error);
-          }
+            // Durable-effect-before-checkpoint ordering: a successful save's
+            // returned system fields are persisted *first*, one record at a
+            // time, and only once every one of them has durably landed is the
+            // corresponding mutationId acknowledged in the single
+            // applyMutationOutcomes call below. If persisting a system-fields
+            // value fails partway, no mutationId has yet been acknowledged or
+            // marked -- every mutation this pass touched, including ones
+            // whose own system-fields write already succeeded, simply remains
+            // queued exactly as it was; a future pass's upload is still
+            // conflict-safe and idempotent using whatever system fields did
+            // land. The pass stops here and never reaches the fetch step.
+            try {
+              for (final entry in systemFieldsToStore.entries) {
+                await _store.replaceRecordSystemFields(
+                  fingerprint,
+                  entry.key,
+                  entry.value,
+                );
+              }
+            } on SyncPersistenceStoreException catch (error) {
+              keptDiagnostic('sync-orchestrator: system-fields-persist-failed');
+              return SyncPassResult.persistenceFailure(cause: error);
+            }
+
+            // Only after every returned system-fields value is durable does
+            // this pass commit acknowledgment/marking. If this call itself
+            // fails, the affected mutations remain queued -- already carrying
+            // their newly-persisted system fields from the step above, so the
+            // next upload attempt for them is still conflict-safe and
+            // idempotent -- and this pass still never reaches the fetch step.
+            try {
+              await _store.applyMutationOutcomes(
+                fingerprint,
+                acknowledgedMutationIds: acknowledgedMutationIds,
+                updatedStatusByMutationId: updatedStatusByMutationId,
+              );
+            } on SyncPersistenceStoreException catch (error) {
+              keptDiagnostic('sync-orchestrator: apply-outcomes-failed');
+              return SyncPassResult.persistenceFailure(cause: error);
+            }
+        }
       }
     }
 
@@ -472,6 +495,18 @@ final class SyncOrchestrator {
         keptDiagnostic('sync-orchestrator: fetch-unknown-result');
         return SyncPassResult.permanentFailure(cause: fetchResult);
     }
+  }
+
+  static void _prependSplitBatch(
+    ListQueue<List<PersistedOutboxMutation>> queue,
+    List<PersistedOutboxMutation> batch,
+  ) {
+    final midpoint = batch.length ~/ 2;
+    final first = batch.sublist(0, midpoint);
+    final second = batch.sublist(midpoint);
+    queue
+      ..addFirst(second)
+      ..addFirst(first);
   }
 
   /// Step 1's account gate. Returns a terminal [SyncPassResult] when the

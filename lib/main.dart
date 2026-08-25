@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import 'app.dart';
+import 'bootstrap/bootstrap_gate.dart';
 import 'controllers/appearance_preference_controller.dart';
 import 'controllers/locale_preference_controller.dart';
 import 'services/app_services.dart';
@@ -25,26 +26,36 @@ Future<void> main() async {
   final appearancePreferenceLoad = appearancePreferenceController.load();
   final dateFormattingLoad = initializeEastDateFormatting();
 
-  // Build 26 production cutover: the protected Kept repository (and the
-  // migration attempt it depends on) must be fully bootstrapped before the
-  // widget tree is built, so every screen's `late final` service reference
-  // (`app_services.savedReflectionsService`) is already populated by the
-  // time it is first read. No timeout — a slow
-  // or failed migration still resolves to a definite, content-safe
-  // `KeptBootstrapResult` (see `initializeKeptStorage`), it never hangs
-  // silently forever, and it must never race app startup.
-  await initializeKeptStorage();
-  await localePreferenceLoad;
-  await appearancePreferenceLoad;
-  await dateFormattingLoad;
+  // Keep one authoritative bootstrap Future. BootstrapGate observes this
+  // exact instance without timing it out, canceling it, or recreating it, so
+  // migration remains single-shot and uninterrupted while Flutter can still
+  // paint a safe waiting/error surface immediately.
+  final bootstrap = Future.wait<void>([
+    initializeKeptStorage(),
+    localePreferenceLoad,
+    appearancePreferenceLoad,
+    dateFormattingLoad,
+  ]);
 
   runApp(
-    WisdomApp(
+    BootstrapGate(
+      bootstrap: bootstrap,
       localePreferenceController: localePreferenceController,
       appearancePreferenceController: appearancePreferenceController,
+      readyBuilder: (_) => WisdomApp(
+        localePreferenceController: localePreferenceController,
+        appearancePreferenceController: appearancePreferenceController,
+      ),
     ),
   );
 
+  // Runtime services may only observe fully-initialized app_services late
+  // finals. This listens to the same bootstrap Future as BootstrapGate and
+  // remains exception-contained if an unexpected bootstrap failure occurs.
+  unawaited(bootstrap.then((_) => _startRuntimeServices()).catchError((_) {}));
+}
+
+void _startRuntimeServices() {
   Future.microtask(() async {
     try {
       await purchaseService.init();
@@ -77,6 +88,17 @@ Future<void> main() async {
   // remains entirely ritual-domain (pausing/resuming audio, the countdown,
   // and the pulse animation) and is not modified by this phase.
   WidgetsBinding.instance.addObserver(_CloudKitSyncLifecycleObserver());
+  WidgetsBinding.instance.addObserver(_KeeperEntitlementLifecycleObserver());
+}
+
+/// Re-checks StoreKit 2 when the app returns to the foreground so refunds
+/// and revocations are reflected without requiring a relaunch.
+class _KeeperEntitlementLifecycleObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(purchaseService.reconcileKeeperEntitlement().catchError((_) {}));
+  }
 }
 
 /// See its registration in [main] for why this exists as an independent

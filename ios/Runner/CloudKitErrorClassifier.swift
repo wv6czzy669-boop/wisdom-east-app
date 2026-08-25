@@ -25,6 +25,7 @@ enum CloudKitErrorClassifier {
   static let unknownItem = "unknownItem"
   static let incompatibleVersion = "incompatibleVersion"
   static let quotaExceeded = "quotaExceeded"
+  static let limitExceeded = "limitExceeded"
 
   /// Build 26 Phase 4B-2: `CKError.Code.serverRejectedRequest` (raw code
   /// 15), confirmed on a physical device as the error `EASTKeptZone`'s
@@ -105,6 +106,8 @@ enum CloudKitErrorClassifier {
       return incompatibleVersion
     case .quotaExceeded:
       return quotaExceeded
+    case .limitExceeded:
+      return limitExceeded
     case .serverRejectedRequest:
       return serverRejectedRequest
     case .permissionFailure:

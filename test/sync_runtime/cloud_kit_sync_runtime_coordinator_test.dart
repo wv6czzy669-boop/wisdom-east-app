@@ -103,6 +103,42 @@ void main() {
     });
   });
 
+  group('production retry jitter', () {
+    test('stays inside the locked ±15 percent envelope', () {
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(1, 0),
+        const Duration(milliseconds: 25500),
+      );
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(1, 0.5),
+        const Duration(seconds: 30),
+      );
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(1, 1),
+        const Duration(milliseconds: 34500),
+      );
+    });
+
+    test('clamps random samples and preserves the 30 minute cap', () {
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(1, -20),
+        const Duration(milliseconds: 25500),
+      );
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(1, 20),
+        const Duration(milliseconds: 34500),
+      );
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(50, 1),
+        const Duration(minutes: 30),
+      );
+      expect(
+        CloudKitSyncRuntimeCoordinator.jitteredBackoffForAttempt(50, 0),
+        const Duration(minutes: 25, seconds: 30),
+      );
+    });
+  });
+
   group('happy-path pipeline', () {
     test(
         'fresh device, available account, empty remote -> completed, '
@@ -1455,6 +1491,10 @@ class _RuntimeHarness {
       localSyncIntentStore: intentStore,
       bridge: bridge,
       scheduler: retryScheduler,
+      // Harness timing stays deterministic; dedicated tests above exercise
+      // the production jitter envelope itself.
+      backoffForAttempt:
+          CloudKitSyncRuntimeCoordinator.defaultBackoffForAttempt,
     );
   }
 }

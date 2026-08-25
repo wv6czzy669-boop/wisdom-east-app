@@ -394,6 +394,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get opening => 'جارٍ الفتح.';
 
   @override
+  String get bootstrapRecovery =>
+      'يستغرق الفتح وقتًا أطول من المتوقع. يُرجى إغلاق EAST. ثم فتحه مجددًا.';
+
+  @override
   String get supportEmailSubject => 'دعم EAST.';
 
   @override
@@ -428,6 +432,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get icloudEnabled => 'مفعّل';
+
+  @override
+  String get icloudSyncing => 'جارٍ المزامنة';
+
+  @override
+  String get icloudUnavailable => 'iCloud غير متاح';
+
+  @override
+  String get icloudNeedsAttention => 'يتطلب الانتباه';
 
   @override
   String get icloudNotEnabled => 'غير مفعّل';

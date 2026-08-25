@@ -13,6 +13,8 @@ import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/data_export_service.dart';
 import '../services/purchase_service.dart';
+import '../sync_diagnostics/sync_health_snapshot.dart';
+import '../sync_diagnostics/sync_recovery_coordinator.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
@@ -25,6 +27,9 @@ typedef SettingsUrlLauncher = Future<bool> Function(
   required LaunchMode mode,
 });
 
+typedef SettingsSyncHealthReader = Future<SyncHealthSnapshot> Function();
+typedef SettingsSyncRecoveryAction = Future<SyncRecoveryResult> Function();
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -35,6 +40,8 @@ class SettingsScreen extends StatefulWidget {
     this.dataExportService,
     this.localePreferenceController,
     this.appearancePreferenceController,
+    this.syncHealthReader,
+    this.syncRecoveryAction,
   });
 
   final SettingsUrlLauncher? urlLauncher;
@@ -42,6 +49,8 @@ class SettingsScreen extends StatefulWidget {
   final DataExportService? dataExportService;
   final LocalePreferenceController? localePreferenceController;
   final AppearancePreferenceController? appearancePreferenceController;
+  final SettingsSyncHealthReader? syncHealthReader;
+  final SettingsSyncRecoveryAction? syncRecoveryAction;
 
   /// Build 26 Phase 4G: injectable only for tests -- production always uses
   /// the single [app_services.cloudKitAssociationController] instance (see
@@ -90,7 +99,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // fail-closed default [SyncAssociationController] itself returns for
   // every non-`associationRequired` status.
   SyncAssociationCheckResult? _cloudKitAssociationStatus;
+  SyncHealthSnapshot? _syncHealthSnapshot;
   bool _cloudKitAssociationActionInProgress = false;
+  bool _syncRecoveryInProgress = false;
   bool _enableSyncOverlayVisible = false;
 
   // Build 26 Phase 5 (final slice): the explicit "Remove from iCloud" row.
@@ -127,6 +138,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   SyncAssociationController? get _cloudKitAssociationController =>
       widget.cloudKitAssociationController ??
       app_services.cloudKitAssociationController;
+
+  SettingsSyncHealthReader? get _syncHealthReader =>
+      widget.syncHealthReader ?? app_services.syncHealthEvaluator?.evaluate;
+
+  SettingsSyncRecoveryAction? get _syncRecoveryAction =>
+      widget.syncRecoveryAction ??
+      app_services.syncRecoveryCoordinator?.attemptRecovery;
 
   /// `null` whenever neither an injected test controller nor the production
   /// composition-root global (`app_services.icloudRemovalController`) is
@@ -929,15 +947,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = controller == null
         ? _cloudKitAssociationUnavailable
         : await controller.checkStatus();
+    SyncHealthSnapshot? health;
+    final healthReader = _syncHealthReader;
+    if (healthReader != null) {
+      try {
+        health = await healthReader();
+      } catch (_) {
+        health = null;
+      }
+    }
     if (!mounted) return;
     setState(() {
       _cloudKitAssociationStatus = result;
+      _syncHealthSnapshot = health;
     });
   }
 
   String get _cloudKitSyncSubtitle {
     final l10n = eastLocalizations(context);
     if (_cloudKitAssociationActionInProgress) return l10n.icloudEnabling;
+    if (_syncRecoveryInProgress) return l10n.icloudSyncing;
+    switch (_syncHealthSnapshot?.state) {
+      case SyncHealthState.healthy:
+        return l10n.icloudEnabled;
+      case SyncHealthState.pending:
+      case SyncHealthState.recovering:
+      case SyncHealthState.temporaryFailure:
+        return l10n.icloudSyncing;
+      case SyncHealthState.iCloudUnavailable:
+        return l10n.icloudUnavailable;
+      case SyncHealthState.recoveryRequired:
+        return l10n.icloudNeedsAttention;
+      case SyncHealthState.disabled:
+        return l10n.icloudNotEnabled;
+      case null:
+        break;
+    }
     return _cloudKitAssociationStatus?.displayStatus ==
             SyncAssociationDisplayStatus.enabled
         ? l10n.icloudEnabled
@@ -958,11 +1003,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// .requiresExplicitConsent] -- requirement 1: never show an unnecessary
   /// authorization prompt.
   VoidCallback? get cloudKitSyncAction {
-    if (_cloudKitAssociationActionInProgress) return null;
-    if (_cloudKitAssociationStatus?.requiresExplicitConsent != true) {
+    if (_cloudKitAssociationActionInProgress || _syncRecoveryInProgress) {
       return null;
     }
-    return _showEnableICloudSyncSheet;
+    if (_cloudKitAssociationStatus?.requiresExplicitConsent == true) {
+      return _showEnableICloudSyncSheet;
+    }
+    switch (_syncHealthSnapshot?.state) {
+      case SyncHealthState.pending:
+      case SyncHealthState.iCloudUnavailable:
+      case SyncHealthState.recovering:
+      case SyncHealthState.temporaryFailure:
+        return _syncRecoveryAction == null ? null : _attemptSafeSyncRecovery;
+      case SyncHealthState.disabled:
+      case SyncHealthState.healthy:
+      case SyncHealthState.recoveryRequired:
+      case null:
+        return null;
+    }
+  }
+
+  Future<void> _attemptSafeSyncRecovery() async {
+    final recovery = _syncRecoveryAction;
+    if (recovery == null || _syncRecoveryInProgress || !mounted) return;
+    setState(() {
+      _syncRecoveryInProgress = true;
+    });
+    try {
+      await recovery();
+    } catch (_) {
+      // Refresh below from the authoritative evaluator. Never fabricate an
+      // "Enabled" state merely because a recovery request was attempted.
+    }
+    if (!mounted) return;
+    setState(() {
+      _syncRecoveryInProgress = false;
+    });
+    await _refreshSyncAssociationStatus();
   }
 
   void _showEnableICloudSyncSheet() {

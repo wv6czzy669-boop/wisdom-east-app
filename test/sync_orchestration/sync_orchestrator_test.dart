@@ -583,6 +583,23 @@ void main() {
     );
   }
 
+  String revealIdForIndex(int index) =>
+      'aaaaaaaa-1111-4111-8111-${index.toRadixString(16).padLeft(12, '0')}';
+
+  CloudKitModifyRecordsResult successfulModify(
+    CloudKitModifyRecordsRequest request,
+  ) =>
+      CloudKitModifyRecordsResult.allSucceeded(
+        request.records
+            .map(
+              (record) => CloudKitRecordModifyOutcome.success(
+                recordName: record.fields['recordName']! as String,
+                systemFields: 'c3lzdGVtZmllbGRz',
+              ),
+            )
+            .toList(growable: false),
+      );
+
   // ---------------------------------------------------------------------
   // 1. no-account state performs zero persistence mutation and zero
   //    transport operation.
@@ -769,6 +786,95 @@ void main() {
         .map((r) => r.fields['recordName'] as String)
         .toList(growable: false);
     expect(actualOrder, expectedOrder);
+  });
+
+  for (final scenario in <int, List<int>>{
+    401: [300, 101],
+    800: [300, 300, 200],
+  }.entries) {
+    test('${scenario.key} pending records upload in bounded ordered batches',
+        () async {
+      final store = buildStore();
+      for (var index = 0; index < scenario.key; index += 1) {
+        await store.enqueueMutation(
+          fingerprintA,
+          createChangeFor(revealIdForIndex(index)),
+        );
+      }
+      final bridge = _FakeCloudKitPlatformBridge();
+      bridge.accountSnapshotSequence = [availableSnapshot()];
+      bridge.zoneConfigurationProvider = () => successZoneResult;
+      bridge.modifyProvider = successfulModify;
+      bridge.fetchProvider = (_) => CloudKitZoneChangesResult.success(
+            changedKeptWisdomRecords: const [],
+            changedSyncStateRecords: const [],
+            serverToken: 'bmV3dG9rZW4=',
+          );
+
+      final result = await SyncOrchestrator(
+        bridge: bridge,
+        persistenceStore: store,
+      ).runSyncPass();
+
+      expect(result.status, SyncPassStatus.completed);
+      expect(result.uploadedRecordCount, scenario.key);
+      expect(result.acknowledgedMutationCount, scenario.key);
+      expect(
+        bridge.modifyRequests.map((request) => request.records.length),
+        scenario.value,
+      );
+      expect(await store.readPendingMutations(fingerprintA), isEmpty);
+    }, timeout: const Timeout(Duration(minutes: 2)));
+  }
+
+  test('limitExceeded adaptively splits and preserves deterministic order',
+      () async {
+    final store = buildStore();
+    for (var index = 0; index < 4; index += 1) {
+      await store.enqueueMutation(
+        fingerprintA,
+        createChangeFor(revealIdForIndex(index)),
+      );
+    }
+    var firstAttempt = true;
+    final bridge = _FakeCloudKitPlatformBridge();
+    bridge.accountSnapshotSequence = [availableSnapshot()];
+    bridge.zoneConfigurationProvider = () => successZoneResult;
+    bridge.modifyProvider = (request) {
+      if (firstAttempt) {
+        firstAttempt = false;
+        return CloudKitModifyRecordsResult.transportFailure(
+          syncErrorCodeLimitExceeded,
+        );
+      }
+      return successfulModify(request);
+    };
+    bridge.fetchProvider = (_) => CloudKitZoneChangesResult.success(
+          changedKeptWisdomRecords: const [],
+          changedSyncStateRecords: const [],
+          serverToken: 'bmV3dG9rZW4=',
+        );
+
+    final result = await SyncOrchestrator(
+      bridge: bridge,
+      persistenceStore: store,
+    ).runSyncPass();
+
+    expect(result.status, SyncPassStatus.completed);
+    expect(
+      bridge.modifyRequests.map((request) => request.records.length),
+      [4, 2, 2],
+    );
+    final retriedOrder = bridge.modifyRequests
+        .skip(1)
+        .expand((request) => request.records)
+        .map((record) => record.fields['recordName'])
+        .toList(growable: false);
+    expect(
+      retriedOrder,
+      List.generate(4, (index) => 'east-kept-${revealIdForIndex(index)}'),
+    );
+    expect(await store.readPendingMutations(fingerprintA), isEmpty);
   });
 
   // ---------------------------------------------------------------------

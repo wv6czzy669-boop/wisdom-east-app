@@ -840,6 +840,12 @@ abstract class AppLocalizations {
   /// **'Opening.'**
   String get opening;
 
+  /// No description provided for @bootstrapRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening is taking longer than expected. Please close EAST. and open it again.'**
+  String get bootstrapRecovery;
+
   /// No description provided for @supportEmailSubject.
   ///
   /// In en, this message translates to:
@@ -905,6 +911,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enabled'**
   String get icloudEnabled;
+
+  /// No description provided for @icloudSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing'**
+  String get icloudSyncing;
+
+  /// No description provided for @icloudUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'iCloud unavailable'**
+  String get icloudUnavailable;
+
+  /// No description provided for @icloudNeedsAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get icloudNeedsAttention;
 
   /// No description provided for @icloudNotEnabled.
   ///

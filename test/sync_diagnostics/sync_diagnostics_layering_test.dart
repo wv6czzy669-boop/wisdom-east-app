@@ -252,10 +252,8 @@ void main() {
   });
 
   test(
-      '7. no screen or widget file references SyncHealthEvaluator, '
-      'SyncRecoveryCoordinator, SyncHealthSnapshot, or SyncHealthState -- '
-      'this phase adds no Settings diagnostics screen or any other '
-      'user-facing surface for this core', () {
+      '7. Settings is the sole user-facing sync-health surface; no other '
+      'screen or widget references the diagnostics core', () {
     const forbiddenSubstrings = [
       'SyncHealthEvaluator',
       'SyncRecoveryCoordinator',
@@ -267,6 +265,9 @@ void main() {
       final normalizedPath = file.path.replaceAll('\\', '/');
       if (!normalizedPath.contains('/screens/') &&
           !normalizedPath.contains('/widgets/')) {
+        continue;
+      }
+      if (normalizedPath.endsWith('/screens/settings_screen.dart')) {
         continue;
       }
       final codeOnly = _stripComments(file.readAsStringSync());

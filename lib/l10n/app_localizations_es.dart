@@ -400,6 +400,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get opening => 'Abriendo.';
 
   @override
+  String get bootstrapRecovery =>
+      'La apertura está tardando más de lo esperado. Cierra EAST. y vuelve a abrirla.';
+
+  @override
   String get supportEmailSubject => 'Soporte de EAST.';
 
   @override
@@ -435,6 +439,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get icloudEnabled => 'Activada';
+
+  @override
+  String get icloudSyncing => 'Sincronizando';
+
+  @override
+  String get icloudUnavailable => 'iCloud no disponible';
+
+  @override
+  String get icloudNeedsAttention => 'Requiere atención';
 
   @override
   String get icloudNotEnabled => 'No activada';

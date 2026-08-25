@@ -5,6 +5,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'analytics_service.dart';
+import 'keeper_entitlement_authority.dart';
 
 enum PurchaseServiceStatus {
   initial,
@@ -27,6 +28,7 @@ class _OperationWaitTimedOut implements Exception {
 class PurchaseService extends ChangeNotifier {
   PurchaseService({
     Future<bool> Function()? entitlementWriter,
+    KeeperEntitlementAuthority? entitlementAuthority,
     AnalyticsService? analyticsService,
     this.purchaseInitiationTimeout = const Duration(seconds: 12),
     this.purchaseResponseTimeout = const Duration(seconds: 45),
@@ -35,9 +37,12 @@ class PurchaseService extends ChangeNotifier {
     this.storeRetryCooldown = const Duration(seconds: 3),
     this.storeAvailabilityTimeout = const Duration(seconds: 8),
     this.productDetailsTimeout = const Duration(seconds: 10),
+    this.entitlementQueryTimeout = const Duration(seconds: 8),
     this.purchaseOperationRecoveryTimeout = const Duration(seconds: 60),
     this.restoreOperationRecoveryTimeout = const Duration(seconds: 60),
   })  : _entitlementWriter = entitlementWriter,
+        _entitlementAuthority = entitlementAuthority ??
+            const MethodChannelKeeperEntitlementAuthority(),
         _analyticsService = analyticsService ?? AnalyticsService();
 
   static const String keeperProductId = 'com.dailywisdomeast.keeper';
@@ -46,6 +51,7 @@ class PurchaseService extends ChangeNotifier {
 
   final InAppPurchase _iap = InAppPurchase.instance;
   final Future<bool> Function()? _entitlementWriter;
+  final KeeperEntitlementAuthority _entitlementAuthority;
   final AnalyticsService _analyticsService;
   final Duration purchaseInitiationTimeout;
   final Duration purchaseResponseTimeout;
@@ -54,6 +60,7 @@ class PurchaseService extends ChangeNotifier {
   final Duration storeRetryCooldown;
   final Duration storeAvailabilityTimeout;
   final Duration productDetailsTimeout;
+  final Duration entitlementQueryTimeout;
   final Duration purchaseOperationRecoveryTimeout;
   final Duration restoreOperationRecoveryTimeout;
 
@@ -64,6 +71,7 @@ class PurchaseService extends ChangeNotifier {
   Future<bool>? _restoreInProgress;
   Future<void> _purchaseEventTail = Future<void>.value();
   Future<bool>? _storeRefreshInProgress;
+  Future<void>? _entitlementReconciliationInProgress;
   DateTime? _lastStoreRefreshAttempt;
   Timer? _purchaseWatchdog;
   Timer? _purchaseOperationRecoveryWatchdog;
@@ -136,8 +144,12 @@ class PurchaseService extends ChangeNotifier {
   Future<void> _init() async {
     var streamSubscribed = _subscription != null;
     try {
-      await _loadPersistedKeeperEntitlement();
+      // StoreKit may redeliver transactions from an earlier app session as
+      // soon as the process starts. Subscribe before the first asynchronous
+      // cache/native query so no verified update can arrive in that gap.
       streamSubscribed = _subscribeToPurchaseStreamOnce();
+      await _loadPersistedKeeperEntitlement();
+      await reconcileKeeperEntitlement();
       await refreshStoreIfNeeded(force: true);
     } catch (_) {
       _isAvailable = false;
@@ -165,6 +177,56 @@ class PurchaseService extends ChangeNotifier {
         _isKeeper = false;
         _notifyState();
       }
+    }
+  }
+
+  /// Reconciles the last-known local cache against StoreKit 2's verified
+  /// current entitlements. A definite negative clears stale access (refund
+  /// or revoke); an unavailable native query preserves the cache without
+  /// promoting it to an authority.
+  Future<void> reconcileKeeperEntitlement() {
+    if (_disposed) return Future<void>.value();
+    final inProgress = _entitlementReconciliationInProgress;
+    if (inProgress != null) return inProgress;
+    final reconciliation = _reconcileKeeperEntitlement();
+    _entitlementReconciliationInProgress = reconciliation;
+    return reconciliation.whenComplete(() {
+      if (identical(_entitlementReconciliationInProgress, reconciliation)) {
+        _entitlementReconciliationInProgress = null;
+      }
+    });
+  }
+
+  Future<void> _reconcileKeeperEntitlement() async {
+    final result = await _queryCurrentEntitlement();
+    if (_disposed) return;
+    switch (result) {
+      case KeeperEntitlementAuthorityResult.entitled:
+        _isKeeper = true;
+        _entitlementPersistenceFailed = !await _writeKeeperCache(true);
+        break;
+      case KeeperEntitlementAuthorityResult.notEntitled:
+        _isKeeper = false;
+        _persistedTransactions.clear();
+        _entitlementPersistenceFailed = !await _writeKeeperCache(false);
+        break;
+      case KeeperEntitlementAuthorityResult.unavailable:
+        break;
+    }
+    _notifyState();
+  }
+
+  Future<KeeperEntitlementAuthorityResult> _queryCurrentEntitlement() async {
+    try {
+      return await _entitlementAuthority.currentEntitlement().timeout(
+            entitlementQueryTimeout,
+            onTimeout: () => KeeperEntitlementAuthorityResult.unavailable,
+          );
+    } catch (_) {
+      // StoreKit 2 is authoritative when it answers. A temporarily unavailable
+      // bridge must preserve the last-known cache and must never stall app
+      // startup or purchase-stream processing indefinitely.
+      return KeeperEntitlementAuthorityResult.unavailable;
     }
   }
 
@@ -664,12 +726,16 @@ class PurchaseService extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
         final transactionKey = _transactionKey(purchase);
-        final alreadyPersisted =
-            _persistedTransactions.contains(transactionKey);
-        var persisted = alreadyPersisted;
-        if (!persisted) {
-          persisted = await _persistKeeperEntitlement();
-          if (persisted) {
+        final alreadyVerified = _persistedTransactions.contains(transactionKey);
+        var verified = alreadyVerified && _isKeeper;
+        var cacheWritten = true;
+        if (!verified) {
+          final authorityResult = await _queryCurrentEntitlement();
+          verified =
+              authorityResult == KeeperEntitlementAuthorityResult.entitled;
+          if (verified) {
+            _isKeeper = true;
+            cacheWritten = await _writeKeeperCache(true);
             _persistedTransactions.add(transactionKey);
           }
         }
@@ -678,13 +744,13 @@ class PurchaseService extends ChangeNotifier {
         // the same transaction (`alreadyPersisted`) never re-fires it. No
         // parameter: purchase/transaction identifiers never travel through
         // this call.
-        if (persisted &&
-            !alreadyPersisted &&
+        if (verified &&
+            !alreadyVerified &&
             purchase.status == PurchaseStatus.purchased) {
           _analyticsService.keeperPurchaseCompleted();
         }
-        shouldComplete = persisted;
-        _entitlementPersistenceFailed = !persisted;
+        shouldComplete = verified;
+        _entitlementPersistenceFailed = verified && !cacheWritten;
         _purchaseUncertain = false;
         _purchasePending = false;
         _buyInProgress = null;
@@ -696,10 +762,10 @@ class PurchaseService extends ChangeNotifier {
         _restoreUncertain = false;
         _restorePending = false;
         if (purchase.status == PurchaseStatus.restored) {
-          _currentRestoreMatchedKeeper = persisted;
+          _currentRestoreMatchedKeeper = verified;
         }
         _signalRestoreStream();
-        _setStatus(persisted
+        _setStatus(verified
             ? purchase.status == PurchaseStatus.restored
                 ? PurchaseServiceStatus.restored
                 : PurchaseServiceStatus.purchased
@@ -879,24 +945,22 @@ class PurchaseService extends ChangeNotifier {
         '${purchase.verificationData.serverVerificationData}';
   }
 
-  Future<bool> _persistKeeperEntitlement() async {
+  Future<bool> _writeKeeperCache(bool entitled) async {
     try {
-      if (_isKeeper) return true;
-
       final entitlementWriter = _entitlementWriter;
-      if (entitlementWriter != null) {
+      if (entitled && entitlementWriter != null) {
         final persisted = await entitlementWriter();
-        if (!persisted) return false;
-        _isKeeper = true;
-        return true;
+        return persisted;
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final saved = await prefs.setBool(_keeperKey, true);
-      if (!saved || prefs.getBool(_keeperKey) != true) return false;
-
-      _isKeeper = true;
-      return true;
+      if (entitled) {
+        final saved = await prefs.setBool(_keeperKey, true);
+        return saved && prefs.getBool(_keeperKey) == true;
+      }
+      if (!prefs.containsKey(_keeperKey)) return true;
+      final removed = await prefs.remove(_keeperKey);
+      return removed && !prefs.containsKey(_keeperKey);
     } catch (_) {
       return false;
     }

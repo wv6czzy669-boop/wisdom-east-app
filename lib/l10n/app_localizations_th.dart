@@ -394,6 +394,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get opening => 'กำลังเปิด';
 
   @override
+  String get bootstrapRecovery =>
+      'การเปิดใช้เวลานานกว่าที่คาด โปรดปิด EAST. แล้วเปิดอีกครั้ง';
+
+  @override
   String get supportEmailSubject => 'EAST. การสนับสนุน';
 
   @override
@@ -428,6 +432,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get icloudEnabled => 'เปิดใช้แล้ว';
+
+  @override
+  String get icloudSyncing => 'กำลังซิงค์';
+
+  @override
+  String get icloudUnavailable => 'iCloud ไม่พร้อมใช้งาน';
+
+  @override
+  String get icloudNeedsAttention => 'ต้องตรวจสอบ';
 
   @override
   String get icloudNotEnabled => 'ยังไม่เปิดใช้';

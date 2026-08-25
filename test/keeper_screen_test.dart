@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
+import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
@@ -221,6 +222,38 @@ void main() {
     );
     expect(action.onTap, isNull);
     expect(find.text('£59.99'), findsNothing);
+  });
+
+  testWidgets('purchase failure guidance follows the active locale',
+      (tester) async {
+    service = _StaticPurchaseService(
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: r'$4.99',
+        rawPrice: 4.99,
+        currencyCode: 'USD',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('tr'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: KeeperScreen(purchaseService: service),
+      ),
+    );
+
+    await tester.tap(find.text('Çembere katıl.'));
+    await tester.pump();
+
+    expect(
+      find.text(
+          'Satın alma henüz hazır değil. Lütfen kısa süre sonra yeniden dene.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Keeper screen remains stable on iPhone SE with large text',

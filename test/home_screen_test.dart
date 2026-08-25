@@ -3328,7 +3328,7 @@ void main() {
                 // `initState` falls back to
                 // `app_services.savedReflectionsService` — a `late final`
                 // global only ever populated by production's
-                // `initializeKeptStorage()` before `runApp()`, which this
+                // `initializeKeptStorage()` before building WisdomApp, which this
                 // isolated widget test never runs. A fresh, test-local
                 // `KeptRepositoryTestGraph` (in-memory store only — no
                 // Application Support directory, no native file

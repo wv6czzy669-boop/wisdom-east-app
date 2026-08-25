@@ -13,6 +13,7 @@ import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 
 import '../persistence_test_helpers.dart';
+import '../journal_owner_test_helpers.dart';
 import '../sync_integration/in_memory_sync_test_doubles.dart';
 
 class _FakeAnalyticsTransport implements AnalyticsTransport {
@@ -68,7 +69,9 @@ void main() {
     ShareParams? captured;
     final service = DataExportService(
       savedReflectionsServiceProvider: () => graph.service,
-      journalOwnerService: JournalOwnerService(),
+      journalOwnerService: JournalOwnerService(
+        ownerStore: InMemoryJournalOwnerStore(),
+      ),
       clock: () => DateTime.utc(2026, 8, 16),
       shareLauncher: (params) async {
         captured = params;
@@ -101,7 +104,9 @@ void main() {
 
   test('the optional Journal owner name is included when present', () async {
     final graph = KeptRepositoryTestGraph();
-    final ownerService = JournalOwnerService();
+    final ownerService = JournalOwnerService(
+      ownerStore: InMemoryJournalOwnerStore(),
+    );
     await ownerService.saveName('Doğukan Işık');
 
     ShareParams? captured;
@@ -138,7 +143,9 @@ void main() {
 
     final service = DataExportService(
       savedReflectionsServiceProvider: () => graph.service,
-      journalOwnerService: JournalOwnerService(),
+      journalOwnerService: JournalOwnerService(
+        ownerStore: InMemoryJournalOwnerStore(),
+      ),
       clock: () => DateTime.utc(2026, 8, 16),
       shareLauncher: (params) async =>
           const ShareResult('', ShareResultStatus.success),
@@ -174,7 +181,9 @@ void main() {
 
     final service = DataExportService(
       savedReflectionsServiceProvider: () => analyticsAwareService,
-      journalOwnerService: JournalOwnerService(),
+      journalOwnerService: JournalOwnerService(
+        ownerStore: InMemoryJournalOwnerStore(),
+      ),
       shareLauncher: (params) async =>
           const ShareResult('', ShareResultStatus.success),
     );
@@ -200,7 +209,9 @@ void main() {
 
     final service = DataExportService(
       savedReflectionsServiceProvider: () => graph.service,
-      journalOwnerService: JournalOwnerService(),
+      journalOwnerService: JournalOwnerService(
+        ownerStore: InMemoryJournalOwnerStore(),
+      ),
       shareLauncher: (params) async => throw StateError('share failed'),
     );
 

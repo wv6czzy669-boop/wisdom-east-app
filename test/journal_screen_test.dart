@@ -12,6 +12,8 @@ import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/services/journal_owner_service.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
 
+import 'journal_owner_test_helpers.dart';
+
 /// Holds generation open until [release] is called -- used only to prove
 /// the real-device transition/render repair: the preview surface must
 /// stay stable and spinner-free for as long as generation is genuinely
@@ -125,14 +127,16 @@ void main() {
     expect(find.byKey(const ValueKey('journal-name-field')), findsNothing);
     expect(find.byType(PdfPreview), findsOneWidget);
 
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     expect(await ownerService.loadName(), isNull);
     expect(await ownerService.hasHandledNamePrompt(), isTrue);
   });
 
   testWidgets('skipping once does not show the name step again on a later open',
       (tester) async {
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.skip();
 
     await tester.pumpWidget(
@@ -154,7 +158,8 @@ void main() {
   testWidgets(
       'entering a name and tapping Continue saves it (trimmed) and '
       'proceeds to generation', (tester) async {
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
 
     await tester.pumpWidget(
       MaterialApp(
@@ -183,7 +188,8 @@ void main() {
       'leaving the name field empty and tapping Continue behaves '
       'like Skip -- generation is never blocked on an empty field',
       (tester) async {
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
 
     await tester.pumpWidget(
       MaterialApp(
@@ -208,7 +214,8 @@ void main() {
   testWidgets(
       'the name can be changed later from the preview stage without '
       'turning Journal into a settings screen', (tester) async {
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -252,7 +259,8 @@ void main() {
 
   testWidgets('CANCEL on the name edit leaves the existing name untouched',
       (tester) async {
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -287,7 +295,8 @@ void main() {
 
   testWidgets('SAVE on the name edit persists the new name and regenerates',
       (tester) async {
-    final ownerService = JournalOwnerService();
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
     await ownerService.saveName('Original Name');
 
     await tester.pumpWidget(
@@ -327,7 +336,8 @@ void main() {
         'the name edit overlay stays on the exact same visual axis while '
         'a keyboard inset appears and disappears -- no re-centering, and '
         'REMOVE/CANCEL/SAVE remain reachable throughout', (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.saveName('Original Name');
 
       await tester.pumpWidget(
@@ -375,7 +385,8 @@ void main() {
     testWidgets(
         'SAVE still persists the new name while a keyboard inset is '
         'active', (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.saveName('Original Name');
 
       await tester.pumpWidget(
@@ -417,7 +428,8 @@ void main() {
         'JournalScreen disables automatic keyboard-driven resize, so '
         'neither the overlay nor the content beneath it reflow',
         (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
 
       await tester.pumpWidget(
@@ -443,7 +455,8 @@ void main() {
         'content is preparing, from first mount through a ready preview',
         (tester) async {
       final gatedBuilder = _GatedPdfBuilder();
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
 
       await tester.pumpWidget(
@@ -484,7 +497,8 @@ void main() {
         'generating, with no exception thrown across the reveal',
         (tester) async {
       final gatedBuilder = _GatedPdfBuilder();
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
 
       await tester.pumpWidget(
@@ -523,7 +537,8 @@ void main() {
       required bool isKeeper,
       JournalShareHandler? shareHandler,
     }) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
       await tester.pumpWidget(
         MaterialApp(
@@ -662,7 +677,8 @@ void main() {
 
   group('Voice Control actionability (Build 33 real-device repair)', () {
     testWidgets('Back has SemanticsAction.tap', (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
       await tester.pumpWidget(
         MaterialApp(
@@ -706,7 +722,8 @@ void main() {
     // this session.
     testWidgets('Add/Edit Name has a label and SemanticsAction.tap',
         (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
       await tester.pumpWidget(
         MaterialApp(
@@ -737,7 +754,8 @@ void main() {
     // silent no-op dressed up as a button.
     testWidgets('Export/Take it with you has SemanticsAction.tap for a Keeper',
         (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
       await tester.pumpWidget(
         MaterialApp(
@@ -765,7 +783,8 @@ void main() {
         'Export/Take it with you has SemanticsAction.tap and a truthful '
         'hint when Keeper-gated (tapping genuinely opens Keeper)',
         (tester) async {
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
       await tester.pumpWidget(
         MaterialApp(
@@ -833,7 +852,8 @@ void main() {
         tester.platformDispatcher.clearTextScaleFactorTestValue,
       );
 
-      final ownerService = JournalOwnerService();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
       await ownerService.skip();
       await tester.pumpWidget(
         MaterialApp(
