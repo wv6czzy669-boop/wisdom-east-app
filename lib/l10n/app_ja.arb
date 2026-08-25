@@ -1,6 +1,8 @@
 {
   "@@locale": "ja",
   "appTitle": "日々の知恵：EAST.",
+  "tapAnywhereToBegin": "画面をタップして始める。",
+  "tapWhenReady": "準備ができたらタップ。",
   "pause": "立ち止まる。",
   "feel": "感じる。",
   "askFromYourHeart": "心から問いかける。",

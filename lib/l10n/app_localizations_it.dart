@@ -12,6 +12,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get appTitle => 'Saggezza quotidiana: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Tocca un punto qualsiasi per iniziare.';
+
+  @override
+  String get tapWhenReady => 'Tocca quando sei pronto.';
+
+  @override
   String get pause => 'Pausa.';
 
   @override

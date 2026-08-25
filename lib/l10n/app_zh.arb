@@ -1,6 +1,8 @@
 {
   "@@locale": "zh",
   "appTitle": "每日智慧：EAST.",
+  "tapAnywhereToBegin": "點一下任意位置以開始。",
+  "tapWhenReady": "準備好時點一下。",
   "pause": "停一停。",
   "feel": "感受。",
   "askFromYourHeart": "從心裡提問。",

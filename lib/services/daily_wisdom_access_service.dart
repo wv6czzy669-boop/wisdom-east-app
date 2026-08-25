@@ -6,8 +6,8 @@ import '../models/daily_wisdom_selection.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
 import '../repositories/daily_access_repository.dart' hide WisdomSelector;
 
-typedef WisdomSelector = String Function();
-typedef WisdomSelectionSelector = DailyWisdomSelection Function();
+typedef WisdomSelector = FutureOr<String> Function();
+typedef WisdomSelectionSelector = FutureOr<DailyWisdomSelection> Function();
 typedef WisdomClock = DateTime Function();
 
 class DailyWisdomAccess {

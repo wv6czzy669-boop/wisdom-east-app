@@ -12,6 +12,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appTitle => 'Günlük Bilgelik: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Başlamak için herhangi bir yere dokun.';
+
+  @override
+  String get tapWhenReady => 'Hazır olduğunda dokun.';
+
+  @override
   String get pause => 'Bekle.';
 
   @override

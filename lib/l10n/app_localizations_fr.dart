@@ -12,6 +12,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get appTitle => 'Sagesse quotidienne : EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Touche l’écran pour commencer.';
+
+  @override
+  String get tapWhenReady => 'Touche l’écran quand tu es prêt.';
+
+  @override
   String get pause => 'Pause.';
 
   @override

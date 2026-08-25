@@ -38,6 +38,7 @@ class _HomeMainRitualGesture extends StatelessWidget {
   const _HomeMainRitualGesture({
     required this.navigationDisabled,
     required this.semanticLabel,
+    required this.semanticHint,
     required this.semanticActionEnabled,
     required this.hideContentSemantics,
     required this.onTap,
@@ -50,6 +51,7 @@ class _HomeMainRitualGesture extends StatelessWidget {
 
   final bool navigationDisabled;
   final String? semanticLabel;
+  final String? semanticHint;
   final bool semanticActionEnabled;
   final bool hideContentSemantics;
   final VoidCallback onTap;
@@ -109,8 +111,57 @@ class _HomeMainRitualGesture extends StatelessWidget {
       button: label == null ? null : semanticActionEnabled,
       enabled: label == null ? null : semanticActionEnabled,
       label: label,
+      hint: semanticHint,
       onTap: semanticActionEnabled ? onTap : null,
       child: semanticsChild,
+    );
+  }
+}
+
+/// A quiet, first-use-only instruction. It is deliberately outside the
+/// centered ritual composition, never participates in hit testing, and is
+/// excluded from semantics because the main ritual action owns the same
+/// text as its accessibility hint.
+class _HomeFirstRitualGuidance extends StatelessWidget {
+  const _HomeFirstRitualGuidance({
+    required this.text,
+    required this.visible,
+    required this.reduceMotion,
+  });
+
+  final String text;
+  final bool visible;
+  final bool reduceMotion;
+
+  @override
+  Widget build(BuildContext context) {
+    return PositionedDirectional(
+      start: 30,
+      end: 30,
+      bottom: 42,
+      child: IgnorePointer(
+        child: ExcludeSemantics(
+          child: AnimatedOpacity(
+            key: const ValueKey('first-ritual-guidance'),
+            opacity: visible ? 1.0 : 0.0,
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 700),
+            curve: Curves.easeOutCubic,
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: EastTypography.localized(
+                context,
+                size: 15,
+                color: EastColors.of(context).hint,
+                height: 1.3,
+                letterSpacing: 0.55,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

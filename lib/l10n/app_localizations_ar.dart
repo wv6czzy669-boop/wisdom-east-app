@@ -12,6 +12,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appTitle => 'حكمة يومية: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'اضغط في أي مكان للبدء.';
+
+  @override
+  String get tapWhenReady => 'اضغط عندما تكون مستعدًا.';
+
+  @override
   String get pause => 'تمهّل.';
 
   @override

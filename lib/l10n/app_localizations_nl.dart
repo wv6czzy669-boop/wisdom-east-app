@@ -12,6 +12,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get appTitle => 'Dagelijkse wijsheid: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Tik ergens om te beginnen.';
+
+  @override
+  String get tapWhenReady => 'Tik wanneer je klaar bent.';
+
+  @override
   String get pause => 'Pauze.';
 
   @override

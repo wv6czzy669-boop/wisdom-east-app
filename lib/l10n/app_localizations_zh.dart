@@ -12,6 +12,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => '每日智慧：EAST.';
 
   @override
+  String get tapAnywhereToBegin => '點一下任意位置以開始。';
+
+  @override
+  String get tapWhenReady => '準備好時點一下。';
+
+  @override
   String get pause => '停一停。';
 
   @override
@@ -476,6 +482,12 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get appTitle => '每日智慧：EAST.';
+
+  @override
+  String get tapAnywhereToBegin => '點一下任意位置以開始。';
+
+  @override
+  String get tapWhenReady => '準備好時點一下。';
 
   @override
   String get pause => '停一停。';

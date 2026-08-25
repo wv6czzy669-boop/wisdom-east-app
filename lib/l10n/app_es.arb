@@ -1,6 +1,8 @@
 {
   "@@locale": "es",
   "appTitle": "Sabiduría diaria: EAST.",
+  "tapAnywhereToBegin": "Toca cualquier parte para comenzar.",
+  "tapWhenReady": "Toca cuando estés listo.",
   "pause": "Pausa.",
   "feel": "Siente.",
   "askFromYourHeart": "Pregunta desde el corazón.",

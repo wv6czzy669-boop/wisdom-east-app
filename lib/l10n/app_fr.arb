@@ -1,6 +1,8 @@
 {
   "@@locale": "fr",
   "appTitle": "Sagesse quotidienne : EAST.",
+  "tapAnywhereToBegin": "Touche l’écran pour commencer.",
+  "tapWhenReady": "Touche l’écran quand tu es prêt.",
   "pause": "Pause.",
   "feel": "Ressens.",
   "askFromYourHeart": "Demande avec le cœur.",

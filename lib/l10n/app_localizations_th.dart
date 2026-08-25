@@ -12,6 +12,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get appTitle => 'ข้อคิดประจำวัน: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'แตะที่ใดก็ได้เพื่อเริ่ม';
+
+  @override
+  String get tapWhenReady => 'แตะเมื่อคุณพร้อม';
+
+  @override
   String get pause => 'ชั่วครู่.';
 
   @override

@@ -265,7 +265,9 @@ void main() {
       // noKeptSearchResults), kept entirely on-device.
       // Honest Settings sync health: +3 keys (icloudSyncing,
       // icloudUnavailable, icloudNeedsAttention).
-      expect(expectedKeys, hasLength(146));
+      // First-ritual guidance: +2 keys (tapAnywhereToBegin,
+      // tapWhenReady), visible only during the first entrance sequence.
+      expect(expectedKeys, hasLength(148));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');

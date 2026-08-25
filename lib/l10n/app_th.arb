@@ -1,6 +1,8 @@
 {
   "@@locale": "th",
   "appTitle": "ข้อคิดประจำวัน: EAST.",
+  "tapAnywhereToBegin": "แตะที่ใดก็ได้เพื่อเริ่ม",
+  "tapWhenReady": "แตะเมื่อคุณพร้อม",
   "pause": "ชั่วครู่.",
   "feel": "รู้สึก.",
   "askFromYourHeart": "ถามจากใจ.",

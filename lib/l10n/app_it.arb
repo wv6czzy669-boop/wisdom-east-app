@@ -1,6 +1,8 @@
 {
   "@@locale": "it",
   "appTitle": "Saggezza quotidiana: EAST.",
+  "tapAnywhereToBegin": "Tocca un punto qualsiasi per iniziare.",
+  "tapWhenReady": "Tocca quando sei pronto.",
   "pause": "Pausa.",
   "feel": "Senti.",
   "askFromYourHeart": "Chiedi con il cuore.",

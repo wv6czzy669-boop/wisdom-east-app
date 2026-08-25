@@ -12,6 +12,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appTitle => 'Sabedoria diária: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Toque em qualquer lugar para começar.';
+
+  @override
+  String get tapWhenReady => 'Toque quando estiver pronto.';
+
+  @override
   String get pause => 'Pausa.';
 
   @override
@@ -527,6 +533,12 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get appTitle => 'Sabedoria diária: EAST.';
+
+  @override
+  String get tapAnywhereToBegin => 'Toque em qualquer lugar para começar.';
+
+  @override
+  String get tapWhenReady => 'Toque quando estiver pronto.';
 
   @override
   String get pause => 'Pausa.';

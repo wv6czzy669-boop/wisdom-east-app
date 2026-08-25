@@ -1,6 +1,8 @@
 {
   "@@locale": "en",
   "appTitle": "Daily Wisdom: EAST.",
+  "tapAnywhereToBegin": "Tap anywhere to begin.",
+  "tapWhenReady": "Tap when you’re ready.",
   "pause": "Pause.",
   "feel": "Feel.",
   "askFromYourHeart": "Ask from your heart.",

@@ -132,6 +132,18 @@ abstract class AppLocalizations {
   /// **'Daily Wisdom: EAST.'**
   String get appTitle;
 
+  /// No description provided for @tapAnywhereToBegin.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap anywhere to begin.'**
+  String get tapAnywhereToBegin;
+
+  /// No description provided for @tapWhenReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap when you’re ready.'**
+  String get tapWhenReady;
+
   /// No description provided for @pause.
   ///
   /// In en, this message translates to:

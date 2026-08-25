@@ -23,6 +23,7 @@ import '../services/analytics_service.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
+import '../services/first_ritual_guidance_service.dart';
 import '../services/kept_discovery_hint_service.dart';
 import '../services/rating_request_service.dart';
 import '../services/ritual_audio_policy.dart';
@@ -70,6 +71,7 @@ class HomeScreen extends StatefulWidget {
     this.savedReflectionsService,
     this.wisdomShareService,
     this.wisdomNotificationService,
+    this.firstRitualGuidanceService,
     this.keptDiscoveryHintService,
     this.ratingRequestService,
     this.analyticsService,
@@ -86,6 +88,7 @@ class HomeScreen extends StatefulWidget {
   final SavedReflectionsService? savedReflectionsService;
   final WisdomShareHandler? wisdomShareService;
   final WisdomNotificationService? wisdomNotificationService;
+  final FirstRitualGuidanceService? firstRitualGuidanceService;
   final KeptDiscoveryHintService? keptDiscoveryHintService;
   final RatingRequestService? ratingRequestService;
   final AnalyticsService? analyticsService;
@@ -148,6 +151,10 @@ class _HomeScreenState extends State<HomeScreen>
   bool _saveOperationInProgress = false;
   bool _favoriteLimitOverlayVisible = false;
   bool _shareInProgress = false;
+  late final FirstRitualGuidanceService firstRitualGuidanceService;
+  Timer? _firstRitualGuidanceTimer;
+  bool _firstRitualGuidanceEligible = false;
+  bool _firstRitualGuidanceVisible = false;
   final NotificationOfferGate _notificationOfferGate = NotificationOfferGate();
   bool _revealPersistenceNeedsRetry = false;
   DateTime? _pendingRevealBoundaryForRetry;
@@ -358,6 +365,8 @@ class _HomeScreenState extends State<HomeScreen>
         widget.wisdomShareService ?? app_services.wisdomShareService;
     wisdomNotificationService = widget.wisdomNotificationService ??
         app_services.wisdomNotificationService;
+    firstRitualGuidanceService =
+        widget.firstRitualGuidanceService ?? FirstRitualGuidanceService();
     keptDiscoveryHintService = widget.keptDiscoveryHintService ??
         app_services.keptDiscoveryHintService;
     ratingRequestService =
@@ -404,7 +413,12 @@ class _HomeScreenState extends State<HomeScreen>
       reverseCurve: Curves.easeInCubic,
     );
 
-    loadInitialState().catchError((_) {});
+    unawaited(
+      loadInitialState().then<void>((_) {
+        if (mounted) _scheduleFirstRitualGuidance();
+      }).catchError((_) {}),
+    );
+    unawaited(_initializeFirstRitualGuidance());
     startCountdownTimer();
   }
 
@@ -471,6 +485,7 @@ class _HomeScreenState extends State<HomeScreen>
     app_services.keptStateRevisionNotifier.removeListener(_onKeptStateChanged);
     stopCountdownTimer();
     _notificationOfferGate.dispose();
+    _firstRitualGuidanceTimer?.cancel();
     _keptDiscoveryTimers.dispose();
     pulseController.dispose();
     wisdomRevealController.dispose();
@@ -498,6 +513,7 @@ class _HomeScreenState extends State<HomeScreen>
       // on the flow-session check the timer callback performs when it
       // eventually fires.
       _dismissKeptDiscoveryHint();
+      _hideFirstRitualGuidance();
 
       if (pulseController.isAnimating) {
         pulseController.stop();
@@ -517,6 +533,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       startCountdownTimer();
       unawaited(_resumeAccessState());
+      _scheduleFirstRitualGuidance();
     }
   }
 
@@ -568,6 +585,88 @@ class _HomeScreenState extends State<HomeScreen>
       return l10n.wisdomCouldNotBeKept;
     }
     return null;
+  }
+
+  String? mainRitualSemanticHint(BuildContext context) {
+    if (!_firstRitualGuidanceEligible ||
+        hideMainRitualContentSemantics ||
+        !mainRitualActionSemanticsEnabled) {
+      return null;
+    }
+    if (_phase == RitualPhase.launch) {
+      return eastLocalizations(context).tapAnywhereToBegin;
+    }
+    if (_phase == RitualPhase.pause && pauseFeelOpacity < 1.0) {
+      return eastLocalizations(context).tapWhenReady;
+    }
+    return null;
+  }
+
+  String _firstRitualGuidanceText(BuildContext context) {
+    if (_phase == RitualPhase.pause) {
+      return eastLocalizations(context).tapWhenReady;
+    }
+    return eastLocalizations(context).tapAnywhereToBegin;
+  }
+
+  Future<void> _initializeFirstRitualGuidance() async {
+    final shouldShow = await firstRitualGuidanceService.shouldShow();
+    if (!mounted || !shouldShow) return;
+    setState(() {
+      _firstRitualGuidanceEligible = true;
+    });
+    _scheduleFirstRitualGuidance();
+  }
+
+  void _scheduleFirstRitualGuidance() {
+    _firstRitualGuidanceTimer?.cancel();
+    if (!_firstRitualGuidanceEligible ||
+        (_phase == RitualPhase.launch && !_accessViewState.isResolved) ||
+        (_phase != RitualPhase.launch &&
+            !(_phase == RitualPhase.pause && pauseFeelOpacity < 1.0))) {
+      return;
+    }
+
+    final expectedPhase = _phase;
+    final delay = expectedPhase == RitualPhase.launch
+        ? const Duration(milliseconds: 650)
+        : const Duration(milliseconds: 850);
+    _firstRitualGuidanceTimer = Timer(delay, () {
+      if (!mounted ||
+          !_firstRitualGuidanceEligible ||
+          _phase != expectedPhase ||
+          (expectedPhase == RitualPhase.launch &&
+              !_accessViewState.isResolved) ||
+          (expectedPhase == RitualPhase.pause && pauseFeelOpacity >= 1.0)) {
+        return;
+      }
+      setState(() {
+        _firstRitualGuidanceVisible = true;
+      });
+    });
+  }
+
+  void _hideFirstRitualGuidance() {
+    _firstRitualGuidanceTimer?.cancel();
+    if (!mounted || !_firstRitualGuidanceVisible) return;
+    setState(() {
+      _firstRitualGuidanceVisible = false;
+    });
+  }
+
+  void _completeFirstRitualGuidance() {
+    _firstRitualGuidanceTimer?.cancel();
+    if (!_firstRitualGuidanceEligible) return;
+    if (mounted) {
+      setState(() {
+        _firstRitualGuidanceEligible = false;
+        _firstRitualGuidanceVisible = false;
+      });
+    } else {
+      _firstRitualGuidanceEligible = false;
+      _firstRitualGuidanceVisible = false;
+    }
+    unawaited(firstRitualGuidanceService.markCompleted());
   }
 
   Future<void> loadInitialState() async {
@@ -746,6 +845,7 @@ class _HomeScreenState extends State<HomeScreen>
     invalidateDelayedCallbacks();
 
     if (_phase == RitualPhase.launch) {
+      _hideFirstRitualGuidance();
       HapticFeedback.selectionClick();
 
       final launchFlowSession = flowSessionId;
@@ -756,9 +856,13 @@ class _HomeScreenState extends State<HomeScreen>
 
       transitionInProgress = false;
 
-      if (!_accessViewState.isResolved) return;
+      if (!_accessViewState.isResolved) {
+        _scheduleFirstRitualGuidance();
+        return;
+      }
 
       if (_accessViewState.isLocked) {
+        _completeFirstRitualGuidance();
         final lockedWisdom = _accessViewState.wisdom;
         if (lockedWisdom == null) {
           final countdown = _currentCountdownPresentation(context);
@@ -795,11 +899,13 @@ class _HomeScreenState extends State<HomeScreen>
         eastLocalizations(context).pause,
         nextPhase: RitualPhase.pause,
       );
+      _scheduleFirstRitualGuidance();
 
       return;
     }
 
     if (_phase == RitualPhase.pause) {
+      _completeFirstRitualGuidance();
       HapticFeedback.lightImpact();
 
       if (pauseFeelOpacity < 1.0) {
@@ -1040,6 +1146,7 @@ class _HomeScreenState extends State<HomeScreen>
           textScale = 1.0;
         }
       });
+      if (!_firstRitualGuidanceVisible) _scheduleFirstRitualGuidance();
       return;
     }
 
@@ -1058,13 +1165,15 @@ class _HomeScreenState extends State<HomeScreen>
         currentText = presentation.plainText;
       }
     });
+    if (!_firstRitualGuidanceVisible) _scheduleFirstRitualGuidance();
   }
 
   Future<DailyWisdomPreparedReveal> prepareDailyWisdomReveal() {
     return dailyWisdomAccessService.prepareReveal(
-      selectWisdom: () => wisdomSelector.select()["text"] as String,
-      selectWisdomWithIdentity: () {
-        final wisdom = wisdomSelector.select();
+      selectWisdom: () async =>
+          (await wisdomSelector.select())['text'] as String,
+      selectWisdomWithIdentity: () async {
+        final wisdom = await wisdomSelector.select();
         return DailyWisdomSelection(
           text: wisdom['text'] as String,
           wisdomId: wisdom['id'] as String?,
@@ -1977,6 +2086,7 @@ class _HomeScreenState extends State<HomeScreen>
                           navigationDisabled:
                               navigationInProgress || _transitionLock,
                           semanticLabel: mainRitualSemanticLabel(context),
+                          semanticHint: mainRitualSemanticHint(context),
                           semanticActionEnabled:
                               mainRitualActionSemanticsEnabled,
                           hideContentSemantics: hideMainRitualContentSemantics,
@@ -2010,6 +2120,15 @@ class _HomeScreenState extends State<HomeScreen>
                             onWisdomLongPress: shareCurrentWisdom,
                           ),
                         ),
+                      ),
+                      _HomeFirstRitualGuidance(
+                        text: _firstRitualGuidanceText(context),
+                        visible: _firstRitualGuidanceEligible &&
+                            _firstRitualGuidanceVisible &&
+                            (_phase == RitualPhase.launch ||
+                                (_phase == RitualPhase.pause &&
+                                    pauseFeelOpacity < 1.0)),
+                        reduceMotion: _reduceMotion,
                       ),
                       if (_chromeVisible) ...[
                         _HomeSettingsMenuControl(onPressed: openSettings),

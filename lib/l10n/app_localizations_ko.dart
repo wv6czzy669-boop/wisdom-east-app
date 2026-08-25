@@ -12,6 +12,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appTitle => '매일의 지혜: EAST.';
 
   @override
+  String get tapAnywhereToBegin => '화면을 탭하여 시작하세요.';
+
+  @override
+  String get tapWhenReady => '준비되면 탭하세요.';
+
+  @override
   String get pause => '잠시.';
 
   @override

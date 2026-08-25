@@ -1,6 +1,8 @@
 {
   "@@locale": "tr",
   "appTitle": "Günlük Bilgelik: EAST.",
+  "tapAnywhereToBegin": "Başlamak için herhangi bir yere dokun.",
+  "tapWhenReady": "Hazır olduğunda dokun.",
   "pause": "Bekle.",
   "feel": "Hisset.",
   "askFromYourHeart": "Soruyu kalbinden sor.",

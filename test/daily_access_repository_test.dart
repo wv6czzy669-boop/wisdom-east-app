@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/models/daily_access_snapshot.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
+import 'package:wisdom_app/models/daily_wisdom_selection.dart';
 import 'package:wisdom_app/models/pending_daily_wisdom_reveal.dart';
 import 'package:wisdom_app/persistence/persistence_operation_coordinator.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
@@ -435,6 +436,38 @@ void main() {
 
     expect(selections, 1);
     expect(results.map((result) => result.text).toSet(), {'Selected 1'});
+  });
+
+  test('prepare awaits one asynchronous identity selection only when ready',
+      () async {
+    final repository = createRepository();
+    var selections = 0;
+
+    final first = await repository.prepareReveal(
+      selectWisdom: () async => 'Legacy fallback',
+      selectWisdomWithIdentity: () async {
+        selections++;
+        await Future<void>.delayed(Duration.zero);
+        return DailyWisdomSelection(
+          text: 'Persisted selector wisdom',
+          wisdomId: 'east_wisdom_0301',
+        );
+      },
+      preparedAt: now,
+      now: now,
+    );
+    final recoveredPending = await repository.prepareReveal(
+      selectWisdom: () => throw StateError('must not select again'),
+      selectWisdomWithIdentity: () => throw StateError('must not select again'),
+      preparedAt: now,
+      now: now,
+    );
+
+    expect(selections, 1);
+    expect(first.text, 'Persisted selector wisdom');
+    expect(first.wisdomId, 'east_wisdom_0301');
+    expect(recoveredPending.text, first.text);
+    expect(recoveredPending.wisdomId, first.wisdomId);
   });
 
   test('same storage with shared coordinator serializes separate repositories',

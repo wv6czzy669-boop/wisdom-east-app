@@ -12,6 +12,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appTitle => 'Minh triết mỗi ngày: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Chạm vào bất kỳ đâu để bắt đầu.';
+
+  @override
+  String get tapWhenReady => 'Chạm khi bạn đã sẵn sàng.';
+
+  @override
   String get pause => 'Lắng lại.';
 
   @override

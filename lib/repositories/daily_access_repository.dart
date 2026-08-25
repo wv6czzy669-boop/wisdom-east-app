@@ -10,8 +10,8 @@ import '../models/pending_daily_wisdom_reveal.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/storage_preferences_adapter.dart';
 
-typedef WisdomSelector = String Function();
-typedef WisdomSelectionSelector = DailyWisdomSelection Function();
+typedef WisdomSelector = FutureOr<String> Function();
+typedef WisdomSelectionSelector = FutureOr<DailyWisdomSelection> Function();
 
 class CorruptDailyWisdomRecordException implements Exception {
   const CorruptDailyWisdomRecordException([this.encodedRecord]);
@@ -362,8 +362,9 @@ class DailyAccessRepository {
           );
         }
 
-        final selection = selectWisdomWithIdentity?.call() ??
-            DailyWisdomSelection(text: selectWisdom());
+        final selection = selectWisdomWithIdentity != null
+            ? await selectWisdomWithIdentity()
+            : DailyWisdomSelection(text: await selectWisdom());
         final text = selection.text;
         if (text.trim().isEmpty) {
           throw StateError('Selected daily wisdom text cannot be empty.');

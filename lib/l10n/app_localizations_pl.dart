@@ -12,6 +12,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get appTitle => 'Codzienna mądrość: EAST.';
 
   @override
+  String get tapAnywhereToBegin => 'Stuknij w dowolnym miejscu, aby zacząć.';
+
+  @override
+  String get tapWhenReady => 'Stuknij, gdy będziesz gotowy.';
+
+  @override
   String get pause => 'Zatrzymaj się.';
 
   @override

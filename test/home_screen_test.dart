@@ -20,12 +20,14 @@ import 'package:wisdom_app/services/wisdom_localization_resolver.dart';
 import 'package:wisdom_app/services/analytics_event.dart';
 import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
+import 'package:wisdom_app/services/first_ritual_guidance_service.dart';
 import 'package:wisdom_app/services/kept_discovery_hint_service.dart';
 import 'package:wisdom_app/services/rating_request_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/services/widget_presentation_sync_coordinator.dart';
 import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/services/wisdom_share_service.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 import 'package:wisdom_app/utils/legacy_kept_identity.dart';
@@ -189,6 +191,145 @@ void main() {
     await tester.pump(const Duration(milliseconds: 625));
     expect(_renderedRitualOpacity(tester), 1.0);
     await tester.pump(const Duration(milliseconds: 560));
+  });
+
+  testWidgets(
+      'first ritual guidance teaches launch then Pause and completes once',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final guidanceService = _FirstRitualGuidanceServiceFake(shouldShow: true);
+    try {
+      await tester.pumpWidget(
+        _homeApp(firstRitualGuidanceService: guidanceService),
+      );
+      await _finishOpeningIntro(tester);
+
+      final guidance = find.byKey(
+        const ValueKey('first-ritual-guidance'),
+      );
+      await _pumpUntilCondition(
+        tester,
+        () => tester.widget<AnimatedOpacity>(guidance).opacity == 1.0,
+        maxPumps: 30,
+        pumpDuration: const Duration(milliseconds: 100),
+      );
+      expect(find.text('Tap anywhere to begin.'), findsOneWidget);
+      expect(tester.widget<AnimatedOpacity>(guidance).opacity, 1.0);
+      expect(
+        tester.widget<Text>(find.text('Tap anywhere to begin.')).style?.color,
+        EastColorScheme.light.hint,
+      );
+      expect(
+        tester
+            .widget<Text>(find.text('Tap anywhere to begin.'))
+            .style
+            ?.fontSize,
+        15,
+      );
+      final launchSemantics =
+          find.semantics.byLabel('EAST.').evaluate().single.getSemanticsData();
+      expect(launchSemantics.hint, 'Tap anywhere to begin.');
+
+      await _tapCenter(tester);
+      await tester.pump();
+      expect(tester.widget<AnimatedOpacity>(guidance).opacity, 0.0);
+      expect(_ritualOpacity(tester), 0.0);
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.byKey(const ValueKey('ritual-content-opacity')),
+            )
+            .duration,
+        const Duration(milliseconds: 750),
+      );
+      await tester.pump(const Duration(milliseconds: 375));
+      expect(_renderedRitualOpacity(tester), inExclusiveRange(0.0, 1.0));
+      await tester.pump(const Duration(milliseconds: 475));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 850));
+      await _pumpUntilCondition(
+        tester,
+        () => tester.widget<AnimatedOpacity>(guidance).opacity == 1.0,
+        maxPumps: 30,
+        pumpDuration: const Duration(milliseconds: 100),
+      );
+
+      expect(find.text('Tap when you’re ready.'), findsOneWidget);
+      expect(tester.widget<AnimatedOpacity>(guidance).opacity, 1.0);
+      expect(
+        tester
+            .widget<Text>(find.text('Tap when you’re ready.'))
+            .style
+            ?.fontSize,
+        15,
+      );
+      final pauseSemantics =
+          find.semantics.byLabel('Pause.').evaluate().single.getSemanticsData();
+      expect(pauseSemantics.hint, 'Tap when you’re ready.');
+
+      await _tapCenter(tester);
+      await tester.pump();
+      expect(tester.widget<AnimatedOpacity>(guidance).opacity, 0.0);
+
+      expect(guidanceService.markCompletedCalls, 1);
+      await tester.pump(const Duration(milliseconds: 1300));
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('completed first ritual guidance never returns', (tester) async {
+    await tester.pumpWidget(
+      _homeApp(
+        firstRitualGuidanceService:
+            _FirstRitualGuidanceServiceFake(shouldShow: false),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const ValueKey('first-ritual-guidance')),
+          )
+          .opacity,
+      0.0,
+    );
+  });
+
+  testWidgets('first ritual guidance follows the EAST dark palette',
+      (tester) async {
+    await tester.pumpWidget(
+      _homeApp(
+        themeMode: ThemeMode.dark,
+        firstRitualGuidanceService:
+            _FirstRitualGuidanceServiceFake(shouldShow: true),
+      ),
+    );
+    await _finishOpeningIntro(tester);
+    final guidance = find.byKey(
+      const ValueKey('first-ritual-guidance'),
+    );
+    await _pumpUntilCondition(
+      tester,
+      () => tester.widget<AnimatedOpacity>(guidance).opacity == 1.0,
+      maxPumps: 30,
+      pumpDuration: const Duration(milliseconds: 100),
+    );
+
+    expect(
+      tester.widget<Text>(find.text('Tap anywhere to begin.')).style?.color,
+      EastColorScheme.dark.hint,
+    );
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const ValueKey('first-ritual-guidance')),
+          )
+          .opacity,
+      1.0,
+    );
   });
 
   testWidgets('Home unresolved launch has one disabled EAST semantic node',
@@ -6075,6 +6216,22 @@ class _RecordingWidgetPresentationSyncCoordinator
   }
 }
 
+class _FirstRitualGuidanceServiceFake extends FirstRitualGuidanceService {
+  _FirstRitualGuidanceServiceFake({required bool shouldShow})
+      : _result = shouldShow;
+
+  final bool _result;
+  int markCompletedCalls = 0;
+
+  @override
+  Future<bool> shouldShow() async => _result;
+
+  @override
+  Future<void> markCompleted() async {
+    markCompletedCalls += 1;
+  }
+}
+
 class _FakeAnalyticsTransport implements AnalyticsTransport {
   final List<AnalyticsEvent> tracked = [];
 
@@ -6173,6 +6330,7 @@ Widget _homeApp({
   SavedReflectionsService? savedReflectionsService,
   WisdomShareHandler? wisdomShareService,
   WisdomNotificationService? wisdomNotificationService,
+  FirstRitualGuidanceService? firstRitualGuidanceService,
   KeptDiscoveryHintService? keptDiscoveryHintService,
   RatingRequestService? ratingRequestService,
   AnalyticsService? analyticsService,
@@ -6181,6 +6339,7 @@ Widget _homeApp({
   Duration dailyWisdomOperationTimeout = const Duration(seconds: 8),
   Duration dailyWisdomStatusTimeout =
       DailyWisdomAccessService.defaultStatusTimeout,
+  ThemeMode themeMode = ThemeMode.light,
   List<NavigatorObserver> navigatorObservers = const <NavigatorObserver>[],
 }) {
   final resolvedDailyGraph = dailyGraph ?? DailyAccessTestGraph(clock: clock);
@@ -6194,12 +6353,17 @@ Widget _homeApp({
   final resolvedKeptGraph = keptGraph ?? KeptRepositoryTestGraph();
   return MaterialApp(
     navigatorObservers: navigatorObservers,
+    theme: eastTheme(),
+    darkTheme: eastTheme(brightness: Brightness.dark),
+    themeMode: themeMode,
     home: HomeScreen(
       savedReflectionsService:
           savedReflectionsService ?? resolvedKeptGraph.service,
       dailyWisdomAccessService: resolvedDailyGraph.service,
       wisdomShareService: wisdomShareService,
       wisdomNotificationService: wisdomNotificationService,
+      firstRitualGuidanceService:
+          firstRitualGuidanceService ?? FirstRitualGuidanceService(),
       // Correction (Discovery test isolation): a fresh instance every call,
       // never the process-wide `app_services.keptDiscoveryHintService`
       // singleton. That singleton's in-memory `_completedInMemory`/
@@ -6285,9 +6449,10 @@ Future<void> _pumpUntilCondition(
   WidgetTester tester,
   bool Function() condition, {
   int maxPumps = 8,
+  Duration pumpDuration = Duration.zero,
 }) async {
   for (var attempt = 0; attempt < maxPumps && !condition(); attempt += 1) {
-    await tester.pump();
+    await tester.pump(pumpDuration);
   }
 }
 

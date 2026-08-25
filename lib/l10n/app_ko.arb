@@ -1,6 +1,8 @@
 {
   "@@locale": "ko",
   "appTitle": "매일의 지혜: EAST.",
+  "tapAnywhereToBegin": "화면을 탭하여 시작하세요.",
+  "tapWhenReady": "준비되면 탭하세요.",
   "pause": "잠시.",
   "feel": "느끼다.",
   "askFromYourHeart": "마음으로 묻다.",

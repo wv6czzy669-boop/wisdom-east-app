@@ -12,6 +12,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appTitle => '日々の知恵：EAST.';
 
   @override
+  String get tapAnywhereToBegin => '画面をタップして始める。';
+
+  @override
+  String get tapWhenReady => '準備ができたらタップ。';
+
+  @override
   String get pause => '立ち止まる。';
 
   @override
