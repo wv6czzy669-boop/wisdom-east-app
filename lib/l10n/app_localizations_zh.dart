@@ -405,6 +405,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get keeperWidgetRitual => '儀式，就在你的小工具中。';
 
   @override
+  String get addKeeperWidget => '加入 Keeper 小工具';
+
+  @override
+  String get keeperWidgetInteractive => '在 iOS 17 或更新版本中，可直接在小工具內開始儀式。';
+
+  @override
+  String get keeperWidgetOpensApp => '在 iOS 15 與 16 中，小工具會開啟 EAST.。';
+
+  @override
   String get keepEastAlive => '讓 EAST. 延續。';
 
   @override
@@ -907,6 +916,15 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get keeperWidgetRitual => '儀式，就在你的小工具中。';
+
+  @override
+  String get addKeeperWidget => '加入 Keeper 小工具';
+
+  @override
+  String get keeperWidgetInteractive => '在 iOS 17 或更新版本中，可直接在小工具內開始儀式。';
+
+  @override
+  String get keeperWidgetOpensApp => '在 iOS 15 與 16 中，小工具會開啟 EAST.。';
 
   @override
   String get keepEastAlive => '讓 EAST. 延續。';

@@ -159,6 +159,54 @@ void main() {
   });
 
   testWidgets(
+      'editorial archive prints each day once, marks month changes, and '
+      'keeps every Reflection status below its wisdom', (tester) async {
+    final july = await keep(
+      service,
+      text: 'July closes quietly',
+      date: DateTime.utc(2026, 7, 31, 20),
+    );
+    final firstAugust = await keep(
+      service,
+      text: 'First August wisdom',
+      date: DateTime.utc(2026, 8, 1, 8),
+    );
+    final secondAugust = await keep(
+      service,
+      text: 'Second August wisdom',
+      date: DateTime.utc(2026, 8, 1, 18),
+    );
+    await service.saveReflection(
+      itemId: secondAugust.id,
+      reflection: 'A private August note.',
+      isKeeper: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: await service.load(),
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+
+    expect(find.text('AUGUST 2026'), findsOneWidget);
+    expect(find.text('JULY 2026'), findsOneWidget);
+    expect(find.text('August 1, 2026'), findsOneWidget);
+    expect(find.text('July 31, 2026'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('REFLECTED')).dy,
+      greaterThan(tester.getTopLeft(find.text(secondAugust.text)).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('ADD REFLECTION').first).dy,
+      greaterThan(tester.getTopLeft(find.text(firstAugust.text)).dy),
+    );
+    expect(july.hasReflection, isFalse);
+  });
+
+  testWidgets(
       'a legacy Kept record without wisdomId remains shareable by long press '
       'using its persisted snapshot', (tester) async {
     const legacy = FavoriteItem(
@@ -281,6 +329,18 @@ void main() {
     expect(find.text(doorway.text), findsNothing);
     expect(find.text(reflected.text), findsOneWidget);
     expect(find.text('A private seed became visible.'), findsNothing);
+    expect(find.text(unrelated.text), findsNothing);
+
+    await tester.enterText(searchField, 'July 2026');
+    await tester.pump();
+    expect(find.text(doorway.text), findsOneWidget);
+    expect(find.text(reflected.text), findsOneWidget);
+    expect(find.text(unrelated.text), findsOneWidget);
+
+    await tester.enterText(searchField, 'July 20');
+    await tester.pump();
+    expect(find.text(doorway.text), findsOneWidget);
+    expect(find.text(reflected.text), findsNothing);
     expect(find.text(unrelated.text), findsNothing);
 
     await tester.enterText(searchField, 'missing');
@@ -1331,7 +1391,7 @@ void main() {
       semantics.dispose();
       expect(
         tester.getTopLeft(find.text(item.text)).dy,
-        lessThan(180),
+        lessThan(190),
       );
     });
 

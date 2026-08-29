@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -13,9 +14,11 @@ class KeeperScreen extends StatefulWidget {
   const KeeperScreen({
     super.key,
     this.purchaseService,
+    this.supportsInteractiveKeeperWidget,
   });
 
   final PurchaseService? purchaseService;
+  final bool? supportsInteractiveKeeperWidget;
 
   @override
   State<KeeperScreen> createState() => _KeeperScreenState();
@@ -26,6 +29,16 @@ class _KeeperScreenState extends State<KeeperScreen> {
 
   PurchaseService get _purchaseService =>
       widget.purchaseService ?? app_services.purchaseService;
+
+  bool get _supportsInteractiveKeeperWidget {
+    final override = widget.supportsInteractiveKeeperWidget;
+    if (override != null) return override;
+    if (!Platform.isIOS) return false;
+    final match = RegExp(r'(?:Version\s+)?(\d+)')
+        .firstMatch(Platform.operatingSystemVersion);
+    final major = int.tryParse(match?.group(1) ?? '');
+    return major != null && major >= 17;
+  }
 
   @override
   void initState() {
@@ -119,7 +132,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = eastLocalizations(context);
-    final isKeeper = _purchaseService.isKeeper;
+    final isKeeper = _purchaseService.resolveKeeperAccess();
     final keeperProduct = _purchaseService.keeperProduct;
     final purchaseAvailable =
         _purchaseService.isAvailable && keeperProduct != null;
@@ -169,7 +182,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                           color: eastMutedTextColor(context),
                         ).copyWith(letterSpacing: 1.55),
                       ),
-                      const SizedBox(height: 92),
+                      SizedBox(height: isKeeper ? 54 : 92),
                       Semantics(
                         button: !isKeeper,
                         enabled: purchaseEnabled,
@@ -195,8 +208,8 @@ class _KeeperScreenState extends State<KeeperScreen> {
                               curve: Curves.easeOutCubic,
                               opacity: _purchaseService.isLoading ? 0.72 : 1.0,
                               child: Container(
-                                width: 238,
-                                height: 238,
+                                width: isKeeper ? 168 : 238,
+                                height: isKeeper ? 168 : 238,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
@@ -230,7 +243,7 @@ class _KeeperScreenState extends State<KeeperScreen> {
                                   child: FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: SizedBox(
-                                      width: 194,
+                                      width: isKeeper ? 142 : 194,
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -296,31 +309,52 @@ class _KeeperScreenState extends State<KeeperScreen> {
                       // rhythm -- no rules, labels, or graphic dividers. The
                       // core pair is tightly bound, with a wider pause before
                       // the Journal benefit and the closing sentiment.
-                      const SizedBox(height: 72),
-                      Text(
-                        l10n.keepWithoutLimit,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        l10n.reflectWithoutLimit,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                      ),
-                      const SizedBox(height: 28),
-                      Text(
-                        l10n.takeJournalWithYou,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        l10n.keeperWidgetRitual,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                      ),
-                      const SizedBox(height: 44),
+                      SizedBox(height: isKeeper ? 42 : 72),
+                      if (isKeeper) ...[
+                        Text(
+                          l10n.addKeeperWidget,
+                          key: const ValueKey('keeper-widget-guide-title'),
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _supportsInteractiveKeeperWidget
+                              ? l10n.keeperWidgetInteractive
+                              : l10n.keeperWidgetOpensApp,
+                          key: const ValueKey('keeper-widget-guide-detail'),
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(
+                            14,
+                            color: eastMutedTextColor(context),
+                          ).copyWith(letterSpacing: 0.65),
+                        ),
+                      ] else ...[
+                        Text(
+                          l10n.keepWithoutLimit,
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          l10n.reflectWithoutLimit,
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                        ),
+                        const SizedBox(height: 28),
+                        Text(
+                          l10n.takeJournalWithYou,
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          l10n.keeperWidgetRitual,
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                        ),
+                      ],
+                      SizedBox(height: isKeeper ? 36 : 44),
                       Text(
                         l10n.keepEastAlive,
                         textAlign: TextAlign.center,

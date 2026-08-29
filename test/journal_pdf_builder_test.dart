@@ -299,7 +299,8 @@ void main() {
     expect(_physicalPageCount(bytes), 3);
   });
 
-  test('items without a revealId contribute no body page', () async {
+  test('items without a revealId still contribute a Journal body page',
+      () async {
     final legacyOnly = [
       FavoriteItem(
         id: 'legacy',
@@ -315,7 +316,7 @@ void main() {
       compress: false,
     );
 
-    expect(_physicalPageCount(bytes), 3);
+    expect(_physicalPageCount(bytes), 4);
   });
 
   test('Reflection emoji render through the bundled PDF fallback', () async {

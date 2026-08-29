@@ -406,6 +406,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get keeperWidgetRitual => 'ウィジェットの中にも、儀式を。';
 
   @override
+  String get addKeeperWidget => 'Keeperウィジェットを追加';
+
+  @override
+  String get keeperWidgetInteractive => 'iOS 17以降では、ウィジェットの中で儀式を始められます。';
+
+  @override
+  String get keeperWidgetOpensApp => 'iOS 15と16では、ウィジェットからEAST.が開きます。';
+
+  @override
   String get keepEastAlive => 'EAST.を生かし続ける。';
 
   @override

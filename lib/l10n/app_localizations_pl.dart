@@ -421,6 +421,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get keeperWidgetRitual => 'Rytuał, w Twoim widżecie.';
 
   @override
+  String get addKeeperWidget => 'Dodaj widżet Keeper';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'W iOS 17 lub nowszym rozpocznij rytuał w widżecie.';
+
+  @override
+  String get keeperWidgetOpensApp => 'W iOS 15 i 16 widżet otwiera EAST.';
+
+  @override
   String get keepEastAlive => 'Niech EAST. trwa.';
 
   @override

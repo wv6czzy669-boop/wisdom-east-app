@@ -65,7 +65,7 @@ void main() {
       final decoded = decodeJson(document);
 
       expect(decoded['format'], 'EAST Data Export');
-      expect(decoded['version'], 1);
+      expect(decoded['version'], 2);
       expect(decoded['exportedAt'], exportedAt.toUtc().toIso8601String());
     });
 
@@ -114,7 +114,8 @@ void main() {
 
     test(
         'active Kept occurrences are exported with exactly the expected '
-        'fields -- revealId, wisdom text, and keptAt only', () {
+        'fields -- recordId, optional revealId, wisdom text, and keptAt only',
+        () {
       final document = builder.build(
         items: [
           item(
@@ -132,7 +133,11 @@ void main() {
 
       expect(kept, hasLength(1));
       final entry = kept.single as Map<String, Object?>;
-      expect(entry.keys.toSet(), {'revealId', 'wisdomText', 'keptAt'});
+      expect(
+        entry.keys.toSet(),
+        {'recordId', 'revealId', 'wisdomText', 'keptAt'},
+      );
+      expect(entry['recordId'], '1');
       expect(entry['revealId'], 'a5f3c111-1111-4111-8111-000000000001');
       expect(entry['wisdomText'], 'A kept wisdom');
       expect(entry['keptAt'], DateTime.utc(2026, 1, 1).toIso8601String());
@@ -171,8 +176,11 @@ void main() {
       final reflections = decoded['reflections'] as List<Object?>;
       expect(reflections, hasLength(1));
       final reflectionEntry = reflections.single as Map<String, Object?>;
-      expect(reflectionEntry.keys.toSet(),
-          {'revealId', 'reflectionText', 'reflectedAt'});
+      expect(
+        reflectionEntry.keys.toSet(),
+        {'recordId', 'revealId', 'reflectionText', 'reflectedAt'},
+      );
+      expect(reflectionEntry['recordId'], '2');
       expect(
         reflectionEntry['revealId'],
         'a5f3c111-1111-4111-8111-000000000002',
@@ -219,12 +227,14 @@ void main() {
     });
 
     test(
-        'an item with no revealId (no stable identity) is never '
-        'exported', () {
+        'a legacy item without revealId is exported with its existing '
+        'recordId and Reflection', () {
       const noIdentity = FavoriteItem(
         id: 'legacy-1',
         text: 'A legacy item with no revealId',
         date: 'display date',
+        reflection: 'A legacy Reflection that belongs in the archive.',
+        reflectedAt: '2026-01-02T00:00:00.000Z',
       );
       final document = builder.build(
         items: [noIdentity],
@@ -233,8 +243,38 @@ void main() {
       );
       final decoded = decodeJson(document);
 
-      expect(decoded['kept'], isEmpty);
-      expect(decoded['reflections'], isEmpty);
+      final kept =
+          (decoded['kept'] as List<Object?>).single as Map<String, Object?>;
+      expect(kept['recordId'], 'legacy-1');
+      expect(kept['revealId'], isNull);
+      expect(kept['wisdomText'], 'A legacy item with no revealId');
+
+      final reflection = (decoded['reflections'] as List<Object?>).single
+          as Map<String, Object?>;
+      expect(reflection['recordId'], 'legacy-1');
+      expect(reflection['revealId'], isNull);
+      expect(
+        reflection['reflectionText'],
+        'A legacy Reflection that belongs in the archive.',
+      );
+    });
+
+    test('duplicate legacy wisdom text remains two records by local id', () {
+      const sharedText = 'The same legacy wisdom twice.';
+      final decoded = decodeJson(
+        builder.build(
+          items: const [
+            FavoriteItem(id: 'legacy-a', text: sharedText, date: 'date'),
+            FavoriteItem(id: 'legacy-b', text: sharedText, date: 'date'),
+          ],
+          journalOwnerName: null,
+          exportedAt: exportedAt,
+        ),
+      );
+
+      final kept =
+          (decoded['kept'] as List<Object?>).cast<Map<String, Object?>>();
+      expect(kept.map((entry) => entry['recordId']), ['legacy-a', 'legacy-b']);
     });
 
     test('Kept content is sorted oldest -> newest, deterministically', () {

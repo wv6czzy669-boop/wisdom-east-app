@@ -419,6 +419,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get keeperWidgetRitual => 'Ritüel, widget’ının içinde.';
 
   @override
+  String get addKeeperWidget => 'Keeper Widget’ını Ekle';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'iOS 17 veya sonrasında ritüeli widget içinde başlat.';
+
+  @override
+  String get keeperWidgetOpensApp => 'iOS 15 ve 16’da widget EAST.’i açar.';
+
+  @override
   String get keepEastAlive => 'EAST. yaşamaya devam etsin.';
 
   @override

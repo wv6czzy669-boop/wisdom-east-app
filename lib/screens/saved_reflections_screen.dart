@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:intl/intl.dart' as intl;
 
 import '../controllers/latest_request_guard.dart';
 import '../l10n/east_localizations.dart';
@@ -16,6 +17,7 @@ import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
 import '../utils/date_formatter.dart';
+import '../utils/favorite_date_codec.dart';
 import '../utils/kept_search_matcher.dart';
 import '../widgets/east_back_button.dart';
 import 'journal_screen.dart';
@@ -70,7 +72,9 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   /// notification always wins over a still-in-flight earlier reload.
   final _incomingKeptRefreshGuard = LatestRequestGuard();
 
-  bool get _isKeeper => widget.isKeeper || _purchaseService.isKeeper;
+  bool get _isKeeper => _purchaseService.resolveKeeperAccess(
+        unresolvedFallback: widget.isKeeper,
+      );
 
   TextStyle _style(
     double size, {
@@ -100,6 +104,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     _service =
         widget.savedReflectionsService ?? app_services.savedReflectionsService;
     _purchaseService = widget.purchaseService ?? app_services.purchaseService;
+    _purchaseService.addListener(_onKeeperEntitlementChanged);
     _wisdomShareService =
         widget.wisdomShareService ?? app_services.wisdomShareService;
     // Build 26 Phase 4H-6: subscribe to the neutral incoming-Kept-state
@@ -112,6 +117,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   @override
   void dispose() {
+    _purchaseService.removeListener(_onKeeperEntitlementChanged);
     app_services.keptStateRevisionNotifier.removeListener(_onKeptStateChanged);
     _incomingKeptRefreshGuard.invalidate();
     _searchController.dispose();
@@ -119,6 +125,10 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       ..removeListener(_onSearchFocusChanged)
       ..dispose();
     super.dispose();
+  }
+
+  void _onKeeperEntitlementChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onSearchFocusChanged() {
@@ -262,6 +272,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
             item: item,
             isKeeper: _isKeeper,
             savedReflectionsService: _service,
+            purchaseService: _purchaseService,
           ),
         ),
       );
@@ -321,8 +332,11 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(
-          builder: (context) =>
-              JournalScreen(items: _items, isKeeper: _isKeeper),
+          builder: (context) => JournalScreen(
+            items: _items,
+            isKeeper: _isKeeper,
+            purchaseService: _purchaseService,
+          ),
         ),
       );
     } finally {
@@ -586,90 +600,114 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     );
   }
 
-  Widget _keptItem(FavoriteItem item, int index) {
+  Widget _keptItem(
+    FavoriteItem item,
+    int index, {
+    required String? monthHeader,
+    required String? dateHeader,
+  }) {
     final itemNumber = index + 1;
     final l10n = eastLocalizations(context);
-    return Builder(
-      builder: (rowContext) => Semantics(
-        customSemanticsActions: {
-          CustomSemanticsAction(label: l10n.shareWisdomNumbered(itemNumber)):
-              () => unawaited(_shareWisdom(item, rowContext)),
-          CustomSemanticsAction(label: l10n.delete): () {
-            _requestDelete(item);
-          },
-        },
-        child: _KeptSwipeToDeleteRow(
-          key: ValueKey('kept-${item.id}'),
-          itemId: item.id,
-          dismissRevision: _deleteDismissRevision,
-          actionLabelStyle: _statusStyle,
-          deleteLabel: l10n.deleteUpper,
-          onDelete: () => _requestDelete(item),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _displayDate(item),
-                style: _style(
-                  15,
-                  color: eastMutedTextColor(context),
-                  letterSpacing: 0.4,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (monthHeader != null) ...[
+          Semantics(
+            header: true,
+            child: Text(
+              monthHeader,
+              key: ValueKey('kept-month-${_monthKey(item)}'),
+              style: _style(
+                12,
+                color: eastMutedTextColor(context),
+                letterSpacing: 2.2,
               ),
-              if (_status(item, itemNumber) case final status?) ...[
-                const SizedBox(height: 4),
-                status,
-                const SizedBox(height: 6),
-              ] else
-                const SizedBox(height: 10),
-              // The wisdom itself is also a natural entry point into its
-              // Reflection. The explicit ADD REFLECTION / REFLECTED control
-              // below remains the accessible named action; excluding only
-              // this gesture from semantics avoids announcing two identical
-              // controls while preserving the wisdom Text's reading semantics.
-              Builder(
-                builder: (wisdomContext) => GestureDetector(
-                  key: ValueKey('kept-${item.id}-wisdom-action'),
-                  behavior: HitTestBehavior.opaque,
-                  excludeFromSemantics: true,
-                  onTap: () => unawaited(_openReflection(item)),
-                  onLongPress: () =>
-                      unawaited(_shareWisdom(item, wisdomContext)),
-                  child: Text(_displayWisdom(item), style: _style(24)),
-                ),
-              ),
-              if (!item.hasReflection) ...[
-                const SizedBox(height: 6),
-                Semantics(
-                  container: true,
-                  button: true,
-                  label: l10n.addReflectionNumbered(itemNumber),
-                  onTap: () => _openReflection(item),
-                  child: ExcludeSemantics(
-                    child: GestureDetector(
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (dateHeader != null) ...[
+          Text(
+            dateHeader,
+            key: ValueKey('kept-date-${_dayKey(item)}'),
+            style: _style(
+              15,
+              color: eastMutedTextColor(context),
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        Builder(
+          builder: (rowContext) => Semantics(
+            customSemanticsActions: {
+              CustomSemanticsAction(
+                label: l10n.shareWisdomNumbered(itemNumber),
+              ): () => unawaited(_shareWisdom(item, rowContext)),
+              CustomSemanticsAction(label: l10n.delete): () {
+                _requestDelete(item);
+              },
+            },
+            child: _KeptSwipeToDeleteRow(
+              key: ValueKey('kept-${item.id}'),
+              itemId: item.id,
+              dismissRevision: _deleteDismissRevision,
+              actionLabelStyle: _statusStyle,
+              deleteLabel: l10n.deleteUpper,
+              onDelete: () => _requestDelete(item),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // The wisdom is the primary editorial content and remains
+                  // both tappable (Reflection) and long-pressable (share).
+                  // Its status is deliberately placed below it for every
+                  // record, so the archive has one stable reading rhythm.
+                  Builder(
+                    builder: (wisdomContext) => GestureDetector(
+                      key: ValueKey('kept-${item.id}-wisdom-action'),
                       behavior: HitTestBehavior.opaque,
+                      excludeFromSemantics: true,
+                      onTap: () => unawaited(_openReflection(item)),
+                      onLongPress: () =>
+                          unawaited(_shareWisdom(item, wisdomContext)),
+                      child: Text(_displayWisdom(item), style: _style(24)),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  if (_status(item, itemNumber) case final status?)
+                    status
+                  else
+                    Semantics(
+                      container: true,
+                      button: true,
+                      label: l10n.addReflectionNumbered(itemNumber),
                       onTap: () => _openReflection(item),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minWidth: 44,
-                          minHeight: 44,
-                        ),
-                        child: Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: Text(
-                            l10n.addReflectionUpper,
-                            style: _statusStyle,
+                      child: ExcludeSemantics(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _openReflection(item),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              minWidth: 44,
+                              minHeight: 44,
+                            ),
+                            child: Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Text(
+                                l10n.addReflectionUpper,
+                                style: _statusStyle,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -709,6 +747,83 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   DateTime? _parseKeptAt(FavoriteItem item) {
     final raw = item.keptAt;
     return raw == null ? null : DateTime.tryParse(raw)?.toUtc();
+  }
+
+  DateTime? _archiveDate(FavoriteItem item) {
+    final keptAt = _parseKeptAt(item);
+    if (keptAt != null) return keptAt.toLocal();
+    try {
+      return FavoriteDateCodec.parseFavoriteDateToUtc(item.date).toLocal();
+    } on FavoriteDateParseException {
+      return null;
+    }
+  }
+
+  String _dayKey(FavoriteItem item) {
+    final date = _archiveDate(item);
+    if (date == null) return 'legacy:${item.date.trim()}';
+    return '${date.year}-${date.month}-${date.day}';
+  }
+
+  String? _monthKey(FavoriteItem item) {
+    final date = _archiveDate(item);
+    return date == null ? null : '${date.year}-${date.month}';
+  }
+
+  String? _monthHeader(FavoriteItem item) {
+    final date = _archiveDate(item);
+    if (date == null) return null;
+    final localeTag = localeTagForDate(Localizations.localeOf(context));
+    try {
+      return intl.DateFormat.yMMMM(localeTag).format(date).toUpperCase();
+    } catch (_) {
+      return '${intl.DateFormat.MMMM('en').format(date).toUpperCase()} ${date.year}';
+    }
+  }
+
+  String _searchableDateText(FavoriteItem item) {
+    final date = _archiveDate(item);
+    if (date == null) return '${item.date} ${item.keptAt ?? ''}';
+    final localeTag = localeTagForDate(Localizations.localeOf(context));
+    final localized = <String>[
+      _displayDate(item),
+      item.date,
+      '${date.day} ${date.month} ${date.year}',
+    ];
+    try {
+      localized
+        ..add(intl.DateFormat.yMMMM(localeTag).format(date))
+        ..add(intl.DateFormat.MMMM(localeTag).format(date))
+        ..add(intl.DateFormat.yMMMMd(localeTag).format(date));
+    } catch (_) {
+      // The app initializes all supported CLDR symbols at startup. Tests and
+      // library-only callers still retain the stable display/year corpus.
+    }
+    return localized.join(' ');
+  }
+
+  List<_KeptArchiveEntry> _archiveEntries(List<FavoriteItem> items) {
+    String? previousDay;
+    String? previousMonth;
+    return <_KeptArchiveEntry>[
+      for (var index = 0; index < items.length; index++)
+        (() {
+          final item = items[index];
+          final day = _dayKey(item);
+          final month = _monthKey(item);
+          final startsDay = day != previousDay;
+          final startsMonth = month != null && month != previousMonth;
+          previousDay = day;
+          if (month != null) previousMonth = month;
+          return _KeptArchiveEntry(
+            item: item,
+            itemNumber: index,
+            monthHeader: startsMonth ? _monthHeader(item) : null,
+            dateHeader: startsDay ? _displayDate(item) : null,
+            startsDay: startsDay,
+          );
+        })(),
+    ];
   }
 
   Widget _searchField() {
@@ -817,8 +932,10 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         wisdom: _displayWisdom(item),
         reflection: item.reflection,
         query: _searchQuery,
+        additionalText: _searchableDateText(item),
       );
     }).toList(growable: false);
+    final archiveEntries = _archiveEntries(visibleItems);
     final hasQuery = KeptSearchMatcher.normalize(_searchQuery).isNotEmpty;
 
     return PopScope(
@@ -894,29 +1011,45 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                                       ),
                                     ),
                                   )
-                                : ListView.separated(
+                                : ListView.builder(
                                     padding: const EdgeInsets.fromLTRB(
                                       24,
-                                      14,
+                                      8,
                                       24,
                                       32,
                                     ),
-                                    itemCount: visibleItems.length,
-                                    separatorBuilder: (context, index) {
-                                      return Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        child: Divider(
-                                          color: EastColors.of(context).divider,
-                                          thickness: 0.5,
-                                        ),
-                                      );
-                                    },
+                                    itemCount: archiveEntries.length,
                                     itemBuilder: (context, index) {
-                                      return _keptItem(
-                                        visibleItems[index],
-                                        index,
+                                      final entry = archiveEntries[index];
+                                      final nextStartsDay = index + 1 <
+                                              archiveEntries.length &&
+                                          archiveEntries[index + 1].startsDay;
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _keptItem(
+                                            entry.item,
+                                            entry.itemNumber,
+                                            monthHeader: entry.monthHeader,
+                                            dateHeader: entry.dateHeader,
+                                          ),
+                                          if (index + 1 < archiveEntries.length)
+                                            if (nextStartsDay)
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 18,
+                                                ),
+                                                child: Divider(
+                                                  color: EastColors.of(context)
+                                                      .divider,
+                                                  thickness: 0.5,
+                                                ),
+                                              )
+                                            else
+                                              const SizedBox(height: 10),
+                                        ],
                                       );
                                     },
                                   ),
@@ -932,6 +1065,22 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
       ),
     );
   }
+}
+
+class _KeptArchiveEntry {
+  const _KeptArchiveEntry({
+    required this.item,
+    required this.itemNumber,
+    required this.monthHeader,
+    required this.dateHeader,
+    required this.startsDay,
+  });
+
+  final FavoriteItem item;
+  final int itemNumber;
+  final String? monthHeader;
+  final String? dateHeader;
+  final bool startsDay;
 }
 
 /// A single Kept row with one quiet iOS-style action: a swipe toward the

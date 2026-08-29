@@ -21,6 +21,14 @@ enum PurchaseServiceStatus {
   productUnavailable,
 }
 
+/// The StoreKit-backed Keeper truth exposed to every app surface.
+///
+/// [unresolved] deliberately differs from [free]: it means the local cache
+/// may be used as a temporary fallback, but StoreKit has not answered yet.
+/// Once StoreKit returns a verified answer, all screens and widgets consume
+/// the same definitive [free] or [keeper] value.
+enum KeeperEntitlementState { unresolved, free, keeper }
+
 class _OperationWaitTimedOut implements Exception {
   const _OperationWaitTimedOut();
 }
@@ -83,6 +91,7 @@ class PurchaseService extends ChangeNotifier {
 
   bool _isAvailable = false;
   bool _isKeeper = false;
+  KeeperEntitlementState _entitlementState = KeeperEntitlementState.unresolved;
   bool _entitlementPersistenceFailed = false;
   bool _disposed = false;
   bool _initialized = false;
@@ -103,6 +112,19 @@ class PurchaseService extends ChangeNotifier {
 
   bool get isAvailable => _isAvailable;
   bool get isKeeper => _isKeeper;
+  KeeperEntitlementState get entitlementState => _entitlementState;
+
+  /// Resolves access without allowing a stale route argument to override a
+  /// definitive StoreKit answer. The route value exists only for the short
+  /// unresolved window while older callers migrate to this reactive source.
+  bool resolveKeeperAccess({bool unresolvedFallback = false}) {
+    return switch (entitlementState) {
+      KeeperEntitlementState.keeper => true,
+      KeeperEntitlementState.free => false,
+      KeeperEntitlementState.unresolved => isKeeper || unresolvedFallback,
+    };
+  }
+
   bool get isLoading => _purchasePending || _restorePending;
   bool get entitlementPersistenceFailed => _entitlementPersistenceFailed;
   ProductDetails? get keeperProduct => _keeperProduct;
@@ -203,14 +225,19 @@ class PurchaseService extends ChangeNotifier {
     switch (result) {
       case KeeperEntitlementAuthorityResult.entitled:
         _isKeeper = true;
+        _entitlementState = KeeperEntitlementState.keeper;
         _entitlementPersistenceFailed = !await _writeKeeperCache(true);
         break;
       case KeeperEntitlementAuthorityResult.notEntitled:
         _isKeeper = false;
+        _entitlementState = KeeperEntitlementState.free;
         _persistedTransactions.clear();
         _entitlementPersistenceFailed = !await _writeKeeperCache(false);
         break;
       case KeeperEntitlementAuthorityResult.unavailable:
+        // Preserve both the cache and any earlier definitive StoreKit state.
+        // On a cold start this intentionally remains `unresolved` rather than
+        // publishing a false Free state to UI or WidgetKit.
         break;
     }
     _notifyState();
@@ -735,8 +762,13 @@ class PurchaseService extends ChangeNotifier {
               authorityResult == KeeperEntitlementAuthorityResult.entitled;
           if (verified) {
             _isKeeper = true;
+            _entitlementState = KeeperEntitlementState.keeper;
             cacheWritten = await _writeKeeperCache(true);
             _persistedTransactions.add(transactionKey);
+          } else if (authorityResult ==
+              KeeperEntitlementAuthorityResult.notEntitled) {
+            _isKeeper = false;
+            _entitlementState = KeeperEntitlementState.free;
           }
         }
         // EAST. Phase 7: fires only the first time this exact transaction

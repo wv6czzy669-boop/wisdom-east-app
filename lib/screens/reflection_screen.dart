@@ -7,6 +7,7 @@ import '../controllers/reflection_autosave_coordinator.dart';
 import '../models/favorite_item.dart';
 import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
+import '../services/purchase_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/wisdom_localization_resolver.dart';
 import '../theme/east_design.dart';
@@ -22,12 +23,14 @@ class ReflectionScreen extends StatefulWidget {
     required this.item,
     required this.isKeeper,
     this.savedReflectionsService,
+    this.purchaseService,
     this.autosaveDebounce = const Duration(milliseconds: 600),
   });
 
   final FavoriteItem item;
   final bool isKeeper;
   final SavedReflectionsService? savedReflectionsService;
+  final PurchaseService? purchaseService;
 
   /// How long typing must pause before the current text is autosaved and
   /// (if it actually changed) becomes eligible for the next coalesced
@@ -58,6 +61,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   // [ReflectionAutosaveCoordinator].
   late final TextEditingController _controller;
   late final SavedReflectionsService _service;
+  late final PurchaseService _purchaseService;
   late final ReflectionAutosaveCoordinator _autosave;
   late final int _promptIndex;
 
@@ -79,8 +83,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   static const double _backSwipeDistanceThreshold = 64;
   static const double _backSwipeVelocityThreshold = 700;
 
-  bool get _isKeeper =>
-      widget.isKeeper || app_services.purchaseService.isKeeper;
+  bool get _isKeeper => _purchaseService.resolveKeeperAccess(
+        unresolvedFallback: widget.isKeeper,
+      );
 
   TextStyle _style(
     double size, {
@@ -103,6 +108,8 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     WidgetsBinding.instance.addObserver(this);
     _service =
         widget.savedReflectionsService ?? app_services.savedReflectionsService;
+    _purchaseService = widget.purchaseService ?? app_services.purchaseService;
+    _purchaseService.addListener(_onKeeperEntitlementChanged);
     // Deterministic per Phase 8: keyed on the occurrence's own `revealId`
     // (falling back to its always-present `id` only for pre-revealId
     // legacy Kept records) -- never on a persisted "chosen prompt" field,
@@ -133,11 +140,16 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _purchaseService.removeListener(_onKeeperEntitlementChanged);
     _autosave.dispose();
     _controller
       ..removeListener(_handleTextChanged)
       ..dispose();
     super.dispose();
+  }
+
+  void _onKeeperEntitlementChanged() {
+    if (mounted) setState(() {});
   }
 
   @override

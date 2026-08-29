@@ -9,12 +9,22 @@ abstract final class KeptSearchMatcher {
     required String wisdom,
     required String? reflection,
     required String query,
+    String additionalText = '',
   }) {
     final normalizedQuery = normalize(query);
     if (normalizedQuery.isEmpty) return true;
 
-    final corpus = normalize('$wisdom ${reflection ?? ''}');
-    return normalizedQuery.split(' ').every(corpus.contains);
+    final corpus = normalize('$wisdom ${reflection ?? ''} $additionalText');
+    final corpusTerms = corpus.split(' ').toSet();
+    return normalizedQuery.split(' ').every((term) {
+      // Numeric date terms must match a complete token. Without this guard,
+      // searching for "July 20" also matched every July 2026 entry because
+      // `20` is a substring of the year.
+      if (RegExp(r'^\d+$').hasMatch(term)) {
+        return corpusTerms.contains(term);
+      }
+      return corpus.contains(term);
+    });
   }
 
   static String normalize(String value) {
@@ -34,7 +44,10 @@ abstract final class KeptSearchMatcher {
       }
     }
 
-    return normalized.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return normalized
+        .replaceAll(RegExp(r'[,./:_-]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   static const Map<String, String> _folds = {

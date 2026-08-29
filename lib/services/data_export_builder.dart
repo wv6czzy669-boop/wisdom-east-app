@@ -32,18 +32,20 @@ class DataExportDocument {
 /// without any native/UI surface.
 ///
 /// Only meaningful, user-owned ACTIVE content is included: a Kept
-/// occurrence's `revealId`/wisdom text/`keptAt`, and (only when present) a
-/// Reflection's `revealId`/text/`reflectedAt`. Every CloudKit-internal,
+/// occurrence's stable local `recordId`, optional `revealId`, wisdom text,
+/// and `keptAt`, and (only when present) a Reflection's matching identity,
+/// text, and `reflectedAt`. Every CloudKit-internal,
 /// sync-internal, purchase, analytics, rating, notification,
 /// Return-scheduling, and rolling-24h-lock field is structurally absent --
 /// this builder never even receives them, since [FavoriteItem] itself never
-/// carries them (see its own class doc comment). An item with no `revealId`
-/// (predates that field entirely -- no stable identity) is never exported.
+/// carries them (see its own class doc comment). Pre-`revealId` records are
+/// exported with their existing [FavoriteItem.id]; export never fabricates or
+/// persists a new domain identity.
 class DataExportBuilder {
   const DataExportBuilder();
 
   static const String formatName = 'EAST Data Export';
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
   static const String _divider = '--------------------------------';
 
   DataExportDocument build({
@@ -51,9 +53,7 @@ class DataExportBuilder {
     required String? journalOwnerName,
     required DateTime exportedAt,
   }) {
-    final identifiable =
-        items.where((item) => item.revealId != null).toList(growable: false);
-    final sorted = _sortedChronologically(identifiable);
+    final sorted = _sortedChronologically(items);
 
     final jsonText = _buildJson(
       sorted: sorted,
@@ -77,8 +77,9 @@ class DataExportBuilder {
 
   /// Oldest → newest by [FavoriteItem.keptAt]. An item with no parseable
   /// `keptAt` sorts after every dated item; ties (including the undated
-  /// group) break deterministically on `revealId` -- never on wisdom text,
-  /// never randomized, never on list-input order.
+  /// group) break deterministically on the occurrence's existing identity --
+  /// `revealId` when present, otherwise its local `id`. Wisdom text and input
+  /// order are never used as identity.
   List<FavoriteItem> _sortedChronologically(List<FavoriteItem> items) {
     final sorted = List<FavoriteItem>.from(items);
     sorted.sort((a, b) {
@@ -86,15 +87,19 @@ class DataExportBuilder {
       final bAt = DateTime.tryParse(b.keptAt ?? '');
       if (aAt != null && bAt != null) {
         final byDate = aAt.compareTo(bAt);
-        return byDate != 0 ? byDate : a.revealId!.compareTo(b.revealId!);
+        return byDate != 0
+            ? byDate
+            : _referenceId(a).compareTo(_referenceId(b));
       }
       if (aAt == null && bAt == null) {
-        return a.revealId!.compareTo(b.revealId!);
+        return _referenceId(a).compareTo(_referenceId(b));
       }
       return aAt == null ? 1 : -1;
     });
     return sorted;
   }
+
+  String _referenceId(FavoriteItem item) => item.revealId ?? item.id;
 
   String _buildJson({
     required List<FavoriteItem> sorted,
@@ -103,6 +108,7 @@ class DataExportBuilder {
   }) {
     final kept = sorted
         .map((item) => {
+              'recordId': item.id,
               'revealId': item.revealId,
               'wisdomText': item.text,
               'keptAt': item.keptAt,
@@ -112,6 +118,7 @@ class DataExportBuilder {
     final reflections = sorted
         .where((item) => item.hasReflection)
         .map((item) => {
+              'recordId': item.id,
               'revealId': item.revealId,
               'reflectionText': item.reflection,
               'reflectedAt': item.reflectedAt,
@@ -161,7 +168,7 @@ class DataExportBuilder {
       // Unobtrusive machine/reference metadata only -- never part of the
       // main prose above.
       buffer.writeln();
-      buffer.writeln('Reference: ${item.revealId}');
+      buffer.writeln('Reference: ${_referenceId(item)}');
       buffer.writeln();
       buffer.writeln(_divider);
     }

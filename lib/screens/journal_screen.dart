@@ -10,6 +10,7 @@ import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/journal_owner_service.dart';
 import '../services/journal_pdf_builder.dart';
+import '../services/purchase_service.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/journal_owner_name_policy.dart';
@@ -42,6 +43,7 @@ class JournalScreen extends StatefulWidget {
     super.key,
     required this.items,
     required this.isKeeper,
+    this.purchaseService,
     this.journalOwnerService,
     this.pdfBuilder,
     this.shareHandler,
@@ -49,6 +51,7 @@ class JournalScreen extends StatefulWidget {
 
   final List<FavoriteItem> items;
   final bool isKeeper;
+  final PurchaseService? purchaseService;
   final JournalOwnerService? journalOwnerService;
   final JournalPdfBuilder? pdfBuilder;
   final JournalShareHandler? shareHandler;
@@ -59,6 +62,7 @@ class JournalScreen extends StatefulWidget {
 
 class _JournalScreenState extends State<JournalScreen> {
   late final JournalOwnerService _ownerService;
+  late final PurchaseService _purchaseService;
   late final JournalPdfBuilder? _injectedPdfBuilder;
 
   _JournalStage _stage = _JournalStage.resolving;
@@ -103,8 +107,9 @@ class _JournalScreenState extends State<JournalScreen> {
   /// existing Keeper paywall (opened from [_handleTakeItWithYou] below)
   /// immediately reflects a fresh purchase without requiring Journal to be
   /// reopened -- mirrors `ReflectionScreen`'s own `_isKeeper` pattern.
-  bool get _isKeeper =>
-      widget.isKeeper || app_services.purchaseService.isKeeper;
+  bool get _isKeeper => _purchaseService.resolveKeeperAccess(
+        unresolvedFallback: widget.isKeeper,
+      );
 
   TextStyle _style(
     double size, {
@@ -125,6 +130,8 @@ class _JournalScreenState extends State<JournalScreen> {
   void initState() {
     super.initState();
     _ownerService = widget.journalOwnerService ?? JournalOwnerService();
+    _purchaseService = widget.purchaseService ?? app_services.purchaseService;
+    _purchaseService.addListener(_onKeeperEntitlementChanged);
     _injectedPdfBuilder = widget.pdfBuilder;
     unawaited(_bootstrap());
   }
@@ -144,8 +151,13 @@ class _JournalScreenState extends State<JournalScreen> {
 
   @override
   void dispose() {
+    _purchaseService.removeListener(_onKeeperEntitlementChanged);
     _nameEditController?.dispose();
     super.dispose();
+  }
+
+  void _onKeeperEntitlementChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _bootstrap() async {

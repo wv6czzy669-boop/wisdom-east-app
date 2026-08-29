@@ -271,7 +271,9 @@ void main() {
       // reflectionLimitExplanation) for the fourth-Reflection decision.
       // Settings/discoverability: +3 keys (quietReminder, shareWisdom,
       // shareWisdomNumbered).
-      expect(expectedKeys, hasLength(158));
+      // Keeper widget guidance: +3 keys (addKeeperWidget,
+      // keeperWidgetInteractive, keeperWidgetOpensApp).
+      expect(expectedKeys, hasLength(161));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');

@@ -803,7 +803,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadKeeperStatus() async {
-    final keeperValue = app_services.purchaseService.isKeeper;
+    final keeperValue = app_services.purchaseService.resolveKeeperAccess();
 
     if (!mounted) return;
 

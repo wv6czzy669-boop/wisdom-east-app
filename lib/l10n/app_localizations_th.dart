@@ -416,6 +416,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get keeperWidgetRitual => 'พิธีกรรม อยู่ในวิดเจ็ตของคุณ.';
 
   @override
+  String get addKeeperWidget => 'เพิ่มวิดเจ็ต Keeper';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'บน iOS 17 หรือใหม่กว่า เริ่มพิธีกรรมได้ภายในวิดเจ็ต';
+
+  @override
+  String get keeperWidgetOpensApp => 'บน iOS 15 และ 16 วิดเจ็ตจะเปิด EAST.';
+
+  @override
   String get keepEastAlive => 'ให้ EAST. ดำเนินต่อไป.';
 
   @override

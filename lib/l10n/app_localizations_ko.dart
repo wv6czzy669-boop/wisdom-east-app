@@ -408,6 +408,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get keeperWidgetRitual => '위젯 안에서도 이어지는 의식.';
 
   @override
+  String get addKeeperWidget => 'Keeper 위젯 추가';
+
+  @override
+  String get keeperWidgetInteractive => 'iOS 17 이상에서는 위젯 안에서 의식을 시작할 수 있습니다.';
+
+  @override
+  String get keeperWidgetOpensApp => 'iOS 15와 16에서는 위젯이 EAST.를 엽니다.';
+
+  @override
   String get keepEastAlive => 'EAST.를 이어 가기.';
 
   @override

@@ -421,6 +421,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get keeperWidgetRitual => 'Nghi thức, ngay trong tiện ích của bạn.';
 
   @override
+  String get addKeeperWidget => 'Thêm tiện ích Keeper';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'Trên iOS 17 trở lên, hãy bắt đầu nghi thức ngay trong tiện ích.';
+
+  @override
+  String get keeperWidgetOpensApp => 'Trên iOS 15 và 16, tiện ích sẽ mở EAST.';
+
+  @override
   String get keepEastAlive => 'Giữ cho EAST. tiếp tục sống.';
 
   @override

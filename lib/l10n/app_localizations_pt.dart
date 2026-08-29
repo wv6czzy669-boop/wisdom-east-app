@@ -422,6 +422,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String get keeperWidgetRitual => 'O ritual, dentro do seu widget.';
 
   @override
+  String get addKeeperWidget => 'Adicionar o widget Keeper';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'No iOS 17 ou posterior, comece o ritual dentro do widget.';
+
+  @override
+  String get keeperWidgetOpensApp => 'No iOS 15 e 16, o widget abre o EAST.';
+
+  @override
   String get keepEastAlive => 'Mantenha EAST. vivo.';
 
   @override
@@ -976,6 +986,16 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get keeperWidgetRitual => 'O ritual, dentro do seu widget.';
+
+  @override
+  String get addKeeperWidget => 'Adicionar o widget Keeper';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'No iOS 17 ou posterior, comece o ritual dentro do widget.';
+
+  @override
+  String get keeperWidgetOpensApp => 'No iOS 15 e 16, o widget abre o EAST.';
 
   @override
   String get keepEastAlive => 'Mantenha EAST. vivo.';

@@ -522,6 +522,15 @@ void main() {
           find.semantics.byLabel('Keeper access active').evaluate().single;
       expect(find.text('Within the Circle'), findsOneWidget);
       expect(find.text('Keeper active'), findsOneWidget);
+      expect(find.text('Add the Keeper Widget'), findsOneWidget);
+      expect(
+        find.text('On iOS 15 and 16, the widget opens EAST.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('keeper-purchase-action'))),
+        const Size(168, 168),
+      );
       expect(
         find.byKey(const ValueKey('keeper-active-status')),
         findsOneWidget,
@@ -538,6 +547,28 @@ void main() {
     } finally {
       semantics.dispose();
     }
+  });
+
+  testWidgets('active Keeper explains the interactive iOS 17 widget',
+      (tester) async {
+    service = _StaticPurchaseService(keeper: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: KeeperScreen(
+          purchaseService: service,
+          supportsInteractiveKeeperWidget: true,
+        ),
+      ),
+    );
+
+    expect(find.text('Add the Keeper Widget'), findsOneWidget);
+    expect(
+      find.text('On iOS 17 or later, begin the ritual in the widget.'),
+      findsOneWidget,
+    );
+    expect(find.text('Keep without limit.'), findsNothing);
+    expect(find.text('Take your Journal with you.'), findsNothing);
   });
 
   testWidgets(
@@ -653,6 +684,10 @@ class _StaticPurchaseService extends PurchaseService {
 
   @override
   bool get isKeeper => keeper;
+
+  @override
+  KeeperEntitlementState get entitlementState =>
+      keeper ? KeeperEntitlementState.keeper : KeeperEntitlementState.free;
 
   @override
   bool get isLoading => loading;

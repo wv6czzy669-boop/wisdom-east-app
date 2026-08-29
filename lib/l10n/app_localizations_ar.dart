@@ -416,6 +416,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get keeperWidgetRitual => 'الطقس، داخل أداتك المصغّرة.';
 
   @override
+  String get addKeeperWidget => 'أضف أداة Keeper';
+
+  @override
+  String get keeperWidgetInteractive =>
+      'في iOS 17 أو أحدث، ابدأ الطقس داخل الأداة.';
+
+  @override
+  String get keeperWidgetOpensApp => 'في iOS 15 و16، تفتح الأداة EAST.';
+
+  @override
   String get keepEastAlive => 'أبقِ EAST. حيًا.';
 
   @override

@@ -120,7 +120,16 @@ class KeeperRitualWidgetCoordinator {
       await _commitProvisionalReveal(provisional);
     }
 
-    final isKeeper = _purchaseService.isKeeper;
+    final entitlement = _purchaseService.entitlementState;
+    if (entitlement == KeeperEntitlementState.unresolved) {
+      // StoreKit has not answered yet. Publishing `false` here would
+      // temporarily downgrade an existing Keeper widget during cold start.
+      // A PurchaseService notification schedules another pass as soon as the
+      // authoritative state resolves.
+      return;
+    }
+
+    final isKeeper = entitlement == KeeperEntitlementState.keeper;
     await _widgetService.setKeeperEntitlement(isKeeper);
     if (!isKeeper || _disposed) return;
 

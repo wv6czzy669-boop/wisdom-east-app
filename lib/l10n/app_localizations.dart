@@ -882,6 +882,24 @@ abstract class AppLocalizations {
   /// **'The ritual, within your widget.'**
   String get keeperWidgetRitual;
 
+  /// No description provided for @addKeeperWidget.
+  ///
+  /// In en, this message translates to:
+  /// **'Add the Keeper Widget'**
+  String get addKeeperWidget;
+
+  /// No description provided for @keeperWidgetInteractive.
+  ///
+  /// In en, this message translates to:
+  /// **'On iOS 17 or later, begin the ritual in the widget.'**
+  String get keeperWidgetInteractive;
+
+  /// No description provided for @keeperWidgetOpensApp.
+  ///
+  /// In en, this message translates to:
+  /// **'On iOS 15 and 16, the widget opens EAST.'**
+  String get keeperWidgetOpensApp;
+
   /// No description provided for @keepEastAlive.
   ///
   /// In en, this message translates to:

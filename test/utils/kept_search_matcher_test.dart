@@ -32,6 +32,39 @@ void main() {
     );
   });
 
+  test('optional editorial date corpus participates in matching', () {
+    expect(
+      KeptSearchMatcher.matches(
+        wisdom: 'Still water',
+        reflection: null,
+        query: 'August 2026',
+        additionalText: 'August 28, 2026 AUGUST 2026',
+      ),
+      isTrue,
+    );
+  });
+
+  test('numeric date terms do not match a partial year', () {
+    expect(
+      KeptSearchMatcher.matches(
+        wisdom: 'Still water',
+        reflection: null,
+        query: 'July 20',
+        additionalText: 'July 21, 2026 JULY 2026 21 7 2026',
+      ),
+      isFalse,
+    );
+    expect(
+      KeptSearchMatcher.matches(
+        wisdom: 'Still water',
+        reflection: null,
+        query: 'July 20',
+        additionalText: 'July 20, 2026 JULY 2026 20 7 2026',
+      ),
+      isTrue,
+    );
+  });
+
   test('folds Turkish I and representative product-locale diacritics', () {
     expect(KeptSearchMatcher.normalize('İÇİMDE IŞIK'), 'icimde isik');
     expect(

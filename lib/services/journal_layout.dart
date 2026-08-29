@@ -353,12 +353,8 @@ class JournalLayoutPlanner {
   }
 
   List<FavoriteItem> _orderedOldestFirst(List<FavoriteItem> items) {
-    final withRevealId = items
-        .asMap()
-        .entries
-        .where((entry) => entry.value.revealId != null)
-        .toList(growable: false);
-    withRevealId.sort((a, b) {
+    final indexed = items.asMap().entries.toList(growable: false);
+    indexed.sort((a, b) {
       final aKeptAt = _parseKeptAt(a.value);
       final bKeptAt = _parseKeptAt(b.value);
       if (aKeptAt != null && bKeptAt != null) {
@@ -370,10 +366,12 @@ class JournalLayoutPlanner {
       final byOriginalOrder = a.key.compareTo(b.key);
       return byOriginalOrder != 0
           ? byOriginalOrder
-          : a.value.revealId!.compareTo(b.value.revealId!);
+          : _referenceId(a.value).compareTo(_referenceId(b.value));
     });
-    return withRevealId.map((entry) => entry.value).toList(growable: false);
+    return indexed.map((entry) => entry.value).toList(growable: false);
   }
+
+  String _referenceId(FavoriteItem item) => item.revealId ?? item.id;
 
   DateTime? _parseKeptAt(FavoriteItem item) {
     final raw = item.keptAt;

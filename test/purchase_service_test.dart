@@ -498,6 +498,8 @@ void main() {
 
     expect(service.isInitialized, isTrue);
     expect(service.isKeeper, isTrue);
+    expect(service.entitlementState, KeeperEntitlementState.unresolved);
+    expect(service.resolveKeeperAccess(), isTrue);
   });
 
   test('hung verification cannot stall the purchase stream event tail',
@@ -540,6 +542,7 @@ void main() {
     await service.init();
 
     expect(service.isKeeper, isTrue);
+    expect(service.entitlementState, KeeperEntitlementState.keeper);
     expect(service.keeperProduct, isNull);
     expect(service.status, PurchaseServiceStatus.failed);
   });
@@ -553,6 +556,8 @@ void main() {
     await service.init();
 
     expect(service.isKeeper, isTrue);
+    expect(service.entitlementState, KeeperEntitlementState.unresolved);
+    expect(service.resolveKeeperAccess(), isTrue);
   });
 
   test('verified missing entitlement clears a stale Keeper cache', () async {
@@ -563,6 +568,11 @@ void main() {
     await service.init();
 
     expect(service.isKeeper, isFalse);
+    expect(service.entitlementState, KeeperEntitlementState.free);
+    expect(
+      service.resolveKeeperAccess(unresolvedFallback: true),
+      isFalse,
+    );
     expect(
       (await SharedPreferences.getInstance()).containsKey('is_premium'),
       isFalse,
@@ -573,11 +583,13 @@ void main() {
     nativeEntitled = true;
     await service.reconcileKeeperEntitlement();
     expect(service.isKeeper, isTrue);
+    expect(service.entitlementState, KeeperEntitlementState.keeper);
 
     nativeEntitled = false;
     await service.reconcileKeeperEntitlement();
 
     expect(service.isKeeper, isFalse);
+    expect(service.entitlementState, KeeperEntitlementState.free);
   });
 
   test('wrong-type persisted Keeper preference fails closed', () async {

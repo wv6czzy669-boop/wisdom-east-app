@@ -181,6 +181,17 @@ void main() {
     expect(await graph.repository.loadPendingDailyWisdomReveal(), isNull);
   });
 
+  test('unresolved StoreKit never publishes a temporary Free widget', () async {
+    purchase.resolved = false;
+
+    await coordinator.reconcileBeforeHome();
+
+    expect(widgetService.entitlements, isEmpty);
+    expect(widgetService.prepared, isEmpty);
+    expect(widgetService.active, isEmpty);
+    expect(await graph.repository.loadPendingDailyWisdomReveal(), isNull);
+  });
+
   test('locale and appearance republish presentation, not identity', () async {
     await coordinator.reconcileBeforeHome();
     final first = widgetService.prepared.single;
@@ -234,9 +245,17 @@ class _TestPurchaseService extends PurchaseService {
   _TestPurchaseService({required this.keeper});
 
   bool keeper;
+  bool resolved = true;
 
   @override
   bool get isKeeper => keeper;
+
+  @override
+  KeeperEntitlementState get entitlementState => !resolved
+      ? KeeperEntitlementState.unresolved
+      : keeper
+          ? KeeperEntitlementState.keeper
+          : KeeperEntitlementState.free;
 }
 
 class _RecordingKeeperWidgetService implements KeeperRitualWidgetService {

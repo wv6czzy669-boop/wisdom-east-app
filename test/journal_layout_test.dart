@@ -84,7 +84,7 @@ void main() {
       expect(ordered, ['a', 'm', 'z']);
     });
 
-    test('items without a revealId are excluded entirely', () {
+    test('legacy items without revealId remain in the Journal', () {
       const planner = JournalLayoutPlanner();
       final items = [
         item(
@@ -95,7 +95,7 @@ void main() {
         ),
         FavoriteItem(
           id: 'no-reveal',
-          text: 'Excluded (legacy, no revealId)',
+          text: 'Included legacy item with no revealId',
           date: 'display date',
           keptAt: now.subtract(const Duration(days: 5)).toIso8601String(),
         ),
@@ -104,7 +104,33 @@ void main() {
       final groups = planner.plan(items, font: font);
       final ids = groups.expand((g) => g.entries).map((e) => e.id).toList();
 
-      expect(ids, ['has-reveal']);
+      expect(ids, ['has-reveal', 'no-reveal']);
+    });
+
+    test('duplicate legacy wisdom text remains two independent entries', () {
+      const planner = JournalLayoutPlanner();
+      final groups = planner.plan(
+        [
+          FavoriteItem(
+            id: 'legacy-a',
+            text: 'The same legacy wisdom twice.',
+            date: 'display date',
+            keptAt: now.subtract(const Duration(days: 2)).toIso8601String(),
+          ),
+          FavoriteItem(
+            id: 'legacy-b',
+            text: 'The same legacy wisdom twice.',
+            date: 'display date',
+            keptAt: now.subtract(const Duration(days: 1)).toIso8601String(),
+          ),
+        ],
+        font: font,
+      );
+
+      expect(
+        groups.expand((group) => group.entries).map((entry) => entry.id),
+        ['legacy-a', 'legacy-b'],
+      );
     });
 
     test(
