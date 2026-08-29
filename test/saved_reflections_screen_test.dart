@@ -1,4 +1,4 @@
-import 'dart:ui' show SemanticsAction;
+import 'dart:ui' show Rect, SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +12,7 @@ import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/screens/reflection_screen.dart';
 import 'package:wisdom_app/screens/saved_reflections_screen.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/services/wisdom_share_service.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
@@ -155,6 +156,79 @@ void main() {
     final oldestY = tester.getTopLeft(find.text(oldest.text)).dy;
     expect(newestY, lessThan(middleY));
     expect(middleY, lessThan(oldestY));
+  });
+
+  testWidgets(
+      'a legacy Kept record without wisdomId remains shareable by long press '
+      'using its persisted snapshot', (tester) async {
+    const legacy = FavoriteItem(
+      id: 'legacy-kept-item',
+      text: 'What was kept before still travels with you.',
+      date: 'July 1, 2024',
+    );
+    final shareService = _RecordingWisdomShareService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: const [legacy],
+          savedReflectionsService: service,
+          wisdomShareService: shareService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('kept-legacy-kept-item-share-action')),
+      findsNothing,
+    );
+    await tester.longPress(
+      find.byKey(const ValueKey('kept-legacy-kept-item-wisdom-action')),
+    );
+    await tester.pump();
+
+    expect(shareService.calls, 1);
+    expect(
+      shareService.wisdoms.single,
+      'What was kept before still travels with you.',
+    );
+    expect(shareService.origins.single.width, greaterThan(0));
+    expect(shareService.origins.single.height, greaterThan(0));
+  });
+
+  testWidgets(
+      'resting Kept rows stay compact and expose no permanent share line',
+      (tester) async {
+    final item = await keep(
+      service,
+      text: 'A compact editorial row',
+      date: DateTime.utc(2026, 7, 23),
+    );
+    await service.saveReflection(
+      itemId: item.id,
+      reflection: 'Already reflected.',
+      isKeeper: true,
+    );
+    final reflected = (await service.load()).single;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SavedReflectionsScreen(
+          reflections: [reflected],
+          savedReflectionsService: service,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final row = find.byKey(ValueKey('kept-${item.id}'));
+    expect(tester.getSize(row).height, lessThan(130));
+    expect(find.text('Share').hitTestable(), findsNothing);
+
+    final semantics = tester.ensureSemantics();
+    expect(find.semantics.byLabel('Share wisdom, item 1'), findsNothing);
+    semantics.dispose();
   });
 
   testWidgets(
@@ -535,8 +609,7 @@ void main() {
     expect((await service.load()).single.hasReflection, isFalse);
   });
 
-  testWidgets(
-      'free fourth reflection opens the calm Keeper experience after three active reflections',
+  testWidgets('free fourth reflection explains the limit before opening Keeper',
       (tester) async {
     final first = await keep(
       service,
@@ -585,6 +658,22 @@ void main() {
     );
 
     await tester.tap(find.text('ADD REFLECTION'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('reflection-limit-decision')),
+        findsOneWidget);
+    expect(find.text('Keep reflecting?'), findsOneWidget);
+    expect(find.text('Keeper'), findsNothing);
+
+    await tester.tap(find.text('CANCEL'));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('reflection-limit-decision')), findsNothing);
+    expect(find.text('Keeper'), findsNothing);
+
+    await tester.tap(find.text('ADD REFLECTION'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BECOME A KEEPER'));
     await tester.pumpAndSettle();
 
     expect(find.text('Keeper'), findsOneWidget);
@@ -1447,4 +1536,20 @@ void main() {
       expect(find.text('Journal'), findsOneWidget);
     });
   });
+}
+
+class _RecordingWisdomShareService implements WisdomShareHandler {
+  int calls = 0;
+  final List<String> wisdoms = [];
+  final List<Rect> origins = [];
+
+  @override
+  Future<void> shareWisdom({
+    required String wisdom,
+    required Rect sharePositionOrigin,
+  }) async {
+    calls += 1;
+    wisdoms.add(wisdom);
+    origins.add(sharePositionOrigin);
+  }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../utils/canonical_uuid.dart';
+import '../utils/reflection_text_policy.dart';
 import '../data/wisdoms.dart';
 
 class FavoriteItem {
@@ -153,7 +154,8 @@ class FavoriteItem {
         date.trim().isEmpty ||
         text.trim().isEmpty ||
         (reflection != null && normalizedReflection!.isEmpty) ||
-        (normalizedReflection != null && normalizedReflection.length > 250)) {
+        (normalizedReflection != null &&
+            ReflectionTextPolicy.exceedsMaximum(normalizedReflection))) {
       throw const FormatException('Invalid saved reflection.');
     }
 

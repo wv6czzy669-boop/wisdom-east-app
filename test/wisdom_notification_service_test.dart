@@ -255,6 +255,100 @@ void main() {
     expect(await service.shouldOfferPermission(), isFalse);
   });
 
+  test('authorized existing users default Quiet Reminder to enabled', () async {
+    expect(
+      await service.quietReminderStatus(),
+      QuietReminderStatus.enabled,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.containsKey(WisdomNotificationService.quietReminderEnabledKey),
+      isFalse,
+    );
+  });
+
+  test('disabling Quiet Reminder persists the choice and cancels scheduling',
+      () async {
+    expect(await service.setQuietReminderEnabled(false), isTrue);
+    expect(
+      await service.quietReminderStatus(),
+      QuietReminderStatus.disabled,
+    );
+
+    final unlockAt = now.add(const Duration(hours: 24));
+    await service.scheduleFromAuthoritativeUnlock(unlockAt);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(WisdomNotificationService.quietReminderEnabledKey),
+      isFalse,
+    );
+    expect(platform.schedules, isEmpty);
+    expect(
+      platform.events,
+      everyElement(
+        'cancel:${WisdomNotificationService.unlockNotificationId}',
+      ),
+    );
+  });
+
+  test('re-enabling reconciles the exact authoritative locked status',
+      () async {
+    await service.setQuietReminderEnabled(false);
+    platform.events.clear();
+    final unlockAt = now.add(const Duration(hours: 9));
+
+    expect(
+      await service.setQuietReminderEnabled(
+        true,
+        status: DailyWisdomStatus(
+          isReady: false,
+          unlockAt: unlockAt,
+          remaining: const Duration(hours: 9),
+        ),
+      ),
+      isTrue,
+    );
+
+    expect(await service.quietReminderStatus(), QuietReminderStatus.enabled);
+    expect(platform.permissionRequests, 0);
+    expect(platform.schedules.single.unlockAt, unlockAt);
+  });
+
+  test('first enable requests native permission once and reconciles status',
+      () async {
+    platform.enabled = false;
+    platform.permissionResult = true;
+    final unlockAt = now.add(const Duration(hours: 3));
+
+    expect(
+      await service.setQuietReminderEnabled(
+        true,
+        status: DailyWisdomStatus(
+          isReady: false,
+          unlockAt: unlockAt,
+          remaining: const Duration(hours: 3),
+        ),
+      ),
+      isTrue,
+    );
+
+    expect(platform.permissionRequests, 1);
+    expect(platform.schedules.single.unlockAt, unlockAt);
+    expect(await service.quietReminderStatus(), QuietReminderStatus.enabled);
+  });
+
+  test('denied Quiet Reminder stays denied without requesting again', () async {
+    platform.enabled = false;
+    await service.dismissPermissionOffer();
+
+    expect(await service.quietReminderStatus(), QuietReminderStatus.denied);
+    expect(await service.setQuietReminderEnabled(true), isFalse);
+    expect(platform.permissionRequests, 0);
+    expect(platform.schedules, isEmpty);
+  });
+
   test('scheduling failure is contained', () async {
     platform.scheduleError = StateError('native scheduling failed');
 

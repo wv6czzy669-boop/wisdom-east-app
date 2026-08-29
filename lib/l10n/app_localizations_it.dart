@@ -119,6 +119,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get retry => 'Riprova';
 
   @override
+  String get tryAgainUpper => 'RIPROVA';
+
+  @override
   String get skip => 'Salta';
 
   @override
@@ -206,6 +209,13 @@ class AppLocalizationsIt extends AppLocalizations {
       'La versione gratuita consente di conservare fino a 3 saggezze.';
 
   @override
+  String get keepReflectingQuestion => 'Continuare a riflettere?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'Sono incluse tre Riflessioni. Keeper apre uno spazio illimitato per ciò che resta.';
+
+  @override
   String get becomeKeeper => 'ATTIVA CUSTODIRE';
 
   @override
@@ -234,6 +244,15 @@ class AppLocalizationsIt extends AppLocalizations {
   String get enterTheCircle => 'Entra nel cerchio.';
 
   @override
+  String get withinTheCircle => 'Nel cerchio.';
+
+  @override
+  String get keeperActive => 'Keeper attivo';
+
+  @override
+  String get oneTimePurchase => 'Acquisto una tantum';
+
+  @override
   String get askFrom => 'Chiedi con';
 
   @override
@@ -242,6 +261,17 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get longPressToShareWisdom =>
       'Tieni premuto per condividere questa saggezza.';
+
+  @override
+  String get shareWisdom => 'Condividi';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'Condividi saggezza, elemento $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'Promemoria discreto';
 
   @override
   String get nothingHasStayedYet => 'Non è ancora rimasto nulla.';
@@ -389,6 +419,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'Porta con te il tuo Diario.';
+
+  @override
+  String get keeperWidgetRitual => 'Il rituale, nel tuo widget.';
 
   @override
   String get keepEastAlive => 'Mantieni vivo EAST.';

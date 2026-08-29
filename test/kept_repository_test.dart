@@ -934,6 +934,30 @@ void main() {
         ),
         throwsA(isA<KeptRepositoryException>()),
       );
+
+      final emojiAtLimit = List.filled(
+        KeptRecord.maximumReflectionLength,
+        '👨‍👩‍👧‍👦',
+      ).join();
+      final emojiResult = await repository.saveReflection(
+        itemId: id,
+        reflection: emojiAtLimit,
+        isKeeper: true,
+      );
+      expect(emojiResult.items.single.reflection, emojiAtLimit);
+
+      final emojiOverLimit = List.filled(
+        KeptRecord.maximumReflectionLength + 1,
+        '👨‍👩‍👧‍👦',
+      ).join();
+      await expectLater(
+        repository.saveReflection(
+          itemId: id,
+          reflection: emojiOverLimit,
+          isKeeper: true,
+        ),
+        throwsA(isA<KeptRepositoryException>()),
+      );
     });
   });
 

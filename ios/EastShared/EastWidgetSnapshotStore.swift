@@ -28,13 +28,13 @@ enum EastWidgetState: Equatable {
 /// same thing: "no explicit EAST. override -- follow the extension's own
 /// current system value," resolved live wherever this is rendered, never
 /// frozen at publish time.
-enum EastWidgetAppearanceMode: String, Equatable {
+enum EastWidgetAppearanceMode: String, Equatable, Codable {
     case system
     case light
     case dark
 }
 
-struct EastWidgetPresentation: Equatable {
+struct EastWidgetPresentation: Equatable, Codable {
     let appearanceMode: EastWidgetAppearanceMode
     let localeOverrideTag: String?
 

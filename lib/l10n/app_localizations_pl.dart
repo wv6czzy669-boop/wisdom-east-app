@@ -119,6 +119,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get retry => 'Spróbuj ponownie';
 
   @override
+  String get tryAgainUpper => 'SPRÓBUJ PONOWNIE';
+
+  @override
   String get skip => 'Pomiń';
 
   @override
@@ -206,6 +209,13 @@ class AppLocalizationsPl extends AppLocalizations {
       'W wersji bezpłatnej można zachować do 3 mądrości.';
 
   @override
+  String get keepReflectingQuestion => 'Kontynuować refleksję?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'W cenie są trzy Refleksje. Keeper otwiera nieograniczoną przestrzeń na to, co pozostaje.';
+
+  @override
   String get becomeKeeper => 'WŁĄCZ ZACHOWAĆ';
 
   @override
@@ -234,6 +244,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String get enterTheCircle => 'Wejdź do kręgu.';
 
   @override
+  String get withinTheCircle => 'Wewnątrz kręgu.';
+
+  @override
+  String get keeperActive => 'Keeper aktywny';
+
+  @override
+  String get oneTimePurchase => 'Zakup jednorazowy';
+
+  @override
   String get askFrom => 'Zapytaj prosto';
 
   @override
@@ -242,6 +261,17 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get longPressToShareWisdom =>
       'Przytrzymaj, aby udostępnić tę mądrość.';
+
+  @override
+  String get shareWisdom => 'Udostępnij';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'Udostępnij mądrość, element $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'Ciche przypomnienie';
 
   @override
   String get nothingHasStayedYet => 'Nic jeszcze nie zostało.';
@@ -386,6 +416,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'Zabierz swój Dziennik ze sobą.';
+
+  @override
+  String get keeperWidgetRitual => 'Rytuał, w Twoim widżecie.';
 
   @override
   String get keepEastAlive => 'Niech EAST. trwa.';

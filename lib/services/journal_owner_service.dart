@@ -1,6 +1,7 @@
 import '../persistence/journal_owner_store.dart';
 import '../persistence/persistence_operation_coordinator.dart';
 import '../persistence/storage_preferences_adapter.dart';
+import '../utils/journal_owner_name_policy.dart';
 
 /// EAST. Phase 10 — Journal's own device-local "whose journal is this"
 /// preference.
@@ -38,7 +39,7 @@ class JournalOwnerService {
           final protectedName = await _ownerStore.loadName();
           if (protectedName != null) {
             await _removeLegacyNameBestEffort();
-            return protectedName;
+            return JournalOwnerNamePolicy.normalize(protectedName);
           }
         } catch (_) {
           // Fall through to the legacy value. A protected-store outage must
@@ -56,7 +57,7 @@ class JournalOwnerService {
           // Keep and return the legacy value until a later load can migrate
           // it safely. Never delete the only durable copy first.
         }
-        return legacy;
+        return JournalOwnerNamePolicy.normalize(legacy);
       },
     );
   }
@@ -79,13 +80,14 @@ class JournalOwnerService {
   /// only: a persistence failure here never blocks or fails Journal
   /// generation itself.
   Future<void> saveName(String name) async {
-    final trimmed = name.trim();
+    final normalized = JournalOwnerNamePolicy.normalize(name);
     try {
       await _operationCoordinator.runExclusive<void>(
         resourceKey: _resourceKey,
         operation: () async {
-          await _ownerStore.writeName(trimmed.isEmpty ? null : trimmed);
-          if (trimmed.isEmpty || await _ownerStore.loadName() == trimmed) {
+          await _ownerStore.writeName(normalized);
+          if (normalized == null ||
+              await _ownerStore.loadName() == normalized) {
             await _removeLegacyNameBestEffort();
           }
         },
@@ -126,8 +128,7 @@ class JournalOwnerService {
   Future<String?> _loadLegacyNameBestEffort() async {
     try {
       final raw = await _preferencesAdapter.getString(nameKey);
-      final trimmed = raw?.trim();
-      return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+      return JournalOwnerNamePolicy.normalize(raw);
     } catch (_) {
       return null;
     }

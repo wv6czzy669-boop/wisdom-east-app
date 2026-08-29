@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
@@ -12,11 +12,12 @@ import '../services/journal_owner_service.dart';
 import '../services/journal_pdf_builder.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
+import '../utils/journal_owner_name_policy.dart';
 import '../widgets/east_back_button.dart';
 import '../widgets/journal_pdf_reader.dart';
 import 'keeper_screen.dart';
 
-enum _JournalStage { resolving, namePrompt, generating, preview, error }
+enum _JournalStage { resolving, generating, preview, error }
 
 /// Injection point for the native export action ("Take it with you" for a
 /// Keeper) -- defaults to [Printing.sharePdf]. Exposed for tests only,
@@ -59,11 +60,11 @@ class JournalScreen extends StatefulWidget {
 class _JournalScreenState extends State<JournalScreen> {
   late final JournalOwnerService _ownerService;
   late final JournalPdfBuilder? _injectedPdfBuilder;
-  late final TextEditingController _nameController;
 
   _JournalStage _stage = _JournalStage.resolving;
   String? _ownerName;
   Uint8List? _pdfBytes;
+  JournalPdfAccessibility? _pdfAccessibility;
 
   // Real-device repair: the Journal preview must never blank/flash on a
   // regeneration that has a prior good publication to keep showing (Name
@@ -94,8 +95,7 @@ class _JournalScreenState extends State<JournalScreen> {
   // decision takeover (same visual system as Reflection's Delete
   // Reflection screen) rather than a rounded AlertDialog. `_nameEditController`
   // is created fresh each time the overlay opens and disposed when it
-  // closes -- never shared with `_nameController` (the separate, first-run
-  // name-prompt field), and never left alive once dismissed.
+  // closes and is never left alive once dismissed.
   bool _editingName = false;
   TextEditingController? _nameEditController;
 
@@ -126,7 +126,6 @@ class _JournalScreenState extends State<JournalScreen> {
     super.initState();
     _ownerService = widget.journalOwnerService ?? JournalOwnerService();
     _injectedPdfBuilder = widget.pdfBuilder;
-    _nameController = TextEditingController();
     unawaited(_bootstrap());
   }
 
@@ -145,22 +144,14 @@ class _JournalScreenState extends State<JournalScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     _nameEditController?.dispose();
     super.dispose();
   }
 
   Future<void> _bootstrap() async {
     if (widget.items.isEmpty) {
-      // Empty state is handled entirely by `build()` below -- no name
-      // prompt, no generation attempt for a meaningless empty PDF.
-      return;
-    }
-
-    final handled = await _ownerService.hasHandledNamePrompt();
-    if (!mounted) return;
-    if (!handled) {
-      setState(() => _stage = _JournalStage.namePrompt);
+      // Empty state is handled entirely by `build()` below -- no generation
+      // attempt for a meaningless empty PDF.
       return;
     }
 
@@ -183,7 +174,7 @@ class _JournalScreenState extends State<JournalScreen> {
       setState(() => _stage = _JournalStage.generating);
     }
 
-    final Uint8List bytes;
+    final JournalPdfPublication publication;
     try {
       final locale = Localizations.localeOf(context);
       final pdfBuilder = _injectedPdfBuilder ??
@@ -194,7 +185,7 @@ class _JournalScreenState extends State<JournalScreen> {
               brightness: brightness,
             ),
           );
-      bytes = await pdfBuilder.build(
+      publication = await pdfBuilder.buildPublication(
         items: widget.items,
         ownerName: _ownerName,
       );
@@ -219,32 +210,18 @@ class _JournalScreenState extends State<JournalScreen> {
       return;
     }
     setState(() {
-      _pdfBytes = bytes;
-      _previewBuild = (format) async => bytes;
+      _pdfBytes = publication.bytes;
+      _pdfAccessibility = publication.accessibility;
+      _previewBuild = (format) async => publication.bytes;
       _generatedBrightness = brightness;
       _brightnessGenerationInFlight = null;
       _stage = _JournalStage.preview;
     });
   }
 
-  Future<void> _continueFromNamePrompt() async {
-    final entered = _nameController.text.trim();
-    if (entered.isEmpty) {
-      await _ownerService.skip();
-      _ownerName = null;
-    } else {
-      await _ownerService.saveName(entered);
-      _ownerName = entered;
-    }
-    if (!mounted) return;
-    await _generate();
-  }
-
-  Future<void> _skipNamePrompt() async {
-    await _ownerService.skip();
-    _ownerName = null;
-    if (!mounted) return;
-    await _generate();
+  void _retryGeneration() {
+    if (_stage != _JournalStage.error) return;
+    unawaited(_generate());
   }
 
   /// A quiet, non-settings-screen way to add/change/remove the owner name
@@ -267,8 +244,8 @@ class _JournalScreenState extends State<JournalScreen> {
   }
 
   Future<void> _saveNameEdit() async {
-    final entered = _nameEditController?.text.trim() ?? '';
-    final nextName = entered.isEmpty ? null : entered;
+    final nextName =
+        JournalOwnerNamePolicy.normalize(_nameEditController?.text);
     // An unchanged name (including "still empty") must not regenerate the
     // publication at all -- only a genuine change to the owner name is
     // publication-affecting.
@@ -423,6 +400,11 @@ class _JournalScreenState extends State<JournalScreen> {
                       key: const ValueKey('journal-name-edit-field'),
                       controller: controller,
                       autofocus: true,
+                      inputFormatters: [
+                        LengthLimitingTextInputFormatter(
+                          JournalOwnerNamePolicy.maximumGraphemeLength,
+                        ),
+                      ],
                       textAlign: TextAlign.center,
                       style: _style(26),
                       cursorColor: EastColors.of(context).ink,
@@ -486,10 +468,7 @@ class _JournalScreenState extends State<JournalScreen> {
       // which reflows *everything* inside it -- both the overlay (see
       // `_nameDecisionOverlay`) and the underlying preview/gate content
       // behind the scrim. Disabling the automatic resize keeps every layer
-      // of this screen at a constant height regardless of keyboard state;
-      // the one flow that genuinely wants keyboard-avoidance (the
-      // first-run name prompt) now does it itself, explicitly, in
-      // `_buildNamePrompt`.
+      // of this screen at a constant height regardless of keyboard state.
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: EastColors.of(context).background,
@@ -554,20 +533,51 @@ class _JournalScreenState extends State<JournalScreen> {
 
     switch (_stage) {
       case _JournalStage.resolving:
-        // Near-instantaneous (a single local preferences read) -- kept
-        // blank rather than pre-committing to either the name-prompt or
-        // preview shape, so a first-run user never sees a shape swap that
-        // was never going to be theirs.
+        // Near-instantaneous protected local read. Journal never waits for
+        // an optional-name decision before it starts preparing.
         return const SizedBox.shrink();
-      case _JournalStage.namePrompt:
-        return _buildNamePrompt();
       case _JournalStage.error:
         return Center(
-          child: Text(
-            eastLocalizations(context).journalCouldNotBePrepared,
-            key: const ValueKey('journal-error-state'),
-            textAlign: TextAlign.center,
-            style: _style(19, color: eastMutedTextColor(context)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              key: const ValueKey('journal-error-state'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  eastLocalizations(context).journalCouldNotBePrepared,
+                  textAlign: TextAlign.center,
+                  style: _style(19, color: eastMutedTextColor(context)),
+                ),
+                const SizedBox(height: 30),
+                Semantics(
+                  button: true,
+                  label: eastLocalizations(context).retry,
+                  onTap: _retryGeneration,
+                  child: ExcludeSemantics(
+                    child: GestureDetector(
+                      key: const ValueKey('journal-retry-action'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _retryGeneration,
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        child: Center(
+                          child: Text(
+                            eastLocalizations(context).tryAgainUpper,
+                            style: _style(
+                              11,
+                              color: EastColors.of(context).ink,
+                              letterSpacing: 3.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       case _JournalStage.generating:
@@ -601,10 +611,13 @@ class _JournalScreenState extends State<JournalScreen> {
   // stays painted until the new one finishes decoding, instead of the
   // `Image` widget clearing to nothing in between.
   Widget _pagesBuilder(BuildContext context, List<PdfPreviewPageData> pages) {
+    final accessibility = _pdfAccessibility;
+    if (accessibility == null) return const SizedBox.shrink();
     return JournalPdfReader(
       key: const ValueKey('journal-pdf-reader'),
       pages: pages,
       journalLabel: eastLocalizations(context).journal,
+      accessibility: accessibility,
     );
   }
 
@@ -744,85 +757,6 @@ class _JournalScreenState extends State<JournalScreen> {
           ),
         ],
       ],
-    );
-  }
-
-  Widget _buildNamePrompt() {
-    return SingleChildScrollView(
-      // Real-device repair: with the Scaffold's own automatic resize now
-      // disabled (see `build`), this is the one Journal flow that still
-      // wants ordinary keyboard-avoidance -- so it does it itself here,
-      // explicitly, exactly like `ReflectionScreen`'s writing area already
-      // does.
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        32 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            eastLocalizations(context).whoseJournal,
-            style: _style(24),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            eastLocalizations(context).onlyKeptOnThisDevice,
-            style: _style(16, color: eastMutedTextColor(context)),
-          ),
-          const SizedBox(height: 34),
-          // See ReflectionScreen's writing area for why `MergeSemantics` is
-          // used: it keeps the TextField's own native text-input semantics
-          // (value, editing actions) while adding a stable accessible name
-          // that survives the hint disappearing once a value is entered.
-          MergeSemantics(
-            child: Semantics(
-              label: eastLocalizations(context).yourName,
-              child: TextField(
-                key: const ValueKey('journal-name-field'),
-                controller: _nameController,
-                autofocus: false,
-                style: _style(20),
-                cursorColor: EastColors.of(context).ink,
-                decoration: InputDecoration(
-                  hintText: eastLocalizations(context).yourName,
-                  hintStyle: _style(20, color: EastColors.of(context).hint),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                        color: eastMutedTextColor(context), width: 0.5),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                        color: eastMutedTextColor(context), width: 0.5),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 34),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                key: const ValueKey('journal-name-skip'),
-                onPressed: () => unawaited(_skipNamePrompt()),
-                child: Text(eastLocalizations(context).skip, style: _style(17)),
-              ),
-              const SizedBox(width: 14),
-              TextButton(
-                key: const ValueKey('journal-name-continue'),
-                onPressed: () => unawaited(_continueFromNamePrompt()),
-                child: Text(
-                  eastLocalizations(context).continueAction,
-                  style: _style(17, color: eastMutedTextColor(context)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

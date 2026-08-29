@@ -119,6 +119,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get retry => 'إعادة المحاولة';
 
   @override
+  String get tryAgainUpper => 'إعادة المحاولة';
+
+  @override
   String get skip => 'تخطي';
 
   @override
@@ -206,6 +209,13 @@ class AppLocalizationsAr extends AppLocalizations {
       'يمكن للمستخدمين المجانيين الاحتفاظ بما يصل إلى 3 حِكَم.';
 
   @override
+  String get keepReflectingQuestion => 'هل تواصل التأمّل؟';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'تتضمن النسخة ثلاث تأملات. يفتح Keeper مساحة غير محدودة لما يبقى.';
+
+  @override
   String get becomeKeeper => 'فعّل «احتفظ»';
 
   @override
@@ -234,6 +244,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get enterTheCircle => 'ادخل الدائرة.';
 
   @override
+  String get withinTheCircle => 'داخل الدائرة.';
+
+  @override
+  String get keeperActive => 'الحافظ مفعّل';
+
+  @override
+  String get oneTimePurchase => 'شراء لمرة واحدة';
+
+  @override
   String get askFrom => 'اسأل';
 
   @override
@@ -241,6 +260,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get longPressToShareWisdom => 'اضغط مطولًا لمشاركة هذه الحكمة.';
+
+  @override
+  String get shareWisdom => 'مشاركة';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'مشاركة الحكمة، العنصر $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'تذكير هادئ';
 
   @override
   String get nothingHasStayedYet => 'لم يبقَ شيء بعد.';
@@ -381,6 +411,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'خذ دفتر يومياتك معك.';
+
+  @override
+  String get keeperWidgetRitual => 'الطقس، داخل أداتك المصغّرة.';
 
   @override
   String get keepEastAlive => 'أبقِ EAST. حيًا.';

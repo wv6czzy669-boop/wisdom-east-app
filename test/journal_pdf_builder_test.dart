@@ -89,6 +89,54 @@ void main() {
     expect(JournalPdfBuilder.headerYear(DateTime.utc(2031, 1, 1)), '2031');
   });
 
+  test('publication carries readable page content beside the raster PDF',
+      () async {
+    final publication = await JournalPdfBuilder().buildPublication(
+      items: [
+        item(
+          id: 'spoken',
+          revealId: 'r-spoken',
+          text: 'Listen to what stays.',
+          keptAt: now,
+          reflection: 'A complete Reflection 👨‍👩‍👧‍👦',
+        ),
+      ],
+      ownerName: 'A Reader',
+      now: now,
+      compress: false,
+    );
+
+    expect(publication.bytes, isNotEmpty);
+    expect(publication.accessibility.coverLabel, 'EAST.');
+    expect(publication.accessibility.titlePageLabel, contains('A Reader'));
+    expect(
+      publication.accessibility.bodyPageLabels.single,
+      contains('Listen to what stays.'),
+    );
+    expect(
+      publication.accessibility.bodyPageLabels.single,
+      contains('A complete Reflection 👨‍👩‍👧‍👦'),
+      reason: 'VoiceOver receives the original grapheme, not PDF glyph '
+          'normalization output.',
+    );
+  });
+
+  test('oversized body content never leaves a continuation page silent', () {
+    const accessibility = JournalPdfAccessibility(
+      coverLabel: 'cover',
+      titlePageLabel: 'title',
+      bodyPageLabels: ['first entry', 'second entry'],
+      closingPageLabel: 'closing',
+    );
+
+    expect(accessibility.contentForPage(0, 6), 'cover');
+    expect(accessibility.contentForPage(1, 6), 'title');
+    expect(accessibility.contentForPage(2, 6), 'first entry');
+    expect(accessibility.contentForPage(3, 6), 'first entry');
+    expect(accessibility.contentForPage(4, 6), 'second entry');
+    expect(accessibility.contentForPage(5, 6), 'closing');
+  });
+
   test('Journal presentation exposes the locked EAST Light and Dark palettes',
       () {
     const light = JournalPdfPresentation();
@@ -404,6 +452,30 @@ void main() {
 
     expect(bytes.length, greaterThan(1000));
     expect(_physicalPageCount(bytes), 4); // cover + title + 1 body + final
+  });
+
+  test(
+      'an overlong legacy owner name is safely bounded without changing '
+      'the title-page count or breaking PDF layout', () async {
+    final longOwner = List.filled(120, '👨‍👩‍👧‍👦').join();
+    final publication = await JournalPdfBuilder().buildPublication(
+      items: [
+        item(
+          id: 'long-owner',
+          revealId: 'r-long-owner',
+          text: 'The page keeps its shape.',
+          keptAt: now,
+        ),
+      ],
+      ownerName: longOwner,
+      now: now,
+      compress: false,
+    );
+
+    expect(_physicalPageCount(publication.bytes), 4);
+    expect(
+        publication.accessibility.titlePageLabel, isNot(contains(longOwner)));
+    expect(publication.accessibility.titlePageLabel, contains('👨‍👩‍👧‍👦'));
   });
 
   test(

@@ -22,6 +22,7 @@ import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/controllers/icloud_removal_controller.dart';
 import 'package:wisdom_app/controllers/sync_association_controller.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
@@ -30,6 +31,7 @@ import 'package:wisdom_app/models/kept_record.dart';
 import 'package:wisdom_app/screens/settings_screen.dart';
 import 'package:wisdom_app/services/data_export_service.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
+import 'package:wisdom_app/services/wisdom_notification_service.dart';
 import 'package:wisdom_app/sync/data_epoch.dart';
 import 'package:wisdom_app/sync/sync_change.dart';
 import 'package:wisdom_app/sync_diagnostics/sync_health_snapshot.dart';
@@ -54,6 +56,7 @@ import 'package:wisdom_app/sync_platform/cloud_kit_sync_state_epoch_contract.dar
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_changes_contract.dart';
 import 'package:wisdom_app/sync_platform/cloud_kit_zone_configuration_result.dart';
 import 'package:wisdom_app/sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 
 import 'persistence_test_helpers.dart';
 import 'sync_integration/in_memory_sync_test_doubles.dart';
@@ -205,16 +208,22 @@ void main() {
     DataExportService? dataExportService,
     SettingsSyncHealthReader? syncHealthReader,
     SettingsSyncRecoveryAction? syncRecoveryAction,
+    WisdomNotificationService? wisdomNotificationService,
+    SettingsUrlLauncher? urlLauncher,
+    Brightness brightness = Brightness.light,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: eastTheme(brightness: brightness),
         home: SettingsScreen(
+          urlLauncher: urlLauncher,
           purchaseService: PurchaseService(),
           cloudKitAssociationController: controller,
           icloudRemovalController: removalController ?? icloudRemovalController,
           dataExportService: dataExportService,
           syncHealthReader: syncHealthReader,
           syncRecoveryAction: syncRecoveryAction,
+          wisdomNotificationService: wisdomNotificationService,
         ),
       ),
     );
@@ -244,7 +253,11 @@ void main() {
     await pumpSettings(tester);
 
     expect(find.text('iCloud Sync'), findsOneWidget);
-    expect(find.text('Not enabled'), findsOneWidget);
+    expect(
+      find.descendant(
+          of: find.byKey(rowKey), matching: find.text('Not enabled')),
+      findsWidgets,
+    );
   });
 
   testWidgets(
@@ -280,6 +293,7 @@ void main() {
       'Export My Data',
       'Language',
       'Appearance',
+      'Quiet Reminder',
       'EAST. Productions',
       'Privacy Policy',
       'Reach Out',
@@ -303,7 +317,7 @@ void main() {
     expect(find.text('The world beyond the ritual.'), findsOneWidget);
   });
 
-  testWidgets('Settings heading resolves in every product locale',
+  testWidgets('Settings heading and Quiet Reminder resolve in every locale',
       (tester) async {
     for (final target in EastLocaleRegistry.targets) {
       await tester.pumpWidget(
@@ -322,6 +336,93 @@ void main() {
         findsOneWidget,
         reason: 'locale=${target.tag}',
       );
+      expect(
+        find.text(lookupAppLocalizations(target.locale).quietReminder),
+        findsOneWidget,
+        reason: 'quietReminder locale=${target.tag}',
+      );
+    }
+  });
+
+  testWidgets(
+      'Quiet Reminder shows and controls the real notification preference',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final platform = _SettingsNotificationPlatform(enabled: true);
+    final notificationService = WisdomNotificationService(platform: platform);
+
+    await pumpSettings(
+      tester,
+      wisdomNotificationService: notificationService,
+    );
+
+    final row = find.byKey(const ValueKey('settings-quiet-reminder-row'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    expect(find.text('Quiet Reminder'), findsOneWidget);
+    expect(
+        find.descendant(of: row, matching: find.text('Enabled')), findsWidgets);
+
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: row, matching: find.text('Not enabled')),
+      findsWidgets,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(WisdomNotificationService.quietReminderEnabledKey),
+      isFalse,
+    );
+    expect(platform.cancelCount, greaterThan(0));
+  });
+
+  testWidgets('denied Quiet Reminder opens the iOS app Settings page',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      WisdomNotificationService.permissionPromptHandledKey: true,
+    });
+    final platform = _SettingsNotificationPlatform(enabled: false);
+    final notificationService = WisdomNotificationService(platform: platform);
+    Uri? launchedUri;
+
+    await pumpSettings(
+      tester,
+      wisdomNotificationService: notificationService,
+      urlLauncher: (uri, {required mode}) async {
+        launchedUri = uri;
+        return true;
+      },
+    );
+
+    final row = find.byKey(const ValueKey('settings-quiet-reminder-row'));
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(launchedUri, Uri.parse('app-settings:'));
+    expect(platform.permissionRequests, 0);
+  });
+
+  testWidgets('Quiet Reminder keeps EAST contrast in Light and Dark',
+      (tester) async {
+    for (final brightness in Brightness.values) {
+      SharedPreferences.setMockInitialValues({});
+      final notificationService = WisdomNotificationService(
+        platform: _SettingsNotificationPlatform(enabled: true),
+      );
+      await pumpSettings(
+        tester,
+        wisdomNotificationService: notificationService,
+        brightness: brightness,
+      );
+
+      final title = tester.widget<Text>(find.text('Quiet Reminder'));
+      final expected = brightness == Brightness.dark
+          ? EastColorScheme.dark.ink
+          : EastColorScheme.light.ink;
+      expect(title.style?.color, expected, reason: brightness.name);
     }
   });
 
@@ -354,7 +455,11 @@ void main() {
       isNull,
     );
     expect(requestSyncCallCount, 0);
-    expect(find.text('Not enabled'), findsOneWidget);
+    expect(
+      find.descendant(
+          of: find.byKey(rowKey), matching: find.text('Not enabled')),
+      findsWidgets,
+    );
   });
 
   testWidgets(
@@ -373,8 +478,17 @@ void main() {
       fingerprintA,
     );
     expect(requestSyncCallCount, 1);
-    expect(find.text('Enabled'), findsOneWidget);
-    expect(find.text('Not enabled'), findsNothing);
+    expect(
+      find.descendant(of: find.byKey(rowKey), matching: find.text('Enabled')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(rowKey),
+        matching: find.text('Not enabled'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets(
@@ -484,7 +598,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('iCloud Sync'), findsOneWidget);
-    expect(find.text('Not enabled'), findsOneWidget);
+    expect(
+      find.descendant(
+          of: find.byKey(rowKey), matching: find.text('Not enabled')),
+      findsWidgets,
+    );
 
     // Not actionable: tapping the row must never surface the confirmation
     // sheet when no controller is available to act on a confirmed Enable.
@@ -1275,4 +1393,37 @@ class _RecordingDataExportService implements DataExportService {
     if (wait != null) await wait;
     return succeeds;
   }
+}
+
+class _SettingsNotificationPlatform implements WisdomNotificationPlatform {
+  _SettingsNotificationPlatform({required this.enabled});
+
+  bool enabled;
+  int permissionRequests = 0;
+  int cancelCount = 0;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<bool?> notificationsEnabled() async => enabled;
+
+  @override
+  Future<bool> requestPermission() async {
+    permissionRequests += 1;
+    return false;
+  }
+
+  @override
+  Future<void> cancel(int id) async {
+    cancelCount += 1;
+  }
+
+  @override
+  Future<void> schedule({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime unlockAt,
+  }) async {}
 }

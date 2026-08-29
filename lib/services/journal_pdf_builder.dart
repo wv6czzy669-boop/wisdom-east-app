@@ -12,6 +12,7 @@ import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 import '../localization/east_locale_registry.dart';
 import '../localization/east_typography_resolver.dart';
+import '../utils/journal_owner_name_policy.dart';
 import 'journal_layout.dart';
 
 /// Removes invisible emoji sequence controls that package:pdf would
@@ -118,6 +119,49 @@ class _JournalPdfFonts {
   final List<pw.Font> fallback;
 }
 
+/// Spoken representation of the publication shown by the raster PDF reader.
+///
+/// Preview pages are images, so their text is otherwise invisible to
+/// VoiceOver. A rare oversized Reflection can span more than one physical
+/// page; its complete spoken text is repeated on continuation pages rather
+/// than leaving any page silent.
+class JournalPdfAccessibility {
+  const JournalPdfAccessibility({
+    required this.coverLabel,
+    required this.titlePageLabel,
+    required this.bodyPageLabels,
+    required this.closingPageLabel,
+  });
+
+  final String coverLabel;
+  final String titlePageLabel;
+  final List<String> bodyPageLabels;
+  final String closingPageLabel;
+
+  String contentForPage(int pageIndex, int pageCount) {
+    if (pageIndex <= 0) return coverLabel;
+    if (pageIndex == 1) return titlePageLabel;
+    if (pageIndex >= pageCount - 1) return closingPageLabel;
+    if (bodyPageLabels.isEmpty) return coverLabel;
+
+    final bodyPageCount = (pageCount - 3).clamp(1, pageCount);
+    final bodyPageIndex = pageIndex - 2;
+    final mappedIndex = (bodyPageIndex * bodyPageLabels.length ~/ bodyPageCount)
+        .clamp(0, bodyPageLabels.length - 1);
+    return bodyPageLabels[mappedIndex];
+  }
+}
+
+class JournalPdfPublication {
+  const JournalPdfPublication({
+    required this.bytes,
+    required this.accessibility,
+  });
+
+  final Uint8List bytes;
+  final JournalPdfAccessibility accessibility;
+}
+
 /// EAST. Phase 10 — builds the on-device A4 Journal PDF.
 ///
 /// Entirely local: no network call, no server, no upload of Kept or
@@ -176,6 +220,7 @@ class JournalPdfBuilder {
   static const double _yearTopFraction = 243 / 481;
   static const double _ownerFontSize = 24.51;
   static const double _ownerTopFraction = 279 / 481;
+  static const double _ownerMaxHeight = 65;
 
   // ---- Final page ----
   static const double _finalRingDiameter = 70.03;
@@ -201,7 +246,24 @@ class JournalPdfBuilder {
     DateTime? now,
     bool compress = true,
   }) async {
+    final publication = await buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    );
+    return publication.bytes;
+  }
+
+  /// Builds the PDF and its matching VoiceOver transcript atomically.
+  Future<JournalPdfPublication> buildPublication({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
     final generatedAt = now ?? DateTime.now();
+    final normalizedOwnerName = JournalOwnerNamePolicy.normalize(ownerName);
     final typography = EastTypographyResolver.forLocale(_presentation.locale);
     final fonts = await _loadFonts(typography);
     final presentationDirection = _presentation.textDirection ??
@@ -225,19 +287,28 @@ class JournalPdfBuilder {
     document.addPage(
       _buildTitlePage(
         fonts,
-        ownerName:
-            ownerName == null ? null : normalizeJournalPdfText(ownerName),
+        ownerName: normalizedOwnerName == null
+            ? null
+            : normalizeJournalPdfText(normalizedOwnerName),
         generatedAt: generatedAt,
         textDirection: textDirection,
       ),
     );
 
-    final localizedItems = items
+    final presentedItems = items
         .map(
           (item) => item.copyWith(
-            text: normalizeJournalPdfText(
-              _wisdomPresentation.resolveItem(item, _presentation.locale),
-            ),
+            text: _wisdomPresentation.resolveItem(item, _presentation.locale),
+          ),
+        )
+        .toList(growable: false);
+    final accessibleItemsByIdentity = <String, FavoriteItem>{
+      for (final item in presentedItems) _accessibilityIdentity(item): item,
+    };
+    final localizedItems = presentedItems
+        .map(
+          (item) => item.copyWith(
+            text: normalizeJournalPdfText(item.text),
             reflection: item.reflection == null
                 ? null
                 : normalizeJournalPdfText(item.reflection!),
@@ -270,7 +341,47 @@ class JournalPdfBuilder {
 
     document.addPage(_buildFinalPage());
 
-    return document.save();
+    final bodyPageLabels = groups
+        .map(
+          (group) => group.entries
+              .map(
+                (entry) => _accessibleEntryLabel(
+                  accessibleItemsByIdentity[_accessibilityIdentity(entry)] ??
+                      entry,
+                  dateFormatter,
+                ),
+              )
+              .join('. '),
+        )
+        .toList(growable: false);
+    final titlePageParts = <String>[
+      _localizations.journalPdfTitle,
+      headerYear(generatedAt),
+      if (normalizedOwnerName != null) normalizedOwnerName,
+    ];
+    final bytes = await document.save();
+    return JournalPdfPublication(
+      bytes: bytes,
+      accessibility: JournalPdfAccessibility(
+        coverLabel: 'EAST.',
+        titlePageLabel: titlePageParts.join('. '),
+        bodyPageLabels: bodyPageLabels,
+        closingPageLabel: 'EAST.',
+      ),
+    );
+  }
+
+  static String _accessibilityIdentity(FavoriteItem item) =>
+      '${item.revealId}\u0000${item.id}';
+
+  static String _accessibleEntryLabel(
+    FavoriteItem item,
+    JournalDateFormatter dateFormatter,
+  ) {
+    final parts = <String>[dateFormatter(item), item.text.trim()];
+    final reflection = item.reflection?.trim();
+    if (reflection != null && reflection.isNotEmpty) parts.add(reflection);
+    return parts.where((part) => part.isNotEmpty).join('. ');
   }
 
   Future<_JournalPdfFonts> _loadFonts(EastTypographyPlan typography) async {
@@ -412,14 +523,21 @@ class JournalPdfBuilder {
                   top: _ownerTopFraction * pageHeight,
                   left: _titleMargin,
                   right: _titleMargin,
-                  child: pw.Text(
-                    trimmedOwnerName,
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(
-                      font: fonts.primary,
-                      fontFallback: fonts.fallback,
-                      fontSize: _ownerFontSize,
-                      color: _palette.ownerMuted,
+                  child: pw.Container(
+                    height: _ownerMaxHeight,
+                    alignment: pw.Alignment.topCenter,
+                    child: pw.Text(
+                      trimmedOwnerName,
+                      textAlign: pw.TextAlign.center,
+                      maxLines: 2,
+                      overflow: pw.TextOverflow.clip,
+                      style: pw.TextStyle(
+                        font: fonts.primary,
+                        fontFallback: fonts.fallback,
+                        fontSize: _ownerFontSize,
+                        lineSpacing: 2,
+                        color: _palette.ownerMuted,
+                      ),
                     ),
                   ),
                 ),

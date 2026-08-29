@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../utils/canonical_uuid.dart';
 import '../data/wisdoms.dart';
+import '../utils/reflection_text_policy.dart';
 
 /// An active, user-visible Kept wisdom (and its optional Reflection).
 ///
@@ -60,9 +61,8 @@ class KeptRecord {
   /// know what version a stored payload claims to be.
   static const int currentSchemaVersion = 3;
 
-  /// Maximum accepted [reflectionText] length, in Unicode code points
-  /// (not UTF-16 code units), matching the current product limit.
-  static const int maximumReflectionLength = 250;
+  /// Maximum accepted [reflectionText] length in user-perceived characters.
+  static const int maximumReflectionLength = ReflectionTextPolicy.maximumLength;
 
   /// Identity of this Kept record itself. Preserved verbatim from
   /// `FavoriteItem.id` on migration. Not required to be a UUID — existing
@@ -87,7 +87,7 @@ class KeptRecord {
 
   /// Optional reflection text. When non-null, contains non-whitespace
   /// content and is preserved exactly as accepted — never silently
-  /// trimmed — up to [maximumReflectionLength] Unicode code points.
+  /// trimmed — up to [maximumReflectionLength] grapheme clusters.
   final String? reflectionText;
 
   /// When the reflection was written. Always UTC when present. Must be
@@ -267,7 +267,7 @@ class KeptRecord {
           'Kept record reflection text cannot be blank.',
         );
       }
-      if (reflectionText.runes.length > maximumReflectionLength) {
+      if (ReflectionTextPolicy.exceedsMaximum(reflectionText)) {
         throw const FormatException(
           'Kept record reflection text exceeds the maximum length.',
         );

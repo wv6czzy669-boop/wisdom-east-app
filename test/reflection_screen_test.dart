@@ -12,6 +12,7 @@ import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/saved_reflections_service.dart';
 import 'package:wisdom_app/sync_integration/kept_sync_integration_coordinator.dart';
 import 'package:wisdom_app/utils/reflection_prompt.dart';
+import 'package:wisdom_app/utils/reflection_text_policy.dart';
 
 import 'persistence_test_helpers.dart';
 import 'sync_integration/in_memory_sync_test_doubles.dart';
@@ -1000,7 +1001,7 @@ void main() {
       expect((await service.load()).single.reflection, 'Keep this on failure');
     });
 
-    testWidgets('counter appears only near the enforced 250 character limit',
+    testWidgets('counter appears only near the enforced 1000 character limit',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -1013,18 +1014,22 @@ void main() {
       );
 
       final field = find.byKey(const ValueKey('reflection-writing-area'));
-      await tester.enterText(field, List.filled(219, 'a').join());
+      await tester.enterText(field, List.filled(899, 'a').join());
       await tester.pump();
-      expect(find.text('219/250'), findsNothing);
+      expect(find.text('899/1000'), findsNothing);
 
-      await tester.enterText(field, List.filled(220, 'a').join());
+      await tester.enterText(field, List.filled(900, 'a').join());
       await tester.pump();
-      expect(find.text('220/250'), findsOneWidget);
+      expect(find.text('900/1000'), findsOneWidget);
 
-      await tester.enterText(field, List.filled(260, 'a').join());
+      await tester.enterText(
+        field,
+        List.filled(1001, '👨‍👩‍👧‍👦').join(),
+      );
       await tester.pump();
-      expect(tester.widget<TextField>(field).controller!.text, hasLength(250));
-      expect(find.text('250/250'), findsOneWidget);
+      final value = tester.widget<TextField>(field).controller!.text;
+      expect(ReflectionTextPolicy.length(value), 1000);
+      expect(find.text('1000/1000'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

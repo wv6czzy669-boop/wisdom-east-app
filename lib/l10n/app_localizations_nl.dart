@@ -119,6 +119,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get retry => 'Probeer opnieuw';
 
   @override
+  String get tryAgainUpper => 'PROBEER OPNIEUW';
+
+  @override
   String get skip => 'Overslaan';
 
   @override
@@ -206,6 +209,13 @@ class AppLocalizationsNl extends AppLocalizations {
       'Gratis kun je maximaal 3 wijsheden bewaren.';
 
   @override
+  String get keepReflectingQuestion => 'Verder reflecteren?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'Drie Reflecties zijn inbegrepen. Keeper opent onbeperkte ruimte voor wat blijft.';
+
+  @override
   String get becomeKeeper => 'BEWAREN ACTIVEREN';
 
   @override
@@ -234,6 +244,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get enterTheCircle => 'Stap in de cirkel.';
 
   @override
+  String get withinTheCircle => 'Binnen de cirkel.';
+
+  @override
+  String get keeperActive => 'Keeper actief';
+
+  @override
+  String get oneTimePurchase => 'Eenmalige aankoop';
+
+  @override
   String get askFrom => 'Vraag vanuit';
 
   @override
@@ -242,6 +261,17 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get longPressToShareWisdom =>
       'Houd ingedrukt om deze wijsheid te delen.';
+
+  @override
+  String get shareWisdom => 'Delen';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'Wijsheid delen, item $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'Stille herinnering';
 
   @override
   String get nothingHasStayedYet => 'Er is nog niets gebleven.';
@@ -386,6 +416,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'Neem je Dagboek mee.';
+
+  @override
+  String get keeperWidgetRitual => 'Het ritueel, in je widget.';
 
   @override
   String get keepEastAlive => 'Houd EAST. levend.';

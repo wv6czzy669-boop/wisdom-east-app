@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/persistence/storage_preferences_adapter.dart';
 import 'package:wisdom_app/services/journal_owner_service.dart';
+import 'package:wisdom_app/utils/journal_owner_name_policy.dart';
 
 import 'journal_owner_test_helpers.dart';
 
@@ -28,6 +29,22 @@ void main() {
 
     expect(await service.loadName(), 'Doğukan Işık');
     expect(await service.hasHandledNamePrompt(), isTrue);
+  });
+
+  test('long names are capped by visible grapheme without splitting emoji',
+      () async {
+    final service =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+    final family = '👨‍👩‍👧‍👦';
+
+    await service.saveName(List.filled(90, family).join());
+
+    final saved = await service.loadName();
+    expect(saved, List.filled(80, family).join());
+    expect(
+      JournalOwnerNamePolicy.maximumGraphemeLength,
+      80,
+    );
   });
 
   test(

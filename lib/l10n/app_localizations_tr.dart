@@ -119,6 +119,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get retry => 'Yeniden Dene';
 
   @override
+  String get tryAgainUpper => 'YENİDEN DENE';
+
+  @override
   String get skip => 'Atla';
 
   @override
@@ -206,6 +209,13 @@ class AppLocalizationsTr extends AppLocalizations {
       'Ücretsiz kullanıcılar en fazla 3 bilgeliği tutabilir.';
 
   @override
+  String get keepReflectingQuestion => 'Yansıtmaya devam edilsin mi?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'Üç Yansıma dahildir. Tutucu, kalanlar için sınırsız alan açar.';
+
+  @override
   String get becomeKeeper => 'TUTUCU OL';
 
   @override
@@ -234,6 +244,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get enterTheCircle => 'Çembere katıl.';
 
   @override
+  String get withinTheCircle => 'Çemberin içinde.';
+
+  @override
+  String get keeperActive => 'Tutucu etkin';
+
+  @override
+  String get oneTimePurchase => 'Tek seferlik satın alma';
+
+  @override
   String get askFrom => 'Soruyu';
 
   @override
@@ -242,6 +261,17 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get longPressToShareWisdom =>
       'Bu bilgeliği paylaşmak için basılı tut.';
+
+  @override
+  String get shareWisdom => 'Paylaş';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'Bilgeliği paylaş, öğe $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'Sessiz Hatırlatıcı';
 
   @override
   String get nothingHasStayedYet => 'Henüz hiçbir şey kalmadı.';
@@ -384,6 +414,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'Günlüğünü yanında götür.';
+
+  @override
+  String get keeperWidgetRitual => 'Ritüel, widget’ının içinde.';
 
   @override
   String get keepEastAlive => 'EAST. yaşamaya devam etsin.';

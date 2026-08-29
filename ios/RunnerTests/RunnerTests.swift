@@ -6,6 +6,59 @@ import XCTest
 @testable import Runner
 
 class RunnerTests: XCTestCase {
+  // MARK: - App-switcher privacy shield
+
+  @MainActor
+  func testPrivacyShieldCoversIdempotentlyAndRevealsOnReturn() {
+    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+    let sensitiveContent = UILabel(frame: window.bounds)
+    sensitiveContent.text = "A private Reflection"
+    window.addSubview(sensitiveContent)
+
+    let controller = EastPrivacyShieldController()
+    controller.cover(window: window)
+
+    XCTAssertTrue(controller.isCovering)
+    XCTAssertEqual(window.subviews.last?.tag, EastPrivacyShieldController.shieldViewTag)
+    XCTAssertEqual(
+      window.subviews.filter { $0.tag == EastPrivacyShieldController.shieldViewTag }.count,
+      1
+    )
+
+    // Background notifications can arrive more than once. Re-covering must
+    // neither stack duplicate surfaces nor expose the content beneath.
+    controller.cover(window: window)
+    XCTAssertEqual(
+      window.subviews.filter { $0.tag == EastPrivacyShieldController.shieldViewTag }.count,
+      1
+    )
+    XCTAssertEqual(window.subviews.last?.tag, EastPrivacyShieldController.shieldViewTag)
+
+    controller.reveal()
+    XCTAssertFalse(controller.isCovering)
+    XCTAssertNil(window.viewWithTag(EastPrivacyShieldController.shieldViewTag))
+    XCTAssertTrue(window.subviews.contains(sensitiveContent))
+  }
+
+  func testRunnerUsesThePrivacyAwareSceneDelegate() throws {
+    let sceneManifest = try XCTUnwrap(
+      Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest")
+        as? [String: Any]
+    )
+    let configurations = try XCTUnwrap(
+      sceneManifest["UISceneConfigurations"] as? [String: Any]
+    )
+    let applicationConfigurations = try XCTUnwrap(
+      configurations["UIWindowSceneSessionRoleApplication"] as? [[String: Any]]
+    )
+    let delegateClass = try XCTUnwrap(
+      applicationConfigurations.first?["UISceneDelegateClassName"] as? String
+    )
+
+    XCTAssertTrue(delegateClass.hasSuffix(".SceneDelegate"))
+    XCTAssertNotEqual(delegateClass, "FlutterSceneDelegate")
+  }
+
   // MARK: - Release privacy-manifest coverage
 
   private func loadPrivacyManifest(at url: URL) throws -> [String: Any] {

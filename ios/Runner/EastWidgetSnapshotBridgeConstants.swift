@@ -7,6 +7,10 @@ enum EastWidgetSnapshotBridgeConstants {
 
     static let methodPublishRevealed = "publishRevealed"
     static let methodPublishSilence = "publishSilence"
+    static let methodReadKeeperRitualSnapshot = "readKeeperRitualSnapshot"
+    static let methodSetKeeperEntitlement = "setKeeperEntitlement"
+    static let methodPublishKeeperPrepared = "publishKeeperPrepared"
+    static let methodPublishKeeperActive = "publishKeeperActive"
 
     static let argText = "text"
     static let argUnlockAtMillis = "unlockAtMillis"
@@ -16,4 +20,14 @@ enum EastWidgetSnapshotBridgeConstants {
     /// legacy one -- see `EastWidgetSnapshotBridge.containsPresentationPayload`.
     static let argAppearanceMode = "appearanceMode"
     static let argLocaleOverrideTag = "localeOverrideTag"
+
+    static let argIsKeeper = "isKeeper"
+    static let argCandidateId = "candidateId"
+    static let argCanonicalText = "canonicalText"
+    static let argDisplayText = "displayText"
+    static let argWisdomId = "wisdomId"
+    static let argPreparedAtMillis = "preparedAtMillis"
+    static let argActivationAtMillis = "activationAtMillis"
+    static let argRevealedAtMillis = "revealedAtMillis"
+    static let argRevealId = "revealId"
 }

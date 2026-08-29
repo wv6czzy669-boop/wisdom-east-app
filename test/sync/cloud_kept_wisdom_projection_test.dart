@@ -266,6 +266,25 @@ void main() {
       expect(CloudKeptWisdomProjection.tryParseRemote(fields), isNull);
     });
 
+    test('20a. CloudKit accepts 1000 graphemes and old 250-char data', () {
+      for (final reflection in [
+        'x' * 250,
+        List.filled(1000, '👨‍👩‍👧‍👦').join(),
+      ]) {
+        final fields = validActiveFields()
+          ..['reflectionText'] = reflection
+          ..['reflectedAtMs'] = updatedAt.millisecondsSinceEpoch;
+        final parsed = CloudKeptWisdomProjection.tryParseRemote(fields);
+        expect(parsed?.reflectionText, reflection);
+      }
+    });
+
+    test('20b. CloudKit rejects 1001 visible emoji characters', () {
+      final fields = validActiveFields()
+        ..['reflectionText'] = List.filled(1001, '👨‍👩‍👧‍👦').join();
+      expect(CloudKeptWisdomProjection.tryParseRemote(fields), isNull);
+    });
+
     test('21. reflectedAtMs present without reflectionText fails closed', () {
       final fields = validActiveFields()
         ..['reflectedAtMs'] = updatedAt.millisecondsSinceEpoch;

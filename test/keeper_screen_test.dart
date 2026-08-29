@@ -9,6 +9,7 @@ import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_inte
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
+import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 
 void main() {
@@ -51,6 +52,7 @@ void main() {
       'Keep without limit.',
       'Reflect without limit.',
       'Take your Journal with you.',
+      'The ritual, within your widget.',
       'Keep EAST. alive.',
     ];
 
@@ -159,7 +161,7 @@ void main() {
     );
   });
 
-  testWidgets('Keeper keeps StoreKit price semantic but not visible',
+  testWidgets('Keeper shows the exact StoreKit price and purchase type',
       (tester) async {
     service = _StaticPurchaseService(
       product: ProductDetails(
@@ -176,9 +178,92 @@ void main() {
       MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
-    expect(find.text('CA\$6.99'), findsNothing);
-    expect(find.text('One-time offering.'), findsNothing);
+    expect(find.text('CA\$6.99'), findsOneWidget);
+    expect(find.text('One-time purchase'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('keeper-localized-price')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('keeper-one-time-purchase')),
+      findsOneWidget,
+    );
     expect(find.text('Temporarily unavailable'), findsNothing);
+  });
+
+  testWidgets('new Keeper value copy renders in all 15 product locales',
+      (tester) async {
+    service = _StaticPurchaseService(
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: r'$2.99',
+        rawPrice: 2.99,
+        currencyCode: 'USD',
+      ),
+    );
+
+    for (final locale in AppLocalizations.supportedLocales) {
+      final l10n = await AppLocalizations.delegate.load(locale);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: eastTheme(locale: locale),
+          home: KeeperScreen(purchaseService: service),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text(l10n.enterTheCircle), findsOneWidget, reason: '$locale');
+      expect(find.text(l10n.oneTimePurchase), findsOneWidget,
+          reason: '$locale');
+      expect(find.text(l10n.keeperWidgetRitual), findsOneWidget,
+          reason: '$locale');
+      expect(find.text(r'$2.99'), findsOneWidget, reason: '$locale');
+      expect(tester.takeException(), isNull, reason: '$locale');
+    }
+  });
+
+  testWidgets('Keeper purchase and active states render in Light and Dark',
+      (tester) async {
+    service = _StaticPurchaseService(
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: 'CA\$6.99',
+        rawPrice: 6.99,
+        currencyCode: 'CAD',
+      ),
+    );
+
+    for (final brightness in Brightness.values) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: eastTheme(brightness: brightness),
+          home: KeeperScreen(purchaseService: service),
+        ),
+      );
+      await tester.pump();
+
+      final context = tester.element(find.byType(KeeperScreen));
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+        EastColors.of(context).background,
+      );
+      expect(find.text('CA\$6.99'), findsOneWidget);
+      expect(find.text('One-time purchase'), findsOneWidget);
+
+      service.update(keeper: true);
+      await tester.pump();
+      expect(find.text('Within the Circle'), findsOneWidget);
+      expect(find.text('Keeper active'), findsOneWidget);
+
+      service.update(keeper: false);
+    }
   });
 
   testWidgets('Keeper purchase action is blocked when product is unavailable',
@@ -221,7 +306,8 @@ void main() {
       find.byKey(const ValueKey('keeper-purchase-action')),
     );
     expect(action.onTap, isNull);
-    expect(find.text('£59.99'), findsNothing);
+    expect(find.text('£59.99'), findsOneWidget);
+    expect(find.text('One-time purchase'), findsOneWidget);
   });
 
   testWidgets('purchase failure guidance follows the active locale',
@@ -271,14 +357,28 @@ void main() {
       MaterialApp(home: KeeperScreen(purchaseService: service)),
     );
 
-    expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.text('Keeper'), findsOneWidget);
     expect(find.text(removedThreeRevealCopy), findsNothing);
     expect(find.text('Keep without limit.'), findsOneWidget);
     expect(find.text('Reflect without limit.'), findsOneWidget);
     expect(find.text('Take your Journal with you.'), findsOneWidget);
+    expect(find.text('The ritual, within your widget.'), findsOneWidget);
     expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Keep EAST. alive.'), findsOneWidget);
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const ValueKey('keeper-scroll-view')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(scrollable.position.maxScrollExtent, greaterThan(0));
+    await tester.drag(
+      find.byKey(const ValueKey('keeper-scroll-view')),
+      const Offset(0, -300),
+    );
+    await tester.pump();
+    expect(scrollable.position.pixels, greaterThan(0));
     expect(find.text('Support EAST.'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -325,7 +425,7 @@ void main() {
       );
 
       final purchaseNode = find.semantics
-          .byLabel('Enter the Circle, CA\$6.99, one-time offering')
+          .byLabel('Enter the Circle, CA\$6.99, one-time purchase')
           .evaluate()
           .single;
       expect(
@@ -420,6 +520,13 @@ void main() {
 
       final keeperNode =
           find.semantics.byLabel('Keeper access active').evaluate().single;
+      expect(find.text('Within the Circle'), findsOneWidget);
+      expect(find.text('Keeper active'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('keeper-active-status')),
+        findsOneWidget,
+      );
+      expect(find.text('Enter the Circle'), findsNothing);
       expect(
         keeperNode.getSemanticsData().flagsCollection.isButton,
         isFalse,
@@ -432,6 +539,90 @@ void main() {
       semantics.dispose();
     }
   });
+
+  testWidgets(
+      'verified purchase and restore updates enter the active Keeper state',
+      (tester) async {
+    service = _StaticPurchaseService(
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: r'$2.99',
+        rawPrice: 2.99,
+        currencyCode: 'USD',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
+    );
+
+    expect(find.text('Enter the Circle'), findsOneWidget);
+    expect(find.text(r'$2.99'), findsOneWidget);
+
+    // A verified purchase stream update and a verified restore both reach
+    // the screen through the same authoritative isKeeper state.
+    service.update(keeper: true);
+    await tester.pump();
+
+    expect(find.text('Within the Circle'), findsOneWidget);
+    expect(find.text('Keeper active'), findsOneWidget);
+    expect(find.text(r'$2.99'), findsNothing);
+
+    service.update(keeper: false);
+    await tester.pump();
+    expect(find.text('Enter the Circle'), findsOneWidget);
+
+    service.update(keeper: true);
+    await tester.pump();
+    expect(find.text('Within the Circle'), findsOneWidget);
+    expect(find.text('Keeper active'), findsOneWidget);
+  });
+
+  testWidgets('pending blocks taps and cancel restores the purchase action',
+      (tester) async {
+    service = _StaticPurchaseService(
+      loading: true,
+      product: ProductDetails(
+        id: PurchaseService.keeperProductId,
+        title: 'Keeper',
+        description: 'Support EAST.',
+        price: '€3.49',
+        rawPrice: 3.49,
+        currencyCode: 'EUR',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: KeeperScreen(purchaseService: service)),
+    );
+
+    expect(
+      tester
+          .widget<GestureDetector>(
+            find.byKey(const ValueKey('keeper-purchase-action')),
+          )
+          .onTap,
+      isNull,
+    );
+    expect(find.text('€3.49'), findsOneWidget);
+
+    // StoreKit cancellation is non-entitling and clears the pending guard.
+    service.update(loading: false, keeper: false);
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<GestureDetector>(
+            find.byKey(const ValueKey('keeper-purchase-action')),
+          )
+          .onTap,
+      isNotNull,
+    );
+    expect(find.text('Enter the Circle'), findsOneWidget);
+    expect(find.text('Keeper active'), findsNothing);
+  });
 }
 
 class _StaticPurchaseService extends PurchaseService {
@@ -441,9 +632,15 @@ class _StaticPurchaseService extends PurchaseService {
     this.keeper = false,
   });
 
-  final bool loading;
+  bool loading;
   final ProductDetails? product;
-  final bool keeper;
+  bool keeper;
+
+  void update({bool? loading, bool? keeper}) {
+    if (loading != null) this.loading = loading;
+    if (keeper != null) this.keeper = keeper;
+    notifyListeners();
+  }
 
   @override
   bool get isInitialized => false;

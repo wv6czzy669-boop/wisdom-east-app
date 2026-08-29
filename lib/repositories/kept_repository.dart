@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/favorite_item.dart';
 import '../models/kept_bootstrap_result.dart';
 import '../models/kept_record.dart';
+import '../utils/reflection_text_policy.dart';
 import '../models/kept_state_envelope.dart';
 import '../persistence/kept_state_store.dart';
 import '../persistence/persistence_operation_coordinator.dart';
@@ -299,7 +300,7 @@ final class KeptRepository {
 
         final normalized = reflection.trim();
         if (normalized.isEmpty ||
-            normalized.runes.length > KeptRecord.maximumReflectionLength) {
+            ReflectionTextPolicy.exceedsMaximum(normalized)) {
           throw const KeptRepositoryException(
             'invalid-reflection',
             'Reflection must be non-empty and within the maximum length.',

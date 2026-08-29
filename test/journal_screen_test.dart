@@ -36,13 +36,102 @@ class _GatedPdfBuilder implements JournalPdfBuilder {
     DateTime? now,
     bool compress = true,
   }) async {
+    return (await buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    ))
+        .bytes;
+  }
+
+  @override
+  Future<JournalPdfPublication> buildPublication({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
     await _gate.future;
-    return _delegate.build(
+    return _delegate.buildPublication(
       items: items,
       ownerName: ownerName,
       now: now,
       compress: compress,
     );
+  }
+}
+
+class _FailOncePdfBuilder implements JournalPdfBuilder {
+  _FailOncePdfBuilder() : _delegate = JournalPdfBuilder();
+
+  final JournalPdfBuilder _delegate;
+  int attempts = 0;
+
+  @override
+  Future<Uint8List> build({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
+    return (await buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    ))
+        .bytes;
+  }
+
+  @override
+  Future<JournalPdfPublication> buildPublication({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
+    attempts += 1;
+    if (attempts == 1) {
+      throw StateError('First Journal generation failed');
+    }
+    return _delegate.buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    );
+  }
+}
+
+class _AlwaysFailPdfBuilder implements JournalPdfBuilder {
+  int attempts = 0;
+
+  @override
+  Future<Uint8List> build({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
+    return (await buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    ))
+        .bytes;
+  }
+
+  @override
+  Future<JournalPdfPublication> buildPublication({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
+    attempts += 1;
+    throw StateError('Journal generation failed');
   }
 }
 
@@ -84,131 +173,27 @@ void main() {
   });
 
   testWidgets(
-      'the first-run name step offers optional name entry with Continue '
-      'and Skip both present', (tester) async {
+      'a fresh Journal opens directly without requiring a name, while NAME '
+      'remains available as an optional preview action', (tester) async {
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+
     await tester.pumpWidget(
       MaterialApp(
         home: JournalScreen(
           items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
           isKeeper: true,
+          journalOwnerService: ownerService,
         ),
       ),
     );
-    await tester.pump();
-
-    expect(
-      find.byKey(const ValueKey('journal-name-field')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('journal-name-continue')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('journal-name-skip')), findsOneWidget);
-  });
-
-  testWidgets(
-      'tapping Skip allows generation immediately with no name '
-      'ever required, and reaches the PDF preview', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: JournalScreen(
-          items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
-          isKeeper: true,
-        ),
-      ),
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const ValueKey('journal-name-skip')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
+    expect(find.byType(PdfPreview), findsOneWidget);
     expect(find.byKey(const ValueKey('journal-name-field')), findsNothing);
-    expect(find.byType(PdfPreview), findsOneWidget);
-
-    final ownerService =
-        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+    expect(find.byKey(const ValueKey('journal-name-action')), findsOneWidget);
     expect(await ownerService.loadName(), isNull);
-    expect(await ownerService.hasHandledNamePrompt(), isTrue);
-  });
-
-  testWidgets('skipping once does not show the name step again on a later open',
-      (tester) async {
-    final ownerService =
-        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
-    await ownerService.skip();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: JournalScreen(
-          items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
-          isKeeper: true,
-          journalOwnerService: ownerService,
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.byKey(const ValueKey('journal-name-field')), findsNothing);
-    expect(find.byType(PdfPreview), findsOneWidget);
-  });
-
-  testWidgets(
-      'entering a name and tapping Continue saves it (trimmed) and '
-      'proceeds to generation', (tester) async {
-    final ownerService =
-        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: JournalScreen(
-          items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
-          isKeeper: true,
-          journalOwnerService: ownerService,
-        ),
-      ),
-    );
-    await tester.pump();
-
-    await tester.enterText(
-      find.byKey(const ValueKey('journal-name-field')),
-      '  Doğukan Işık  ',
-    );
-    await tester.tap(find.byKey(const ValueKey('journal-name-continue')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.byType(PdfPreview), findsOneWidget);
-    expect(await ownerService.loadName(), 'Doğukan Işık');
-  });
-
-  testWidgets(
-      'leaving the name field empty and tapping Continue behaves '
-      'like Skip -- generation is never blocked on an empty field',
-      (tester) async {
-    final ownerService =
-        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: JournalScreen(
-          items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
-          isKeeper: true,
-          journalOwnerService: ownerService,
-        ),
-      ),
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const ValueKey('journal-name-continue')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.byType(PdfPreview), findsOneWidget);
-    expect(await ownerService.loadName(), isNull);
-    expect(await ownerService.hasHandledNamePrompt(), isTrue);
   });
 
   testWidgets(
@@ -329,6 +314,38 @@ void main() {
     );
     expect(await ownerService.loadName(), 'Renamed Owner');
     expect(find.byType(PdfPreview), findsOneWidget);
+  });
+
+  testWidgets(
+      'the optional NAME field limits a long grapheme-safe value before save',
+      (tester) async {
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+    final family = '👨‍👩‍👧‍👦';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: JournalScreen(
+          items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
+          isKeeper: true,
+          journalOwnerService: ownerService,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const ValueKey('journal-name-action')));
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('journal-name-edit-field')),
+      List.filled(90, family).join(),
+    );
+    await tester.tap(find.text('SAVE'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(await ownerService.loadName(), List.filled(80, family).join());
   });
 
   group('name edit keyboard stability', () {
@@ -525,6 +542,99 @@ void main() {
 
       expect(find.byType(AppBar), findsOneWidget);
       expect(find.byType(PdfPreview), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Journal generation recovery', () {
+    testWidgets(
+        'TRY AGAIN performs a real second generation and reaches the preview',
+        (tester) async {
+      final pdfBuilder = _FailOncePdfBuilder();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+      await ownerService.skip();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
+            isKeeper: true,
+            journalOwnerService: ownerService,
+            pdfBuilder: pdfBuilder,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(pdfBuilder.attempts, 1);
+      expect(
+        find.byKey(const ValueKey('journal-error-state')),
+        findsOneWidget,
+      );
+      expect(find.text('TRY AGAIN'), findsOneWidget);
+
+      final semantics = tester.ensureSemantics();
+      final retryNode = tester.getSemantics(
+        find.byKey(const ValueKey('journal-retry-action')),
+      );
+      expect(retryNode.label, 'Retry');
+      expect(
+        retryNode.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('journal-retry-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(pdfBuilder.attempts, 2);
+      expect(
+        find.byKey(const ValueKey('journal-error-state')),
+        findsNothing,
+      );
+      expect(find.byType(PdfPreview), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+
+    testWidgets(
+        'a repeated failure stays recoverable after background and return',
+        (tester) async {
+      final pdfBuilder = _AlwaysFailPdfBuilder();
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+      await ownerService.skip();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
+            isKeeper: true,
+            journalOwnerService: ownerService,
+            pdfBuilder: pdfBuilder,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('journal-retry-action')));
+      await tester.pump();
+
+      expect(pdfBuilder.attempts, 2);
+      expect(
+        find.byKey(const ValueKey('journal-error-state')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('journal-retry-action')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
   });
@@ -812,37 +922,36 @@ void main() {
   });
 
   group('Dynamic Type (Build 33 accessibility repair)', () {
-    testWidgets(
-        'the first-time name prompt stays usable at 100/135/160/200% '
-        'text scale', (tester) async {
-      for (final scale in [1.0, 1.35, 1.6, 2.0]) {
-        tester.platformDispatcher.textScaleFactorTestValue = scale;
-        addTearDown(
-          tester.platformDispatcher.clearTextScaleFactorTestValue,
-        );
+    testWidgets('the optional NAME editor stays usable at 200% text scale',
+        (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(
+        tester.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+      final ownerService =
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: JournalScreen(
-              items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
-              isKeeper: true,
-            ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JournalScreen(
+            items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
+            isKeeper: true,
+            journalOwnerService: ownerService,
           ),
-        );
-        await tester.pump();
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byKey(const ValueKey('journal-name-action')));
+      await tester.pump();
 
-        expect(
-          find.byKey(const ValueKey('journal-name-field')),
-          findsOneWidget,
-          reason: 'the name field must remain reachable at ${scale}x.',
-        );
-        expect(
-          find.byKey(const ValueKey('journal-name-skip')),
-          findsOneWidget,
-          reason: 'Skip must remain reachable at ${scale}x.',
-        );
-        expect(tester.takeException(), isNull);
-      }
+      expect(
+        find.byKey(const ValueKey('journal-name-edit-field')),
+        findsOneWidget,
+      );
+      expect(find.text('CANCEL'), findsOneWidget);
+      expect(find.text('SAVE'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('the PDF preview stays usable at 200% text scale',

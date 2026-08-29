@@ -119,6 +119,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retry => '再試行';
 
   @override
+  String get tryAgainUpper => '再試行';
+
+  @override
   String get skip => 'スキップ';
 
   @override
@@ -204,6 +207,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get freeUsersKeepLimit => '無料では知恵を3つまで残せます。';
 
   @override
+  String get keepReflectingQuestion => '内省を続けますか？';
+
+  @override
+  String get reflectionLimitExplanation =>
+      '3つの内省が含まれます。Keeperなら、残ったものをいくつでも書き留められます。';
+
+  @override
   String get becomeKeeper => '残すをひらく';
 
   @override
@@ -231,6 +241,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enterTheCircle => '輪の中へ。';
 
   @override
+  String get withinTheCircle => '輪の中に。';
+
+  @override
+  String get keeperActive => 'Keeperは有効です';
+
+  @override
+  String get oneTimePurchase => '一度限りの購入';
+
+  @override
   String get askFrom => '心から';
 
   @override
@@ -238,6 +257,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get longPressToShareWisdom => '長押しすると、この知恵を共有できます。';
+
+  @override
+  String get shareWisdom => '共有';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return '知恵を共有、項目$itemNumber';
+  }
+
+  @override
+  String get quietReminder => '静かなリマインダー';
 
   @override
   String get nothingHasStayedYet => 'まだ何も残っていません。';
@@ -371,6 +401,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => '日記を持っていく。';
+
+  @override
+  String get keeperWidgetRitual => 'ウィジェットの中にも、儀式を。';
 
   @override
   String get keepEastAlive => 'EAST.を生かし続ける。';

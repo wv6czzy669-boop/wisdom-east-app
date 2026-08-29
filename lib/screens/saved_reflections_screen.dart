@@ -11,6 +11,7 @@ import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../services/saved_reflections_service.dart';
 import '../services/wisdom_localization_resolver.dart';
+import '../services/wisdom_share_service.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
@@ -28,12 +29,14 @@ class SavedReflectionsScreen extends StatefulWidget {
     this.isKeeper = false,
     this.savedReflectionsService,
     this.purchaseService,
+    this.wisdomShareService,
   });
 
   final List<FavoriteItem> reflections;
   final bool isKeeper;
   final SavedReflectionsService? savedReflectionsService;
   final PurchaseService? purchaseService;
+  final WisdomShareHandler? wisdomShareService;
 
   @override
   State<SavedReflectionsScreen> createState() => _SavedReflectionsScreenState();
@@ -44,8 +47,11 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   late List<FavoriteItem> _items;
   late final SavedReflectionsService _service;
   late final PurchaseService _purchaseService;
+  late final WisdomShareHandler _wisdomShareService;
   bool _navigationInProgress = false;
   bool _deleteInProgress = false;
+  bool _reflectionLimitDecisionVisible = false;
+  bool _shareInProgress = false;
   FavoriteItem? _pendingDeleteItem;
   int _deleteDismissRevision = 0;
   final TextEditingController _searchController = TextEditingController();
@@ -53,6 +59,8 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   String _searchQuery = '';
 
   bool get _confirmingDelete => _pendingDeleteItem != null;
+  bool get _decisionOpen =>
+      _confirmingDelete || _reflectionLimitDecisionVisible;
 
   /// Build 26 Phase 4H-6: guards the silent background reload triggered by
   /// [app_services.keptStateRevisionNotifier] (an incoming CloudKit sync
@@ -92,6 +100,8 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     _service =
         widget.savedReflectionsService ?? app_services.savedReflectionsService;
     _purchaseService = widget.purchaseService ?? app_services.purchaseService;
+    _wisdomShareService =
+        widget.wisdomShareService ?? app_services.wisdomShareService;
     // Build 26 Phase 4H-6: subscribe to the neutral incoming-Kept-state
     // signal for as long as this screen stays mounted -- mirrors the
     // existing `app_services.purchaseService.addListener(...)` pattern
@@ -160,6 +170,47 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   String _displayWisdom(FavoriteItem item) =>
       _wisdomPresentation.resolveItem(item, Localizations.localeOf(context));
 
+  Future<void> _shareWisdom(
+    FavoriteItem item,
+    BuildContext originContext,
+  ) async {
+    if (_shareInProgress || !mounted) return;
+    final renderObject = originContext.findRenderObject();
+    final Rect origin;
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      origin = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    } else {
+      final size = MediaQuery.sizeOf(context);
+      origin = Rect.fromCenter(
+        center: size.center(Offset.zero),
+        width: 1,
+        height: 1,
+      );
+    }
+
+    _shareInProgress = true;
+    try {
+      final wisdom = _displayWisdom(item);
+      if (_wisdomShareService case WisdomShareService service) {
+        await service.shareWisdomForLocale(
+          wisdom: wisdom,
+          sharePositionOrigin: origin,
+          locale: Localizations.localeOf(context),
+          scheme: EastColors.of(context),
+        );
+      } else {
+        await _wisdomShareService.shareWisdom(
+          wisdom: wisdom,
+          sharePositionOrigin: origin,
+        );
+      }
+    } catch (_) {
+      // Dismissing or failing the native sheet never changes Kept content.
+    } finally {
+      _shareInProgress = false;
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -200,12 +251,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
           !_isKeeper &&
           _items.where((candidate) => candidate.hasReflection).length >=
               SavedReflectionsService.freeReflectionLimit) {
-        await Navigator.push<void>(
-          context,
-          MaterialPageRoute<void>(
-            builder: (context) => const KeeperScreen(),
-          ),
-        );
+        setState(() => _reflectionLimitDecisionVisible = true);
         return;
       }
 
@@ -235,6 +281,28 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
           'matchingRecordHasReflection=$hasReflection',
         );
       }
+    } finally {
+      _navigationInProgress = false;
+    }
+  }
+
+  void _dismissReflectionLimitDecision() {
+    if (!mounted) return;
+    setState(() => _reflectionLimitDecisionVisible = false);
+  }
+
+  Future<void> _openKeeperFromReflectionLimit() async {
+    if (_navigationInProgress || !mounted) return;
+
+    setState(() => _reflectionLimitDecisionVisible = false);
+    _navigationInProgress = true;
+    try {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (context) => const KeeperScreen(),
+        ),
+      );
     } finally {
       _navigationInProgress = false;
     }
@@ -405,6 +473,66 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     );
   }
 
+  Widget _reflectionLimitDecisionOverlay() {
+    final l10n = eastLocalizations(context);
+    if (!_reflectionLimitDecisionVisible) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_reflectionLimitDecisionVisible,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          opacity: _reflectionLimitDecisionVisible ? 1.0 : 0.0,
+          child: Container(
+            key: const ValueKey('reflection-limit-decision'),
+            color: EastColors.of(context).overlay,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.keepReflectingQuestion,
+                  textAlign: TextAlign.center,
+                  style: _style(28, height: 1.1),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.reflectionLimitExplanation,
+                  textAlign: TextAlign.center,
+                  style: _style(
+                    15,
+                    color: EastColors.of(context).secondary,
+                    height: 1.45,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 44),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _deleteDecisionLabel(
+                      l10n.cancelUpper,
+                      onTap: _dismissReflectionLimitDecision,
+                      color: EastColors.of(context).secondary,
+                    ),
+                    const SizedBox(width: 56),
+                    _deleteDecisionLabel(
+                      l10n.becomeKeeper,
+                      onTap: () => unawaited(_openKeeperFromReflectionLimit()),
+                      color: EastColors.of(context).ink,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // Build 33 real-device Voice Control repair: `itemNumber` (1-based,
   // screen-order -- see `itemBuilder`'s `index`) makes each row's
   // Reflection action uniquely addressable by name ("Open Reflection,
@@ -460,78 +588,86 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   Widget _keptItem(FavoriteItem item, int index) {
     final itemNumber = index + 1;
-    return Semantics(
-      customSemanticsActions: {
-        CustomSemanticsAction(label: eastLocalizations(context).delete): () {
-          _requestDelete(item);
+    final l10n = eastLocalizations(context);
+    return Builder(
+      builder: (rowContext) => Semantics(
+        customSemanticsActions: {
+          CustomSemanticsAction(label: l10n.shareWisdomNumbered(itemNumber)):
+              () => unawaited(_shareWisdom(item, rowContext)),
+          CustomSemanticsAction(label: l10n.delete): () {
+            _requestDelete(item);
+          },
         },
-      },
-      child: _KeptSwipeToDeleteRow(
-        key: ValueKey('kept-${item.id}'),
-        itemId: item.id,
-        dismissRevision: _deleteDismissRevision,
-        deleteLabelStyle: _statusStyle,
-        deleteLabel: eastLocalizations(context).deleteUpper,
-        onDelete: () => _requestDelete(item),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_displayDate(item),
+        child: _KeptSwipeToDeleteRow(
+          key: ValueKey('kept-${item.id}'),
+          itemId: item.id,
+          dismissRevision: _deleteDismissRevision,
+          actionLabelStyle: _statusStyle,
+          deleteLabel: l10n.deleteUpper,
+          onDelete: () => _requestDelete(item),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _displayDate(item),
                 style: _style(
                   15,
                   color: eastMutedTextColor(context),
                   letterSpacing: 0.4,
-                )),
-            if (_status(item, itemNumber) case final status?) ...[
-              const SizedBox(height: 5),
-              status,
-              const SizedBox(height: 7),
-            ] else
-              const SizedBox(height: 12),
-            // The wisdom itself is also a natural entry point into its
-            // Reflection. The explicit ADD REFLECTION / REFLECTED control
-            // below remains the accessible named action; excluding only
-            // this gesture from semantics avoids announcing two identical
-            // controls while preserving the wisdom Text's reading semantics.
-            GestureDetector(
-              key: ValueKey('kept-${item.id}-wisdom-action'),
-              behavior: HitTestBehavior.opaque,
-              excludeFromSemantics: true,
-              onTap: () => unawaited(_openReflection(item)),
-              child: Text(_displayWisdom(item), style: _style(24)),
-            ),
-            if (!item.hasReflection) ...[
-              const SizedBox(height: 12),
-              // `container: true` -- see `_status` above for why this is
-              // needed to keep this control's per-row label from merging
-              // into the row's static date/status/wisdom content.
-              Semantics(
-                container: true,
-                button: true,
-                label: eastLocalizations(context).addReflectionNumbered(
-                  itemNumber,
                 ),
-                onTap: () => _openReflection(item),
-                child: ExcludeSemantics(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _openReflection(item),
-                    child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(minWidth: 44, minHeight: 44),
-                      child: Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(
-                          eastLocalizations(context).addReflectionUpper,
-                          style: _statusStyle,
+              ),
+              if (_status(item, itemNumber) case final status?) ...[
+                const SizedBox(height: 4),
+                status,
+                const SizedBox(height: 6),
+              ] else
+                const SizedBox(height: 10),
+              // The wisdom itself is also a natural entry point into its
+              // Reflection. The explicit ADD REFLECTION / REFLECTED control
+              // below remains the accessible named action; excluding only
+              // this gesture from semantics avoids announcing two identical
+              // controls while preserving the wisdom Text's reading semantics.
+              Builder(
+                builder: (wisdomContext) => GestureDetector(
+                  key: ValueKey('kept-${item.id}-wisdom-action'),
+                  behavior: HitTestBehavior.opaque,
+                  excludeFromSemantics: true,
+                  onTap: () => unawaited(_openReflection(item)),
+                  onLongPress: () =>
+                      unawaited(_shareWisdom(item, wisdomContext)),
+                  child: Text(_displayWisdom(item), style: _style(24)),
+                ),
+              ),
+              if (!item.hasReflection) ...[
+                const SizedBox(height: 6),
+                Semantics(
+                  container: true,
+                  button: true,
+                  label: l10n.addReflectionNumbered(itemNumber),
+                  onTap: () => _openReflection(item),
+                  child: ExcludeSemantics(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _openReflection(item),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            l10n.addReflectionUpper,
+                            style: _statusStyle,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -685,118 +821,122 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     }).toList(growable: false);
     final hasQuery = KeptSearchMatcher.normalize(_searchQuery).isNotEmpty;
 
-    return Scaffold(
-      key: const ValueKey('kept-screen-root'),
-      backgroundColor: EastColors.of(context).background,
-      appBar: AppBar(
+    return PopScope(
+      canPop: !_reflectionLimitDecisionVisible,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _reflectionLimitDecisionVisible) {
+          _dismissReflectionLimitDecision();
+        }
+      },
+      child: Scaffold(
+        key: const ValueKey('kept-screen-root'),
         backgroundColor: EastColors.of(context).background,
-        foregroundColor: EastColors.of(context).ink,
-        iconTheme: IconThemeData(
-          color: EastColors.of(context).ink,
-          size: 22,
-          weight: 300,
-        ),
-        surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        elevation: 0,
-        leading: Navigator.canPop(context) ? const EastBackButton() : null,
-        centerTitle: true,
-        title: Text(l10n.kept, style: _style(24)),
-        actions: [
-          Semantics(
-            button: true,
-            label: l10n.journal,
-            onTap: () => unawaited(_openJournal()),
-            child: ExcludeSemantics(
-              child: IconButton(
-                key: const ValueKey('kept-journal-control'),
-                onPressed: () => unawaited(_openJournal()),
-                icon: const Icon(Icons.menu_book_outlined),
+        appBar: AppBar(
+          backgroundColor: EastColors.of(context).background,
+          foregroundColor: EastColors.of(context).ink,
+          iconTheme: IconThemeData(
+            color: EastColors.of(context).ink,
+            size: 22,
+            weight: 300,
+          ),
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          leading: Navigator.canPop(context) ? const EastBackButton() : null,
+          centerTitle: true,
+          title: Text(l10n.kept, style: _style(24)),
+          actions: [
+            Semantics(
+              button: true,
+              label: l10n.journal,
+              onTap: () => unawaited(_openJournal()),
+              child: ExcludeSemantics(
+                child: IconButton(
+                  key: const ValueKey('kept-journal-control'),
+                  onPressed: () => unawaited(_openJournal()),
+                  icon: const Icon(Icons.menu_book_outlined),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          IgnorePointer(
-            ignoring: _confirmingDelete,
-            child: ExcludeSemantics(
-              excluding: _confirmingDelete,
-              child: _items.isEmpty
-                  ? Center(
-                      child: Text(
-                        l10n.nothingHasStayedYet,
-                        style: _style(
-                          21,
-                          color: eastMutedTextColor(context),
+          ],
+        ),
+        body: Stack(
+          children: [
+            IgnorePointer(
+              ignoring: _decisionOpen,
+              child: ExcludeSemantics(
+                excluding: _decisionOpen,
+                child: _items.isEmpty
+                    ? Center(
+                        child: Text(
+                          l10n.nothingHasStayedYet,
+                          style: _style(
+                            21,
+                            color: eastMutedTextColor(context),
+                          ),
                         ),
+                      )
+                    : Column(
+                        children: [
+                          _searchField(),
+                          Expanded(
+                            child: visibleItems.isEmpty && hasQuery
+                                ? Center(
+                                    child: Text(
+                                      l10n.noKeptSearchResults,
+                                      key: const ValueKey(
+                                        'kept-search-empty-state',
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      style: _style(
+                                        21,
+                                        color: eastMutedTextColor(context),
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      24,
+                                      14,
+                                      24,
+                                      32,
+                                    ),
+                                    itemCount: visibleItems.length,
+                                    separatorBuilder: (context, index) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        child: Divider(
+                                          color: EastColors.of(context).divider,
+                                          thickness: 0.5,
+                                        ),
+                                      );
+                                    },
+                                    itemBuilder: (context, index) {
+                                      return _keptItem(
+                                        visibleItems[index],
+                                        index,
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
                       ),
-                    )
-                  : Column(
-                      children: [
-                        _searchField(),
-                        Expanded(
-                          child: visibleItems.isEmpty && hasQuery
-                              ? Center(
-                                  child: Text(
-                                    l10n.noKeptSearchResults,
-                                    key: const ValueKey(
-                                      'kept-search-empty-state',
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    style: _style(
-                                      21,
-                                      color: eastMutedTextColor(context),
-                                    ),
-                                  ),
-                                )
-                              : ListView.separated(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    24,
-                                    14,
-                                    24,
-                                    32,
-                                  ),
-                                  itemCount: visibleItems.length,
-                                  separatorBuilder: (context, index) {
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 18,
-                                      ),
-                                      child: Divider(
-                                        color: EastColors.of(context).divider,
-                                        thickness: 0.5,
-                                      ),
-                                    );
-                                  },
-                                  itemBuilder: (context, index) {
-                                    return _keptItem(
-                                      visibleItems[index],
-                                      index,
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    ),
+              ),
             ),
-          ),
-          _deleteDecisionOverlay(),
-        ],
+            _deleteDecisionOverlay(),
+            _reflectionLimitDecisionOverlay(),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// A single Kept row that reveals a trailing "DELETE" action on a leftward
-/// swipe, in the style of a conventional iOS trailing swipe action.
-///
-/// Swiping alone never deletes anything: it only slides [child] aside to
-/// expose the DELETE action, which stays exposed until the user explicitly
-/// taps it, taps the row again, or swipes the row back closed. Tapping the
-/// DELETE action invokes [onDelete], which requests the full-field decision;
-/// the durable removal runs only after that separate confirmation.
+/// A single Kept row with one quiet iOS-style action: a swipe toward the
+/// start reveals DELETE. Sharing belongs to the wisdom itself and is opened
+/// by long-press, so the row never has competing swipe directions.
 ///
 /// Both the sliding foreground and the revealed DELETE action are built so
 /// that their *hit-test* regions move/appear exactly where they are
@@ -809,7 +949,7 @@ class _KeptSwipeToDeleteRow extends StatefulWidget {
     required this.itemId,
     required this.dismissRevision,
     required this.onDelete,
-    required this.deleteLabelStyle,
+    required this.actionLabelStyle,
     required this.deleteLabel,
     required this.child,
   });
@@ -817,7 +957,7 @@ class _KeptSwipeToDeleteRow extends StatefulWidget {
   final String itemId;
   final int dismissRevision;
   final VoidCallback onDelete;
-  final TextStyle deleteLabelStyle;
+  final TextStyle actionLabelStyle;
   final String deleteLabel;
   final Widget child;
 
@@ -857,7 +997,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
     super.dispose();
   }
 
-  bool get _isOpen => _controller.value >= 1.0;
+  bool get _isDeleteOpen => _controller.value >= 1.0;
 
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
     final delta = details.primaryDelta;
@@ -915,9 +1055,9 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
                 // provides a fully accessible delete path regardless of
                 // this region's open/closed state.
                 return IgnorePointer(
-                  ignoring: !_isOpen,
+                  ignoring: !_isDeleteOpen,
                   child: ExcludeSemantics(
-                    excluding: !_isOpen,
+                    excluding: !_isDeleteOpen,
                     child: child,
                   ),
                 );
@@ -931,7 +1071,7 @@ class _KeptSwipeToDeleteRowState extends State<_KeptSwipeToDeleteRow>
                   color: EastColors.of(context).background,
                   child: Text(
                     widget.deleteLabel,
-                    style: widget.deleteLabelStyle,
+                    style: widget.actionLabelStyle,
                   ),
                 ),
               ),

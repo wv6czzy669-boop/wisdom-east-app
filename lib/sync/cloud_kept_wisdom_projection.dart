@@ -1,4 +1,5 @@
 import '../models/kept_record.dart';
+import '../utils/reflection_text_policy.dart';
 import '../data/wisdoms.dart';
 import '../utils/canonical_uuid.dart';
 import '../utils/kept_timestamp_canonicalizer.dart';
@@ -249,7 +250,7 @@ final class CloudKeptWisdomProjection {
     if (reflectionText != null) {
       if (reflectionText is! String ||
           reflectionText.trim().isEmpty ||
-          reflectionText.runes.length > KeptRecord.maximumReflectionLength) {
+          ReflectionTextPolicy.exceedsMaximum(reflectionText)) {
         return null;
       }
     }

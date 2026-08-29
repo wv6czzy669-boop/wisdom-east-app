@@ -267,7 +267,11 @@ void main() {
       // icloudUnavailable, icloudNeedsAttention).
       // First-ritual guidance: +2 keys (tapAnywhereToBegin,
       // tapWhenReady), visible only during the first entrance sequence.
-      expect(expectedKeys, hasLength(148));
+      // Reflection foundation: +2 keys (keepReflectingQuestion,
+      // reflectionLimitExplanation) for the fourth-Reflection decision.
+      // Settings/discoverability: +3 keys (quietReminder, shareWisdom,
+      // shareWisdomNumbered).
+      expect(expectedKeys, hasLength(158));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');

@@ -9,8 +9,10 @@ import 'l10n/app_localizations_en.dart';
 import 'localization/east_locale_registry.dart';
 import 'screens/home_screen.dart';
 import 'services/app_services.dart' as app_services;
+import 'services/keeper_ritual_widget_coordinator.dart';
 import 'services/saved_reflections_service.dart';
 import 'services/widget_presentation_sync_coordinator.dart';
+import 'services/wisdom_selector.dart';
 import 'theme/east_design.dart';
 
 class WisdomApp extends StatefulWidget {
@@ -68,6 +70,23 @@ class _WisdomAppState extends State<WisdomApp> {
     widgetSnapshotService: app_services.widgetSnapshotService,
   );
 
+  // One selector instance is shared by Home and the Keeper widget. This is
+  // what prevents two concurrent entry points from consuming two catalog
+  // choices for one daily occurrence.
+  late final WisdomSelectorService _wisdomSelector = WisdomSelectorService();
+
+  late final KeeperRitualWidgetCoordinator _keeperRitualWidgetCoordinator =
+      KeeperRitualWidgetCoordinator(
+    appearanceController: _appearancePreferenceController,
+    localeController: _localePreferenceController,
+    purchaseService: app_services.purchaseService,
+    dailyWisdomAccessService: app_services.createDailyWisdomAccessService(),
+    dailyWisdomAccessServiceFactory: ({clock}) =>
+        app_services.createDailyWisdomAccessService(clock: clock),
+    widgetService: app_services.keeperRitualWidgetService,
+    wisdomSelector: _wisdomSelector,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -78,12 +97,14 @@ class _WisdomAppState extends State<WisdomApp> {
       unawaited(_appearancePreferenceController.load());
     }
     _widgetPresentationSyncCoordinator.start();
+    _keeperRitualWidgetCoordinator.start();
   }
 
   @override
   void dispose() {
     // Disposed before the preference controllers below, so the coordinator
     // never observes a disposed controller mid-teardown.
+    _keeperRitualWidgetCoordinator.dispose();
     _widgetPresentationSyncCoordinator.dispose();
     if (widget.localePreferenceController == null) {
       _localePreferenceController.dispose();
@@ -131,6 +152,8 @@ class _WisdomAppState extends State<WisdomApp> {
             appearancePreferenceController: _appearancePreferenceController,
             widgetPresentationSyncCoordinator:
                 _widgetPresentationSyncCoordinator,
+            keeperRitualWidgetCoordinator: _keeperRitualWidgetCoordinator,
+            wisdomSelectorService: _wisdomSelector,
           ),
         );
       },

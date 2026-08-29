@@ -25,6 +25,7 @@ import '../services/audio_service.dart';
 import '../services/daily_wisdom_access_service.dart';
 import '../services/first_ritual_guidance_service.dart';
 import '../services/kept_discovery_hint_service.dart';
+import '../services/keeper_ritual_widget_coordinator.dart';
 import '../services/rating_request_service.dart';
 import '../services/ritual_audio_policy.dart';
 import '../services/saved_reflections_service.dart';
@@ -76,6 +77,8 @@ class HomeScreen extends StatefulWidget {
     this.ratingRequestService,
     this.analyticsService,
     this.widgetPresentationSyncCoordinator,
+    this.keeperRitualWidgetCoordinator,
+    this.wisdomSelectorService,
     this.localePreferenceController,
     this.appearancePreferenceController,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
@@ -101,6 +104,8 @@ class HomeScreen extends StatefulWidget {
   /// since no such fallback singleton exists (ownership stays in
   /// `_WisdomAppState` only).
   final WidgetPresentationSyncCoordinator? widgetPresentationSyncCoordinator;
+  final KeeperRitualWidgetCoordinator? keeperRitualWidgetCoordinator;
+  final WisdomSelectorService? wisdomSelectorService;
   final LocalePreferenceController? localePreferenceController;
   final AppearancePreferenceController? appearancePreferenceController;
   final Duration dailyWisdomOperationTimeout;
@@ -326,7 +331,8 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  final WisdomSelectorService wisdomSelector = WisdomSelectorService();
+  late final WisdomSelectorService wisdomSelector =
+      widget.wisdomSelectorService ?? WisdomSelectorService();
 
   @override
   void initState() {
@@ -670,6 +676,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> loadInitialState() async {
+    // A Keeper widget can complete the ritual while Flutter is terminated.
+    // Commit that provisional reveal before Home performs its first status
+    // read, so the app enters the same locked occurrence rather than
+    // offering a second ritual.
+    await widget.keeperRitualWidgetCoordinator?.reconcileBeforeHome();
     // Build 26 Phase 3D-E (safety-gap correction, round 3 — direction
     // inversion): a single atomic startup sequence, run before
     // loadFavorites() below so the very first `favorites` read and the
@@ -802,6 +813,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _resumeAccessState() async {
+    await widget.keeperRitualWidgetCoordinator?.reconcileBeforeHome();
     await updateNextWisdomMessage();
     await synchronizeUnlockNotification();
     final unlockAt = _pendingNotificationUnlockAt;
@@ -1194,6 +1206,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (notificationOfferUnlockAt != null) {
       _pendingNotificationUnlockAt = notificationOfferUnlockAt;
     }
+    widget.keeperRitualWidgetCoordinator?.notifyAuthoritativeReveal();
   }
 
   Future<void> synchronizeUnlockNotification() async {
@@ -1566,13 +1579,6 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final locale = Localizations.localeOf(context);
       final presentedWisdom = _presentedWisdom(locale);
-      // Build 33: the generated share PNG follows the EFFECTIVE app
-      // appearance at this exact moment -- `EastColors.of(context)` already
-      // resolves System Default against the live platform brightness
-      // (Theme.of(context).extension<EastColorScheme>(), the same
-      // resolution every other themed surface uses), never merely the
-      // stored Appearance enum. The native iOS share sheet itself is never
-      // recolored -- only this generated image's own material.
       final shareScheme = EastColors.of(context);
       if (wisdomShareService case WisdomShareService service) {
         await service.shareWisdomForLocale(
@@ -2054,6 +2060,12 @@ class _HomeScreenState extends State<HomeScreen>
     // shared by both countdown render sites below so they always show the
     // identical HH:MM token for the identical underlying duration.
     final countdownPresentation = _currentCountdownPresentation(context);
+    final wisdomShareAvailable = wisdomRevealed &&
+        !transitionInProgress &&
+        !_transitionLock &&
+        !_isInRitualSilence &&
+        !_revealPersistenceNeedsRetry &&
+        wisdomRevealController.value >= 1.0;
     return Scaffold(
       backgroundColor: EastColors.of(context).background,
       body: SafeArea(
@@ -2110,12 +2122,7 @@ class _HomeScreenState extends State<HomeScreen>
                             wisdomRevealed: wisdomRevealed,
                             onLockedCountdown: onLockedCountdown,
                             countdownPresentation: countdownPresentation,
-                            wisdomShareEnabled: wisdomRevealed &&
-                                !transitionInProgress &&
-                                !_transitionLock &&
-                                !_isInRitualSilence &&
-                                !_revealPersistenceNeedsRetry &&
-                                wisdomRevealController.value >= 1.0,
+                            wisdomShareEnabled: wisdomShareAvailable,
                             wisdomShareOriginKey: _wisdomShareOriginKey,
                             onWisdomLongPress: shareCurrentWisdom,
                           ),

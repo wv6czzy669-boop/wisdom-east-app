@@ -273,4 +273,39 @@ void main() {
       );
     });
   });
+
+  group('Reflection length compatibility', () {
+    test('old schema-2 records with 250 characters still decode', () {
+      final item = FavoriteItem.decodeCurrent(jsonEncode({
+        'schemaVersion': 2,
+        'id': 'legacy-reflection',
+        'date': 'August 1, 2026',
+        'text': 'Be still.',
+        'reflection': 'x' * 250,
+      }));
+
+      expect(item.reflection, 'x' * 250);
+    });
+
+    test('schema-2 decoding uses the shared 1000-grapheme limit', () {
+      final atLimit = jsonEncode({
+        'schemaVersion': 2,
+        'id': 'emoji-reflection',
+        'date': 'August 1, 2026',
+        'text': 'Be still.',
+        'reflection': List.filled(1000, '👨‍👩‍👧‍👦').join(),
+      });
+      final overLimit = jsonEncode({
+        'schemaVersion': 2,
+        'id': 'emoji-reflection',
+        'date': 'August 1, 2026',
+        'text': 'Be still.',
+        'reflection': List.filled(1001, '👨‍👩‍👧‍👦').join(),
+      });
+
+      expect(() => FavoriteItem.decodeCurrent(atLimit), returnsNormally);
+      expect(
+          () => FavoriteItem.decodeCurrent(overLimit), throwsFormatException);
+    });
+  });
 }

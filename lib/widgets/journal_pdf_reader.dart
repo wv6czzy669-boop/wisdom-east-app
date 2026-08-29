@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
+import '../services/journal_pdf_builder.dart';
 import '../theme/east_design.dart';
 
 /// Presents real rasterized Journal PDF pages as a restrained, page-by-page
@@ -15,10 +16,12 @@ class JournalPdfReader extends StatefulWidget {
     super.key,
     required this.pages,
     required this.journalLabel,
+    required this.accessibility,
   });
 
   final List<PdfPreviewPageData> pages;
   final String journalLabel;
+  final JournalPdfAccessibility accessibility;
 
   @override
   State<JournalPdfReader> createState() => _JournalPdfReaderState();
@@ -68,10 +71,13 @@ class _JournalPdfReaderState extends State<JournalPdfReader> {
             onPageChanged: (index) => setState(() => _pageIndex = index),
             itemBuilder: (context, index) {
               final page = widget.pages[index];
+              final content =
+                  widget.accessibility.contentForPage(index, pageCount);
               return Semantics(
                 container: true,
                 image: true,
-                label: '${widget.journalLabel} ${index + 1} / $pageCount',
+                label: '${widget.journalLabel} ${index + 1} / $pageCount. '
+                    '$content',
                 child: ExcludeSemantics(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),

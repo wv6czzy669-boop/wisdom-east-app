@@ -24,6 +24,7 @@ import 'analytics_service.dart';
 import 'daily_wisdom_access_service.dart';
 import 'data_export_service.dart';
 import 'journal_owner_service.dart';
+import 'keeper_ritual_widget_service.dart';
 import 'kept_discovery_hint_service.dart';
 import 'kept_migration_coordinator.dart';
 import 'kept_state_revision_notifier.dart';
@@ -45,6 +46,8 @@ final WisdomNotificationService wisdomNotificationService =
     WisdomNotificationService();
 final RatingRequestService ratingRequestService = RatingRequestService();
 final WidgetSnapshotService widgetSnapshotService = WidgetSnapshotService();
+final KeeperRitualWidgetService keeperRitualWidgetService =
+    KeeperRitualWidgetService();
 final JournalOwnerService journalOwnerService = JournalOwnerService();
 final ProductionDiagnosticsService productionDiagnosticsService =
     ProductionDiagnosticsService();
@@ -94,6 +97,13 @@ DailyWisdomAccessService createDailyWisdomAccessService({
     clock: clock,
     statusTimeout: statusTimeout,
   );
+}
+
+/// Narrow read-only presentation seam for surfaces such as Settings that
+/// need to reconcile an optional reminder without owning the daily-access
+/// service or mutating ritual cadence.
+Future<DailyWisdomStatus> readDailyWisdomStatus() {
+  return createDailyWisdomAccessService().status();
 }
 
 // ---------------------------------------------------------------------

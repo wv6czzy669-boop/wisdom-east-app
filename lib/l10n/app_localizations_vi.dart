@@ -119,6 +119,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get retry => 'Thử lại';
 
   @override
+  String get tryAgainUpper => 'THỬ LẠI';
+
+  @override
   String get skip => 'Bỏ qua';
 
   @override
@@ -206,6 +209,13 @@ class AppLocalizationsVi extends AppLocalizations {
       'Người dùng miễn phí có thể giữ tối đa 3 điều minh triết.';
 
   @override
+  String get keepReflectingQuestion => 'Tiếp tục suy ngẫm?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'Ba Suy ngẫm được bao gồm. Keeper mở không gian không giới hạn cho những gì ở lại.';
+
+  @override
   String get becomeKeeper => 'MỞ GIỮ LẠI';
 
   @override
@@ -234,6 +244,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enterTheCircle => 'Bước vào vòng tròn.';
 
   @override
+  String get withinTheCircle => 'Trong vòng tròn.';
+
+  @override
+  String get keeperActive => 'Keeper đang hoạt động';
+
+  @override
+  String get oneTimePurchase => 'Mua một lần';
+
+  @override
   String get askFrom => 'Hỏi bằng';
 
   @override
@@ -242,6 +261,17 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get longPressToShareWisdom =>
       'Nhấn giữ để chia sẻ điều minh triết này.';
+
+  @override
+  String get shareWisdom => 'Chia sẻ';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'Chia sẻ điều minh triết, mục $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'Lời nhắc nhẹ nhàng';
 
   @override
   String get nothingHasStayedYet => 'Chưa có điều gì còn lại.';
@@ -386,6 +416,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'Mang Nhật ký theo bên mình.';
+
+  @override
+  String get keeperWidgetRitual => 'Nghi thức, ngay trong tiện ích của bạn.';
 
   @override
   String get keepEastAlive => 'Giữ cho EAST. tiếp tục sống.';

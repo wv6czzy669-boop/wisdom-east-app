@@ -6,14 +6,13 @@ import WidgetKit
 /// `handle(_:result:)` entry point, registered once from
 /// `AppDelegate.didInitializeImplicitFlutterEngine`.
 ///
-/// Flutter's `DailyWisdomAccessService` remains the sole authority on what
-/// wisdom exists and when it unlocks -- this bridge never selects, generates,
-/// or reveals anything. It only writes exactly what it is told into
-/// `EastWidgetSnapshotStore` and, only when that write actually changed the
-/// persisted snapshot, asks WidgetKit to reload this one widget kind's
-/// timelines. An unchanged republish (e.g. a resume-time reconciliation that
-/// finds nothing new) is a deliberate no-op -- this is the guard against
-/// reload spam on ordinary rebuilds.
+/// Flutter's `DailyWisdomAccessService` remains the sole authority on the
+/// canonical daily occurrence. The original free-widget methods still only
+/// mirror that authority. Keeper-only methods additionally stage a candidate
+/// and reconcile the interactive widget's provisional reveal; they never
+/// bypass the Dart repository's final commit. WidgetKit reloads only when the
+/// relevant persisted snapshot actually changes, preventing ordinary resume
+/// reconciliation from producing reload spam.
 enum EastWidgetSnapshotBridge {
     static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
@@ -21,9 +20,101 @@ enum EastWidgetSnapshotBridge {
             handlePublishRevealed(call, result: result)
         case EastWidgetSnapshotBridgeConstants.methodPublishSilence:
             handlePublishSilence(call, result: result)
+        case EastWidgetSnapshotBridgeConstants.methodReadKeeperRitualSnapshot:
+            result(EastKeeperRitualStore.bridgePayload(now: Date()))
+        case EastWidgetSnapshotBridgeConstants.methodSetKeeperEntitlement:
+            handleSetKeeperEntitlement(call, result: result)
+        case EastWidgetSnapshotBridgeConstants.methodPublishKeeperPrepared:
+            handlePublishKeeperPrepared(call, result: result)
+        case EastWidgetSnapshotBridgeConstants.methodPublishKeeperActive:
+            handlePublishKeeperActive(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    private static func handleSetKeeperEntitlement(
+        _ call: FlutterMethodCall,
+        result: @escaping FlutterResult
+    ) {
+        guard let arguments = call.arguments as? [String: Any],
+              let isKeeper = arguments[EastWidgetSnapshotBridgeConstants.argIsKeeper] as? Bool
+        else {
+            result(invalidArguments("setKeeperEntitlement requires isKeeper"))
+            return
+        }
+        if EastKeeperRitualStore.setKeeperEntitlement(isKeeper) {
+            reloadKeeperTimelines()
+        }
+        result(nil)
+    }
+
+    private static func handlePublishKeeperPrepared(
+        _ call: FlutterMethodCall,
+        result: @escaping FlutterResult
+    ) {
+        guard let arguments = call.arguments as? [String: Any],
+              let candidateId = arguments[EastWidgetSnapshotBridgeConstants.argCandidateId] as? String,
+              let canonicalText = arguments[EastWidgetSnapshotBridgeConstants.argCanonicalText] as? String,
+              let displayText = arguments[EastWidgetSnapshotBridgeConstants.argDisplayText] as? String,
+              let wisdomId = arguments[EastWidgetSnapshotBridgeConstants.argWisdomId] as? String,
+              let preparedAtMillis = milliseconds(arguments, EastWidgetSnapshotBridgeConstants.argPreparedAtMillis),
+              let activationAtMillis = milliseconds(arguments, EastWidgetSnapshotBridgeConstants.argActivationAtMillis)
+        else {
+            result(invalidArguments("publishKeeperPrepared received an invalid candidate"))
+            return
+        }
+
+        let candidate = EastKeeperRitualCandidate(
+            candidateId: candidateId,
+            canonicalText: canonicalText,
+            displayText: displayText,
+            wisdomId: wisdomId,
+            preparedAt: date(milliseconds: preparedAtMillis),
+            activationAt: date(milliseconds: activationAtMillis)
+        )
+        let changed = EastKeeperRitualStore.publishPrepared(
+            candidate: candidate,
+            presentation: presentation(from: arguments),
+            now: Date()
+        )
+        if changed { reloadKeeperTimelines() }
+        result(nil)
+    }
+
+    private static func handlePublishKeeperActive(
+        _ call: FlutterMethodCall,
+        result: @escaping FlutterResult
+    ) {
+        guard let arguments = call.arguments as? [String: Any],
+              let candidateId = arguments[EastWidgetSnapshotBridgeConstants.argCandidateId] as? String,
+              let canonicalText = arguments[EastWidgetSnapshotBridgeConstants.argCanonicalText] as? String,
+              let displayText = arguments[EastWidgetSnapshotBridgeConstants.argDisplayText] as? String,
+              let wisdomId = arguments[EastWidgetSnapshotBridgeConstants.argWisdomId] as? String,
+              let revealedAtMillis = milliseconds(arguments, EastWidgetSnapshotBridgeConstants.argRevealedAtMillis),
+              let unlockAtMillis = milliseconds(arguments, EastWidgetSnapshotBridgeConstants.argUnlockAtMillis)
+        else {
+            result(invalidArguments("publishKeeperActive received an invalid reveal"))
+            return
+        }
+
+        let reveal = EastKeeperRitualReveal(
+            candidateId: candidateId,
+            canonicalText: canonicalText,
+            displayText: displayText,
+            wisdomId: wisdomId,
+            revealedAt: date(milliseconds: revealedAtMillis),
+            unlockAt: date(milliseconds: unlockAtMillis),
+            revealId: arguments[EastWidgetSnapshotBridgeConstants.argRevealId] as? String,
+            needsAppCommit: false
+        )
+        let changed = EastKeeperRitualStore.publishActive(
+            reveal: reveal,
+            presentation: presentation(from: arguments),
+            now: Date()
+        )
+        if changed { reloadKeeperTimelines() }
+        result(nil)
     }
 
     private static func handlePublishRevealed(
@@ -121,5 +212,28 @@ enum EastWidgetSnapshotBridge {
         if #available(iOS 14.0, *) {
             WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.kind)
         }
+    }
+
+    private static func reloadKeeperTimelines() {
+        if #available(iOS 14.0, *) {
+            WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.keeperRitualKind)
+        }
+    }
+
+    private static func milliseconds(
+        _ arguments: [String: Any],
+        _ key: String
+    ) -> Double? {
+        guard let value = arguments[key] as? NSNumber else { return nil }
+        let milliseconds = value.doubleValue
+        return milliseconds.isFinite && milliseconds >= 0 ? milliseconds : nil
+    }
+
+    private static func date(milliseconds: Double) -> Date {
+        Date(timeIntervalSince1970: milliseconds / 1000.0)
+    }
+
+    private static func invalidArguments(_ message: String) -> FlutterError {
+        FlutterError(code: "invalid_arguments", message: message, details: nil)
     }
 }

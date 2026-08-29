@@ -119,6 +119,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get retry => 'ลองอีกครั้ง';
 
   @override
+  String get tryAgainUpper => 'ลองอีกครั้ง';
+
+  @override
   String get skip => 'ข้าม';
 
   @override
@@ -205,6 +208,13 @@ class AppLocalizationsTh extends AppLocalizations {
   String get freeUsersKeepLimit => 'ผู้ใช้ฟรีเก็บข้อคิดได้สูงสุด 3 ข้อ.';
 
   @override
+  String get keepReflectingQuestion => 'ไตร่ตรองต่อไหม?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'รวมการไตร่ตรอง 3 ครั้ง Keeper เปิดพื้นที่ไม่จำกัดสำหรับสิ่งที่ยังคงอยู่';
+
+  @override
   String get becomeKeeper => 'เปิดใช้ “คงไว้”';
 
   @override
@@ -233,6 +243,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get enterTheCircle => 'เข้ามาในวง.';
 
   @override
+  String get withinTheCircle => 'ภายในวง.';
+
+  @override
+  String get keeperActive => 'Keeper เปิดใช้งานอยู่';
+
+  @override
+  String get oneTimePurchase => 'ซื้อครั้งเดียว';
+
+  @override
   String get askFrom => 'ถาม';
 
   @override
@@ -240,6 +259,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get longPressToShareWisdom => 'กดค้างเพื่อแชร์ข้อคิดนี้.';
+
+  @override
+  String get shareWisdom => 'แชร์';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'แชร์ข้อคิด รายการที่ $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'การเตือนอย่างเงียบงัน';
 
   @override
   String get nothingHasStayedYet => 'ยังไม่มีสิ่งใดคงอยู่.';
@@ -381,6 +411,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'พกสมุดบันทึกของคุณไปด้วย.';
+
+  @override
+  String get keeperWidgetRitual => 'พิธีกรรม อยู่ในวิดเจ็ตของคุณ.';
 
   @override
   String get keepEastAlive => 'ให้ EAST. ดำเนินต่อไป.';

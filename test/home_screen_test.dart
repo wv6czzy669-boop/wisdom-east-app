@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:ui' show SemanticsAction, Tristate;
+import 'dart:ui' show Rect, SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/controllers/locale_preference_controller.dart';
-import 'package:wisdom_app/data/wisdoms.dart' show wisdoms;
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/localization/east_locale_registry.dart';
 import 'package:wisdom_app/models/daily_wisdom_record.dart';
@@ -2496,136 +2495,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wisdom sharing is unavailable before a reveal', (tester) async {
-    final shareService = _RecordingWisdomShareService();
-
-    await tester.pumpWidget(
-      _homeApp(wisdomShareService: shareService),
-    );
-    await _finishOpeningIntro(tester);
-
-    await tester.longPress(
-      find.byKey(const ValueKey('launch-ritual-mark')),
-    );
-    await tester.pump();
-
-    expect(shareService.calls, 0);
-    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
-  });
-
-  testWidgets(
-      'revealed wisdom shares exact text without changing access or notification',
+  testWidgets('Home shares only by long press and has no visible share control',
       (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
-    const wisdom = 'The current wisdom remains unchanged.';
-    // A Build 26 record with a revealId already present, so startup's
-    // backfillRevealIdIfNeeded() is a no-op and the persisted JSON below
-    // cannot change out from under this test's exact-state assertion. A
-    // Build 25 record without revealId would be backfilled during
-    // loadInitialState(), which is correct product behavior but would race
-    // this test's own expectations rather than testing sharing.
-    const fixedRevealId = '123e4567-e89b-42d3-a456-426614174000';
+    const wisdom = 'The ritual remains a quiet, single-purpose surface.';
     final record = DailyWisdomRecord(
       text: wisdom,
       revealedAt: now,
       unlockAt: now.add(const Duration(hours: 24)),
-      revealId: fixedRevealId,
+      revealId: '123e4567-e89b-42d3-a456-426614174000',
     );
     SharedPreferences.setMockInitialValues({
       DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
     });
-    final shareService = _RecordingWisdomShareService()..blockNext();
-    final notificationPlatform = _HomeNotificationPlatform(enabled: true);
-    final notificationService = WisdomNotificationService(
-      platform: notificationPlatform,
-      clock: () => now,
-    );
+    final shareService = _RecordingWisdomShareService();
 
     await tester.pumpWidget(
       _homeApp(
         dailyGraph: DailyAccessTestGraph(clock: () => now),
         clock: () => now,
         wisdomShareService: shareService,
-        wisdomNotificationService: notificationService,
       ),
     );
     await _finishOpeningIntro(tester);
     await _openExistingWisdom(tester);
-    await _pumpUntilWisdomShareEnabled(tester);
+    await _pumpInSteps(tester, const Duration(seconds: 2));
 
     final semantics = tester.getSemantics(find.text(wisdom));
     expect(semantics.label, wisdom);
-    expect(semantics.hint, 'Long press to share this wisdom.');
     expect(
       semantics.getSemanticsData().hasAction(SemanticsAction.longPress),
       isTrue,
     );
+    expect(find.byKey(const ValueKey('home-share-control')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('home-share-control-position')),
+      findsNothing,
+    );
 
-    final schedulesBeforeShare = notificationPlatform.schedules.length;
     await tester.longPress(find.text(wisdom));
-    _wisdomShareGesture(tester).onLongPress!();
     await tester.pump();
-
     expect(shareService.calls, 1);
     expect(shareService.wisdoms, [wisdom]);
-    expect(shareService.origins.single.width, greaterThan(0));
-    expect(shareService.origins.single.height, greaterThan(0));
-
-    shareService.release();
-    await tester.pump();
-    _wisdomShareGesture(tester).onLongPress!();
-    await tester.pump();
-
-    expect(shareService.calls, 2);
-    expect(notificationPlatform.schedules.length, schedulesBeforeShare);
-    final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getString(DailyAccessRepository.dailyWisdomAccessKey),
-      record.encode(),
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('share guard resets after failure and disposal is safe',
-      (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
-    const wisdom = 'A quiet failure cannot disturb this wisdom.';
-    final record = DailyWisdomRecord(
-      text: wisdom,
-      revealedAt: now,
-      unlockAt: now.add(const Duration(hours: 24)),
-    );
-    SharedPreferences.setMockInitialValues({
-      DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
-    });
-    final shareService = _RecordingWisdomShareService()..failNext = true;
-
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
-        clock: () => now,
-        wisdomShareService: shareService,
-      ),
-    );
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
-    await _pumpUntilWisdomShareEnabled(tester);
-
-    _wisdomShareGesture(tester).onLongPress!();
-    await tester.pump();
-    expect(shareService.calls, 1);
-    expect(tester.takeException(), isNull);
-
-    shareService
-      ..failNext = false
-      ..blockNext();
-    _wisdomShareGesture(tester).onLongPress!();
-    await tester.pump();
-    expect(shareService.calls, 2);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    shareService.release();
-    await tester.pump();
     expect(tester.takeException(), isNull);
   });
 
@@ -4571,74 +4482,6 @@ void main() {
   });
 
   testWidgets(
-      'Final correction Item 3: long-press-share still fires exactly once '
-      'when a small realistic finger movement occurs mid-press, with no '
-      'Kept navigation and no screenStep change', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
-    const wisdom = 'A wisdom used to verify long-press-share survives pan';
-    final record = DailyWisdomRecord(
-      text: wisdom,
-      revealedAt: now,
-      unlockAt: now.add(const Duration(hours: 24)),
-    );
-    SharedPreferences.setMockInitialValues({
-      DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
-    });
-    final shareService = _RecordingWisdomShareService();
-    final pushObserver = _HomePushCountingNavigatorObserver();
-
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
-        clock: () => now,
-        wisdomShareService: shareService,
-        navigatorObservers: [pushObserver],
-      ),
-    );
-    await _finishOpeningIntro(tester);
-    await _openExistingWisdom(tester);
-    await _pumpUntilWisdomShareEnabled(tester);
-
-    final screenStepBefore = _homeScreenStep(tester);
-    final pushesBefore = pushObserver.pushCount;
-
-    // A real long press, driven through the actual gesture arena (not a
-    // manual `.onLongPress!()` invocation), with a small incidental finger
-    // movement partway through the hold — well under both the long-press
-    // recognizer's own move tolerance and the Home swipe-to-Kept gesture's
-    // 60px distance / 320px/s velocity thresholds (see
-    // `_homeSwipeToKeptEligible`/`_handleHomeSwipeEnd` in home_screen.dart).
-    // This is the exact regression the horizontal pan callbacks newly added
-    // to the ancestor `_HomeMainRitualGesture` GestureDetector could have
-    // introduced: the wisdom text's own nested, deeper GestureDetector
-    // (`wisdomShareOriginKey`, real `onLongPress`) must still win the tap
-    // arena over both the ancestor's no-op `onLongPress: () {}` and its pan
-    // recognizers.
-    final wisdomCenter = tester.getCenter(find.text(wisdom));
-    final gesture = await tester.startGesture(wisdomCenter);
-    await tester.pump(const Duration(milliseconds: 200));
-    await gesture.moveBy(const Offset(2, 1));
-    await tester.pump(const Duration(milliseconds: 400));
-    await gesture.up();
-    await tester.pump();
-
-    expect(
-      shareService.calls,
-      1,
-      reason: 'Long-press-share must still fire exactly once.',
-    );
-    expect(shareService.wisdoms, [wisdom]);
-    expect(find.byKey(const ValueKey('kept-screen-root')), findsNothing);
-    expect(_homeScreenStep(tester), screenStepBefore);
-    expect(
-      pushObserver.pushCount,
-      pushesBefore,
-      reason: 'No duplicate (or any) navigation occurred from this gesture.',
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
       'Final correction Item 4: Home swipe-to-Kept gesture boundaries — '
       'short left, vertical, and rightward movement are no-ops; a rapid '
       'repeated qualifying swipe opens Kept exactly once; the save-ring tap '
@@ -5797,59 +5640,6 @@ void main() {
       // Still locked (daily lock untouched by presentation-only switches).
       expect(statusAfter.unlockAt!.isAfter(now), isTrue);
     });
-
-    testWidgets(
-        '24. Share uses the current locale, not the locale the wisdom was '
-        'first revealed in', (tester) async {
-      final now = DateTime.utc(2041, 7, 23, 8);
-      final wisdomId = 'east_wisdom_0301';
-      final englishText =
-          wisdoms.firstWhere((w) => w['id'] == wisdomId)['text'] as String;
-      final record = DailyWisdomRecord(
-        text: englishText,
-        revealedAt: now,
-        unlockAt: now.add(const Duration(hours: 24)),
-        revealId: '123e4567-e89b-42d3-a456-426614174001',
-        wisdomId: wisdomId,
-      );
-      SharedPreferences.setMockInitialValues({
-        DailyAccessRepository.dailyWisdomAccessKey: record.encode(),
-      });
-      final shareService = _RecordingWisdomShareService();
-      final localeController = LocalePreferenceController(
-        storage: StoragePreferencesAdapter(),
-      );
-      await localeController.load();
-
-      await tester.pumpWidget(
-        _localeAwareHomeApp(
-          localeController: localeController,
-          dailyGraph: DailyAccessTestGraph(clock: () => now),
-          wisdomShareService: shareService,
-          clock: () => now,
-        ),
-      );
-      await _finishOpeningIntro(tester);
-      await _openExistingWisdom(tester);
-      await _pumpUntilWisdomShareEnabled(tester);
-
-      await localeController.setExplicitLocale(const Locale('tr'));
-      await tester.pump();
-      await tester.pump();
-
-      final expectedTurkish = const WisdomLocalizationResolver().resolve(
-        wisdomId: wisdomId,
-        locale: const Locale('tr'),
-        persistedSnapshot: englishText,
-      );
-      expect(expectedTurkish, isNot(englishText));
-
-      _wisdomShareGesture(tester).onLongPress!();
-      await tester.pump();
-
-      expect(shareService.calls, 1);
-      expect(shareService.wisdoms.single, expectedTurkish);
-    });
   });
 
   group('EAST. 1.2 HH:MM countdown', () {
@@ -6551,60 +6341,6 @@ TopNavRingPainter _topNavRingPainterByKey(WidgetTester tester, String key) {
   return tester.widget<CustomPaint>(finder).painter! as TopNavRingPainter;
 }
 
-GestureDetector _wisdomShareGesture(WidgetTester tester) {
-  final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
-  return tester
-      .widgetList<GestureDetector>(
-        find.ancestor(
-          of: reveal,
-          matching: find.byType(GestureDetector),
-        ),
-      )
-      .firstWhere(
-        (gesture) => gesture.key is GlobalKey && gesture.onLongPress != null,
-      );
-}
-
-Future<void> _pumpUntilWisdomShareEnabled(WidgetTester tester) async {
-  for (var attempt = 0; attempt < 40; attempt += 1) {
-    final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
-    if (reveal.evaluate().isNotEmpty) {
-      final gestures = tester.widgetList<GestureDetector>(
-        find.ancestor(
-          of: reveal,
-          matching: find.byType(GestureDetector),
-        ),
-      );
-      if (gestures.any(
-        (gesture) => gesture.key is GlobalKey && gesture.onLongPress != null,
-      )) {
-        return;
-      }
-    }
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
-  final revealOpacity = reveal.evaluate().isEmpty
-      ? null
-      : tester.widget<FadeTransition>(reveal).opacity.value;
-  final globalGestures = reveal.evaluate().isEmpty
-      ? const <GestureDetector>[]
-      : tester
-          .widgetList<GestureDetector>(
-            find.ancestor(
-              of: reveal,
-              matching: find.byType(GestureDetector),
-            ),
-          )
-          .where((gesture) => gesture.key is GlobalKey)
-          .toList();
-  fail(
-    'Revealed wisdom did not become shareable: opacity=$revealOpacity, '
-    'global gestures=${globalGestures.length}, '
-    'callbacks=${globalGestures.map((gesture) => gesture.onLongPress != null)}.',
-  );
-}
-
 Future<void> _pumpUntilWisdomFullyAppeared(WidgetTester tester) async {
   for (var attempt = 0; attempt < 200; attempt += 1) {
     final reveal = find.byKey(const ValueKey('wisdom-reveal-fade'));
@@ -6904,22 +6640,8 @@ class _RecordingSavedReflectionsService implements SavedReflectionsService {
 
 class _RecordingWisdomShareService implements WisdomShareHandler {
   int calls = 0;
-  bool failNext = false;
-  Completer<void>? _gate;
   final List<String> wisdoms = [];
   final List<Rect> origins = [];
-
-  void blockNext() {
-    _gate = Completer<void>();
-  }
-
-  void release() {
-    final gate = _gate;
-    _gate = null;
-    if (gate != null && !gate.isCompleted) {
-      gate.complete();
-    }
-  }
 
   @override
   Future<void> shareWisdom({
@@ -6929,14 +6651,6 @@ class _RecordingWisdomShareService implements WisdomShareHandler {
     calls += 1;
     wisdoms.add(wisdom);
     origins.add(sharePositionOrigin);
-    final gate = _gate;
-    if (gate != null) {
-      await gate.future;
-    }
-    if (failNext) {
-      failNext = false;
-      throw StateError('share failed');
-    }
   }
 }
 

@@ -119,6 +119,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '再試一次';
 
   @override
+  String get tryAgainUpper => '再試一次';
+
+  @override
   String get skip => '略過';
 
   @override
@@ -204,6 +207,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get freeUsersKeepLimit => '免費使用者最多可留住 3 則智慧。';
 
   @override
+  String get keepReflectingQuestion => '繼續省思？';
+
+  @override
+  String get reflectionLimitExplanation => '內含 3 則省思。Keeper 為留下的一切開啟無限空間。';
+
+  @override
   String get becomeKeeper => '啟用留住';
 
   @override
@@ -231,6 +240,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enterTheCircle => '走進圓圈。';
 
   @override
+  String get withinTheCircle => '身在圓圈之中。';
+
+  @override
+  String get keeperActive => 'Keeper 已啟用';
+
+  @override
+  String get oneTimePurchase => '一次性購買';
+
+  @override
   String get askFrom => '從心裡';
 
   @override
@@ -238,6 +256,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get longPressToShareWisdom => '長按即可分享這份智慧。';
+
+  @override
+  String get shareWisdom => '分享';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return '分享智慧，第 $itemNumber 項';
+  }
+
+  @override
+  String get quietReminder => '靜默提醒';
 
   @override
   String get nothingHasStayedYet => '還沒有任何事物留下。';
@@ -371,6 +400,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => '帶走你的日記。';
+
+  @override
+  String get keeperWidgetRitual => '儀式，就在你的小工具中。';
 
   @override
   String get keepEastAlive => '讓 EAST. 延續。';
@@ -591,6 +623,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get retry => '再試一次';
 
   @override
+  String get tryAgainUpper => '再試一次';
+
+  @override
   String get skip => '略過';
 
   @override
@@ -676,6 +711,12 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get freeUsersKeepLimit => '免費使用者最多可留住 3 則智慧。';
 
   @override
+  String get keepReflectingQuestion => '繼續省思？';
+
+  @override
+  String get reflectionLimitExplanation => '內含 3 則省思。Keeper 為留下的一切開啟無限空間。';
+
+  @override
   String get becomeKeeper => '啟用留住';
 
   @override
@@ -703,6 +744,15 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get enterTheCircle => '走進圓圈。';
 
   @override
+  String get withinTheCircle => '身在圓圈之中。';
+
+  @override
+  String get keeperActive => 'Keeper 已啟用';
+
+  @override
+  String get oneTimePurchase => '一次性購買';
+
+  @override
   String get askFrom => '從心裡';
 
   @override
@@ -710,6 +760,17 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get longPressToShareWisdom => '長按即可分享這份智慧。';
+
+  @override
+  String get shareWisdom => '分享';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return '分享智慧，第 $itemNumber 項';
+  }
+
+  @override
+  String get quietReminder => '靜默提醒';
 
   @override
   String get nothingHasStayedYet => '還沒有任何事物留下。';
@@ -843,6 +904,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get takeJournalWithYou => '帶走你的日記。';
+
+  @override
+  String get keeperWidgetRitual => '儀式，就在你的小工具中。';
 
   @override
   String get keepEastAlive => '讓 EAST. 延續。';

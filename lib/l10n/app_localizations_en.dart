@@ -119,6 +119,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
+  String get tryAgainUpper => 'TRY AGAIN';
+
+  @override
   String get skip => 'Skip';
 
   @override
@@ -205,6 +208,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get freeUsersKeepLimit => 'Free users can keep up to 3 wisdoms.';
 
   @override
+  String get keepReflectingQuestion => 'Keep reflecting?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      'Three Reflections are included. Keeper opens unlimited space for what stays.';
+
+  @override
   String get becomeKeeper => 'BECOME A KEEPER';
 
   @override
@@ -233,6 +243,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get enterTheCircle => 'Enter the Circle';
 
   @override
+  String get withinTheCircle => 'Within the Circle';
+
+  @override
+  String get keeperActive => 'Keeper active';
+
+  @override
+  String get oneTimePurchase => 'One-time purchase';
+
+  @override
   String get askFrom => 'Ask from';
 
   @override
@@ -240,6 +259,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get longPressToShareWisdom => 'Long press to share this wisdom.';
+
+  @override
+  String get shareWisdom => 'Share';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return 'Share wisdom, item $itemNumber';
+  }
+
+  @override
+  String get quietReminder => 'Quiet Reminder';
 
   @override
   String get nothingHasStayedYet => 'Nothing has stayed yet.';
@@ -370,7 +400,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String keeperPurchaseOffering(Object price) {
-    return 'Enter the Circle, $price, one-time offering';
+    return 'Enter the Circle, $price, one-time purchase';
   }
 
   @override
@@ -384,6 +414,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => 'Take your Journal with you.';
+
+  @override
+  String get keeperWidgetRitual => 'The ritual, within your widget.';
 
   @override
   String get keepEastAlive => 'Keep EAST. alive.';

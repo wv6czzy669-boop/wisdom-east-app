@@ -18,11 +18,11 @@ import WidgetKit
 /// values remain pinned to the app's own locked field/ink; the dark values
 /// remain the app's locked Dark Mode field/ink (`east_design.dart`'s
 /// `EastColorScheme.dark`).
-private let eastStoneLight = Color(red: 226.0 / 255.0, green: 224.0 / 255.0, blue: 217.0 / 255.0)
-private let eastInkLight = Color(red: 44.0 / 255.0, green: 41.0 / 255.0, blue: 36.0 / 255.0)
-private let eastStoneDark = Color(red: 28.0 / 255.0, green: 27.0 / 255.0, blue: 24.0 / 255.0)
-private let eastInkDark = Color(red: 216.0 / 255.0, green: 212.0 / 255.0, blue: 203.0 / 255.0)
-private let eastWidgetURL = URL(string: "eastwidget://open")
+let eastStoneLight = Color(red: 226.0 / 255.0, green: 224.0 / 255.0, blue: 217.0 / 255.0)
+let eastInkLight = Color(red: 44.0 / 255.0, green: 41.0 / 255.0, blue: 36.0 / 255.0)
+let eastStoneDark = Color(red: 28.0 / 255.0, green: 27.0 / 255.0, blue: 24.0 / 255.0)
+let eastInkDark = Color(red: 216.0 / 255.0, green: 212.0 / 255.0, blue: 203.0 / 255.0)
+let eastWidgetURL = URL(string: "eastwidget://open")!
 
 struct EastWidgetView: View {
     let entry: EastWidgetEntry
@@ -160,7 +160,7 @@ struct EastWidgetView: View {
 /// Keeps the iOS 17+ removable widget background contract while preserving
 /// the identical full-surface stone background on iOS 15-16, where
 /// `containerBackground(for:)` does not exist yet.
-private struct EastWidgetBackground: ViewModifier {
+struct EastWidgetBackground: ViewModifier {
     let color: Color
 
     @ViewBuilder
@@ -175,7 +175,7 @@ private struct EastWidgetBackground: ViewModifier {
 
 /// Accent participation was introduced in iOS 16. Earlier widgets retain
 /// the exact same text rendering and simply omit that unavailable hint.
-private struct EastWidgetAccent: ViewModifier {
+struct EastWidgetAccent: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOSApplicationExtension 16.0, *) {

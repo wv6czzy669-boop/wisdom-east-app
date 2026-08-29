@@ -13,6 +13,7 @@ import '../controllers/sync_association_controller.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/data_export_service.dart';
 import '../services/purchase_service.dart';
+import '../services/wisdom_notification_service.dart';
 import '../sync_diagnostics/sync_health_snapshot.dart';
 import '../sync_diagnostics/sync_recovery_coordinator.dart';
 import '../theme/east_design.dart';
@@ -40,6 +41,8 @@ class SettingsScreen extends StatefulWidget {
     this.dataExportService,
     this.localePreferenceController,
     this.appearancePreferenceController,
+    this.wisdomNotificationService,
+    this.dailyWisdomStatusReader,
     this.syncHealthReader,
     this.syncRecoveryAction,
   });
@@ -49,6 +52,8 @@ class SettingsScreen extends StatefulWidget {
   final DataExportService? dataExportService;
   final LocalePreferenceController? localePreferenceController;
   final AppearancePreferenceController? appearancePreferenceController;
+  final WisdomNotificationService? wisdomNotificationService;
+  final QuietReminderDailyStatusReader? dailyWisdomStatusReader;
   final SettingsSyncHealthReader? syncHealthReader;
   final SettingsSyncRecoveryAction? syncRecoveryAction;
 
@@ -73,7 +78,8 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   late final LocalePreferenceController _fallbackLocalePreferenceController =
       LocalePreferenceController();
   late final AppearancePreferenceController
@@ -92,6 +98,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _restoreResultMessage;
   bool _eastProductionsLaunchInProgress = false;
   bool _dataExportInProgress = false;
+  QuietReminderStatus _quietReminderStatus = QuietReminderStatus.unavailable;
+  bool _quietReminderActionInProgress = false;
 
   // Build 26 Phase 4G: the explicit one-time iCloud association row. `null`
   // until the first [_refreshSyncAssociationStatus] call resolves --
@@ -122,8 +130,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshSyncAssociationStatus());
     unawaited(_refreshICloudRemovalStatus());
+    unawaited(_refreshQuietReminderStatus());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshQuietReminderStatus());
+    }
   }
 
   /// `null` whenever neither an injected test controller nor the production
@@ -163,6 +186,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppearancePreferenceController get _appearancePreferenceController =>
       widget.appearancePreferenceController ??
       _fallbackAppearancePreferenceController;
+
+  WisdomNotificationService get _wisdomNotificationService =>
+      widget.wisdomNotificationService ??
+      app_services.wisdomNotificationService;
 
   String _localePreferenceLabel(AppLocalizations l10n) {
     final explicit = _localePreferenceController.explicitLocale;
@@ -313,6 +340,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
       color: _settingsDividerColor(context),
       thickness: 0.5,
     );
+  }
+
+  String get _quietReminderStatusLabel {
+    final l10n = eastLocalizations(context);
+    switch (_quietReminderStatus) {
+      case QuietReminderStatus.enabled:
+        return l10n.icloudEnabled;
+      case QuietReminderStatus.disabled:
+      case QuietReminderStatus.denied:
+      case QuietReminderStatus.unavailable:
+        return l10n.icloudNotEnabled;
+    }
+  }
+
+  String get _quietReminderSemanticLabel {
+    final l10n = eastLocalizations(context);
+    return '${l10n.quietReminder}. $_quietReminderStatusLabel';
+  }
+
+  Future<void> _refreshQuietReminderStatus() async {
+    final status = await _wisdomNotificationService.quietReminderStatus();
+    if (!mounted) return;
+    setState(() => _quietReminderStatus = status);
+  }
+
+  VoidCallback? get _quietReminderAction {
+    if (_quietReminderActionInProgress ||
+        _quietReminderStatus == QuietReminderStatus.unavailable) {
+      return null;
+    }
+    if (_quietReminderStatus == QuietReminderStatus.denied) {
+      return () => unawaited(_openNotificationSettings());
+    }
+    return () => unawaited(_toggleQuietReminder());
+  }
+
+  Future<void> _toggleQuietReminder() async {
+    if (_quietReminderActionInProgress || !mounted) return;
+    setState(() => _quietReminderActionInProgress = true);
+
+    final shouldEnable = _quietReminderStatus != QuietReminderStatus.enabled;
+    final succeeded = await _wisdomNotificationService
+        .setQuietReminderEnabledFromStatusReader(
+      shouldEnable,
+      statusReader:
+          widget.dailyWisdomStatusReader ?? app_services.readDailyWisdomStatus,
+    );
+    if (!mounted) return;
+    setState(() => _quietReminderActionInProgress = false);
+    await _refreshQuietReminderStatus();
+    if (!succeeded && mounted) {
+      showSettingsSnack(eastLocalizations(context).operationFailedRetry);
+    }
+  }
+
+  Future<void> _openNotificationSettings() async {
+    if (_quietReminderActionInProgress || !mounted) return;
+    setState(() => _quietReminderActionInProgress = true);
+    try {
+      final launched = await _launchExternal(
+        Uri.parse('app-settings:'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        showSettingsSnack(eastLocalizations(context).operationFailedRetry);
+      }
+    } catch (_) {
+      if (mounted) {
+        showSettingsSnack(eastLocalizations(context).operationFailedRetry);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _quietReminderActionInProgress = false);
+      }
+    }
   }
 
   Future<bool> _launchExternal(
@@ -1425,6 +1527,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: _openAppearance,
                       trailing:
                           _settingsTrailingState(appearancePreferenceLabel),
+                    ),
+                    const SizedBox(height: 24),
+                    settingsItem(
+                      rowKey: const ValueKey('settings-quiet-reminder-row'),
+                      title: l10n.quietReminder,
+                      subtitle: _quietReminderStatusLabel,
+                      showSubtitle: false,
+                      semanticLabel: _quietReminderSemanticLabel,
+                      onTap: _quietReminderAction,
+                      trailing:
+                          _settingsTrailingState(_quietReminderStatusLabel),
                     ),
 
                     _settingsGroupDivider(),

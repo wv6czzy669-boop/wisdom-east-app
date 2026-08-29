@@ -18,6 +18,15 @@ enum WisdomNotificationAuthorization {
   unavailable,
 }
 
+enum QuietReminderStatus {
+  enabled,
+  disabled,
+  denied,
+  unavailable,
+}
+
+typedef QuietReminderDailyStatusReader = Future<DailyWisdomStatus> Function();
+
 /// Explicit, deterministic copy dependency for code that has no BuildContext.
 /// A later locale controller can supply a locale-specific [AppLocalizations]
 /// instance without coupling this service to widget state.
@@ -172,6 +181,8 @@ class WisdomNotificationService {
   static const int unlockNotificationId = 21001;
   static const String permissionPromptHandledKey =
       'wisdom_unlock_notification_prompt_handled';
+  static const String quietReminderEnabledKey =
+      'wisdom_unlock_notification_enabled';
 
   final WisdomNotificationPlatform _platform;
   final StoragePreferencesAdapter _preferencesAdapter;
@@ -237,6 +248,81 @@ class WisdomNotificationService {
         WisdomNotificationAuthorization.notDetermined;
   }
 
+  /// The Settings-facing state combines the system authorization with
+  /// EAST.'s own explicit preference. Existing users who already granted
+  /// notification permission remain enabled by default; the preference key
+  /// is only written when they deliberately change Quiet Reminder.
+  Future<QuietReminderStatus> quietReminderStatus() async {
+    final authorization = await authorizationStatus();
+    switch (authorization) {
+      case WisdomNotificationAuthorization.authorized:
+        return await _quietReminderEnabledByPreference()
+            ? QuietReminderStatus.enabled
+            : QuietReminderStatus.disabled;
+      case WisdomNotificationAuthorization.notDetermined:
+        return QuietReminderStatus.disabled;
+      case WisdomNotificationAuthorization.denied:
+        return QuietReminderStatus.denied;
+      case WisdomNotificationAuthorization.unavailable:
+        return QuietReminderStatus.unavailable;
+    }
+  }
+
+  /// Applies the explicit Settings choice without changing ritual cadence.
+  /// Enabling may request the one native permission when it has never been
+  /// decided. [status] is only used to reconcile the single unlock reminder;
+  /// no wisdom record or unlock time is created here.
+  Future<bool> setQuietReminderEnabled(
+    bool enabled, {
+    DailyWisdomStatus? status,
+  }) async {
+    try {
+      if (!enabled) {
+        await _preferencesAdapter.setBool(quietReminderEnabledKey, false);
+        await _serialize(_cancelNative);
+        return true;
+      }
+
+      var authorization = await authorizationStatus();
+      if (authorization == WisdomNotificationAuthorization.notDetermined) {
+        await _markPromptHandled();
+        await initialize();
+        final granted = await _platform.requestPermission();
+        if (!granted) return false;
+        authorization = WisdomNotificationAuthorization.authorized;
+      }
+      if (authorization != WisdomNotificationAuthorization.authorized) {
+        return false;
+      }
+
+      await _preferencesAdapter.setBool(quietReminderEnabledKey, true);
+      if (status != null) {
+        await synchronizeWithStatus(status);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Settings convenience that keeps the daily-access dependency behind a
+  /// narrow read-only callback. The status is fetched only while enabling;
+  /// disabling never touches ritual state.
+  Future<bool> setQuietReminderEnabledFromStatusReader(
+    bool enabled, {
+    required QuietReminderDailyStatusReader statusReader,
+  }) async {
+    DailyWisdomStatus? status;
+    if (enabled) {
+      try {
+        status = await statusReader();
+      } catch (_) {
+        status = null;
+      }
+    }
+    return setQuietReminderEnabled(enabled, status: status);
+  }
+
   Future<void> dismissPermissionOffer() async {
     await _markPromptHandled();
   }
@@ -254,6 +340,7 @@ class WisdomNotificationService {
     try {
       final status = await authorizationStatus();
       if (status == WisdomNotificationAuthorization.authorized) {
+        if (!await _quietReminderEnabledByPreference()) return false;
         await _serialize(() => _replaceSchedule(unlockAt));
         return true;
       }
@@ -266,6 +353,7 @@ class WisdomNotificationService {
       await initialize();
       final granted = await _platform.requestPermission();
       if (!granted) return false;
+      await _preferencesAdapter.setBool(quietReminderEnabledKey, true);
       await _serialize(() => _replaceSchedule(unlockAt));
       return true;
     } catch (_) {
@@ -286,6 +374,10 @@ class WisdomNotificationService {
         }
         if (await authorizationStatus() !=
             WisdomNotificationAuthorization.authorized) {
+          return;
+        }
+        if (!await _quietReminderEnabledByPreference()) {
+          await _cancelNative();
           return;
         }
         await _replaceSchedule(unlockAt);
@@ -312,6 +404,10 @@ class WisdomNotificationService {
         }
         if (await authorizationStatus() !=
             WisdomNotificationAuthorization.authorized) {
+          return;
+        }
+        if (!await _quietReminderEnabledByPreference()) {
+          await _cancelNative();
           return;
         }
         await _replaceSchedule(unlockAt);
@@ -375,6 +471,16 @@ class WisdomNotificationService {
       await _preferencesAdapter.setBool(permissionPromptHandledKey, true);
     } catch (_) {
       // The in-memory guard still prevents repeated prompts in this session.
+    }
+  }
+
+  Future<bool> _quietReminderEnabledByPreference() async {
+    try {
+      return await _preferencesAdapter.getBool(quietReminderEnabledKey) ?? true;
+    } catch (_) {
+      // Fail open only for an already-authorized system permission so an
+      // old installation never silently loses its existing reminder.
+      return true;
     }
   }
 }

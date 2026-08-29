@@ -1,7 +1,6 @@
 import Flutter
 import MetricKit
 import OSLog
-import StoreKit
 import UIKit
 import UserNotifications
 
@@ -235,13 +234,16 @@ final class EastProductionDiagnostics: NSObject, MXMetricManagerSubscriber {
 enum EastKeeperEntitlement {
   static let channelName = "com.dogukan.dailywisdom/keeper_entitlement"
   static let methodName = "currentKeeperEntitlement"
-  static let keeperProductID = "com.dailywisdomeast.keeper"
+  static let keeperProductID = EastKeeperEntitlementAuthority.keeperProductID
 
   static func isCurrentKeeperTransaction(
     productID: String,
     revocationDate: Date?
   ) -> Bool {
-    productID == keeperProductID && revocationDate == nil
+    EastKeeperEntitlementAuthority.isCurrentKeeperTransaction(
+      productID: productID,
+      revocationDate: revocationDate
+    )
   }
 
   static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -251,20 +253,7 @@ enum EastKeeperEntitlement {
     }
 
     Task { @MainActor in
-      var isEntitled = false
-      for await verification in Transaction.currentEntitlements {
-        guard case .verified(let transaction) = verification else {
-          continue
-        }
-        if isCurrentKeeperTransaction(
-          productID: transaction.productID,
-          revocationDate: transaction.revocationDate
-        ) {
-          isEntitled = true
-          break
-        }
-      }
-      result(isEntitled)
+      result(await EastKeeperEntitlementAuthority.currentEntitlement())
     }
   }
 }

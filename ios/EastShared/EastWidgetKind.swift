@@ -1,10 +1,9 @@
 import Foundation
 
-/// The single WidgetKit widget kind EAST. ships, shared between the Runner
-/// app (which reloads this kind's timelines after an authoritative reveal or
-/// silence transition) and the EastWidgetExtension target (which declares
-/// its `StaticConfiguration` under this exact same kind). One name, one
-/// source of truth -- never duplicated as a string literal on either side.
+/// WidgetKit kinds shared by Runner and the extension. The original kind is
+/// intentionally unchanged so existing free widgets keep their identity and
+/// configuration across the Keeper-widget addition.
 enum EastWidgetKind {
     static let kind = "EASTWidget"
+    static let keeperRitualKind = "EASTKeeperRitualWidget"
 }

@@ -330,6 +330,12 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get retry;
 
+  /// No description provided for @tryAgainUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'TRY AGAIN'**
+  String get tryAgainUpper;
+
   /// No description provided for @skip.
   ///
   /// In en, this message translates to:
@@ -492,6 +498,18 @@ abstract class AppLocalizations {
   /// **'Free users can keep up to 3 wisdoms.'**
   String get freeUsersKeepLimit;
 
+  /// No description provided for @keepReflectingQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep reflecting?'**
+  String get keepReflectingQuestion;
+
+  /// No description provided for @reflectionLimitExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Three Reflections are included. Keeper opens unlimited space for what stays.'**
+  String get reflectionLimitExplanation;
+
   /// No description provided for @becomeKeeper.
   ///
   /// In en, this message translates to:
@@ -546,6 +564,24 @@ abstract class AppLocalizations {
   /// **'Enter the Circle'**
   String get enterTheCircle;
 
+  /// No description provided for @withinTheCircle.
+  ///
+  /// In en, this message translates to:
+  /// **'Within the Circle'**
+  String get withinTheCircle;
+
+  /// No description provided for @keeperActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeper active'**
+  String get keeperActive;
+
+  /// No description provided for @oneTimePurchase.
+  ///
+  /// In en, this message translates to:
+  /// **'One-time purchase'**
+  String get oneTimePurchase;
+
   /// No description provided for @askFrom.
   ///
   /// In en, this message translates to:
@@ -563,6 +599,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Long press to share this wisdom.'**
   String get longPressToShareWisdom;
+
+  /// No description provided for @shareWisdom.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get shareWisdom;
+
+  /// No description provided for @shareWisdomNumbered.
+  ///
+  /// In en, this message translates to:
+  /// **'Share wisdom, item {itemNumber}'**
+  String shareWisdomNumbered(int itemNumber);
+
+  /// No description provided for @quietReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Quiet Reminder'**
+  String get quietReminder;
 
   /// No description provided for @nothingHasStayedYet.
   ///
@@ -795,7 +849,7 @@ abstract class AppLocalizations {
   /// No description provided for @keeperPurchaseOffering.
   ///
   /// In en, this message translates to:
-  /// **'Enter the Circle, {price}, one-time offering'**
+  /// **'Enter the Circle, {price}, one-time purchase'**
   String keeperPurchaseOffering(Object price);
 
   /// No description provided for @keeperUnavailable.
@@ -821,6 +875,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Take your Journal with you.'**
   String get takeJournalWithYou;
+
+  /// No description provided for @keeperWidgetRitual.
+  ///
+  /// In en, this message translates to:
+  /// **'The ritual, within your widget.'**
+  String get keeperWidgetRitual;
 
   /// No description provided for @keepEastAlive.
   ///

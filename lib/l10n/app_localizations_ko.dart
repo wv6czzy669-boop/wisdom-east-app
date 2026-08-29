@@ -119,6 +119,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get retry => '다시 시도';
 
   @override
+  String get tryAgainUpper => '다시 시도';
+
+  @override
   String get skip => '건너뛰기';
 
   @override
@@ -204,6 +207,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get freeUsersKeepLimit => '무료로 지혜를 3개까지 간직할 수 있습니다.';
 
   @override
+  String get keepReflectingQuestion => '계속 성찰할까요?';
+
+  @override
+  String get reflectionLimitExplanation =>
+      '세 번의 성찰이 포함됩니다. Keeper는 남는 모든 것을 위한 무제한 공간을 엽니다.';
+
+  @override
   String get becomeKeeper => '간직 열기';
 
   @override
@@ -231,6 +241,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enterTheCircle => '원 안으로.';
 
   @override
+  String get withinTheCircle => '원 안에서.';
+
+  @override
+  String get keeperActive => 'Keeper 활성화됨';
+
+  @override
+  String get oneTimePurchase => '한 번만 구매';
+
+  @override
   String get askFrom => '마음으로';
 
   @override
@@ -238,6 +257,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get longPressToShareWisdom => '길게 눌러 이 지혜를 공유하세요.';
+
+  @override
+  String get shareWisdom => '공유';
+
+  @override
+  String shareWisdomNumbered(int itemNumber) {
+    return '지혜 공유, 항목 $itemNumber';
+  }
+
+  @override
+  String get quietReminder => '조용한 알림';
 
   @override
   String get nothingHasStayedYet => '아직 남은 것이 없습니다.';
@@ -373,6 +403,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get takeJournalWithYou => '일기장 함께 가져가기.';
+
+  @override
+  String get keeperWidgetRitual => '위젯 안에서도 이어지는 의식.';
 
   @override
   String get keepEastAlive => 'EAST.를 이어 가기.';

@@ -13,6 +13,7 @@ import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../utils/kept_diagnostics.dart';
 import '../utils/reflection_prompt.dart';
+import '../utils/reflection_text_policy.dart';
 import '../widgets/east_back_button.dart';
 
 class ReflectionScreen extends StatefulWidget {
@@ -382,8 +383,8 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = eastLocalizations(context);
-    final characterCount = _controller.text.characters.length;
-    const counterThreshold = 220;
+    final characterCount = ReflectionTextPolicy.length(_controller.text);
+    const counterThreshold = 900;
 
     final hasUnpersistedChanges = _autosave.hasUnpersistedChanges;
 

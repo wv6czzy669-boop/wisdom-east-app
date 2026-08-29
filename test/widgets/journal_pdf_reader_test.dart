@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing/printing.dart';
+import 'package:wisdom_app/services/journal_pdf_builder.dart';
 import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/widgets/journal_pdf_reader.dart';
 
@@ -38,6 +39,14 @@ void main() {
             child: JournalPdfReader(
               pages: pages(4),
               journalLabel: 'Journal',
+              accessibility: const JournalPdfAccessibility(
+                coverLabel: 'EAST.',
+                titlePageLabel: 'Journal. 2026',
+                bodyPageLabels: [
+                  'August 1, 2026. A kept wisdom. A private reflection.',
+                ],
+                closingPageLabel: 'EAST.',
+              ),
             ),
           ),
         ),
@@ -83,12 +92,29 @@ void main() {
     );
   });
 
-  testWidgets('each PDF page exposes a localized page-position label',
+  testWidgets('each PDF page exposes its position and readable content',
       (tester) async {
     await pumpReader(tester);
     final semantics = tester.ensureSemantics();
 
-    expect(find.semantics.byLabel('Journal 1 / 4'), findsOneWidget);
+    expect(
+      find.semantics.byLabel('Journal 1 / 4. EAST.'),
+      findsOneWidget,
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('journal-pdf-page-view')),
+      const Offset(-720, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.semantics.byLabel(
+        'Journal 3 / 4. August 1, 2026. A kept wisdom. '
+        'A private reflection.',
+      ),
+      findsOneWidget,
+    );
 
     semantics.dispose();
   });

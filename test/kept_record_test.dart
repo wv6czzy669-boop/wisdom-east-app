@@ -178,15 +178,8 @@ void main() {
     );
   });
 
-  test(
-      'reflection text over 250 Unicode code points is rejected, counted '
-      'by code points not UTF-16 units', () {
-    // Each 🙂 is one Unicode code point but two UTF-16 code units. 126 of
-    // them is 126 code points (accepted, under the limit) but 252 UTF-16
-    // code units (would be wrongly rejected by a UTF-16-length check).
-    final acceptedEmojiReflection = List.filled(126, '🙂').join();
-    expect(acceptedEmojiReflection.length, 252); // UTF-16 code units.
-    expect(acceptedEmojiReflection.runes.length, 126); // Real code points.
+  test('reflection limit is 1000 user-perceived characters', () {
+    final acceptedEmojiReflection = List.filled(1000, '👨‍👩‍👧‍👦').join();
     expect(
       () => buildRecord(
         reflectionText: acceptedEmojiReflection,
@@ -195,7 +188,7 @@ void main() {
       returnsNormally,
     );
 
-    final exactlyAtLimit = List.filled(250, 'a').join();
+    final exactlyAtLimit = List.filled(1000, 'a').join();
     expect(
       () => buildRecord(
         reflectionText: exactlyAtLimit,
@@ -204,7 +197,7 @@ void main() {
       returnsNormally,
     );
 
-    final overLimit = List.filled(251, 'a').join();
+    final overLimit = List.filled(1001, 'a').join();
     expect(
       () => buildRecord(
         reflectionText: overLimit,
@@ -213,9 +206,7 @@ void main() {
       throwsFormatException,
     );
 
-    // 251 code points via a two-UTF-16-unit character must also be
-    // rejected — proving the check is code-point based in both directions.
-    final overLimitEmoji = List.filled(251, '🙂').join();
+    final overLimitEmoji = List.filled(1001, '👨‍👩‍👧‍👦').join();
     expect(
       () => buildRecord(
         reflectionText: overLimitEmoji,
@@ -223,6 +214,18 @@ void main() {
       ),
       throwsFormatException,
     );
+  });
+
+  test('an existing 250-character schema-3 record remains decodable', () {
+    final encoded = buildRecord(
+      reflectionText: 'x' * 250,
+      reflectedAtValue: reflectedAt,
+    ).encode();
+
+    final decoded = KeptRecord.decode(encoded);
+
+    expect(decoded.reflectionText, 'x' * 250);
+    expect(decoded.encode()['schemaVersion'], 3);
   });
 
   test('reflectedAt without reflectionText is rejected', () {

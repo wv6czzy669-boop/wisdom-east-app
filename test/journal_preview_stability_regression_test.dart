@@ -54,19 +54,35 @@ class _SequencedPdfBuilder implements JournalPdfBuilder {
     DateTime? now,
     bool compress = true,
   }) async {
+    return (await buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    ))
+        .bytes;
+  }
+
+  @override
+  Future<JournalPdfPublication> buildPublication({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
     final gate = Completer<void>();
     final index = calls;
     gates.add(gate);
     calls++;
     await gate.future;
-    final bytes = await _delegate.build(
+    final publication = await _delegate.buildPublication(
       items: items,
       ownerName: ownerName,
       now: now,
       compress: compress,
     );
-    results[index] = bytes;
-    return bytes;
+    results[index] = publication.bytes;
+    return publication;
   }
 }
 
