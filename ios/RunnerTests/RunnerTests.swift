@@ -58,17 +58,29 @@ class RunnerTests: XCTestCase {
       shield.descendant(withAccessibilityIdentifier: "east-privacy-launch-title") as? UILabel
     )
 
-    let expectedDiameter = window.bounds.width * 0.585
+    let safeBounds = shield.bounds.inset(by: shield.safeAreaInsets)
+    let expectedDiameter = min(window.bounds.width * 0.585, safeBounds.height)
     XCTAssertEqual(ring.bounds.width, expectedDiameter, accuracy: 0.001)
     XCTAssertEqual(ring.bounds.height, expectedDiameter, accuracy: 0.001)
-    XCTAssertEqual(ring.center.x, shield.bounds.midX, accuracy: 0.001)
-    XCTAssertEqual(ring.center.y, shield.bounds.midY, accuracy: 0.001)
+    XCTAssertEqual(ring.center.x, safeBounds.midX, accuracy: 0.001)
+    XCTAssertEqual(ring.center.y, safeBounds.midY, accuracy: 0.001)
     XCTAssertEqual(ring.layer.cornerRadius, expectedDiameter / 2, accuracy: 0.001)
     XCTAssertEqual(ring.layer.borderWidth, 0.85, accuracy: 0.001)
     XCTAssertTrue(title.superview === ring)
     XCTAssertEqual(title.center.x, ring.bounds.midX, accuracy: 0.001)
     XCTAssertEqual(title.center.y, ring.bounds.midY - 2.5, accuracy: 0.001)
     XCTAssertEqual(title.font.pointSize, 21.5, accuracy: 0.001)
+    XCTAssertEqual(title.font.fontName, "EBGaramond-Regular")
+    XCTAssertEqual(title.bounds.height, 21.5 * 1.28, accuracy: 0.001)
+    let letterSpacing = try XCTUnwrap(
+      title.attributedText?.attribute(
+        .kern,
+        at: 0,
+        effectiveRange: nil
+      ) as? CGFloat,
+      "Privacy title must retain Flutter's exact 0.5pt letter spacing"
+    )
+    XCTAssertEqual(letterSpacing, 0.5, accuracy: 0.001)
   }
 
   func testRunnerUsesThePrivacyAwareSceneDelegate() throws {

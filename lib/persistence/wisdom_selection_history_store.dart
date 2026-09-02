@@ -1,6 +1,9 @@
 import 'storage_preferences_adapter.dart';
 
-/// Device-local memory of recently selected canonical wisdom identities.
+/// Device-local memory of recently selected canonical wisdom occurrences.
+///
+/// IDs may repeat. Their order and multiplicity are required by the selector's
+/// bounded recurrence policy.
 ///
 /// This is presentation quality state only. It never participates in the
 /// rolling daily-access lock, Kept persistence, CloudKit, or analytics.

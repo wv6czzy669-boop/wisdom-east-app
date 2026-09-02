@@ -1,3 +1,4 @@
+import CoreText
 import Flutter
 import UIKit
 
@@ -54,6 +55,8 @@ private final class EastPrivacyShieldView: UIView {
   private static let launchMarkBorderAlpha: CGFloat = 0.70
   private static let launchMarkBorderWidth: CGFloat = 0.85
   private static let launchMarkTitleSize: CGFloat = 21.5
+  private static let launchMarkTitleLineHeight: CGFloat = 1.28
+  private static let launchMarkTitleLetterSpacing: CGFloat = 0.5
   private static let launchMarkTitleLift: CGFloat = 2.5
 
   private let ringView = UIView()
@@ -72,13 +75,23 @@ private final class EastPrivacyShieldView: UIView {
     ringView.layer.borderWidth = Self.launchMarkBorderWidth
     addSubview(ringView)
 
-    titleLabel.text = "EAST."
     titleLabel.textAlignment = .center
     titleLabel.accessibilityIdentifier = "east-privacy-launch-title"
-    titleLabel.font =
-      UIFont(name: "EBGaramond-Regular", size: Self.launchMarkTitleSize)
-      ?? UIFont(name: "Georgia", size: Self.launchMarkTitleSize)
-      ?? UIFont.systemFont(ofSize: Self.launchMarkTitleSize, weight: .regular)
+    titleLabel.font = Self.launchMarkFont()
+    let paragraphStyle = NSMutableParagraphStyle()
+    paragraphStyle.alignment = .center
+    paragraphStyle.minimumLineHeight =
+      Self.launchMarkTitleSize * Self.launchMarkTitleLineHeight
+    paragraphStyle.maximumLineHeight =
+      Self.launchMarkTitleSize * Self.launchMarkTitleLineHeight
+    titleLabel.attributedText = NSAttributedString(
+      string: "EAST.",
+      attributes: [
+        .font: titleLabel.font as Any,
+        .kern: Self.launchMarkTitleLetterSpacing,
+        .paragraphStyle: paragraphStyle,
+      ]
+    )
     ringView.addSubview(titleLabel)
 
     applyPalette()
@@ -92,16 +105,25 @@ private final class EastPrivacyShieldView: UIView {
   override func layoutSubviews() {
     super.layoutSubviews()
 
-    // Match Flutter's first ritual frame: one large, thin circle occupying
-    // 58.5% of the available width, with the EAST. wordmark inside its exact
-    // centre. The calculation stays responsive for compact app-switcher
-    // cards and landscape windows instead of copying screenshot pixels.
-    let diameter = min(bounds.width * Self.launchMarkWidthRatio, bounds.height)
+    // Match Flutter's first ritual frame, which is centered inside SafeArea
+    // rather than the full physical window. Without this correction the
+    // privacy mark sits slightly higher on devices whose top and bottom safe
+    // insets differ (for example Dynamic Island iPhones).
+    let safeBounds = bounds.inset(by: safeAreaInsets)
+    let diameter = min(bounds.width * Self.launchMarkWidthRatio, safeBounds.height)
     ringView.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
-    ringView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    ringView.center = CGPoint(x: safeBounds.midX, y: safeBounds.midY)
     ringView.layer.cornerRadius = diameter / 2
 
-    titleLabel.sizeToFit()
+    let titleSize = titleLabel.sizeThatFits(
+      CGSize(width: diameter, height: .greatestFiniteMagnitude)
+    )
+    titleLabel.bounds = CGRect(
+      x: 0,
+      y: 0,
+      width: ceil(titleSize.width),
+      height: Self.launchMarkTitleSize * Self.launchMarkTitleLineHeight
+    )
     titleLabel.center = CGPoint(
       x: ringView.bounds.midX,
       y: ringView.bounds.midY - Self.launchMarkTitleLift
@@ -137,6 +159,30 @@ private final class EastPrivacyShieldView: UIView {
     backgroundColor = background
     titleLabel.textColor = ink
     ringView.layer.borderColor = ink.withAlphaComponent(Self.launchMarkBorderAlpha).cgColor
+  }
+
+  private static func launchMarkFont() -> UIFont {
+    if let registeredFont = UIFont(
+      name: "EBGaramond-Regular",
+      size: launchMarkTitleSize
+    ) {
+      return registeredFont
+    }
+
+    // Flutter already embeds this font for the opening ritual. Register that
+    // exact asset for UIKit as well, avoiding both a Georgia fallback and a
+    // second copy of the font in Runner's resources.
+    let fontURL = Bundle.main.bundleURL
+      .appendingPathComponent("Frameworks/App.framework", isDirectory: true)
+      .appendingPathComponent("flutter_assets/assets/fonts", isDirectory: true)
+      .appendingPathComponent("EBGaramond-Variable.ttf")
+    if FileManager.default.fileExists(atPath: fontURL.path) {
+      CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+    }
+
+    return UIFont(name: "EBGaramond-Regular", size: launchMarkTitleSize)
+      ?? UIFont(name: "Georgia", size: launchMarkTitleSize)
+      ?? UIFont.systemFont(ofSize: launchMarkTitleSize, weight: .regular)
   }
 }
 
