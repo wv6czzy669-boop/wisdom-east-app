@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart' show Brightness, Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/localization/east_typography_resolver.dart';
 import 'package:wisdom_app/models/favorite_item.dart';
 import 'package:wisdom_app/services/journal_layout.dart';
@@ -59,13 +59,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final now = DateTime.utc(2026, 8, 16);
-  late pw.Font font;
-
-  setUpAll(() async {
-    font = pw.Font.ttf(
-      await rootBundle.load('assets/fonts/EBGaramond-Variable.ttf'),
-    );
-  });
 
   FavoriteItem item({
     required String id,
@@ -83,11 +76,6 @@ void main() {
       keptAt: keptAt.toIso8601String(),
     );
   }
-
-  test('title-page header uses only the Journal generation year', () {
-    expect(JournalPdfBuilder.headerYear(DateTime.utc(2026, 8, 16)), '2026');
-    expect(JournalPdfBuilder.headerYear(DateTime.utc(2031, 1, 1)), '2031');
-  });
 
   test('publication carries readable page content beside the raster PDF',
       () async {
@@ -107,14 +95,20 @@ void main() {
     );
 
     expect(publication.bytes, isNotEmpty);
-    expect(publication.accessibility.coverLabel, 'EAST.');
-    expect(publication.accessibility.titlePageLabel, contains('A Reader'));
     expect(
-      publication.accessibility.bodyPageLabels.single,
+      publication.accessibility.pageLabels,
+      hasLength(_physicalPageCount(publication.bytes)),
+      reason: 'Every physical page must have one exact VoiceOver label.',
+    );
+    expect(publication.accessibility.coverLabel, 'EAST.');
+    expect(publication.accessibility.titlePageLabel, 'Journal. A Reader');
+    expect(publication.accessibility.titlePageLabel, isNot(contains('2026')));
+    expect(
+      publication.accessibility.bodyPageLabels.last,
       contains('Listen to what stays.'),
     );
     expect(
-      publication.accessibility.bodyPageLabels.single,
+      publication.accessibility.bodyPageLabels.last,
       contains('A complete Reflection 👨‍👩‍👧‍👦'),
       reason: 'VoiceOver receives the original grapheme, not PDF glyph '
           'normalization output.',
@@ -123,10 +117,14 @@ void main() {
 
   test('oversized body content never leaves a continuation page silent', () {
     const accessibility = JournalPdfAccessibility(
-      coverLabel: 'cover',
-      titlePageLabel: 'title',
-      bodyPageLabels: ['first entry', 'second entry'],
-      closingPageLabel: 'closing',
+      pageLabels: [
+        'cover',
+        'title',
+        'first entry',
+        'first entry',
+        'second entry',
+        'closing',
+      ],
     );
 
     expect(accessibility.contentForPage(0, 6), 'cover');
@@ -258,9 +256,8 @@ void main() {
     }
   });
 
-  test(
-      'physical page count is exactly cover(1) + title(1) + body-groups + '
-      'final(1)', () async {
+  test('multi-year sections and VoiceOver labels match physical pages exactly',
+      () async {
     final planner = const JournalLayoutPlanner();
     final items = List.generate(
       15,
@@ -273,17 +270,24 @@ void main() {
             i.isEven ? 'A reflection of modest length for entry $i.' : null,
       ),
     );
-    final expectedBodyGroups = planner.plan(items, font: font).length;
-
-    final bytes = await JournalPdfBuilder(planner: planner).build(
+    final publication =
+        await JournalPdfBuilder(planner: planner).buildPublication(
       items: items,
       now: now,
       compress: false,
     );
 
     expect(
-      _physicalPageCount(bytes),
-      2 + expectedBodyGroups + 1,
+      publication.accessibility.pageLabels,
+      hasLength(_physicalPageCount(publication.bytes)),
+    );
+    expect(
+      publication.accessibility.pageLabels.where((label) => label == '2025'),
+      hasLength(1),
+    );
+    expect(
+      publication.accessibility.pageLabels.where((label) => label == '2026'),
+      hasLength(1),
     );
   });
 
@@ -316,10 +320,10 @@ void main() {
       compress: false,
     );
 
-    expect(_physicalPageCount(bytes), 4);
+    expect(_physicalPageCount(bytes), 5);
   });
 
-  test('Reflection emoji render through the bundled PDF fallback', () async {
+  test('Reflection emoji render through the bundled outline font', () async {
     final printMessages = <String>[];
     late Uint8List bytes;
     await runZoned(
@@ -351,7 +355,12 @@ void main() {
       ),
       isEmpty,
     );
-    expect(_embeddedImageCount(bytes), greaterThanOrEqualTo(8));
+    expect(
+      _embeddedImageCount(bytes),
+      0,
+      reason: 'The compact monochrome emoji font embeds glyph outlines, not '
+          'multi-megabyte bitmap strikes.',
+    );
     expect(normalizeJournalPdfText('❤️ 👍🏽 👨‍👩‍👧‍👦'), '❤ 👍 👨👩👧👦');
     expect(
       EastTypographyResolver.forLocale(const Locale('en'))
@@ -452,7 +461,10 @@ void main() {
     );
 
     expect(bytes.length, greaterThan(1000));
-    expect(_physicalPageCount(bytes), 4); // cover + title + 1 body + final
+    expect(
+      _physicalPageCount(bytes),
+      5,
+    ); // cover + title + year + 1 body + final
   });
 
   test(
@@ -473,7 +485,7 @@ void main() {
       compress: false,
     );
 
-    expect(_physicalPageCount(publication.bytes), 4);
+    expect(_physicalPageCount(publication.bytes), 5);
     expect(
         publication.accessibility.titlePageLabel, isNot(contains(longOwner)));
     expect(publication.accessibility.titlePageLabel, contains('👨‍👩‍👧‍👦'));
@@ -505,5 +517,67 @@ void main() {
     // and idempotent in shape (same physical page count each time).
     expect(firstRun.length, greaterThan(0));
     expect(secondRun.length, greaterThan(0));
+  });
+
+  test('large archives and unusually long Reflections build in a worker', () {
+    final shortItems = List.generate(
+      23,
+      (i) => item(
+        id: 'short-$i',
+        revealId: 'r-short-$i',
+        text: 'Brief.',
+        keptAt: now.subtract(Duration(days: i)),
+      ),
+    );
+    final largeArchive = List.generate(
+      24,
+      (i) => item(
+        id: 'large-$i',
+        revealId: 'r-large-$i',
+        text: 'Brief.',
+        keptAt: now.subtract(Duration(days: i)),
+      ),
+    );
+    final longReflection = [
+      item(
+        id: 'long',
+        revealId: 'r-long',
+        text: 'A single entry.',
+        keptAt: now,
+        reflection: List.filled(12000, 'a').join(),
+      ),
+    ];
+
+    expect(JournalPdfBuilder.shouldBuildInBackground(shortItems), isFalse);
+    expect(JournalPdfBuilder.shouldBuildInBackground(largeArchive), isTrue);
+    expect(JournalPdfBuilder.shouldBuildInBackground(longReflection), isTrue);
+  });
+
+  test('background generation keeps dates localized inside its worker',
+      () async {
+    final items = List<FavoriteItem>.generate(
+      24,
+      (index) => item(
+        id: 'localized-$index',
+        revealId: 'localized-reveal-$index',
+        text: 'Sessizlik de bir cevaptır.',
+        keptAt: DateTime.utc(2026, 8, index + 1),
+      ),
+    );
+    final publication = await JournalPdfBuilder(
+      localizations: lookupAppLocalizations(const Locale('tr')),
+      presentation: const JournalPdfPresentation(locale: Locale('tr')),
+    ).buildPublication(
+      items: items,
+      now: now,
+    );
+
+    expect(JournalPdfBuilder.shouldBuildInBackground(items), isTrue);
+    expect(
+      publication.accessibility.pageLabels.any(
+        (label) => label.contains('Ağustos') && !label.contains('August'),
+      ),
+      isTrue,
+    );
   });
 }

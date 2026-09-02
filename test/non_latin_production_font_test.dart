@@ -120,7 +120,7 @@ void main() {
     expect(documentation, contains('| ar | Noto Naskh Arabic'));
     expect(documentation, contains('2.021'));
     expect(documentation, contains('Noto Serif Thai'));
-    expect(documentation, contains('Noto Color Emoji 2.051'));
+    expect(documentation, contains('Noto Emoji v62'));
     expect(documentation, contains('OFL-EBGaramond.txt'));
     expect(documentation, contains('ef9512f92f6d'));
 
@@ -138,8 +138,10 @@ void main() {
     );
 
     for (final font in EastTypographyResolver.productionFonts) {
-      final data = await rootBundle.load(font.asset);
-      expect(data.lengthInBytes, font.byteLength, reason: font.family);
+      final appData = await rootBundle.load(font.asset);
+      final pdfData = await rootBundle.load(font.pdfAsset);
+      expect(appData.lengthInBytes, font.byteLength, reason: font.family);
+      expect(pdfData.lengthInBytes, font.pdfByteLength, reason: font.family);
       expect(font.sourceVersion, isNotEmpty, reason: font.family);
     }
   });

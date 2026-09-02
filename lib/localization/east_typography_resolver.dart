@@ -8,26 +8,38 @@ class EastProductionFont {
   const EastProductionFont({
     required this.family,
     required this.asset,
+    String? pdfAsset,
     required this.script,
     required this.byteLength,
+    int? pdfByteLength,
     required this.sourceVersion,
     required this.licenseAsset,
-  });
+  })  : pdfAsset = pdfAsset ?? asset,
+        pdfByteLength = pdfByteLength ?? byteLength;
 
   final String family;
+
+  /// Compact controlled-copy font used by Flutter's UI.
   final String asset;
+
+  /// Full-glyph font retained for arbitrary user text in Journal PDFs.
+  final String pdfAsset;
   final EastScript script;
   final int byteLength;
+  final int pdfByteLength;
   final String sourceVersion;
   final String? licenseAsset;
 }
 
-/// The complete font plan for one locale. The same plan drives Flutter text,
-/// share cards, render QA, and the Journal PDF foundation.
+/// The complete font plan for one locale. Compact app-copy assets drive
+/// Flutter text; full PDF assets preserve arbitrary user-written Journal
+/// content. Both stay behind this one registry so the two layers cannot
+/// silently choose different typography.
 class EastTypographyPlan {
   const EastTypographyPlan({
     required this.family,
     required this.asset,
+    required this.primaryPdfAsset,
     required this.fallbacks,
     required this.pdfFallbackAssets,
     required this.script,
@@ -39,24 +51,28 @@ class EastTypographyPlan {
   final List<String> pdfFallbackAssets;
   final EastScript script;
 
-  String get pdfFontAsset => asset;
+  String get pdfFontAsset => primaryPdfAsset;
+  final String primaryPdfAsset;
   bool get hasEmbeddedPdfFont => true;
 }
 
 /// EAST.'s single script-to-production-font registry.
 ///
-/// The five Noto assets are full-glyph static Regular instances, not
-/// corpus-only subsets. Consequently locale-controlled copy and arbitrary
-/// user Reflection text can use the same deterministic fallback chain without
-/// losing characters. Source hashes, build instructions, and the OFL license
-/// are retained under `assets/fonts/`.
+/// Japanese, Korean, and Traditional Chinese use reproducible controlled-copy
+/// subsets in Flutter while retaining full-glyph static Regular instances for
+/// arbitrary Reflection text in PDFs. Arabic and Thai are already compact
+/// enough to share one full asset. Source hashes, build instructions, and the
+/// OFL licenses are retained under `assets/fonts/`.
 abstract final class EastTypographyResolver {
-  /// PDF-only bitmap emoji fallback. Kept separate from the Flutter type
-  /// family registry so EAST.'s on-screen editorial typography is unchanged.
-  static const String pdfEmojiFontAsset = 'assets/fonts/NotoColorEmoji.ttf';
-  static const int pdfEmojiFontByteLength = 10673480;
+  /// PDF-only monochrome emoji fallback. It covers the normalized Unicode
+  /// emoji scalar set without the 10 MB bitmap strike carried by
+  /// NotoColorEmoji. EAST.'s editorial PDFs are monochrome, so this preserves
+  /// every user-visible emoji while removing the package's largest single
+  /// avoidable asset.
+  static const String pdfEmojiFontAsset = 'assets/fonts/NotoEmoji-Regular.ttf';
+  static const int pdfEmojiFontByteLength = 879832;
   static const String pdfEmojiSourceVersion =
-      'Noto Color Emoji 2.051; noto-emoji e92753bfa55f';
+      'Noto Emoji v62; Google Fonts monochrome variable instance';
   static const String pdfEmojiLicenseAsset =
       'assets/fonts/licenses/OFL-NotoEmoji.txt';
 
@@ -70,25 +86,31 @@ abstract final class EastTypographyResolver {
   );
   static const EastProductionFont japaneseFont = EastProductionFont(
     family: 'NotoSerifJP',
-    asset: 'assets/fonts/NotoSerifJP-Regular.ttf',
+    asset: 'assets/fonts/NotoSerifJP-App.ttf',
+    pdfAsset: 'assets/fonts/NotoSerifJP-Regular.ttf',
     script: EastScript.japanese,
-    byteLength: 8079968,
+    byteLength: 425684,
+    pdfByteLength: 8079968,
     sourceVersion: 'noto-cjk 985fa52c81c1; static wght=400',
     licenseAsset: 'assets/fonts/licenses/OFL-NotoCJK.txt',
   );
   static const EastProductionFont koreanFont = EastProductionFont(
     family: 'NotoSerifKR',
-    asset: 'assets/fonts/NotoSerifKR-Regular.ttf',
+    asset: 'assets/fonts/NotoSerifKR-App.ttf',
+    pdfAsset: 'assets/fonts/NotoSerifKR-Regular.ttf',
     script: EastScript.korean,
-    byteLength: 14122756,
+    byteLength: 356920,
+    pdfByteLength: 14122756,
     sourceVersion: 'noto-cjk 985fa52c81c1; static wght=400',
     licenseAsset: 'assets/fonts/licenses/OFL-NotoCJK.txt',
   );
   static const EastProductionFont traditionalChineseFont = EastProductionFont(
     family: 'NotoSerifTC',
-    asset: 'assets/fonts/NotoSerifTC-Regular.ttf',
+    asset: 'assets/fonts/NotoSerifTC-App.ttf',
+    pdfAsset: 'assets/fonts/NotoSerifTC-Regular.ttf',
     script: EastScript.traditionalChinese,
-    byteLength: 10003632,
+    byteLength: 465632,
+    pdfByteLength: 10003632,
     sourceVersion: 'noto-cjk 985fa52c81c1; static wght=400',
     licenseAsset: 'assets/fonts/licenses/OFL-NotoCJK.txt',
   );
@@ -128,6 +150,7 @@ abstract final class EastTypographyResolver {
     return EastTypographyPlan(
       family: primary.family,
       asset: primary.asset,
+      primaryPdfAsset: primary.pdfAsset,
       fallbacks: <String>[
         ...fallbackFonts.map((font) => font.family),
         'Georgia',
@@ -135,7 +158,7 @@ abstract final class EastTypographyResolver {
       ],
       pdfFallbackAssets: <String>[
         pdfEmojiFontAsset,
-        ...fallbackFonts.map((font) => font.asset),
+        ...fallbackFonts.map((font) => font.pdfAsset),
       ],
       script: primary.script,
     );

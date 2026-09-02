@@ -40,6 +40,37 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(window.subviews.contains(sensitiveContent))
   }
 
+  @MainActor
+  func testPrivacyShieldMatchesTheResponsiveLaunchMarkComposition() throws {
+    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+    let controller = EastPrivacyShieldController()
+
+    controller.cover(window: window)
+    let shield = try XCTUnwrap(
+      window.viewWithTag(EastPrivacyShieldController.shieldViewTag)
+    )
+    shield.layoutIfNeeded()
+
+    let ring = try XCTUnwrap(
+      shield.descendant(withAccessibilityIdentifier: "east-privacy-launch-ring")
+    )
+    let title = try XCTUnwrap(
+      shield.descendant(withAccessibilityIdentifier: "east-privacy-launch-title") as? UILabel
+    )
+
+    let expectedDiameter = window.bounds.width * 0.585
+    XCTAssertEqual(ring.bounds.width, expectedDiameter, accuracy: 0.001)
+    XCTAssertEqual(ring.bounds.height, expectedDiameter, accuracy: 0.001)
+    XCTAssertEqual(ring.center.x, shield.bounds.midX, accuracy: 0.001)
+    XCTAssertEqual(ring.center.y, shield.bounds.midY, accuracy: 0.001)
+    XCTAssertEqual(ring.layer.cornerRadius, expectedDiameter / 2, accuracy: 0.001)
+    XCTAssertEqual(ring.layer.borderWidth, 0.85, accuracy: 0.001)
+    XCTAssertTrue(title.superview === ring)
+    XCTAssertEqual(title.center.x, ring.bounds.midX, accuracy: 0.001)
+    XCTAssertEqual(title.center.y, ring.bounds.midY - 2.5, accuracy: 0.001)
+    XCTAssertEqual(title.font.pointSize, 21.5, accuracy: 0.001)
+  }
+
   func testRunnerUsesThePrivacyAwareSceneDelegate() throws {
     let sceneManifest = try XCTUnwrap(
       Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest")
@@ -2871,4 +2902,16 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(fakeDatabase.fetchedRecordIDs.allSatisfy { $0 == CloudKitRecordIdentity.syncStateRecordID() })
   }
 
+}
+
+private extension UIView {
+  func descendant(withAccessibilityIdentifier identifier: String) -> UIView? {
+    if accessibilityIdentifier == identifier { return self }
+    for subview in subviews {
+      if let match = subview.descendant(withAccessibilityIdentifier: identifier) {
+        return match
+      }
+    }
+    return nil
+  }
 }

@@ -40,12 +40,12 @@ void main() {
               pages: pages(4),
               journalLabel: 'Journal',
               accessibility: const JournalPdfAccessibility(
-                coverLabel: 'EAST.',
-                titlePageLabel: 'Journal. 2026',
-                bodyPageLabels: [
+                pageLabels: [
+                  'EAST.',
+                  'Journal.',
                   'August 1, 2026. A kept wisdom. A private reflection.',
+                  'EAST.',
                 ],
-                closingPageLabel: 'EAST.',
               ),
             ),
           ),

@@ -50,6 +50,11 @@ final class EastPrivacyShieldController {
 /// EAST.'s fresh-install Light default; System follows the scene's traits.
 private final class EastPrivacyShieldView: UIView {
   private static let appearancePreferenceKey = "flutter.east_appearance_preference"
+  private static let launchMarkWidthRatio: CGFloat = 0.585
+  private static let launchMarkBorderAlpha: CGFloat = 0.70
+  private static let launchMarkBorderWidth: CGFloat = 0.85
+  private static let launchMarkTitleSize: CGFloat = 21.5
+  private static let launchMarkTitleLift: CGFloat = 2.5
 
   private let ringView = UIView()
   private let titleLabel = UILabel()
@@ -62,32 +67,19 @@ private final class EastPrivacyShieldView: UIView {
     accessibilityLabel = "EAST."
     accessibilityViewIsModal = true
 
-    ringView.translatesAutoresizingMaskIntoConstraints = false
     ringView.isAccessibilityElement = false
-    ringView.layer.borderWidth = 0.8
-    ringView.layer.cornerRadius = 18
+    ringView.accessibilityIdentifier = "east-privacy-launch-ring"
+    ringView.layer.borderWidth = Self.launchMarkBorderWidth
+    addSubview(ringView)
 
-    titleLabel.translatesAutoresizingMaskIntoConstraints = false
     titleLabel.text = "EAST."
     titleLabel.textAlignment = .center
+    titleLabel.accessibilityIdentifier = "east-privacy-launch-title"
     titleLabel.font =
-      UIFont(name: "EBGaramond-Regular", size: 31)
-      ?? UIFont(name: "Georgia", size: 31)
-      ?? UIFont.systemFont(ofSize: 31, weight: .regular)
-
-    let stack = UIStackView(arrangedSubviews: [ringView, titleLabel])
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    stack.axis = .vertical
-    stack.alignment = .center
-    stack.spacing = 22
-    addSubview(stack)
-
-    NSLayoutConstraint.activate([
-      ringView.widthAnchor.constraint(equalToConstant: 36),
-      ringView.heightAnchor.constraint(equalToConstant: 36),
-      stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-      stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-    ])
+      UIFont(name: "EBGaramond-Regular", size: Self.launchMarkTitleSize)
+      ?? UIFont(name: "Georgia", size: Self.launchMarkTitleSize)
+      ?? UIFont.systemFont(ofSize: Self.launchMarkTitleSize, weight: .regular)
+    ringView.addSubview(titleLabel)
 
     applyPalette()
   }
@@ -95,6 +87,25 @@ private final class EastPrivacyShieldView: UIView {
   @available(*, unavailable)
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+
+    // Match Flutter's first ritual frame: one large, thin circle occupying
+    // 58.5% of the available width, with the EAST. wordmark inside its exact
+    // centre. The calculation stays responsive for compact app-switcher
+    // cards and landscape windows instead of copying screenshot pixels.
+    let diameter = min(bounds.width * Self.launchMarkWidthRatio, bounds.height)
+    ringView.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+    ringView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    ringView.layer.cornerRadius = diameter / 2
+
+    titleLabel.sizeToFit()
+    titleLabel.center = CGPoint(
+      x: ringView.bounds.midX,
+      y: ringView.bounds.midY - Self.launchMarkTitleLift
+    )
   }
 
   override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -125,7 +136,7 @@ private final class EastPrivacyShieldView: UIView {
 
     backgroundColor = background
     titleLabel.textColor = ink
-    ringView.layer.borderColor = ink.cgColor
+    ringView.layer.borderColor = ink.withAlphaComponent(Self.launchMarkBorderAlpha).cgColor
   }
 }
 

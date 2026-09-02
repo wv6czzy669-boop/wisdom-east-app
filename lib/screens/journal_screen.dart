@@ -9,6 +9,7 @@ import '../models/favorite_item.dart';
 import '../l10n/east_localizations.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/journal_owner_service.dart';
+import '../services/journal_pdf_cache.dart';
 import '../services/journal_pdf_builder.dart';
 import '../services/purchase_service.dart';
 import '../theme/east_design.dart';
@@ -46,6 +47,7 @@ class JournalScreen extends StatefulWidget {
     this.purchaseService,
     this.journalOwnerService,
     this.pdfBuilder,
+    this.pdfCache,
     this.shareHandler,
   });
 
@@ -54,6 +56,7 @@ class JournalScreen extends StatefulWidget {
   final PurchaseService? purchaseService;
   final JournalOwnerService? journalOwnerService;
   final JournalPdfBuilder? pdfBuilder;
+  final JournalPdfCache? pdfCache;
   final JournalShareHandler? shareHandler;
 
   @override
@@ -64,6 +67,8 @@ class _JournalScreenState extends State<JournalScreen> {
   late final JournalOwnerService _ownerService;
   late final PurchaseService _purchaseService;
   late final JournalPdfBuilder? _injectedPdfBuilder;
+  late final JournalPdfCache? _pdfCache;
+  late final DateTime _publicationDate;
 
   _JournalStage _stage = _JournalStage.resolving;
   String? _ownerName;
@@ -94,6 +99,8 @@ class _JournalScreenState extends State<JournalScreen> {
   int _generation = 0;
   Brightness? _generatedBrightness;
   Brightness? _brightnessGenerationInFlight;
+  String? _generatedLocaleTag;
+  String? _localeGenerationInFlight;
 
   // Real-device repair: the Name edit flow is now the approved full-field
   // decision takeover (same visual system as Reflection's Delete
@@ -133,6 +140,9 @@ class _JournalScreenState extends State<JournalScreen> {
     _purchaseService = widget.purchaseService ?? app_services.purchaseService;
     _purchaseService.addListener(_onKeeperEntitlementChanged);
     _injectedPdfBuilder = widget.pdfBuilder;
+    _pdfCache = widget.pdfCache ??
+        (_injectedPdfBuilder == null ? ProtectedJournalPdfCache() : null);
+    _publicationDate = DateTime.now();
     unawaited(_bootstrap());
   }
 
@@ -140,11 +150,24 @@ class _JournalScreenState extends State<JournalScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final brightness = Theme.of(context).brightness;
+    final localeTag = Localizations.localeOf(context).toLanguageTag();
     if (_pdfBytes != null &&
         _injectedPdfBuilder == null &&
-        brightness != _generatedBrightness &&
-        brightness != _brightnessGenerationInFlight) {
+        (brightness != _generatedBrightness ||
+            localeTag != _generatedLocaleTag) &&
+        (brightness != _brightnessGenerationInFlight ||
+            localeTag != _localeGenerationInFlight)) {
       _brightnessGenerationInFlight = brightness;
+      _localeGenerationInFlight = localeTag;
+      unawaited(_generate());
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant JournalScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.items, widget.items) ||
+        oldWidget.items.length != widget.items.length) {
       unawaited(_generate());
     }
   }
@@ -176,7 +199,11 @@ class _JournalScreenState extends State<JournalScreen> {
   Future<void> _generate() async {
     final generation = ++_generation;
     final brightness = Theme.of(context).brightness;
+    final locale = Localizations.localeOf(context);
+    final localeTag = locale.toLanguageTag();
+    final localizations = eastLocalizations(context);
     _brightnessGenerationInFlight = brightness;
+    _localeGenerationInFlight = localeTag;
     // Only the very first generation (no publication has ever existed yet)
     // shows the reserved-but-empty "generating" shape -- a regeneration
     // with a prior good preview never reverts away from `preview`, so the
@@ -186,12 +213,30 @@ class _JournalScreenState extends State<JournalScreen> {
       setState(() => _stage = _JournalStage.generating);
     }
 
+    final fingerprint = JournalPdfFingerprint.create(
+      items: widget.items,
+      ownerName: _ownerName,
+      locale: locale,
+      brightness: brightness,
+      generatedAt: _publicationDate,
+    );
+
+    final cached = await _readCacheBestEffort(fingerprint);
+    if (cached != null) {
+      if (!mounted || generation != _generation) return;
+      _acceptPublication(
+        cached,
+        brightness: brightness,
+        localeTag: localeTag,
+      );
+      return;
+    }
+
     final JournalPdfPublication publication;
     try {
-      final locale = Localizations.localeOf(context);
       final pdfBuilder = _injectedPdfBuilder ??
           JournalPdfBuilder(
-            localizations: eastLocalizations(context),
+            localizations: localizations,
             presentation: JournalPdfPresentation(
               locale: locale,
               brightness: brightness,
@@ -200,6 +245,7 @@ class _JournalScreenState extends State<JournalScreen> {
       publication = await pdfBuilder.buildPublication(
         items: widget.items,
         ownerName: _ownerName,
+        now: _publicationDate,
       );
     } catch (_) {
       // A generation failure never touches Kept/Reflection/Return/daily
@@ -208,6 +254,7 @@ class _JournalScreenState extends State<JournalScreen> {
       // than being replaced by an error state.
       if (!mounted || generation != _generation) return;
       _brightnessGenerationInFlight = null;
+      _localeGenerationInFlight = null;
       if (_pdfBytes == null) {
         setState(() => _stage = _JournalStage.error);
       }
@@ -216,19 +263,61 @@ class _JournalScreenState extends State<JournalScreen> {
 
     if (!mounted || generation != _generation) return;
     if (_injectedPdfBuilder == null &&
-        Theme.of(context).brightness != brightness) {
+        (Theme.of(context).brightness != brightness ||
+            Localizations.localeOf(context).toLanguageTag() != localeTag)) {
       _brightnessGenerationInFlight = null;
+      _localeGenerationInFlight = null;
       unawaited(_generate());
       return;
     }
+    _acceptPublication(
+      publication,
+      brightness: brightness,
+      localeTag: localeTag,
+    );
+    unawaited(_writeCacheBestEffort(fingerprint, publication));
+  }
+
+  void _acceptPublication(
+    JournalPdfPublication publication, {
+    required Brightness brightness,
+    required String localeTag,
+  }) {
     setState(() {
       _pdfBytes = publication.bytes;
       _pdfAccessibility = publication.accessibility;
       _previewBuild = (format) async => publication.bytes;
       _generatedBrightness = brightness;
+      _generatedLocaleTag = localeTag;
       _brightnessGenerationInFlight = null;
+      _localeGenerationInFlight = null;
       _stage = _JournalStage.preview;
     });
+  }
+
+  Future<JournalPdfPublication?> _readCacheBestEffort(
+    String fingerprint,
+  ) async {
+    final cache = _pdfCache;
+    if (cache == null) return null;
+    try {
+      return await cache.read(fingerprint);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeCacheBestEffort(
+    String fingerprint,
+    JournalPdfPublication publication,
+  ) async {
+    final cache = _pdfCache;
+    if (cache == null) return;
+    try {
+      await cache.write(fingerprint, publication);
+    } catch (_) {
+      // Cache failure never invalidates a successfully rendered Journal.
+    }
   }
 
   void _retryGeneration() {

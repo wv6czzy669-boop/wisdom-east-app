@@ -1,7 +1,9 @@
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -17,8 +19,8 @@ import 'journal_layout.dart';
 
 /// Removes invisible emoji sequence controls that package:pdf would
 /// otherwise paint as missing-glyph boxes. The visible base emoji remains and
-/// is rendered by the bundled Noto Color Emoji fallback. Stored Reflection
-/// text is never changed.
+/// is rendered by the bundled monochrome Noto Emoji fallback. Stored
+/// Reflection text is never changed.
 String normalizeJournalPdfText(String text) {
   final output = StringBuffer();
   for (final rune in text.runes) {
@@ -119,36 +121,35 @@ class _JournalPdfFonts {
   final List<pw.Font> fallback;
 }
 
-/// Spoken representation of the publication shown by the raster PDF reader.
+class _JournalYearSection {
+  const _JournalYearSection({required this.year, required this.items});
+
+  final int? year;
+  final List<FavoriteItem> items;
+}
+
+/// Exact spoken representation of every physical publication page.
 ///
 /// Preview pages are images, so their text is otherwise invisible to
-/// VoiceOver. A rare oversized Reflection can span more than one physical
-/// page; its complete spoken text is repeated on continuation pages rather
-/// than leaving any page silent.
+/// VoiceOver. The builder records labels after each `MultiPage` has performed
+/// real pagination; there is no estimated page-to-entry mapping.
 class JournalPdfAccessibility {
   const JournalPdfAccessibility({
-    required this.coverLabel,
-    required this.titlePageLabel,
-    required this.bodyPageLabels,
-    required this.closingPageLabel,
+    required this.pageLabels,
   });
 
-  final String coverLabel;
-  final String titlePageLabel;
-  final List<String> bodyPageLabels;
-  final String closingPageLabel;
+  final List<String> pageLabels;
+
+  String get coverLabel => pageLabels.first;
+  String get titlePageLabel => pageLabels.length > 1 ? pageLabels[1] : 'EAST.';
+  List<String> get bodyPageLabels => pageLabels.length > 3
+      ? pageLabels.sublist(2, pageLabels.length - 1)
+      : const <String>[];
+  String get closingPageLabel => pageLabels.last;
 
   String contentForPage(int pageIndex, int pageCount) {
-    if (pageIndex <= 0) return coverLabel;
-    if (pageIndex == 1) return titlePageLabel;
-    if (pageIndex >= pageCount - 1) return closingPageLabel;
-    if (bodyPageLabels.isEmpty) return coverLabel;
-
-    final bodyPageCount = (pageCount - 3).clamp(1, pageCount);
-    final bodyPageIndex = pageIndex - 2;
-    final mappedIndex = (bodyPageIndex * bodyPageLabels.length ~/ bodyPageCount)
-        .clamp(0, bodyPageLabels.length - 1);
-    return bodyPageLabels[mappedIndex];
+    if (pageIndex < 0 || pageIndex >= pageLabels.length) return 'EAST.';
+    return pageLabels[pageIndex];
   }
 }
 
@@ -191,9 +192,6 @@ class JournalPdfBuilder {
   final JournalPdfPresentation _presentation;
   static const _wisdomPresentation = WisdomLocalizationResolver();
 
-  /// The quiet title-page date is intentionally only the publication year.
-  static String headerYear(DateTime generatedAt) => '${generatedAt.year}';
-
   JournalPdfPalette get _palette => _presentation.palette;
 
   // ---- Cover (physical page 1) ----
@@ -217,9 +215,8 @@ class JournalPdfBuilder {
   static const double _titleTopFraction = 183 / 481;
   static const double _yearFontSize = 17.51;
   static const double _yearLetterSpacing = 5.95;
-  static const double _yearTopFraction = 243 / 481;
   static const double _ownerFontSize = 24.51;
-  static const double _ownerTopFraction = 279 / 481;
+  static const double _ownerTopFraction = 243 / 481;
   static const double _ownerMaxHeight = 65;
 
   // ---- Final page ----
@@ -232,10 +229,9 @@ class JournalPdfBuilder {
   /// returns the encoded bytes. [ownerName], if non-null and non-blank,
   /// appears once, on the title page only.
   ///
-  /// [now] determines the year printed on the title page — the
-  /// Journal's own generation moment, never a content filter over which
-  /// occurrences are included. Injectable for deterministic tests;
-  /// production always uses the real current time.
+  /// [now] is retained for source compatibility with existing callers. The
+  /// title page is intentionally timeless; archive years come exclusively
+  /// from the dated year-section pages.
   ///
   /// [compress] defaults to `true` (smaller files, appropriate for
   /// sharing/printing). Tests that need to inspect the raw PDF structure
@@ -262,10 +258,53 @@ class JournalPdfBuilder {
     DateTime? now,
     bool compress = true,
   }) async {
-    final generatedAt = now ?? DateTime.now();
     final normalizedOwnerName = JournalOwnerNamePolicy.normalize(ownerName);
     final typography = EastTypographyResolver.forLocale(_presentation.locale);
-    final fonts = await _loadFonts(typography);
+    final fonts = await _loadFonts(typography, items, normalizedOwnerName);
+
+    // Tiny publications finish faster inline than they can cross an isolate
+    // boundary. Larger archives do all expensive layout, pagination, font
+    // subsetting, and encoding in a worker isolate so years of entries cannot
+    // stall gestures or animation frames.
+    Future<JournalPdfPublication> build() => _buildPublicationInWorker(
+          items: items,
+          ownerName: normalizedOwnerName,
+          compress: compress,
+          fonts: fonts,
+        );
+    if (!shouldBuildInBackground(items)) return build();
+    return Isolate.run(build);
+  }
+
+  /// The cutoff is deliberately based on both entry count and text volume:
+  /// one unusually long Reflection can be more expensive than many concise
+  /// wisdoms. It is public only so the responsiveness contract can be locked
+  /// without timing-sensitive tests.
+  @visibleForTesting
+  static bool shouldBuildInBackground(List<FavoriteItem> items) {
+    if (items.length >= 24) return true;
+    var textUnits = 0;
+    for (final item in items) {
+      textUnits += item.text.length;
+      textUnits += item.reflection?.length ?? 0;
+      textUnits += item.date.length;
+      if (textUnits >= 12000) return true;
+    }
+    return false;
+  }
+
+  Future<JournalPdfPublication> _buildPublicationInWorker({
+    required List<FavoriteItem> items,
+    required String? ownerName,
+    required bool compress,
+    required _JournalPdfFonts fonts,
+  }) async {
+    // Date symbols are isolate-local. The app initializes all product locales
+    // on its root isolate, but a large Journal is deliberately laid out in a
+    // worker and cannot inherit that static Intl state. Initialize only this
+    // publication's locale here so background generation never falls back to
+    // English month names.
+    await initializeDateFormatting(localeTagForDate(_presentation.locale));
     final presentationDirection = _presentation.textDirection ??
         EastLocaleRegistry.textDirectionFor(_presentation.locale);
     final textDirection = presentationDirection == TextDirection.rtl
@@ -284,15 +323,20 @@ class JournalPdfBuilder {
     );
 
     document.addPage(_buildCoverPage(fonts.brand));
+    final pageLabels = <String>['EAST.'];
     document.addPage(
       _buildTitlePage(
         fonts,
-        ownerName: normalizedOwnerName == null
-            ? null
-            : normalizeJournalPdfText(normalizedOwnerName),
-        generatedAt: generatedAt,
+        ownerName:
+            ownerName == null ? null : normalizeJournalPdfText(ownerName),
         textDirection: textDirection,
       ),
+    );
+    pageLabels.add(
+      <String>[
+        _localizations.journalPdfTitle,
+        if (ownerName != null) ownerName,
+      ].join(' '),
     );
 
     final presentedItems = items
@@ -323,51 +367,56 @@ class JournalPdfBuilder {
             localeTag: localeTagForDate(_presentation.locale),
           ),
         );
-    final groups = _planner.plan(
-      localizedItems,
-      font: fonts.primary,
-      fontFallback: fonts.fallback,
-      textDirection: textDirection,
-      dateFormatter: dateFormatter,
-    );
-    if (groups.isNotEmpty) {
-      document.addPage(_buildBody(
-        fonts,
-        groups,
-        textDirection,
-        dateFormatter,
-      ));
+    var nextBodyFolio = 1;
+    for (final section in _yearSections(localizedItems)) {
+      if (section.year != null) {
+        document.addPage(
+          _buildYearPage(fonts, section.year!, textDirection),
+        );
+        pageLabels.add('${section.year}');
+      }
+
+      final groups = _planner.plan(
+        section.items,
+        font: fonts.primary,
+        fontFallback: fonts.fallback,
+        textDirection: textDirection,
+        dateFormatter: dateFormatter,
+      );
+      for (final group in groups) {
+        final pagesBefore = document.document.pdfPageList.pages.length;
+        final groupLabel = group.entries
+            .map(
+              (entry) => _accessibleEntryLabel(
+                accessibleItemsByIdentity[_accessibilityIdentity(entry)] ??
+                    entry,
+                dateFormatter,
+              ),
+            )
+            .join('. ');
+        document.addPage(
+          _buildBody(
+            fonts,
+            <JournalPageGroup>[group],
+            textDirection,
+            dateFormatter,
+            pagesBefore: pagesBefore,
+            firstFolio: nextBodyFolio,
+          ),
+        );
+        final pagesAfter = document.document.pdfPageList.pages.length;
+        final generatedPages = pagesAfter - pagesBefore;
+        pageLabels.addAll(List<String>.filled(generatedPages, groupLabel));
+        nextBodyFolio += generatedPages;
+      }
     }
 
     document.addPage(_buildFinalPage());
-
-    final bodyPageLabels = groups
-        .map(
-          (group) => group.entries
-              .map(
-                (entry) => _accessibleEntryLabel(
-                  accessibleItemsByIdentity[_accessibilityIdentity(entry)] ??
-                      entry,
-                  dateFormatter,
-                ),
-              )
-              .join('. '),
-        )
-        .toList(growable: false);
-    final titlePageParts = <String>[
-      _localizations.journalPdfTitle,
-      headerYear(generatedAt),
-      if (normalizedOwnerName != null) normalizedOwnerName,
-    ];
+    pageLabels.add('EAST.');
     final bytes = await document.save();
     return JournalPdfPublication(
       bytes: bytes,
-      accessibility: JournalPdfAccessibility(
-        coverLabel: 'EAST.',
-        titlePageLabel: titlePageParts.join('. '),
-        bodyPageLabels: bodyPageLabels,
-        closingPageLabel: 'EAST.',
-      ),
+      accessibility: JournalPdfAccessibility(pageLabels: pageLabels),
     );
   }
 
@@ -384,10 +433,56 @@ class JournalPdfBuilder {
     return parts.where((part) => part.isNotEmpty).join('. ');
   }
 
-  Future<_JournalPdfFonts> _loadFonts(EastTypographyPlan typography) async {
+  List<_JournalYearSection> _yearSections(List<FavoriteItem> items) {
+    final indexed = items.asMap().entries.toList(growable: false);
+    indexed.sort((a, b) {
+      final aDate = _keptAt(a.value);
+      final bDate = _keptAt(b.value);
+      if (aDate != null && bDate != null) {
+        final compared = aDate.compareTo(bDate);
+        if (compared != 0) return compared;
+      } else if (aDate != bDate) {
+        return aDate == null ? -1 : 1;
+      }
+      return a.key.compareTo(b.key);
+    });
+
+    final sections = <_JournalYearSection>[];
+    for (final entry in indexed) {
+      final year = _keptAt(entry.value)?.toLocal().year;
+      if (sections.isEmpty || sections.last.year != year) {
+        sections.add(_JournalYearSection(year: year, items: <FavoriteItem>[]));
+      }
+      sections.last.items.add(entry.value);
+    }
+    return sections;
+  }
+
+  DateTime? _keptAt(FavoriteItem item) {
+    final raw = item.keptAt;
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  Future<_JournalPdfFonts> _loadFonts(
+    EastTypographyPlan typography,
+    List<FavoriteItem> items,
+    String? ownerName,
+  ) async {
+    final allText = StringBuffer(ownerName ?? '');
+    for (final item in items) {
+      allText
+        ..write(item.text)
+        ..write(item.reflection ?? '')
+        ..write(item.date);
+    }
+    final requiredFallbacks = _requiredPdfFallbackAssets(
+      typography,
+      allText.toString(),
+    );
     final assets = <String>{
       typography.pdfFontAsset,
-      ...typography.pdfFallbackAssets,
+      EastTypographyResolver.latinFont.pdfAsset,
+      ...requiredFallbacks,
     };
     final byAsset = <String, pw.Font>{};
     for (final asset in assets) {
@@ -395,12 +490,74 @@ class JournalPdfBuilder {
     }
     return _JournalPdfFonts(
       primary: byAsset[typography.pdfFontAsset]!,
-      brand: byAsset[EastTypographyResolver.latinFont.asset]!,
-      fallback: typography.pdfFallbackAssets
+      brand: byAsset[EastTypographyResolver.latinFont.pdfAsset]!,
+      fallback: requiredFallbacks
           .map((asset) => byAsset[asset]!)
           .toList(growable: false),
     );
   }
+
+  List<String> _requiredPdfFallbackAssets(
+    EastTypographyPlan typography,
+    String text,
+  ) {
+    final assets = <String>[];
+    void add(String asset) {
+      if (asset != typography.pdfFontAsset && !assets.contains(asset)) {
+        assets.add(asset);
+      }
+    }
+
+    for (final rune in text.runes) {
+      if (_isEmojiRune(rune)) {
+        add(EastTypographyResolver.pdfEmojiFontAsset);
+      }
+      if (_isArabicRune(rune)) {
+        add(EastTypographyResolver.arabicFont.pdfAsset);
+      }
+      if (_isThaiRune(rune)) {
+        add(EastTypographyResolver.thaiFont.pdfAsset);
+      }
+      if (_isHangulRune(rune)) {
+        add(EastTypographyResolver.koreanFont.pdfAsset);
+      }
+      if (_isKanaRune(rune)) {
+        add(EastTypographyResolver.japaneseFont.pdfAsset);
+      }
+      if (_isHanRune(rune)) {
+        // Han text written by a user does not carry language metadata. Keep
+        // both regional serif forms available unless one is already primary.
+        add(EastTypographyResolver.traditionalChineseFont.pdfAsset);
+        add(EastTypographyResolver.japaneseFont.pdfAsset);
+      }
+    }
+    return assets;
+  }
+
+  bool _isArabicRune(int rune) =>
+      (rune >= 0x0600 && rune <= 0x06FF) ||
+      (rune >= 0x0750 && rune <= 0x077F) ||
+      (rune >= 0x08A0 && rune <= 0x08FF);
+
+  bool _isThaiRune(int rune) => rune >= 0x0E00 && rune <= 0x0E7F;
+
+  bool _isHangulRune(int rune) =>
+      (rune >= 0x1100 && rune <= 0x11FF) ||
+      (rune >= 0x3130 && rune <= 0x318F) ||
+      (rune >= 0xAC00 && rune <= 0xD7AF);
+
+  bool _isKanaRune(int rune) =>
+      (rune >= 0x3040 && rune <= 0x30FF) || (rune >= 0x31F0 && rune <= 0x31FF);
+
+  bool _isHanRune(int rune) =>
+      (rune >= 0x3400 && rune <= 0x4DBF) ||
+      (rune >= 0x4E00 && rune <= 0x9FFF) ||
+      (rune >= 0xF900 && rune <= 0xFAFF);
+
+  bool _isEmojiRune(int rune) =>
+      (rune >= 0x1F000 && rune <= 0x1FAFF) ||
+      (rune >= 0x2600 && rune <= 0x27BF) ||
+      (rune >= 0x1F1E6 && rune <= 0x1F1FF);
 
   // ---------------------------------------------------------------------
   // Physical page 1 — cover. The EAST mark alone, at the Design's own
@@ -460,19 +617,15 @@ class JournalPdfBuilder {
   }
 
   // ---------------------------------------------------------------------
-  // Physical page 2 — title page. "Journal.", the generation year,
-  // and the optional owner name -- three tiers anchored from the top at
-  // the Design's own fractional offsets (title at 38% of page height),
-  // never a loosely centered block, so the composition holds identically
-  // whether or not the owner name exists.
+  // Physical page 2 — timeless title page. "Journal." and the optional
+  // owner name are anchored from the top at the Design's own fractional
+  // offsets (title at 38% of page height), never a loosely centered block.
   // ---------------------------------------------------------------------
   pw.Page _buildTitlePage(
     _JournalPdfFonts fonts, {
     required String? ownerName,
-    required DateTime generatedAt,
     required pw.TextDirection textDirection,
   }) {
-    final year = headerYear(generatedAt);
     final trimmedOwnerName = ownerName?.trim();
     final pageHeight = PdfPageFormat.a4.height;
 
@@ -499,22 +652,6 @@ class JournalPdfBuilder {
                     fontFallback: fonts.fallback,
                     fontSize: _titleFontSize,
                     color: _palette.ink,
-                  ),
-                ),
-              ),
-              pw.Positioned(
-                top: _yearTopFraction * pageHeight,
-                left: _titleMargin,
-                right: _titleMargin,
-                child: pw.Text(
-                  year,
-                  textAlign: pw.TextAlign.center,
-                  style: pw.TextStyle(
-                    font: fonts.primary,
-                    fontFallback: fonts.fallback,
-                    fontSize: _yearFontSize,
-                    color: _palette.yearMuted,
-                    letterSpacing: _yearLetterSpacing,
                   ),
                 ),
               ),
@@ -549,6 +686,39 @@ class JournalPdfBuilder {
   }
 
   // ---------------------------------------------------------------------
+  // Silent year divider. A multi-year archive gains one quiet threshold per
+  // year without changing the typography or density of any content page.
+  // ---------------------------------------------------------------------
+  pw.Page _buildYearPage(
+    _JournalPdfFonts fonts,
+    int year,
+    pw.TextDirection textDirection,
+  ) {
+    return pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      textDirection: textDirection,
+      build: (context) => pw.Container(
+        color: _palette.background,
+        width: double.infinity,
+        height: double.infinity,
+        alignment: const pw.FractionalOffset(0.5, 0.46),
+        child: pw.Text(
+          '$year',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+            font: fonts.primary,
+            fontFallback: fonts.fallback,
+            fontSize: _yearFontSize,
+            color: _palette.yearMuted,
+            letterSpacing: _yearLetterSpacing,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
   // Physical pages 3+ — the Journal body. One `pw.MultiPage` so the `pdf`
   // package's own layout engine places each occurrence. The planner measures
   // these exact widgets first, keeping every complete entry that genuinely
@@ -558,8 +728,10 @@ class JournalPdfBuilder {
     _JournalPdfFonts fonts,
     List<JournalPageGroup> groups,
     pw.TextDirection textDirection,
-    JournalDateFormatter dateFormatter,
-  ) {
+    JournalDateFormatter dateFormatter, {
+    required int pagesBefore,
+    required int firstFolio,
+  }) {
     return pw.MultiPage(
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
@@ -585,7 +757,12 @@ class JournalPdfBuilder {
         ),
       ),
       maxPages: 20000,
-      footer: (context) => _buildFooter(fonts.brand, context),
+      footer: (context) => _buildFooter(
+        fonts.brand,
+        context,
+        pagesBefore: pagesBefore,
+        firstFolio: firstFolio,
+      ),
       build: (context) {
         final widgets = <pw.Widget>[];
         for (var i = 0; i < groups.length; i++) {
@@ -642,15 +819,16 @@ class JournalPdfBuilder {
     return widgets;
   }
 
-  /// Folios remain at the bottom-right of every Journal body page.
-  /// `context.pageNumber` is 1-indexed across the
-  /// *entire* `pw.Document` (cover + title page + this body) -- see the
-  /// class doc comment on `JournalPdfBuilder.build` for why physical pages
-  /// 1–2 always precede this MultiPage, making the offset exactly 2 for
-  /// every printed body page number.
-  pw.Widget _buildFooter(pw.Font font, pw.Context context) {
-    final printedPageNumber = context.pageNumber - 2;
-    if (printedPageNumber < 1) return pw.SizedBox();
+  /// Folios remain continuous across content pages while intentionally
+  /// ignoring cover, title, silent year dividers, and closing page.
+  pw.Widget _buildFooter(
+    pw.Font font,
+    pw.Context context, {
+    required int pagesBefore,
+    required int firstFolio,
+  }) {
+    final localPageIndex = context.pageNumber - pagesBefore - 1;
+    final printedPageNumber = firstFolio + localPageIndex;
 
     return JournalBodyLayout.buildFolio(
       font,

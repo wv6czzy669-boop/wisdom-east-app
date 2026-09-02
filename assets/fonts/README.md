@@ -1,10 +1,12 @@
 # EAST. production fonts
 
-EAST. preserves EB Garamond Variable for Latin-script typography and bundles
-full-glyph Regular instances of five Noto serif families for Phase 5B.
-Corpus-only subsetting is deliberately avoided: Reflections are arbitrary user
-text, so every primary family retains its complete upstream cmap and the app/PDF
-font plans include every other bundled script as a fallback.
+EAST. preserves EB Garamond Variable for Latin-script typography. The app UI
+uses reproducible controlled-copy subsets of the three large CJK families;
+their full-glyph Regular instances remain bundled as PDF-only assets because
+Reflections are arbitrary user text. Arabic and Thai are small enough to remain
+full in both paths. Flutter can also fall through to iOS system fonts for a
+user-entered glyph absent from an on-screen subset, while Journal PDF creation
+selects the required full fonts from the text it is actually publishing.
 
 Every bundled font is redistributed under the SIL Open Font License 1.1.
 The exact upstream copyright and license texts are retained under `licenses/`,
@@ -17,16 +19,13 @@ identical to Google Fonts' official `ofl/ebgaramond/EBGaramond[wght].ttf`
 (upstream repository commit `106a4a6d377987459ae5e68673a4570f13b957fb`).
 SHA-256: `ef9512f92f6d579e5dc75af59a5a4b1b8b47d2eda89e00b954d44520e5369027`.
 
-Journal PDFs additionally embed Noto Color Emoji 2.051 as their first fallback
-font. The `pdf` package reads its CBDT bitmap glyphs directly, so arbitrary
-Reflection emoji remain visible in exported Journals without a network request
-or any change to EAST.'s on-screen serif typography. The pinned upstream file
-is `googlefonts/noto-emoji` tag `v2.051`, commit marker
-`e92753bfa55fd449e427d4d325f9c8c40408c74e`; its SIL OFL 1.1 text is retained
-at `licenses/OFL-NotoEmoji.txt`.
+Journal PDFs use the official monochrome Noto Emoji v62 variable font. EAST.'s
+publication is monochrome, and `normalizeJournalPdfText` already reduces emoji
+sequences to visible base glyphs. This replaces a 10.2 MB CBDT bitmap font with
+an 859 KB outline font without a network request or a missing-glyph box.
 
-`NotoColorEmoji.ttf` SHA-256:
-`72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b`.
+`NotoEmoji-Regular.ttf` SHA-256:
+`3c4aea565060fa91575a851e2718a5b14b9fe8856ead696b374c5a7e672179cb`.
 
 | Locale | Family/output | Official source | Upstream version/commit | Source SHA-256 | Output SHA-256 |
 |---|---|---|---|---|---|
@@ -36,6 +35,12 @@ at `licenses/OFL-NotoEmoji.txt`.
 | ar | Noto Naskh Arabic / `NotoNaskhArabic-Regular.ttf` | `google/fonts/ofl/notonaskharabic` | 2.021 / `59f5a3fd985bf24858915c3dddfc51a537640965` | `67b5a525a661b607971fbd3f96a81b89d3a768e74534fca84f18ac97e6fab72f` | `0919edeba540a6b27875d4651f2bf26dcbae00324b4bb034f7a030f7f294d381` |
 | th | Noto Serif Thai / `NotoSerifThai-Regular.ttf` | `google/fonts/ofl/notoserifthai` | 2.002 / `f8f3f024703f9d939d02f4e2fe16f1d5a39ca963` | `34a7ad11647c845303aabdde639059806c56b84719e5d2ceb28eb038711bdf53` | `0271d88f4a94c234f47a210f99dc5fb53e2abb50e387d69c20db9c092c5649b1` |
 
+Controlled-copy subset SHA-256 values:
+
+- `NotoSerifJP-App.ttf`: `d2cb8378fe230db1e38db6b8b36a5bc9320b28a85f5915dda03f937fa6bc4d90`
+- `NotoSerifKR-App.ttf`: `b0e19b8784f2f5ea67634e448d82a127b1c91256f006725541c41566b8acc1db`
+- `NotoSerifTC-App.ttf`: `06656e792eee96808c3bd372a5cb513325df0e476a2abb232669204f37dc4be5`
+
 ## Reproduction
 
 1. Run `dart run tool/fonts/generate_glyph_inventories.dart`.
@@ -43,7 +48,8 @@ at `licenses/OFL-NotoEmoji.txt`.
    `python3 -m pip install fonttools==4.59.1`.
 3. Run `python3 tool/fonts/build_noto_production_fonts.py`.
 
-The build script downloads only the official Google Fonts distributions,
-verifies source and output hashes, instantiates weight 400 (and Thai width 100),
-retains all glyphs, and checks `GDEF`, `GPOS`, and `GSUB` shaping tables plus
-every controlled-copy glyph inventory. Source variable fonts are not shipped.
+The build script downloads only official Google Fonts distributions, verifies
+source and output hashes, instantiates weight 400 (and Thai width 100), retains
+the full PDF fonts, creates the CJK app subsets, and checks `GDEF`, `GPOS`, and
+`GSUB` shaping tables plus every controlled-copy glyph inventory. Source
+variable fonts are not shipped.

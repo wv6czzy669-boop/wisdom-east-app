@@ -30,6 +30,7 @@ import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
 import 'package:wisdom_app/utils/date_formatter.dart';
 import 'package:wisdom_app/utils/legacy_kept_identity.dart';
+import 'package:wisdom_app/widgets/east_word_safe_text.dart';
 import 'package:wisdom_app/widgets/home/top_nav_ring.dart';
 
 import 'persistence_test_helpers.dart';
@@ -1814,24 +1815,30 @@ void main() {
         matching: find.byType(Text),
       ),
     );
-    expect(wisdomText.style?.fontSize, 38);
+    final wisdomFontSize = wisdomText.style!.fontSize!;
+    expect(
+      MediaQuery.textScalerOf(
+        tester.element(find.byType(EastWordSafeText)),
+      ).scale(wisdomFontSize),
+      greaterThanOrEqualTo(38),
+      reason: 'uniform locale fitting must never make Larger Text render '
+          'smaller than the approved unscaled wisdom size',
+    );
     expect(wisdomText.style?.height, 1.48);
     // Build 33 accessibility repair (real-device Larger Text failure): at
     // 3x text scale the revealed-wisdom column no longer stays pinned to
-    // the approved 100% composition's `screenWidth * 0.60` (192 here on
-    // this 320pt-wide iPhone SE) -- it widens toward `ritualTextWidth`
-    // (`screenWidth - 68` = 252 here), the same width already used at
-    // every scale for Pause/Feel/Ask/the locked countdown, so a single
-    // long word is no longer forced into a mid-word character break. See
-    // `_HomeRitualContent.build`'s `revealedWisdomWidth` for the full
-    // rationale.
+    // the approved 100% composition's narrow editorial measure. The
+    // invisible hard layout width reaches 12pt from either screen edge,
+    // while EastWordSafeText still wraps ordinary lines against the
+    // narrower preferred measure. This lets one long word occupy its own
+    // centered line without changing the visual measure of every line.
     expect(
       tester
           .widget<SizedBox>(
             find.byKey(const ValueKey('revealed-wisdom-layout')),
           )
           .width,
-      252,
+      296,
     );
     final revealFade = tester.widget<FadeTransition>(
       revealFadeFinder,
@@ -2088,15 +2095,45 @@ void main() {
     }
 
     testWidgets(
-        'at 100% text scale the revealed-wisdom column width is '
-        'bit-for-bit unchanged from the approved composition', (tester) async {
+        'at 100% the hard width protects words while the approved '
+        'editorial measure remains unchanged', (tester) async {
       await pumpRevealedWisdom(tester, text: turkish, textScale: 1.0);
       final sizedBox = tester.widget<SizedBox>(
         find.byKey(const ValueKey('revealed-wisdom-layout')),
       );
       final screenWidth =
           tester.view.physicalSize.width / tester.view.devicePixelRatio;
-      expect(sizedBox.width, screenWidth * 0.60);
+      expect(sizedBox.width, screenWidth - 24);
+      final wordSafeText = tester.widget<EastWordSafeText>(
+        find.byType(EastWordSafeText),
+      );
+      expect(wordSafeText.preferredLineWidth, screenWidth * 0.60);
+    });
+
+    testWidgets(
+        'a revealed wisdom remains pixel-still while the ritual pulse runs',
+        (tester) async {
+      await pumpRevealedWisdom(tester, text: turkish, textScale: 1.0);
+
+      Offset translation() {
+        final transform = tester.widget<Transform>(
+          find.byKey(const ValueKey('ritual-content-translation')),
+        );
+        final value = transform.transform.getTranslation();
+        return Offset(value.x, value.y);
+      }
+
+      final initial = translation();
+      expect(initial, const Offset(0, -18));
+
+      // More than a quarter of the 5.2-second pulse cycle was enough to move
+      // the old implementation by several physical pixels on a 3x display.
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(translation(), initial);
+
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(translation(), initial);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets(
@@ -5561,8 +5598,9 @@ void main() {
         of: find.byKey(const ValueKey('wisdom-reveal-fade')),
         matching: find.byType(Text),
       );
-      final englishText = tester.widget<Text>(wisdomTextFinder.first).data;
-      expect(englishText, isNotNull);
+      final englishText = _cleanTextValue(
+        tester.widget<Text>(wisdomTextFinder.first),
+      );
 
       // Save now (this consumes the "unsaved" ring state, so it happens
       // once, after the English reading above) to introspect the canonical
@@ -5580,7 +5618,9 @@ void main() {
         await tester.pump();
         await tester.pump();
 
-        final displayed = tester.widget<Text>(wisdomTextFinder.first).data;
+        final displayed = _cleanTextValue(
+          tester.widget<Text>(wisdomTextFinder.first),
+        );
         final expected = resolver.resolve(
           wisdomId: wisdomId,
           locale: locale,
@@ -6112,6 +6152,15 @@ KeptRecord _testKeptRecord({
     updatedAt: effectiveUpdatedAt,
     mutationId: revealId,
   );
+}
+
+String _cleanTextValue(Text text) {
+  if (text.data case final value?) return value;
+  final span = text.textSpan;
+  if (span is TextSpan) {
+    return span.semanticsLabel ?? span.text ?? span.toPlainText();
+  }
+  return span?.toPlainText() ?? '';
 }
 
 Widget _homeApp({

@@ -159,7 +159,8 @@ void main() {
   });
 
   testWidgets(
-      'editorial archive prints each day once, marks month changes, and '
+      'editorial archive prints each day once without redundant month '
+      'headings and '
       'keeps every Reflection status below its wisdom', (tester) async {
     final july = await keep(
       service,
@@ -191,8 +192,8 @@ void main() {
       ),
     );
 
-    expect(find.text('AUGUST 2026'), findsOneWidget);
-    expect(find.text('JULY 2026'), findsOneWidget);
+    expect(find.text('AUGUST 2026'), findsNothing);
+    expect(find.text('JULY 2026'), findsNothing);
     expect(find.text('August 1, 2026'), findsOneWidget);
     expect(find.text('July 31, 2026'), findsOneWidget);
     expect(

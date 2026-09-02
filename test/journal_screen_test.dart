@@ -11,6 +11,7 @@ import 'package:wisdom_app/screens/journal_screen.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/services/journal_owner_service.dart';
 import 'package:wisdom_app/services/journal_pdf_builder.dart';
+import 'package:wisdom_app/services/journal_pdf_cache.dart';
 
 import 'journal_owner_test_helpers.dart';
 
@@ -135,6 +136,78 @@ class _AlwaysFailPdfBuilder implements JournalPdfBuilder {
   }
 }
 
+class _CountingPdfBuilder implements JournalPdfBuilder {
+  _CountingPdfBuilder() : _delegate = JournalPdfBuilder();
+
+  final JournalPdfBuilder _delegate;
+  int attempts = 0;
+
+  @override
+  Future<Uint8List> build({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
+    return (await buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    ))
+        .bytes;
+  }
+
+  @override
+  Future<JournalPdfPublication> buildPublication({
+    required List<FavoriteItem> items,
+    String? ownerName,
+    DateTime? now,
+    bool compress = true,
+  }) async {
+    attempts += 1;
+    return _delegate.buildPublication(
+      items: items,
+      ownerName: ownerName,
+      now: now,
+      compress: compress,
+    );
+  }
+}
+
+class _MemoryJournalPdfCache implements JournalPdfCache {
+  final Map<String, JournalPdfPublication> publications =
+      <String, JournalPdfPublication>{};
+
+  @override
+  Future<JournalPdfPublication?> read(String fingerprint) async {
+    return publications[fingerprint];
+  }
+
+  @override
+  Future<void> write(
+    String fingerprint,
+    JournalPdfPublication publication,
+  ) async {
+    publications
+      ..clear()
+      ..[fingerprint] = publication;
+  }
+}
+
+Future<void> _pumpUntilJournalSettles(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    await tester.pump(const Duration(milliseconds: 10));
+    if (find.byType(PdfPreview).evaluate().isNotEmpty ||
+        find
+            .byKey(const ValueKey('journal-error-state'))
+            .evaluate()
+            .isNotEmpty) {
+      return;
+    }
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -184,16 +257,53 @@ void main() {
           items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
           isKeeper: true,
           journalOwnerService: ownerService,
+          pdfBuilder: JournalPdfBuilder(),
         ),
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
 
     expect(find.byType(PdfPreview), findsOneWidget);
     expect(find.byKey(const ValueKey('journal-name-field')), findsNothing);
     expect(find.byKey(const ValueKey('journal-name-action')), findsOneWidget);
     expect(await ownerService.loadName(), isNull);
+  });
+
+  testWidgets(
+      'an unchanged Journal reopens from its publication cache without '
+      'regenerating the PDF', (tester) async {
+    final ownerService =
+        JournalOwnerService(ownerStore: InMemoryJournalOwnerStore());
+    final builder = _CountingPdfBuilder();
+    final cache = _MemoryJournalPdfCache();
+    final items = [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')];
+
+    Widget journal() {
+      return MaterialApp(
+        home: JournalScreen(
+          items: items,
+          isKeeper: true,
+          journalOwnerService: ownerService,
+          pdfBuilder: builder,
+          pdfCache: cache,
+        ),
+      );
+    }
+
+    await tester.pumpWidget(journal());
+    await _pumpUntilJournalSettles(tester);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(builder.attempts, 1);
+    expect(cache.publications, hasLength(1));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(journal());
+    await _pumpUntilJournalSettles(tester);
+
+    expect(find.byType(PdfPreview), findsOneWidget);
+    expect(builder.attempts, 1);
   });
 
   testWidgets(
@@ -209,11 +319,12 @@ void main() {
           items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
           isKeeper: true,
           journalOwnerService: ownerService,
+          pdfBuilder: JournalPdfBuilder(),
         ),
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
     expect(find.byType(PdfPreview), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('journal-name-action')));
@@ -254,11 +365,12 @@ void main() {
           items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
           isKeeper: true,
           journalOwnerService: ownerService,
+          pdfBuilder: JournalPdfBuilder(),
         ),
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
 
     await tester.tap(find.byKey(const ValueKey('journal-name-action')));
     await tester.pump();
@@ -290,11 +402,12 @@ void main() {
           items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
           isKeeper: true,
           journalOwnerService: ownerService,
+          pdfBuilder: JournalPdfBuilder(),
         ),
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
 
     await tester.tap(find.byKey(const ValueKey('journal-name-action')));
     await tester.pump();
@@ -306,7 +419,7 @@ void main() {
     );
     await tester.tap(find.text('SAVE'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
 
     expect(
       find.byKey(const ValueKey('journal-name-decision')),
@@ -329,11 +442,12 @@ void main() {
           items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
           isKeeper: true,
           journalOwnerService: ownerService,
+          pdfBuilder: JournalPdfBuilder(),
         ),
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
     await tester.tap(find.byKey(const ValueKey('journal-name-action')));
     await tester.pump();
 
@@ -343,7 +457,7 @@ void main() {
     );
     await tester.tap(find.text('SAVE'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpUntilJournalSettles(tester);
 
     expect(await ownerService.loadName(), List.filled(80, family).join());
   });
@@ -363,11 +477,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
             isKeeper: true,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       await tester.tap(find.byKey(const ValueKey('journal-name-action')));
       await tester.pump();
@@ -382,7 +497,7 @@ void main() {
       addTearDown(tester.view.resetViewInsets);
       tester.view.viewInsets = const FakeViewPadding(bottom: 300);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(tester.getTopLeft(fieldFinder), beforeKeyboard);
@@ -394,7 +509,7 @@ void main() {
       // was never anywhere else for it to be.
       tester.view.viewInsets = const FakeViewPadding();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       expect(tester.getTopLeft(fieldFinder), beforeKeyboard);
     });
@@ -412,11 +527,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
             isKeeper: true,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       await tester.tap(find.byKey(const ValueKey('journal-name-action')));
       await tester.pump();
@@ -432,7 +548,7 @@ void main() {
       );
       await tester.tap(find.text('SAVE'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       expect(
         find.byKey(const ValueKey('journal-name-decision')),
@@ -455,11 +571,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
             isKeeper: true,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
       expect(scaffold.resizeToAvoidBottomInset, isFalse);
@@ -490,7 +607,7 @@ void main() {
       // Still generating (the gate is held) -- no PdfPreview yet, and
       // critically, no generic loading indicator of any kind.
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
       expect(find.byType(PdfPreview), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byType(LinearProgressIndicator), findsNothing);
@@ -529,7 +646,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       expect(find.byType(AppBar), findsOneWidget);
       expect(find.text('Journal'), findsOneWidget);
@@ -656,12 +773,13 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
             isKeeper: isKeeper,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
             shareHandler: shareHandler,
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
     }
 
     testWidgets(
@@ -776,7 +894,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('journal-take-action')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       expect(find.byType(KeeperScreen), findsNothing);
       expect(sharedBytes, isNotNull);
@@ -803,6 +921,7 @@ void main() {
                       ],
                       isKeeper: true,
                       journalOwnerService: ownerService,
+                      pdfBuilder: JournalPdfBuilder(),
                     ),
                   ),
                 );
@@ -814,7 +933,7 @@ void main() {
       );
       await tester.tap(find.text('Open Journal'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       final semantics = tester.ensureSemantics();
       final node = tester.getSemantics(
@@ -841,11 +960,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A wisdom.')],
             isKeeper: true,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       final semantics = tester.ensureSemantics();
       final node = tester.getSemantics(
@@ -873,11 +993,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A wisdom.')],
             isKeeper: true,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       final semantics = tester.ensureSemantics();
       final node = tester.getSemantics(
@@ -902,11 +1023,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A wisdom.')],
             isKeeper: false,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       final semantics = tester.ensureSemantics();
       final node = tester.getSemantics(
@@ -937,11 +1059,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
             isKeeper: true,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
       await tester.tap(find.byKey(const ValueKey('journal-name-action')));
       await tester.pump();
 
@@ -970,11 +1093,12 @@ void main() {
             items: [item(id: '1', revealId: 'r-1', text: 'A kept wisdom.')],
             isKeeper: false,
             journalOwnerService: ownerService,
+            pdfBuilder: JournalPdfBuilder(),
           ),
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpUntilJournalSettles(tester);
 
       expect(find.byType(PdfPreview), findsOneWidget);
       expect(tester.takeException(), isNull);

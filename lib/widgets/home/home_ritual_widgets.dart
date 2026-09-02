@@ -254,24 +254,16 @@ class _HomeRitualContent extends StatelessWidget {
       1.0,
       MediaQuery.sizeOf(context).width - 68,
     );
-    // Build 33 accessibility repair (real-device Larger Text failure): the
-    // revealed wisdom's approved composition is a narrow 60%-of-screen
-    // column at ordinary text sizes -- deliberate, unchanged here. But that
-    // fixed fraction never grew with Dynamic Type, so at high accessibility
-    // scales a single long word (agglutinative Turkish especially --
-    // "hikâyenin", "değildir") could no longer fit the line on its own,
-    // forcing Flutter's text layout to fall back to a mid-word character
-    // break rather than wrapping at the space before/after it. `FittedBox`
-    // (below) only rescales the already-wrapped result afterward; it never
-    // rewraps, so it could not fix this on its own.
-    //
-    // The fix widens the column as the ambient text scale grows, reaching
-    // the same `ritualTextWidth` already used (at every scale, including
-    // 200%+) for Pause/Feel/Ask/the locked countdown -- a width already
-    // proven safe elsewhere in this exact widget -- by 160%, the top of
-    // this task's called-out critical range. At scale 1.0 the progress
-    // term is exactly 0.0, so the width is bit-for-bit the original
-    // `screenWidth * 0.60` -- the approved 100% composition is unchanged.
+    // Ordinary lines retain EAST.'s narrow editorial measure. The actual
+    // render box is wider and invisible, allowing one reviewed long word to
+    // sit intact on its own line instead of being cut through the middle.
+    // This hard width is identical for every wisdom on the device; the
+    // word-safe renderer also derives any accessibility fit from the widest
+    // reviewed token for the whole locale, never from the current wisdom.
+    final revealedWisdomHardWidth = max(
+      1.0,
+      MediaQuery.sizeOf(context).width - 24,
+    );
     final wisdomWidthScaleProgress =
         ((MediaQuery.textScalerOf(context).scale(1.0) - 1.0) / 0.6)
             .clamp(0.0, 1.0);
@@ -321,26 +313,39 @@ class _HomeRitualContent extends StatelessWidget {
                 presentation: lockedCountdownPresentation,
                 style: ritualTextStyle,
               )
-            : Text(
-                currentText,
-                textAlign: TextAlign.center,
-                style: ritualTextStyle,
-              );
+            : wisdomRevealed
+                ? EastWordSafeText(
+                    currentText,
+                    textAlign: TextAlign.center,
+                    style: ritualTextStyle,
+                    preferredLineWidth: revealedWisdomWidth,
+                  )
+                : Text(
+                    currentText,
+                    textAlign: TextAlign.center,
+                    style: ritualTextStyle,
+                  );
 
     return AnimatedBuilder(
-      animation: pulseController,
+      // The revealed wisdom is a printed-page surface: once its reveal fade
+      // completes, its geometry must remain perfectly still. Listening to the
+      // perpetual ritual pulse here previously translated the text by ±0.8pt;
+      // on a 3x iPhone screen that became a visible 5-pixel up/down oscillation
+      // and made the glyphs appear to "play". Keep the quiet breathing motion
+      // only for Pause, where it is intentional, and detach settled states from
+      // the ticker entirely.
+      animation: !reduceMotion && onPauseScreen
+          ? pulseController
+          : const AlwaysStoppedAnimation<double>(0),
       builder: (context, child) {
-        final floatingY = reduceMotion
-            ? 0.0
-            : wisdomRevealed
-                ? sin(pulseController.value * pi * 2) * 0.8
-                : onPauseScreen
-                    ? sin(pulseController.value * pi * 2) * 0.5
-                    : 0.0;
+        final floatingY = !reduceMotion && onPauseScreen
+            ? sin(pulseController.value * pi * 2) * 0.5
+            : 0.0;
 
         final liftedY = wisdomRevealed ? -18.0 : 0.0;
 
         return Transform.translate(
+          key: const ValueKey('ritual-content-translation'),
           offset: Offset(0, floatingY + liftedY),
           child: child,
         );
@@ -438,7 +443,7 @@ class _HomeRitualContent extends StatelessWidget {
                                   )
                                 : null,
                             width: wisdomRevealed
-                                ? revealedWisdomWidth
+                                ? revealedWisdomHardWidth
                                 : ritualTextWidth,
                             child: wisdomRevealed
                                 ? Semantics(

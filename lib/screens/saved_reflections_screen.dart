@@ -603,7 +603,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   Widget _keptItem(
     FavoriteItem item,
     int index, {
-    required String? monthHeader,
     required String? dateHeader,
   }) {
     final itemNumber = index + 1;
@@ -611,21 +610,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (monthHeader != null) ...[
-          Semantics(
-            header: true,
-            child: Text(
-              monthHeader,
-              key: ValueKey('kept-month-${_monthKey(item)}'),
-              style: _style(
-                12,
-                color: eastMutedTextColor(context),
-                letterSpacing: 2.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
         if (dateHeader != null) ...[
           Text(
             dateHeader,
@@ -765,22 +749,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
     return '${date.year}-${date.month}-${date.day}';
   }
 
-  String? _monthKey(FavoriteItem item) {
-    final date = _archiveDate(item);
-    return date == null ? null : '${date.year}-${date.month}';
-  }
-
-  String? _monthHeader(FavoriteItem item) {
-    final date = _archiveDate(item);
-    if (date == null) return null;
-    final localeTag = localeTagForDate(Localizations.localeOf(context));
-    try {
-      return intl.DateFormat.yMMMM(localeTag).format(date).toUpperCase();
-    } catch (_) {
-      return '${intl.DateFormat.MMMM('en').format(date).toUpperCase()} ${date.year}';
-    }
-  }
-
   String _searchableDateText(FavoriteItem item) {
     final date = _archiveDate(item);
     if (date == null) return '${item.date} ${item.keptAt ?? ''}';
@@ -804,21 +772,16 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
 
   List<_KeptArchiveEntry> _archiveEntries(List<FavoriteItem> items) {
     String? previousDay;
-    String? previousMonth;
     return <_KeptArchiveEntry>[
       for (var index = 0; index < items.length; index++)
         (() {
           final item = items[index];
           final day = _dayKey(item);
-          final month = _monthKey(item);
           final startsDay = day != previousDay;
-          final startsMonth = month != null && month != previousMonth;
           previousDay = day;
-          if (month != null) previousMonth = month;
           return _KeptArchiveEntry(
             item: item,
             itemNumber: index,
-            monthHeader: startsMonth ? _monthHeader(item) : null,
             dateHeader: startsDay ? _displayDate(item) : null,
             startsDay: startsDay,
           );
@@ -1031,7 +994,6 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                                           _keptItem(
                                             entry.item,
                                             entry.itemNumber,
-                                            monthHeader: entry.monthHeader,
                                             dateHeader: entry.dateHeader,
                                           ),
                                           if (index + 1 < archiveEntries.length)
@@ -1039,9 +1001,10 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
                                               Padding(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  vertical: 18,
+                                                  vertical: 12,
                                                 ),
                                                 child: Divider(
+                                                  height: 1,
                                                   color: EastColors.of(context)
                                                       .divider,
                                                   thickness: 0.5,
@@ -1071,14 +1034,12 @@ class _KeptArchiveEntry {
   const _KeptArchiveEntry({
     required this.item,
     required this.itemNumber,
-    required this.monthHeader,
     required this.dateHeader,
     required this.startsDay,
   });
 
   final FavoriteItem item;
   final int itemNumber;
-  final String? monthHeader;
   final String? dateHeader;
   final bool startsDay;
 }

@@ -2,7 +2,7 @@ name: wisdom_app
 description: A minimal wisdom app
 publish_to: "none"
 
-version: 1.3.0+40
+version: 1.3.0+41
 environment:
   sdk: ">=3.0.0 <4.0.0"
   flutter: ">=3.44.0"
@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   intl: any
   characters: ^1.4.0
+  crypto: ^3.0.7
   in_app_purchase: ^3.3.0
   in_app_review: ^2.0.12
   url_launcher: ^6.3.2
@@ -47,7 +48,10 @@ flutter:
 
   assets:
     - assets/sounds/
-    - assets/fonts/NotoColorEmoji.ttf
+    - assets/fonts/NotoEmoji-Regular.ttf
+    - assets/fonts/NotoSerifJP-Regular.ttf
+    - assets/fonts/NotoSerifKR-Regular.ttf
+    - assets/fonts/NotoSerifTC-Regular.ttf
     - assets/fonts/licenses/
 
   fonts:
@@ -57,15 +61,15 @@ flutter:
           weight: 400
     - family: NotoSerifJP
       fonts:
-        - asset: assets/fonts/NotoSerifJP-Regular.ttf
+        - asset: assets/fonts/NotoSerifJP-App.ttf
           weight: 400
     - family: NotoSerifKR
       fonts:
-        - asset: assets/fonts/NotoSerifKR-Regular.ttf
+        - asset: assets/fonts/NotoSerifKR-App.ttf
           weight: 400
     - family: NotoSerifTC
       fonts:
-        - asset: assets/fonts/NotoSerifTC-Regular.ttf
+        - asset: assets/fonts/NotoSerifTC-App.ttf
           weight: 400
     - family: NotoNaskhArabic
       fonts:
