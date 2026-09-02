@@ -97,6 +97,102 @@
         }
       }
     },
+    "EAST. Keeper Ritual" : {
+      "comment" : "Keeper widget gallery display name. EAST. and Keeper remain product names while Ritual is localized.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "طقس Keeper في EAST."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeper-Ritual"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeper Ritual"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ritual Keeper de EAST."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rituel Keeper d’EAST."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rituale Keeper di EAST."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeperの儀式"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeper 의식"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeper-ritueel"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rytuał Keeper w EAST."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ritual Keeper do EAST."
+          }
+        },
+        "th" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "พิธีกรรม Keeper ของ EAST."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeper Ritüeli"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nghi thức Keeper của EAST."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EAST. Keeper 儀式"
+          }
+        }
+      }
+    },
     "Ask from your heart." : {
       "comment" : "Keeper widget ritual phase 3. Mirrors the reviewed Flutter askFromYourHeart copy.",
       "extractionState" : "stale",
@@ -861,6 +957,102 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停一停。"
+          }
+        }
+      }
+    },
+    "Pause. Feel. Ask from your heart." : {
+      "comment" : "Keeper widget gallery description. Composed from the three reviewed ritual phase translations.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تمهّل. اشعر. اسأل من قلبك."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Innehalten. Spüren. Von Herzen fragen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause. Feel. Ask from your heart."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausa. Siente. Pregunta desde el corazón."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause. Ressens. Demande avec le cœur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausa. Senti. Chiedi con il cuore."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立ち止まる。感じる。心から問いかける。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잠시. 느끼다. 마음으로 묻다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pauze. Voel. Vraag vanuit je hart."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zatrzymaj się. Poczuj. Zapytaj prosto z serca."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausa. Sinta. Pergunte com o coração."
+          }
+        },
+        "th" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ชั่วครู่. รู้สึก. ถามจากใจ."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bekle. Hisset. Soruyu kalbinden sor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lắng lại. Cảm nhận. Hỏi bằng tấm lòng."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停一停。感受。從心裡提問。"
           }
         }
       }

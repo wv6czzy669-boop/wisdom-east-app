@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum EastKeeperRitualPhase: String, Codable, Equatable {
@@ -56,8 +57,17 @@ enum EastKeeperRitualStore {
     static let lockDuration: TimeInterval = 24 * 60 * 60
 
     private static let documentKey = "east_keeper_ritual_document_v1"
+    private static let coordinationLockFileName = ".east_keeper_ritual.lock"
+    private static let inProcessCoordinationLock = NSLock()
     private static var productionDefaults: UserDefaults? {
         UserDefaults(suiteName: EastWidgetSnapshotStore.appGroupIdentifier)
+    }
+    private static var productionCoordinationLockURL: URL? {
+        FileManager.default
+            .containerURL(
+                forSecurityApplicationGroupIdentifier: EastWidgetSnapshotStore.appGroupIdentifier
+            )?
+            .appendingPathComponent(coordinationLockFileName, isDirectory: false)
     }
 
     private struct Document: Codable, Equatable {
@@ -84,15 +94,20 @@ enum EastKeeperRitualStore {
 
     @discardableResult
     static func setKeeperEntitlement(_ isKeeper: Bool) -> Bool {
-        setKeeperEntitlement(isKeeper, defaults: productionDefaults)
+        setKeeperEntitlement(
+            isKeeper,
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
+        )
     }
 
     @discardableResult
     static func setKeeperEntitlement(
         _ isKeeper: Bool,
-        defaults: UserDefaults?
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
     ) -> Bool {
-        mutate(defaults: defaults) { document in
+        mutate(defaults: defaults, coordinationLockURL: coordinationLockURL) { document in
             guard document.isKeeper != isKeeper else { return false }
             document.isKeeper = isKeeper
             return true
@@ -109,7 +124,8 @@ enum EastKeeperRitualStore {
             candidate: candidate,
             presentation: presentation,
             now: now,
-            defaults: productionDefaults
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
         )
     }
 
@@ -118,10 +134,11 @@ enum EastKeeperRitualStore {
         candidate: EastKeeperRitualCandidate,
         presentation: EastWidgetPresentation,
         now: Date,
-        defaults: UserDefaults?
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
     ) -> Bool {
         guard isValid(candidate) else { return false }
-        return mutate(defaults: defaults) { document in
+        return mutate(defaults: defaults, coordinationLockURL: coordinationLockURL) { document in
             var changed = document.presentation != presentation
             document.presentation = presentation
             if let reveal = document.reveal, reveal.unlockAt > now {
@@ -169,7 +186,8 @@ enum EastKeeperRitualStore {
             reveal: reveal,
             presentation: presentation,
             now: now,
-            defaults: productionDefaults
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
         )
     }
 
@@ -178,10 +196,11 @@ enum EastKeeperRitualStore {
         reveal: EastKeeperRitualReveal,
         presentation: EastWidgetPresentation,
         now: Date,
-        defaults: UserDefaults?
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
     ) -> Bool {
         guard isValid(reveal), reveal.unlockAt > now else { return false }
-        return mutate(defaults: defaults) { document in
+        return mutate(defaults: defaults, coordinationLockURL: coordinationLockURL) { document in
             let authoritativeReveal = EastKeeperRitualReveal(
                 candidateId: reveal.candidateId,
                 canonicalText: reveal.canonicalText,
@@ -213,14 +232,22 @@ enum EastKeeperRitualStore {
     }
 
     static func resolvedSnapshot(now: Date) -> EastKeeperRitualSnapshot {
-        resolvedSnapshot(now: now, defaults: productionDefaults)
+        resolvedSnapshot(
+            now: now,
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
+        )
     }
 
     static func resolvedSnapshot(
         now: Date,
-        defaults: UserDefaults?
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
     ) -> EastKeeperRitualSnapshot {
-        guard let document = read(defaults: defaults) else {
+        guard let document = read(
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL
+        ) else {
             return EastKeeperRitualSnapshot(
                 content: .keeperRequired,
                 presentation: .systemDefault
@@ -230,92 +257,109 @@ enum EastKeeperRitualStore {
     }
 
     static func advance(now: Date) -> EastKeeperRitualAdvanceResult {
-        advance(now: now, defaults: productionDefaults)
+        advance(
+            now: now,
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
+        )
     }
 
     static func advance(
         now: Date,
-        defaults: UserDefaults?
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
     ) -> EastKeeperRitualAdvanceResult {
-        guard let defaults else {
-            let snapshot = EastKeeperRitualSnapshot(
-                content: .keeperRequired,
-                presentation: .systemDefault
-            )
+        withCoordinatedDefaults(
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL,
+            fallback: unavailableAdvanceResult
+        ) { defaults in
+            var newlyRevealed: EastKeeperRitualReveal?
+            let changed = mutateUnlocked(defaults: defaults) { document in
+                guard document.isKeeper else { return false }
+                let promoted = promoteNextCandidateIfNeeded(
+                    document: &document,
+                    now: now
+                )
+                guard document.reveal == nil,
+                      let candidate = document.currentCandidate,
+                      candidate.activationAt <= now
+                else { return promoted }
+
+                switch document.phase {
+                case .pause:
+                    document.phase = .feel
+                case .feel:
+                    document.phase = .heart
+                case .heart:
+                    let reveal = EastKeeperRitualReveal(
+                        candidateId: candidate.candidateId,
+                        canonicalText: candidate.canonicalText,
+                        displayText: candidate.displayText,
+                        wisdomId: candidate.wisdomId,
+                        revealedAt: now,
+                        unlockAt: now.addingTimeInterval(lockDuration),
+                        revealId: nil,
+                        needsAppCommit: true
+                    )
+                    document.reveal = reveal
+                    document.currentCandidate = nil
+                    document.phase = .pause
+                    newlyRevealed = reveal
+                }
+                return true
+            }
+
+            // Encoding is deterministic for this bounded document, but do
+            // not report a provisional reveal if persistence ever fails.
+            if !changed { newlyRevealed = nil }
+            let document = readUnlocked(defaults: defaults)
+            let snapshot = document.map { resolvedSnapshot(document: $0, now: now) }
+                ?? unavailableAdvanceResult().snapshot
             return EastKeeperRitualAdvanceResult(
                 snapshot: snapshot,
-                newlyRevealed: nil,
-                changed: false
+                newlyRevealed: newlyRevealed,
+                changed: changed
             )
         }
-
-        var newlyRevealed: EastKeeperRitualReveal?
-        var didChange = false
-        _ = mutate(defaults: defaults) { document in
-            guard document.isKeeper else { return false }
-            didChange = promoteNextCandidateIfNeeded(document: &document, now: now)
-            guard document.reveal == nil,
-                  let candidate = document.currentCandidate,
-                  candidate.activationAt <= now
-            else { return didChange }
-
-            switch document.phase {
-            case .pause:
-                document.phase = .feel
-            case .feel:
-                document.phase = .heart
-            case .heart:
-                let reveal = EastKeeperRitualReveal(
-                    candidateId: candidate.candidateId,
-                    canonicalText: candidate.canonicalText,
-                    displayText: candidate.displayText,
-                    wisdomId: candidate.wisdomId,
-                    revealedAt: now,
-                    unlockAt: now.addingTimeInterval(lockDuration),
-                    revealId: nil,
-                    needsAppCommit: true
-                )
-                document.reveal = reveal
-                document.currentCandidate = nil
-                document.phase = .pause
-                newlyRevealed = reveal
-            }
-            didChange = true
-            return true
-        }
-
-        return EastKeeperRitualAdvanceResult(
-            snapshot: resolvedSnapshot(now: now, defaults: defaults),
-            newlyRevealed: newlyRevealed,
-            changed: didChange
-        )
     }
 
     static func bridgePayload(now: Date) -> [String: Any] {
-        bridgePayload(now: now, defaults: productionDefaults)
+        bridgePayload(
+            now: now,
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
+        )
     }
 
     static func bridgePayload(
         now: Date,
-        defaults: UserDefaults?
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
     ) -> [String: Any] {
-        guard let document = read(defaults: defaults) else {
-            return ["isKeeper": false, "state": "unavailable"]
+        withCoordinatedDefaults(
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL,
+            fallback: { ["isKeeper": false, "state": "unavailable"] }
+        ) { defaults in
+            guard let document = readUnlocked(defaults: defaults) else {
+                return ["isKeeper": false, "state": "unavailable"]
+            }
+            var payload: [String: Any] = [
+                "isKeeper": document.isKeeper,
+                "state": stateName(for: resolvedSnapshot(document: document, now: now).content),
+            ]
+            if let candidate = effectiveCandidate(document: document, now: now) {
+                payload["candidate"] = candidatePayload(candidate)
+            }
+            if let next = document.nextCandidate {
+                payload["nextCandidate"] = candidatePayload(next)
+            }
+            if let reveal = document.reveal, reveal.unlockAt > now {
+                payload["reveal"] = revealPayload(reveal)
+            }
+            return payload
         }
-        var payload: [String: Any] = [
-            "isKeeper": document.isKeeper,
-            "state": stateName(for: resolvedSnapshot(document: document, now: now).content),
-        ]
-        if let candidate = effectiveCandidate(document: document, now: now) {
-            payload["candidate"] = candidatePayload(candidate)
-        }
-        if let next = document.nextCandidate {
-            payload["nextCandidate"] = candidatePayload(next)
-        }
-        if let reveal = document.reveal, reveal.unlockAt > now {
-            payload["reveal"] = revealPayload(reveal)
-        }
-        return payload
     }
 
     private static func resolvedSnapshot(
@@ -381,10 +425,23 @@ enum EastKeeperRitualStore {
 
     private static func mutate(
         defaults: UserDefaults?,
+        coordinationLockURL: URL?,
         operation: (inout Document) -> Bool
     ) -> Bool {
-        guard let defaults else { return false }
-        var document = read(defaults: defaults) ?? .empty
+        withCoordinatedDefaults(
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL,
+            fallback: { false }
+        ) { defaults in
+            mutateUnlocked(defaults: defaults, operation: operation)
+        }
+    }
+
+    private static func mutateUnlocked(
+        defaults: UserDefaults,
+        operation: (inout Document) -> Bool
+    ) -> Bool {
+        var document = readUnlocked(defaults: defaults) ?? .empty
         guard operation(&document) else { return false }
         document.revision = document.revision == Int.max ? 1 : document.revision + 1
         guard let encoded = try? JSONEncoder().encode(document) else { return false }
@@ -392,13 +449,82 @@ enum EastKeeperRitualStore {
         return true
     }
 
-    private static func read(defaults: UserDefaults?) -> Document? {
-        guard let data = defaults?.data(forKey: documentKey),
+    private static func read(
+        defaults: UserDefaults?,
+        coordinationLockURL: URL?
+    ) -> Document? {
+        withCoordinatedDefaults(
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL,
+            fallback: { nil }
+        ) { defaults in
+            readUnlocked(defaults: defaults)
+        }
+    }
+
+    private static func readUnlocked(defaults: UserDefaults) -> Document? {
+        guard let data = defaults.data(forKey: documentKey),
               let document = try? JSONDecoder().decode(Document.self, from: data),
               document.schemaVersion == schemaVersion,
               isValid(document)
         else { return nil }
         return document
+    }
+
+    /// Serializes every production read/modify/write across the Runner and
+    /// widget-extension processes. `NSLock` closes the same-process window;
+    /// the advisory lock file closes the cross-process window. The existing
+    /// UserDefaults key and schema stay untouched, so installed users need no
+    /// migration and never lose a prepared or revealed ritual.
+    private static func withCoordinatedDefaults<T>(
+        defaults: UserDefaults?,
+        coordinationLockURL: URL?,
+        fallback: () -> T,
+        operation: (UserDefaults) -> T
+    ) -> T {
+        guard let defaults else { return fallback() }
+
+        inProcessCoordinationLock.lock()
+        defer { inProcessCoordinationLock.unlock() }
+
+        guard let coordinationLockURL else {
+            return operation(defaults)
+        }
+
+        let descriptor = coordinationLockURL.path.withCString { path in
+            Darwin.open(path, O_CREAT | O_RDWR, mode_t(0o600))
+        }
+        guard descriptor >= 0 else {
+            // The App Group can be unavailable during exceptional system
+            // states. Preserve widget availability while retaining the
+            // same-process safety above.
+            return operation(defaults)
+        }
+        defer { _ = Darwin.close(descriptor) }
+
+        guard Darwin.lockf(descriptor, F_LOCK, 0) == 0 else {
+            return operation(defaults)
+        }
+        defer { _ = Darwin.lockf(descriptor, F_ULOCK, 0) }
+
+        // Synchronize while holding the cross-process lock so each process
+        // reads the newest shared-domain value before it mutates, then makes
+        // its result visible before another process acquires the lock.
+        _ = defaults.synchronize()
+        let result = operation(defaults)
+        _ = defaults.synchronize()
+        return result
+    }
+
+    private static func unavailableAdvanceResult() -> EastKeeperRitualAdvanceResult {
+        EastKeeperRitualAdvanceResult(
+            snapshot: EastKeeperRitualSnapshot(
+                content: .keeperRequired,
+                presentation: .systemDefault
+            ),
+            newlyRevealed: nil,
+            changed: false
+        )
     }
 
     private static func isValid(_ document: Document) -> Bool {

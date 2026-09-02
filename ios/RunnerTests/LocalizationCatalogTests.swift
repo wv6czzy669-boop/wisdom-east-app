@@ -133,4 +133,54 @@ final class LocalizationCatalogTests: XCTestCase {
             XCTAssertEqual(try value(localization), expectedText, "silence text drifted for \(locale)")
         }
     }
+
+    func testKeeperWidgetGalleryNameIsLocalizedForEveryProductLocale() throws {
+        let expected: [String: String] = [
+            "en": "EAST. Keeper Ritual",
+            "tr": "EAST. Keeper Ritüeli",
+            "ja": "EAST. Keeperの儀式",
+            "de": "EAST. Keeper-Ritual",
+            "fr": "Rituel Keeper d’EAST.",
+            "ko": "EAST. Keeper 의식",
+            "zh-Hant": "EAST. Keeper 儀式",
+            "ar": "طقس Keeper في EAST.",
+            "es": "Ritual Keeper de EAST.",
+            "pt-BR": "Ritual Keeper do EAST.",
+            "it": "Rituale Keeper di EAST.",
+            "th": "พิธีกรรม Keeper ของ EAST.",
+            "nl": "EAST. Keeper-ritueel",
+            "pl": "Rytuał Keeper w EAST.",
+            "vi": "Nghi thức Keeper của EAST.",
+        ]
+
+        let entry = try XCTUnwrap(try loadStrings()["EAST. Keeper Ritual"])
+        let locales = try localizations(of: entry)
+        XCTAssertEqual(Set(locales.keys), Self.expectedLocales)
+        for (locale, expectedText) in expected {
+            let localization = try XCTUnwrap(locales[locale], "missing locale \(locale)")
+            XCTAssertEqual(try value(localization), expectedText)
+        }
+    }
+
+    func testKeeperWidgetGalleryDescriptionMatchesItsThreeRitualPhases() throws {
+        let strings = try loadStrings()
+        let description = try localizations(of: XCTUnwrap(
+            strings["Pause. Feel. Ask from your heart."]
+        ))
+        let pause = try localizations(of: XCTUnwrap(strings["Pause."]))
+        let feel = try localizations(of: XCTUnwrap(strings["Feel."]))
+        let heart = try localizations(of: XCTUnwrap(strings["Ask from your heart."]))
+
+        for locale in Self.expectedLocales {
+            let separator = ["ja", "zh-Hant"].contains(locale) ? "" : " "
+            let expected = try [pause, feel, heart]
+                .map { try value(XCTUnwrap($0[locale], "missing locale \(locale)")) }
+                .joined(separator: separator)
+            XCTAssertEqual(
+                try value(XCTUnwrap(description[locale], "missing locale \(locale)")),
+                expected,
+                "Keeper widget gallery description drifted from its ritual phases for \(locale)"
+            )
+        }
+    }
 }

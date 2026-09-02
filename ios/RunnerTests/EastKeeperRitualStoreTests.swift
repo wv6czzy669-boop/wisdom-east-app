@@ -6,6 +6,7 @@ final class EastKeeperRitualStoreTests: XCTestCase {
     private static let suiteName = "east-keeper-ritual-store-tests"
 
     private var defaults: UserDefaults!
+    private var coordinationLockURL: URL!
     private let now = Date(timeIntervalSince1970: 1_777_777_000)
 
     override func setUp() {
@@ -13,11 +14,15 @@ final class EastKeeperRitualStoreTests: XCTestCase {
         let handle = UserDefaults(suiteName: Self.suiteName)!
         handle.removePersistentDomain(forName: Self.suiteName)
         defaults = handle
+        coordinationLockURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("east-keeper-ritual-\(UUID().uuidString).lock")
     }
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: Self.suiteName)
         defaults = nil
+        try? FileManager.default.removeItem(at: coordinationLockURL)
+        coordinationLockURL = nil
         super.tearDown()
     }
 
@@ -247,13 +252,85 @@ final class EastKeeperRitualStoreTests: XCTestCase {
         XCTAssertNil(reveal?["revealId"])
     }
 
-    private func prepareKeeperCandidate() {
-        EastKeeperRitualStore.setKeeperEntitlement(true, defaults: defaults)
+    func testCoordinatedConcurrentAdvancesNeverLoseARitualPhase() {
+        prepareKeeperCandidate(coordinationLockURL: coordinationLockURL)
+        let results = LockedResults<EastKeeperRitualAdvanceResult>()
+        let sharedLockURL = coordinationLockURL!
+        let revealMoment = now
+
+        DispatchQueue.concurrentPerform(iterations: 3) { _ in
+            // Separate handles mirror the Runner and widget-extension
+            // processes more closely than sharing one UserDefaults object.
+            let processDefaults = UserDefaults(suiteName: Self.suiteName)!
+            results.append(EastKeeperRitualStore.advance(
+                now: revealMoment,
+                defaults: processDefaults,
+                coordinationLockURL: sharedLockURL
+            ))
+        }
+
+        let captured = results.values
+        XCTAssertEqual(captured.count, 3)
+        XCTAssertEqual(captured.filter { $0.newlyRevealed != nil }.count, 1)
+        XCTAssertTrue(captured.allSatisfy(\.changed))
+        guard case .revealed = EastKeeperRitualStore.resolvedSnapshot(
+            now: revealMoment,
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL
+        ).content else {
+            return XCTFail("three coordinated advances must complete the ritual exactly once")
+        }
+    }
+
+    func testCoordinatedPresentationWriteCannotRollBackAnAdvance() {
+        prepareKeeperCandidate(coordinationLockURL: coordinationLockURL)
+        let sharedLockURL = coordinationLockURL!
+        let candidate = makeCandidate()
+        let presentation = EastWidgetPresentation(
+            appearanceMode: .dark,
+            localeOverrideTag: "tr"
+        )
+
+        DispatchQueue.concurrentPerform(iterations: 2) { index in
+            if index == 0 {
+                _ = EastKeeperRitualStore.advance(
+                    now: now,
+                    defaults: UserDefaults(suiteName: Self.suiteName),
+                    coordinationLockURL: sharedLockURL
+                )
+            } else {
+                _ = EastKeeperRitualStore.publishPrepared(
+                    candidate: candidate,
+                    presentation: presentation,
+                    now: now,
+                    defaults: UserDefaults(suiteName: Self.suiteName),
+                    coordinationLockURL: sharedLockURL
+                )
+            }
+        }
+
+        XCTAssertEqual(
+            EastKeeperRitualStore.resolvedSnapshot(
+                now: now,
+                defaults: defaults,
+                coordinationLockURL: coordinationLockURL
+            ),
+            EastKeeperRitualSnapshot(content: .feel, presentation: presentation)
+        )
+    }
+
+    private func prepareKeeperCandidate(coordinationLockURL: URL? = nil) {
+        EastKeeperRitualStore.setKeeperEntitlement(
+            true,
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL
+        )
         EastKeeperRitualStore.publishPrepared(
             candidate: makeCandidate(),
             presentation: .systemDefault,
             now: now,
-            defaults: defaults
+            defaults: defaults,
+            coordinationLockURL: coordinationLockURL
         )
     }
 
@@ -283,5 +360,22 @@ final class EastKeeperRitualStoreTests: XCTestCase {
             revealId: "11111111-2222-4333-8444-555555555555",
             needsAppCommit: false
         )
+    }
+}
+
+private final class LockedResults<Element>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Element] = []
+
+    func append(_ value: Element) {
+        lock.lock()
+        storage.append(value)
+        lock.unlock()
+    }
+
+    var values: [Element] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
     }
 }
