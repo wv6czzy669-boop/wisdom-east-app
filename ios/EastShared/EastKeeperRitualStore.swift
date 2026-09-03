@@ -55,6 +55,11 @@ struct EastKeeperRitualAdvanceResult: Equatable {
 enum EastKeeperRitualStore {
     static let schemaVersion = 1
     static let lockDuration: TimeInterval = 24 * 60 * 60
+    /// A StoreKit-verified Keeper result may be reused only for the few
+    /// minutes in which a person is completing one ritual. This removes two
+    /// redundant StoreKit round trips without turning the persisted
+    /// entitlement bit into a long-lived purchase authority.
+    static let entitlementVerificationLifetime: TimeInterval = 10 * 60
 
     private static let documentKey = "east_keeper_ritual_document_v1"
     private static let coordinationLockFileName = ".east_keeper_ritual.lock"
@@ -73,6 +78,7 @@ enum EastKeeperRitualStore {
     private struct Document: Codable, Equatable {
         var schemaVersion: Int
         var isKeeper: Bool
+        var keeperVerifiedAt: Date?
         var phase: EastKeeperRitualPhase
         var currentCandidate: EastKeeperRitualCandidate?
         var nextCandidate: EastKeeperRitualCandidate?
@@ -83,6 +89,7 @@ enum EastKeeperRitualStore {
         static let empty = Document(
             schemaVersion: EastKeeperRitualStore.schemaVersion,
             isKeeper: false,
+            keeperVerifiedAt: nil,
             phase: .pause,
             currentCandidate: nil,
             nextCandidate: nil,
@@ -108,10 +115,74 @@ enum EastKeeperRitualStore {
         coordinationLockURL: URL? = nil
     ) -> Bool {
         mutate(defaults: defaults, coordinationLockURL: coordinationLockURL) { document in
-            guard document.isKeeper != isKeeper else { return false }
+            var changed = document.isKeeper != isKeeper
             document.isKeeper = isKeeper
+            if !isKeeper, document.keeperVerifiedAt != nil {
+                document.keeperVerifiedAt = nil
+                changed = true
+            }
+            return changed
+        }
+    }
+
+    /// Records a result that came directly from StoreKit. Existing schema-1
+    /// documents decode this new optional field as nil and are verified once
+    /// before receiving the fast ritual path.
+    @discardableResult
+    static func recordVerifiedKeeperEntitlement(
+        _ isKeeper: Bool,
+        now: Date
+    ) -> Bool {
+        recordVerifiedKeeperEntitlement(
+            isKeeper,
+            now: now,
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
+        )
+    }
+
+    @discardableResult
+    static func recordVerifiedKeeperEntitlement(
+        _ isKeeper: Bool,
+        now: Date,
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
+    ) -> Bool {
+        guard isFinite(now) else { return false }
+        return mutate(defaults: defaults, coordinationLockURL: coordinationLockURL) { document in
+            let verifiedAt = isKeeper ? now : nil
+            guard document.isKeeper != isKeeper
+                    || document.keeperVerifiedAt != verifiedAt
+            else { return false }
+            document.isKeeper = isKeeper
+            document.keeperVerifiedAt = verifiedAt
             return true
         }
+    }
+
+    static func hasFreshVerifiedKeeperEntitlement(now: Date) -> Bool {
+        hasFreshVerifiedKeeperEntitlement(
+            now: now,
+            defaults: productionDefaults,
+            coordinationLockURL: productionCoordinationLockURL
+        )
+    }
+
+    static func hasFreshVerifiedKeeperEntitlement(
+        now: Date,
+        defaults: UserDefaults?,
+        coordinationLockURL: URL? = nil
+    ) -> Bool {
+        guard isFinite(now),
+              let document = read(
+                  defaults: defaults,
+                  coordinationLockURL: coordinationLockURL
+              ),
+              document.isKeeper,
+              let verifiedAt = document.keeperVerifiedAt
+        else { return false }
+        let age = now.timeIntervalSince(verifiedAt)
+        return age >= 0 && age <= entitlementVerificationLifetime
     }
 
     @discardableResult
@@ -531,6 +602,10 @@ enum EastKeeperRitualStore {
         if let current = document.currentCandidate, !isValid(current) { return false }
         if let next = document.nextCandidate, !isValid(next) { return false }
         if let reveal = document.reveal, !isValid(reveal) { return false }
+        if let keeperVerifiedAt = document.keeperVerifiedAt,
+           !isFinite(keeperVerifiedAt) {
+            return false
+        }
         return document.revision >= 0
     }
 

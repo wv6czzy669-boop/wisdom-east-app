@@ -7,11 +7,29 @@ struct EastKeeperRitualAdvanceIntent: AppIntent {
     static var description = IntentDescription("A quiet space for the day's wisdom.")
 
     func perform() async throws -> some IntentResult {
-        let isKeeper = await EastKeeperEntitlementAuthority.currentEntitlement()
-        let entitlementChanged = EastKeeperRitualStore.setKeeperEntitlement(isKeeper)
+        let startedAt = Date()
+        let isKeeper: Bool
+        let entitlementPresentationChanged: Bool
+        if EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(now: startedAt) {
+            // Pause, Feel, and Ask are one short interaction session. The
+            // first verified beat grants a bounded lease so later taps do not
+            // wait on the same StoreKit query again.
+            isKeeper = true
+            entitlementPresentationChanged = false
+        } else {
+            let beforeVerification = EastKeeperRitualStore.resolvedSnapshot(now: startedAt)
+            isKeeper = await EastKeeperEntitlementAuthority.currentEntitlement()
+            let verifiedAt = Date()
+            _ = EastKeeperRitualStore.recordVerifiedKeeperEntitlement(
+                isKeeper,
+                now: verifiedAt
+            )
+            entitlementPresentationChanged = beforeVerification
+                != EastKeeperRitualStore.resolvedSnapshot(now: verifiedAt)
+        }
 
         guard isKeeper else {
-            if entitlementChanged {
+            if entitlementPresentationChanged {
                 WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.keeperRitualKind)
             }
             return .result()
@@ -26,7 +44,7 @@ struct EastKeeperRitualAdvanceIntent: AppIntent {
             )
             WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.kind)
         }
-        if entitlementChanged || result.changed {
+        if entitlementPresentationChanged || result.changed {
             WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.keeperRitualKind)
         }
         return .result()

@@ -39,92 +39,157 @@ struct EastKeeperRitualView: View {
     }
 
     var body: some View {
-        interactiveSurface
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .environment(\.locale, locale)
-            .environment(\.layoutDirection, layoutDirection)
-            .modifier(EastWidgetBackground(color: eastStone))
+        ZStack {
+            content
+                .accessibilityHidden(true)
+            interactionTarget
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.locale, locale)
+        .environment(\.layoutDirection, layoutDirection)
+        .modifier(EastWidgetBackground(color: eastStone))
     }
 
     @ViewBuilder
-    private var interactiveSurface: some View {
+    private var interactionTarget: some View {
         switch entry.snapshot.content {
         case .revealed:
-            Link(destination: eastWidgetURL) { content }
+            Link(destination: eastWidgetURL) { clearInteractionSurface }
                 .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityText)
         case .keeperRequired, .waiting:
-            Link(destination: eastWidgetURL) { content }
+            Link(destination: eastWidgetURL) { clearInteractionSurface }
                 .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityText)
         case .pause, .feel, .heart:
             if #available(iOSApplicationExtension 17.0, *) {
-                Button(intent: EastKeeperRitualAdvanceIntent()) { content }
-                    .buttonStyle(.plain)
+                Button(intent: EastKeeperRitualAdvanceIntent()) {
+                    clearInteractionSurface
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityText)
             } else {
-                Link(destination: eastWidgetURL) { content }
+                Link(destination: eastWidgetURL) { clearInteractionSurface }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(accessibilityText)
             }
         }
+    }
+
+    private var clearInteractionSurface: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
     }
 
     private var content: some View {
         ZStack {
-            mainText
-                .id(contentIdentity)
-                .transition(reduceMotion ? .identity : .opacity)
+            ritualLayer(opacity: keeperRequiredOpacity) {
+                eastText(
+                    localized("Available with Keeper."),
+                    size: 23,
+                    lineLimit: 3
+                )
+            }
+            ritualLayer(opacity: waitingOpacity) {
+                eastText(
+                    localized("Something waits in silence."),
+                    size: 23,
+                    lineLimit: 3
+                )
+            }
+            ritualLayer(opacity: pauseOpacity) {
+                eastText(localized("Pause."), size: 36, lineLimit: 1)
+            }
+            ritualLayer(opacity: feelOpacity, offsetY: 44) {
+                eastText(localized("Feel."), size: 36, lineLimit: 1)
+            }
+            ritualLayer(opacity: heartOpacity) {
+                eastText(
+                    localized("Ask from your heart."),
+                    size: 29,
+                    lineLimit: 2,
+                    maximumWidth: 282
+                )
+            }
+            ritualLayer(opacity: revealedOpacity) {
+                eastText(
+                    revealedText,
+                    size: wisdomFontSize(for: revealedText),
+                    lineLimit: 5
+                )
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
-        .modifier(EastKeeperRitualTransition(
-            value: contentIdentity,
-            duration: ritualTransitionDuration,
-            reduceMotion: reduceMotion
+        .modifier(EastKeeperRitualInvalidation(
+            invalidatable: isInteractiveRitualPhase
         ))
     }
 
-    @ViewBuilder
-    private var mainText: some View {
+    private func ritualLayer<Layer: View>(
+        opacity: Double,
+        offsetY: CGFloat = 0,
+        @ViewBuilder content: () -> Layer
+    ) -> some View {
+        content()
+            .offset(y: offsetY)
+            .opacity(opacity)
+            .modifier(EastKeeperRitualLayerAnimation(
+                value: contentIdentity,
+                duration: ritualAnimationDuration,
+                reduceMotion: reduceMotion
+            ))
+    }
+
+    private var keeperRequiredOpacity: Double {
+        if case .keeperRequired = entry.snapshot.content { return 1 }
+        return 0
+    }
+
+    private var waitingOpacity: Double {
+        if case .waiting = entry.snapshot.content { return 1 }
+        return 0
+    }
+
+    /// Pause owns one fixed optical axis in both of its visible states.
+    /// Feel arrives 44pt below it without recentering the pair, matching the
+    /// app ritual instead of making Pause jump upward on the first tap.
+    private var pauseOpacity: Double {
         switch entry.snapshot.content {
-        case .keeperRequired:
-            eastText(
-                localized("Available with Keeper."),
-                size: 23,
-                lineLimit: 3
-            )
-        case .waiting:
-            eastText(
-                localized("Something waits in silence."),
-                size: 23,
-                lineLimit: 3
-            )
-        case .pause:
-            eastText(localized("Pause."), size: 36, lineLimit: 1)
-        case .feel:
-            VStack(spacing: 12) {
-                eastText(
-                    localized("Pause."),
-                    size: 34,
-                    color: eastInk.opacity(0.28),
-                    lineLimit: 1
-                )
-                eastText(localized("Feel."), size: 36, lineLimit: 1)
-            }
-        case .heart:
-            eastText(
-                localized("Ask from your heart."),
-                size: 29,
-                lineLimit: 2,
-                maximumWidth: 282
-            )
-        case let .revealed(reveal):
-            eastText(
-                reveal.displayText,
-                size: wisdomFontSize(for: reveal.displayText),
-                lineLimit: 5
-            )
+        case .pause: return 1
+        case .feel: return 0.28
+        case .keeperRequired, .waiting, .heart, .revealed: return 0
+        }
+    }
+
+    private var feelOpacity: Double {
+        if case .feel = entry.snapshot.content { return 1 }
+        return 0
+    }
+
+    private var heartOpacity: Double {
+        if case .heart = entry.snapshot.content { return 1 }
+        return 0
+    }
+
+    private var revealedOpacity: Double {
+        if case .revealed = entry.snapshot.content { return 1 }
+        return 0
+    }
+
+    private var revealedText: String {
+        guard case let .revealed(reveal) = entry.snapshot.content else {
+            return ""
+        }
+        return reveal.displayText
+    }
+
+    private var isInteractiveRitualPhase: Bool {
+        switch entry.snapshot.content {
+        case .pause, .feel, .heart: return true
+        case .keeperRequired, .waiting, .revealed: return false
         }
     }
 
@@ -135,14 +200,13 @@ struct EastKeeperRitualView: View {
     private func eastText(
         _ text: String,
         size: CGFloat,
-        color: Color? = nil,
         lineLimit: Int,
         maximumWidth: CGFloat? = nil
     ) -> some View {
         Text(text)
             .font(.custom("EBGaramond-Regular", size: size))
             .fontWeight(.regular)
-            .foregroundStyle(color ?? eastInk)
+            .foregroundStyle(eastInk)
             .lineSpacing(3)
             .lineLimit(lineLimit)
             .minimumScaleFactor(0.72)
@@ -199,24 +263,25 @@ struct EastKeeperRitualView: View {
         }
     }
 
-    /// The app lets the final wisdom arrive more slowly than the preceding
-    /// ritual beats. Keep the widget responsive through Pause, Feel, and Ask,
-    /// then give only the Ask -> wisdom transition the same quiet weight.
-    /// There is deliberately no artificial blank state or delayed action.
-    private var ritualTransitionDuration: TimeInterval {
+    /// WidgetKit updates are snapshots, not a continuously running app view.
+    /// A short ease-out acknowledges each tap immediately; only the wisdom is
+    /// given a slightly longer arrival. Both remain well below the system's
+    /// two-second animation ceiling and avoid the sluggish 1.2s whole-view
+    /// dissolve that previously followed the App Intent round trip.
+    private var ritualAnimationDuration: TimeInterval {
         switch entry.snapshot.content {
         case .revealed:
-            return 1.2
+            return 0.72
         case .keeperRequired, .waiting, .pause, .feel, .heart:
-            return 0.55
+            return 0.52
         }
     }
 }
 
-/// WidgetKit animates App Intent driven data changes on iOS 17 and later.
-/// The ritual uses only a restrained opacity transition: no scale, slide,
-/// ring, or progress-like motion. Reduce Motion removes even that fade.
-private struct EastKeeperRitualTransition: ViewModifier {
+/// The visible hierarchy is intentionally stable across every timeline entry.
+/// Only layer opacity changes, so WidgetKit never combines an identity swap,
+/// insertion transition, and content transition for the same ritual beat.
+private struct EastKeeperRitualLayerAnimation: ViewModifier {
     let value: String
     let duration: TimeInterval
     let reduceMotion: Bool
@@ -225,11 +290,28 @@ private struct EastKeeperRitualTransition: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
             content
-                .contentTransition(reduceMotion ? .identity : .opacity)
+                .contentTransition(.identity)
                 .animation(
-                    reduceMotion ? nil : .easeInOut(duration: duration),
+                    reduceMotion ? nil : .easeOut(duration: duration),
                     value: value
                 )
+        } else {
+            content
+        }
+    }
+}
+
+/// App Intents necessarily complete in the widget extension before WidgetKit
+/// installs the next entry. Mark only the changing ritual text invalidatable,
+/// not the background or the whole widget, so iOS can acknowledge the tap at
+/// once without introducing a spinner, progress UI, or decorative animation.
+private struct EastKeeperRitualInvalidation: ViewModifier {
+    let invalidatable: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            content.invalidatableContent(invalidatable)
         } else {
             content
         }

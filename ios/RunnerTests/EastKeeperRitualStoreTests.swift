@@ -44,6 +44,93 @@ final class EastKeeperRitualStoreTests: XCTestCase {
         )
     }
 
+    func testPersistedKeeperBitAloneIsNotAFreshStoreKitVerification() {
+        EastKeeperRitualStore.setKeeperEntitlement(true, defaults: defaults)
+
+        XCTAssertFalse(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now,
+            defaults: defaults
+        ))
+    }
+
+    func testSchemaOneDocumentWithoutVerificationTimestampStillDecodes() {
+        let legacyDocument = Data("""
+        {
+          "schemaVersion": 1,
+          "isKeeper": true,
+          "phase": "pause",
+          "presentation": { "appearanceMode": "system" },
+          "revision": 7
+        }
+        """.utf8)
+        defaults.set(legacyDocument, forKey: "east_keeper_ritual_document_v1")
+
+        XCTAssertEqual(
+            EastKeeperRitualStore.resolvedSnapshot(
+                now: now,
+                defaults: defaults
+            ).content,
+            .waiting(activationAt: nil)
+        )
+        XCTAssertFalse(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now,
+            defaults: defaults
+        ))
+    }
+
+    func testVerifiedKeeperLeaseCoversOnlyOneShortRitualSession() {
+        XCTAssertTrue(EastKeeperRitualStore.recordVerifiedKeeperEntitlement(
+            true,
+            now: now,
+            defaults: defaults
+        ))
+        XCTAssertTrue(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now,
+            defaults: defaults
+        ))
+        XCTAssertTrue(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now.addingTimeInterval(
+                EastKeeperRitualStore.entitlementVerificationLifetime
+            ),
+            defaults: defaults
+        ))
+        XCTAssertFalse(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now.addingTimeInterval(
+                EastKeeperRitualStore.entitlementVerificationLifetime + 0.001
+            ),
+            defaults: defaults
+        ))
+        XCTAssertFalse(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now.addingTimeInterval(-0.001),
+            defaults: defaults
+        ))
+    }
+
+    func testVerifiedNonKeeperClearsTheFastPathAndVisibleEntitlement() {
+        EastKeeperRitualStore.recordVerifiedKeeperEntitlement(
+            true,
+            now: now,
+            defaults: defaults
+        )
+
+        XCTAssertTrue(EastKeeperRitualStore.recordVerifiedKeeperEntitlement(
+            false,
+            now: now.addingTimeInterval(1),
+            defaults: defaults
+        ))
+        XCTAssertFalse(EastKeeperRitualStore.hasFreshVerifiedKeeperEntitlement(
+            now: now.addingTimeInterval(1),
+            defaults: defaults
+        ))
+        XCTAssertEqual(
+            EastKeeperRitualStore.resolvedSnapshot(
+                now: now.addingTimeInterval(1),
+                defaults: defaults
+            ).content,
+            .keeperRequired
+        )
+    }
+
     func testPreparedCandidateStartsAtPauseAndPreservesPresentation() {
         EastKeeperRitualStore.setKeeperEntitlement(true, defaults: defaults)
         let candidate = makeCandidate()

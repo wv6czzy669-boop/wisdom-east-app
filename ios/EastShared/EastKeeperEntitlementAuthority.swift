@@ -3,7 +3,8 @@ import StoreKit
 
 /// StoreKit 2 is the sole Keeper authority in both Runner and the interactive
 /// widget. Persisted Flutter/App Group booleans are presentation caches only;
-/// every widget mutation re-checks verified current entitlements here.
+/// the widget may reuse only a short, timestamped result that this authority
+/// or Runner just verified while the person completes one ritual.
 enum EastKeeperEntitlementAuthority {
     static let keeperProductID = "com.dailywisdomeast.keeper"
 

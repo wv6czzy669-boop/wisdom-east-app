@@ -43,7 +43,13 @@ enum EastWidgetSnapshotBridge {
             result(invalidArguments("setKeeperEntitlement requires isKeeper"))
             return
         }
-        if EastKeeperRitualStore.setKeeperEntitlement(isKeeper) {
+        let now = Date()
+        let beforeVerification = EastKeeperRitualStore.resolvedSnapshot(now: now)
+        _ = EastKeeperRitualStore.recordVerifiedKeeperEntitlement(
+            isKeeper,
+            now: now
+        )
+        if beforeVerification != EastKeeperRitualStore.resolvedSnapshot(now: now) {
             reloadKeeperTimelines()
         }
         result(nil)
