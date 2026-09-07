@@ -156,7 +156,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get journalSemantic => '日記';
 
   @override
-  String get keeper => '留住';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => '回復購買項目';
@@ -213,7 +213,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reflectionLimitExplanation => '內含 3 則省思。Keeper 為留下的一切開啟無限空間。';
 
   @override
-  String get becomeKeeper => '啟用留住';
+  String get becomeKeeper => '啟用 Keeper';
 
   @override
   String get whoseJournal => '這是誰的日記？';
@@ -326,10 +326,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get takeItWithYou => '隨身帶走。';
 
   @override
-  String get takeItWithYouKeeper => '隨身帶走。可透過「留住」使用。';
+  String get takeItWithYouKeeper => '隨身帶走。可透過 Keeper 使用。';
 
   @override
-  String get availableWithKeeper => '可透過「留住」使用。';
+  String get availableWithKeeper => '可透過 Keeper 使用。';
 
   @override
   String get opensKeeper => '開啟 Keeper。';
@@ -338,7 +338,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nameUpper => '名字';
 
   @override
-  String get keeperPersistenceError => '無法儲存「留住」的使用權。請嘗試回復購買項目。';
+  String get keeperPersistenceError => '無法儲存 Keeper 的使用權。請嘗試回復購買項目。';
 
   @override
   String get purchaseUpdating => '購買狀態仍在更新。請在設定中使用回復購買項目。';
@@ -377,7 +377,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportKeptAndReflections => '帶走你留下的智慧與省思。';
 
   @override
-  String get keeperAccessActive => '「留住」使用權已啟用';
+  String get keeperAccessActive => 'Keeper 使用權已啟用';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -515,6 +515,127 @@ class AppLocalizationsZh extends AppLocalizations {
   String remainingDurationMinutesOnly(int minutes) {
     return '還剩$minutes分鐘';
   }
+
+  @override
+  String get keeperPreviewLabel => '一窺 Keeper';
+
+  @override
+  String get keeperWidgetTab => '小工具';
+
+  @override
+  String get keeperPreviewExample => '範例';
+
+  @override
+  String get keeperPreviewReflection => '今天，我想不慌不忙地前行。';
+
+  @override
+  String get keeperDailyRitual => '無論是否使用 Keeper，每 24 小時一則智慧。';
+
+  @override
+  String get keeperWidgetStepOne => '長按主畫面的空白處。';
+
+  @override
+  String get keeperWidgetStepTwo => '點一下「編輯」，再點「加入小工具」。較舊的 iOS 版本請點「＋」按鈕。';
+
+  @override
+  String get keeperWidgetStepThree => '找到 EAST.，選擇 Keeper 儀式小工具，再點「加入小工具」。';
+
+  @override
+  String get reflectionSaved => '已儲存';
+
+  @override
+  String get reflectionSaving => '儲存中…';
+
+  @override
+  String get reflectionCopyText => '複製文字';
+
+  @override
+  String get reflectionCopied => '已複製';
+
+  @override
+  String get reflectionAddThought => '添上一個新想法';
+
+  @override
+  String get reflectionRevisitPrompt => '今天，我如何讀懂這句話？';
+
+  @override
+  String get reflectionEarlier => '先前的想法';
+
+  @override
+  String get reflectionOverTime => '隨著時間';
+
+  @override
+  String get reflectionHistoryDeleteExplanation => '附於這則智慧的所有想法都將被刪除。';
+
+  @override
+  String get reflectionRecoveryMessage => '你的文字尚未儲存。';
+
+  @override
+  String get settingsEveryday => '日常偏好';
+
+  @override
+  String get settingsYourWriting => '你的文字';
+
+  @override
+  String get settingsAbout => '關於 EAST.';
+
+  @override
+  String get writingLock => '文字鎖定';
+
+  @override
+  String get writingLockDescription => '使用 Face ID、Touch ID 或裝置密碼，開啟留下的、省思與日記。';
+
+  @override
+  String get writingLockFootnote => '每日儀式仍可直接開始。離開 App 時，私人文字會重新鎖定。';
+
+  @override
+  String get writingLockTitle => '你的文字，屬於你。';
+
+  @override
+  String get writingLockPrompt => '請驗證身分以開啟私人文字。';
+
+  @override
+  String get writingLockUnlock => '解鎖';
+
+  @override
+  String get writingLockChecking => '正在驗證…';
+
+  @override
+  String get writingLockReason => '開啟你的私人文字。';
+
+  @override
+  String get writingLockUnavailable => '目前無法驗證。請檢查裝置密碼及 Face ID 或 Touch ID 設定。';
+
+  @override
+  String get writingLockToggleReason => '變更私人文字的鎖定設定。';
+
+  @override
+  String get writingLockOn => '開啟';
+
+  @override
+  String get writingLockOff => '關閉';
+
+  @override
+  String get privacyPreview => 'App 切換器中會隱藏你的文字。';
+
+  @override
+  String get settingsAboutDescription => '每天一次，回到自己的所在。';
+
+  @override
+  String get dailyRitualICloudRequired => '登入 iCloud，即可開啟新的智慧。';
+
+  @override
+  String get dailyRitualConnectionRequired => '連接網路，即可開啟新的智慧。';
+
+  @override
+  String get dailyRitualUnavailable => '目前無法開啟每日智慧，請再試一次。';
+
+  @override
+  String get dailyRitualAccountNote =>
+      '每個 iCloud 帳號每 24 小時可開啟一則智慧。新的智慧需要網路連線，已儲存的文字仍可離線閱讀。';
+
+  @override
+  String get dailyRitualPreviousWisdom => '上一則智慧';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -669,7 +790,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get journalSemantic => '日記';
 
   @override
-  String get keeper => '留住';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => '回復購買項目';
@@ -726,7 +847,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get reflectionLimitExplanation => '內含 3 則省思。Keeper 為留下的一切開啟無限空間。';
 
   @override
-  String get becomeKeeper => '啟用留住';
+  String get becomeKeeper => '啟用 Keeper';
 
   @override
   String get whoseJournal => '這是誰的日記？';
@@ -839,10 +960,10 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get takeItWithYou => '隨身帶走。';
 
   @override
-  String get takeItWithYouKeeper => '隨身帶走。可透過「留住」使用。';
+  String get takeItWithYouKeeper => '隨身帶走。可透過 Keeper 使用。';
 
   @override
-  String get availableWithKeeper => '可透過「留住」使用。';
+  String get availableWithKeeper => '可透過 Keeper 使用。';
 
   @override
   String get opensKeeper => '開啟 Keeper。';
@@ -851,7 +972,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get nameUpper => '名字';
 
   @override
-  String get keeperPersistenceError => '無法儲存「留住」的使用權。請嘗試回復購買項目。';
+  String get keeperPersistenceError => '無法儲存 Keeper 的使用權。請嘗試回復購買項目。';
 
   @override
   String get purchaseUpdating => '購買狀態仍在更新。請在設定中使用回復購買項目。';
@@ -890,7 +1011,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get exportKeptAndReflections => '帶走你留下的智慧與省思。';
 
   @override
-  String get keeperAccessActive => '「留住」使用權已啟用';
+  String get keeperAccessActive => 'Keeper 使用權已啟用';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -1028,4 +1149,125 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String remainingDurationMinutesOnly(int minutes) {
     return '還剩$minutes分鐘';
   }
+
+  @override
+  String get keeperPreviewLabel => '一窺 Keeper';
+
+  @override
+  String get keeperWidgetTab => '小工具';
+
+  @override
+  String get keeperPreviewExample => '範例';
+
+  @override
+  String get keeperPreviewReflection => '今天，我想不慌不忙地前行。';
+
+  @override
+  String get keeperDailyRitual => '無論是否使用 Keeper，每 24 小時一則智慧。';
+
+  @override
+  String get keeperWidgetStepOne => '長按主畫面的空白處。';
+
+  @override
+  String get keeperWidgetStepTwo => '點一下「編輯」，再點「加入小工具」。較舊的 iOS 版本請點「＋」按鈕。';
+
+  @override
+  String get keeperWidgetStepThree => '找到 EAST.，選擇 Keeper 儀式小工具，再點「加入小工具」。';
+
+  @override
+  String get reflectionSaved => '已儲存';
+
+  @override
+  String get reflectionSaving => '儲存中…';
+
+  @override
+  String get reflectionCopyText => '複製文字';
+
+  @override
+  String get reflectionCopied => '已複製';
+
+  @override
+  String get reflectionAddThought => '添上一個新想法';
+
+  @override
+  String get reflectionRevisitPrompt => '今天，我如何讀懂這句話？';
+
+  @override
+  String get reflectionEarlier => '先前的想法';
+
+  @override
+  String get reflectionOverTime => '隨著時間';
+
+  @override
+  String get reflectionHistoryDeleteExplanation => '附於這則智慧的所有想法都將被刪除。';
+
+  @override
+  String get reflectionRecoveryMessage => '你的文字尚未儲存。';
+
+  @override
+  String get settingsEveryday => '日常偏好';
+
+  @override
+  String get settingsYourWriting => '你的文字';
+
+  @override
+  String get settingsAbout => '關於 EAST.';
+
+  @override
+  String get writingLock => '文字鎖定';
+
+  @override
+  String get writingLockDescription => '使用 Face ID、Touch ID 或裝置密碼，開啟留下的、省思與日記。';
+
+  @override
+  String get writingLockFootnote => '每日儀式仍可直接開始。離開 App 時，私人文字會重新鎖定。';
+
+  @override
+  String get writingLockTitle => '你的文字，屬於你。';
+
+  @override
+  String get writingLockPrompt => '請驗證身分以開啟私人文字。';
+
+  @override
+  String get writingLockUnlock => '解鎖';
+
+  @override
+  String get writingLockChecking => '正在驗證…';
+
+  @override
+  String get writingLockReason => '開啟你的私人文字。';
+
+  @override
+  String get writingLockUnavailable => '目前無法驗證。請檢查裝置密碼及 Face ID 或 Touch ID 設定。';
+
+  @override
+  String get writingLockToggleReason => '變更私人文字的鎖定設定。';
+
+  @override
+  String get writingLockOn => '開啟';
+
+  @override
+  String get writingLockOff => '關閉';
+
+  @override
+  String get privacyPreview => 'App 切換器中會隱藏你的文字。';
+
+  @override
+  String get settingsAboutDescription => '每天一次，回到自己的所在。';
+
+  @override
+  String get dailyRitualICloudRequired => '登入 iCloud，即可開啟新的智慧。';
+
+  @override
+  String get dailyRitualConnectionRequired => '連接網路，即可開啟新的智慧。';
+
+  @override
+  String get dailyRitualUnavailable => '目前無法開啟每日智慧，請再試一次。';
+
+  @override
+  String get dailyRitualAccountNote =>
+      '每個 iCloud 帳號每 24 小時可開啟一則智慧。新的智慧需要網路連線，已儲存的文字仍可離線閱讀。';
+
+  @override
+  String get dailyRitualPreviousWisdom => '上一則智慧';
 }

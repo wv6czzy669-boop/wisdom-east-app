@@ -260,6 +260,9 @@ final class CloudKitSyncBridge: NSObject, FlutterStreamHandler {
     if let reflectionText = envelope.reflectionText {
       payload["reflectionText"] = reflectionText
     }
+    if let history = envelope.reflectionHistoryJson {
+      payload["reflectionHistoryJson"] = history
+    }
     if let reflectedAtMs = envelope.reflectedAtMs {
       payload["reflectedAtMs"] = reflectedAtMs
     }

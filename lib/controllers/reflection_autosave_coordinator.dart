@@ -2,6 +2,8 @@ import 'dart:async';
 
 enum ReflectionPersistResult { saved, limitReached }
 
+enum ReflectionSaveState { idle, editing, saving, saved, failed, limited }
+
 typedef ReadReflectionText = String Function();
 typedef PersistReflectionText = Future<ReflectionPersistResult> Function(
   String text,
@@ -19,6 +21,7 @@ class ReflectionAutosaveCoordinator {
     this.onLimitReached,
     this.onPersistFailure,
     this.onDiagnostic,
+    this.onStateChanged,
     this.maximumFlushAttempts = 3,
     this.retryDelay = const Duration(milliseconds: 120),
   }) : _lastPersistedText = initialPersistedText?.trim();
@@ -29,6 +32,7 @@ class ReflectionAutosaveCoordinator {
   final ReflectionAutosaveCallback? onLimitReached;
   final ReflectionAutosaveCallback? onPersistFailure;
   final ReflectionAutosaveDiagnostic? onDiagnostic;
+  final void Function(ReflectionSaveState state)? onStateChanged;
   final int maximumFlushAttempts;
   final Duration retryDelay;
 
@@ -40,6 +44,10 @@ class ReflectionAutosaveCoordinator {
   int _editRevision = 0;
   int _persistedRevision = 0;
 
+  void _notify(ReflectionSaveState state) {
+    if (!_disposed) onStateChanged?.call(state);
+  }
+
   /// Whether the editor currently contains a revision that has not yet
   /// completed its durable local write. Reflection uses this only to decide
   /// whether iOS may use its native interactive pop gesture directly or
@@ -49,6 +57,7 @@ class ReflectionAutosaveCoordinator {
   void handleTextChanged() {
     if (_disposed) return;
     _editRevision += 1;
+    _notify(ReflectionSaveState.editing);
     _debounceTimer?.cancel();
     _debounceTimer = Timer(debounce, () {
       _debounceTimer = null;
@@ -100,14 +109,21 @@ class ReflectionAutosaveCoordinator {
       final text = readText();
       final trimmed = text.trim();
       if (trimmed.isNotEmpty && trimmed != _lastPersistedText) {
+        _notify(ReflectionSaveState.saving);
         final succeeded = await _attemptPersist(
           text: text,
           trimmed: trimmed,
           retryOnFailure: retryOnFailure,
         );
-        if (succeeded) _markPersisted(revisionBeingAttempted);
+        if (succeeded) {
+          _markPersisted(revisionBeingAttempted);
+          if (revisionBeingAttempted == _editRevision) {
+            _notify(ReflectionSaveState.saved);
+          }
+        }
       } else {
         _markPersisted(revisionBeingAttempted);
+        _notify(ReflectionSaveState.idle);
       }
       if (!_persistPending) return;
     }
@@ -134,6 +150,8 @@ class ReflectionAutosaveCoordinator {
             'reflection-screen: local-write-limit-reached attempt=$attempt',
           );
           onLimitReached?.call();
+          _notify(ReflectionSaveState.limited);
+          return false;
         } else {
           onDiagnostic?.call(
             'reflection-screen: local-write-success attempt=$attempt',
@@ -149,6 +167,7 @@ class ReflectionAutosaveCoordinator {
         if (attempt == attempts) {
           onDiagnostic?.call('reflection-screen: local-write-exhausted');
           onPersistFailure?.call();
+          _notify(ReflectionSaveState.failed);
           return false;
         }
         await Future<void>.delayed(retryDelay);

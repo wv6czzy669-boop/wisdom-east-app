@@ -22,6 +22,7 @@ import '../sync_platform/method_channel_cloud_kit_platform_bridge.dart';
 import '../sync_runtime/cloud_kit_sync_runtime_coordinator.dart';
 import 'analytics_service.dart';
 import 'daily_wisdom_access_service.dart';
+import 'daily_ritual_authority.dart';
 import 'data_export_service.dart';
 import 'journal_owner_service.dart';
 import 'keeper_ritual_widget_service.dart';
@@ -96,6 +97,7 @@ DailyWisdomAccessService createDailyWisdomAccessService({
     repository: dailyAccessRepository,
     clock: clock,
     statusTimeout: statusTimeout,
+    authority: const MethodChannelDailyRitualAuthority(),
   );
 }
 

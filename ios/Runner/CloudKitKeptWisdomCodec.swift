@@ -35,6 +35,7 @@ struct CloudKitKeptWisdomWireEnvelope: Equatable {
   let keptAtMs: Int64?
   let reflectionText: String?
   let reflectedAtMs: Int64?
+  var reflectionHistoryJson: String? = nil
 
   // Tombstone-form-only field (§2.4). `nil` on an active-form envelope.
   let deletedAtMs: Int64?
@@ -64,6 +65,7 @@ enum CloudKitKeptWisdomCodec {
   enum EncodeError: Error {
     case invalidRevealId
     case inconsistentReflectionFields
+    case invalidReflectionHistory
   }
 
   enum DecodeError: Error, Equatable {
@@ -77,11 +79,36 @@ enum CloudKitKeptWisdomCodec {
     case inconsistentReflectionFields
   }
 
+  static func isValidReflectionHistory(_ value: String) -> Bool {
+    guard value.utf8.count <= 512 * 1024,
+      let data = value.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      object["version"] as? Int == 1,
+      let clearedAt = object["clearedAtMs"] as? Int64, clearedAt >= 0,
+      clearedAt <= 8_640_000_000_000_000,
+      let thoughts = object["thoughts"] as? [[String: Any]]
+    else { return false }
+    var identifiers = Set<String>()
+    for thought in thoughts {
+      guard let id = thought["id"] as? String,
+        CloudKitRecordIdentity.isCanonicalRevealId(id), identifiers.insert(id).inserted,
+        let text = thought["text"] as? String,
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 1000,
+        let createdAt = thought["createdAtMs"] as? Int64, createdAt > clearedAt,
+        let updatedAt = thought["updatedAtMs"] as? Int64, updatedAt >= createdAt,
+        updatedAt <= 8_640_000_000_000_000,
+        let mutationId = thought["mutationId"] as? String,
+        CloudKitRecordIdentity.isCanonicalRevealId(mutationId)
+      else { return false }
+    }
+    return true
+  }
+
   /// Encodes the active form (§2.3) of a saved reveal occurrence into a
   /// freshly-constructed `CKRecord`. `reflectionText`/`reflectedAtMs` must
-  /// be either both `nil` or both non-`nil` -- an occurrence with a
-  /// Reflection timestamp but no Reflection text (or vice versa) is a
-  /// programmer error, never silently coerced into a valid shape.
+  /// be either both `nil` or both non-`nil`. A valid dated-thought history
+  /// also permits an undated legacy original; its date is never invented.
+  /// A timestamp without Reflection text remains a programmer error.
   ///
   /// Build 26 Phase 4H-5 (sibling of the Phase 4H-4 tombstone
   /// field-retention fix): when no Reflection exists, `reflectionText`/
@@ -107,6 +134,7 @@ enum CloudKitKeptWisdomCodec {
     keptAtMs: Int64,
     reflectionText: String?,
     reflectedAtMs: Int64?,
+    reflectionHistoryJson: String? = nil,
     updatedAtMs: Int64,
     mutationId: String,
     dataEpoch: String,
@@ -115,8 +143,13 @@ enum CloudKitKeptWisdomCodec {
     guard CloudKitRecordIdentity.isCanonicalRevealId(revealId) else {
       throw EncodeError.invalidRevealId
     }
-    guard (reflectionText == nil) == (reflectedAtMs == nil) else {
+    guard (reflectionText == nil) == (reflectedAtMs == nil) ||
+      (reflectionText != nil && reflectedAtMs == nil && reflectionHistoryJson != nil) else {
       throw EncodeError.inconsistentReflectionFields
+    }
+
+    if let history = reflectionHistoryJson, !isValidReflectionHistory(history) {
+      throw EncodeError.invalidReflectionHistory
     }
 
     let recordID = try CloudKitRecordIdentity.keptWisdomRecordID(revealId: revealId)
@@ -142,6 +175,7 @@ enum CloudKitKeptWisdomCodec {
     record[CloudKitRecordSchema.KeptWisdomField.dataEpoch] = dataEpoch as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.schemaVersion] = schemaVersion as CKRecordValue
     record[CloudKitRecordSchema.KeptWisdomField.isTombstone] = false as CKRecordValue
+    record[CloudKitRecordSchema.KeptWisdomField.reflectionHistoryJson] = reflectionHistoryJson as CKRecordValue?
 
     return record
   }
@@ -484,6 +518,12 @@ enum CloudKitKeptWisdomCodec {
           : .malformedField(CloudKitRecordSchema.KeptWisdomField.keptAtMs))
     }
 
+    var reflectionHistoryJson: String?
+    if let raw = record[CloudKitRecordSchema.KeptWisdomField.reflectionHistoryJson] {
+      guard let value = raw as? String, isValidReflectionHistory(value)
+      else { return .failure(.malformedField(CloudKitRecordSchema.KeptWisdomField.reflectionHistoryJson)) }
+      reflectionHistoryJson = value
+    }
     var reflectionText: String?
     if let reflectionTextValue = record[CloudKitRecordSchema.KeptWisdomField.reflectionText] {
       guard let text = reflectionTextValue as? String else {
@@ -500,7 +540,8 @@ enum CloudKitKeptWisdomCodec {
       reflectedAtMs = value
     }
 
-    guard (reflectionText == nil) == (reflectedAtMs == nil) else {
+    guard (reflectionText == nil) == (reflectedAtMs == nil) ||
+      (reflectionText != nil && reflectedAtMs == nil && reflectionHistoryJson != nil) else {
       return .failure(.inconsistentReflectionFields)
     }
 
@@ -515,6 +556,7 @@ enum CloudKitKeptWisdomCodec {
         keptAtMs: keptAtMs,
         reflectionText: reflectionText,
         reflectedAtMs: reflectedAtMs,
+        reflectionHistoryJson: reflectionHistoryJson,
         deletedAtMs: nil,
         updatedAtMs: updatedAtMs,
         mutationId: mutationId,

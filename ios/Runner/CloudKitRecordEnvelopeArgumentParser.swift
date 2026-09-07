@@ -112,9 +112,16 @@ enum CloudKitRecordEnvelopeArgumentParser {
       return .failure(.missingRequiredField("keptAtMs"))
     }
 
+    let history = fields["reflectionHistoryJson"] as? String
+    if let raw = fields["reflectionHistoryJson"], !(raw is NSNull) {
+      guard let value = history, CloudKitKeptWisdomCodec.isValidReflectionHistory(value) else {
+        return .failure(.malformedField("reflectionHistoryJson"))
+      }
+    }
     let reflectionText = fields["reflectionText"] as? String
     let reflectedAtMs = asInt64(fields["reflectedAtMs"])
-    guard (reflectionText == nil) == (reflectedAtMs == nil) else {
+    guard (reflectionText == nil) == (reflectedAtMs == nil) ||
+      (reflectionText != nil && reflectedAtMs == nil && history != nil) else {
       return .failure(.inconsistentReflectionFields)
     }
 
@@ -127,6 +134,7 @@ enum CloudKitRecordEnvelopeArgumentParser {
         keptAtMs: keptAtMs,
         reflectionText: reflectionText,
         reflectedAtMs: reflectedAtMs,
+        reflectionHistoryJson: history,
         updatedAtMs: updatedAtMs,
         mutationId: mutationId,
         dataEpoch: dataEpoch,

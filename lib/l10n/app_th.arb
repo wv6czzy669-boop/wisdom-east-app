@@ -21,16 +21,32 @@
   "systemDefault": "ค่าเริ่มต้นของระบบ",
   "english": "ภาษาอังกฤษ",
   "languageSettingSemantics": "ภาษา ตัวเลือกปัจจุบัน: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "รูปลักษณ์",
   "light": "สว่าง",
   "dark": "มืด",
   "appearanceSettingSemantics": "รูปลักษณ์ ตัวเลือกปัจจุบัน: {value}",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "กลับ",
   "delete": "ลบ",
   "deleteUpper": "ลบ",
@@ -47,11 +63,19 @@
   "deleteReflection": "ลบการไตร่ตรอง",
   "reflectedEditReflection": "ไตร่ตรองแล้ว แก้ไขการไตร่ตรอง.",
   "addReflectionNumbered": "บันทึกการไตร่ตรอง รายการที่ {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "เปิดการไตร่ตรอง รายการที่ {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "สมุดบันทึก",
-  "keeper": "คงไว้",
+  "keeper": "Keeper",
   "restorePurchases": "กู้คืนรายการซื้อ",
   "icloudSync": "ซิงค์ iCloud",
   "removeFromIcloud": "ลบออกจาก iCloud",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "ผู้ใช้ฟรีเก็บข้อคิดได้สูงสุด 3 ข้อ.",
   "keepReflectingQuestion": "ไตร่ตรองต่อไหม?",
   "reflectionLimitExplanation": "รวมการไตร่ตรอง 3 ครั้ง Keeper เปิดพื้นที่ไม่จำกัดสำหรับสิ่งที่ยังคงอยู่",
-  "becomeKeeper": "เปิดใช้ “คงไว้”",
+  "becomeKeeper": "เปิดใช้ Keeper",
   "whoseJournal": "สมุดบันทึกนี้เป็นของใคร?",
   "journalNameExplanation": "ชื่อจะปรากฏอย่างเรียบง่ายบนหน้าชื่อเรื่องของสมุดบันทึก.",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "กดค้างเพื่อแชร์ข้อคิดนี้.",
   "shareWisdom": "แชร์",
   "shareWisdomNumbered": "แชร์ข้อคิด รายการที่ {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "การเตือนอย่างเงียบงัน",
   "nothingHasStayedYet": "ยังไม่มีสิ่งใดคงอยู่.",
   "wisdomCouldNotBeRemoved": "ไม่สามารถนำข้อคิดนี้ออกได้ โปรดลองอีกครั้ง.",
@@ -108,11 +138,11 @@
   "yourName": "ชื่อของคุณ",
   "journalCouldNotBePrepared": "ไม่สามารถเตรียมสมุดบันทึกได้ โปรดลองอีกครั้ง.",
   "takeItWithYou": "พกติดตัวไป.",
-  "takeItWithYouKeeper": "พกติดตัวไป ใช้ได้เมื่อมี “คงไว้”.",
-  "availableWithKeeper": "ใช้ได้เมื่อมี “คงไว้”.",
+  "takeItWithYouKeeper": "พกติดตัวไป ใช้ได้เมื่อมี Keeper",
+  "availableWithKeeper": "ใช้ได้เมื่อมี Keeper",
   "opensKeeper": "เปิด Keeper",
   "nameUpper": "ชื่อ",
-  "keeperPersistenceError": "ไม่สามารถบันทึกสิทธิ์ “คงไว้” ได้ โปรดลองกู้คืนรายการซื้อ.",
+  "keeperPersistenceError": "ไม่สามารถบันทึกสิทธิ์ Keeper ได้ โปรดลองกู้คืนรายการซื้อ",
   "purchaseUpdating": "สถานะการซื้อยังอยู่ระหว่างอัปเดต โปรดใช้กู้คืนรายการซื้อในการตั้งค่า.",
   "purchaseNotReady": "การซื้อยังไม่พร้อม โปรดลองอีกครั้งในอีกสักครู่.",
   "restore": "กู้คืน",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "ที่ซึ่งความเงียบเอ่ยถ้อยคำ.",
   "preparing": "กำลังเตรียม…",
   "exportKeptAndReflections": "พกข้อคิดที่เก็บไว้และการไตร่ตรองของคุณไปด้วย.",
-  "keeperAccessActive": "สิทธิ์ “คงไว้” เปิดใช้งานแล้ว",
+  "keeperAccessActive": "สิทธิ์ Keeper เปิดใช้งานแล้ว",
   "keeperPurchaseInProgress": "เข้ามาในวง {price} การซื้อกำลังดำเนินการ.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "เข้ามาในวง {price} ชำระครั้งเดียว",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "เข้ามาในวง ไม่พร้อมใช้งานชั่วคราว",
   "keepWithoutLimit": "เก็บไว้ได้ไม่จำกัด.",
   "reflectWithoutLimit": "ไตร่ตรองได้ไม่จำกัด.",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "บันทึกการสะท้อนคิดไม่ได้ ระบบจะลองอีกครั้งขณะที่คุณเขียนต่อ",
   "reflectionDeleteFailed": "ลบการสะท้อนคิดไม่ได้ โปรดลองอีกครั้ง",
   "remainingDurationHoursMinutes": "เหลืออีก {hours} ชั่วโมง {minutes} นาที",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "เหลืออีก {hours} ชั่วโมง",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "เหลืออีก {minutes} นาที",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "สัมผัส Keeper",
+  "keeperWidgetTab": "วิดเจ็ต",
+  "keeperPreviewExample": "ตัวอย่าง",
+  "keeperPreviewReflection": "วันนี้ ฉันอยากก้าวต่อไปโดยไม่เร่งรีบ",
+  "keeperDailyRitual": "ข้อคิดหนึ่งบททุก 24 ชั่วโมง ไม่ว่าจะใช้ Keeper หรือไม่",
+  "keeperWidgetStepOne": "แตะพื้นที่ว่างบนหน้าจอโฮมค้างไว้",
+  "keeperWidgetStepTwo": "แตะแก้ไข แล้วแตะเพิ่มวิดเจ็ต สำหรับ iOS รุ่นเก่า ให้แตะปุ่ม +",
+  "keeperWidgetStepThree": "ค้นหา EAST. เลือกวิดเจ็ตพิธีกรรม Keeper แล้วแตะเพิ่มวิดเจ็ต",
+  "reflectionSaved": "บันทึกแล้ว",
+  "reflectionSaving": "กำลังบันทึก…",
+  "reflectionCopyText": "คัดลอกข้อความ",
+  "reflectionCopied": "คัดลอกแล้ว",
+  "reflectionAddThought": "เพิ่มความคิดใหม่",
+  "reflectionRevisitPrompt": "วันนี้ ฉันอ่านถ้อยคำนี้อย่างไร?",
+  "reflectionEarlier": "ความคิดก่อนหน้า",
+  "reflectionOverTime": "เมื่อเวลาผ่านไป",
+  "reflectionHistoryDeleteExplanation": "ความคิดทั้งหมดที่เขียนไว้กับข้อคิดนี้จะถูกลบ",
+  "reflectionRecoveryMessage": "ยังไม่ได้บันทึกข้อความของคุณ",
+  "settingsEveryday": "การตั้งค่าประจำวัน",
+  "settingsYourWriting": "ถ้อยคำของคุณ",
+  "settingsAbout": "เกี่ยวกับ EAST.",
+  "writingLock": "ล็อกบันทึก",
+  "writingLockDescription": "เปิดสิ่งที่เก็บไว้ การไตร่ตรอง และสมุดบันทึกด้วย Face ID, Touch ID หรือรหัสอุปกรณ์",
+  "writingLockFootnote": "พิธีประจำวันยังเข้าได้ตามปกติ เมื่อออกจากแอป บันทึกส่วนตัวจะถูกล็อกอีกครั้ง",
+  "writingLockTitle": "ถ้อยคำของคุณเป็นของคุณ",
+  "writingLockPrompt": "ยืนยันตัวตนเพื่อเปิดบันทึกส่วนตัว",
+  "writingLockUnlock": "ปลดล็อก",
+  "writingLockChecking": "กำลังยืนยันตัวตน…",
+  "writingLockReason": "เปิดบันทึกส่วนตัวของคุณ",
+  "writingLockUnavailable": "ไม่สามารถยืนยันตัวตนได้ โปรดตรวจสอบรหัสอุปกรณ์และการตั้งค่า Face ID หรือ Touch ID",
+  "writingLockToggleReason": "เปลี่ยนการล็อกบันทึกส่วนตัวของคุณ",
+  "writingLockOn": "เปิด",
+  "writingLockOff": "ปิด",
+  "privacyPreview": "บันทึกของคุณจะถูกซ่อนในหน้าสลับแอป",
+  "settingsAboutDescription": "พื้นที่ให้กลับมาหาตัวเอง วันละครั้ง",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "ลงชื่อเข้าใช้ iCloud เพื่อเปิดข้อคิดใหม่",
+  "dailyRitualConnectionRequired": "เชื่อมต่ออินเทอร์เน็ตเพื่อเปิดข้อคิดใหม่",
+  "dailyRitualUnavailable": "ยังเปิดข้อคิดประจำวันไม่ได้ในตอนนี้ โปรดลองอีกครั้ง",
+  "dailyRitualAccountNote": "หนึ่งข้อคิดต่อบัญชี iCloud ทุก 24 ชั่วโมง การเปิดข้อคิดใหม่ต้องเชื่อมต่ออินเทอร์เน็ต คุณยังอ่านงานเขียนที่บันทึกไว้ได้เมื่อออฟไลน์",
+  "dailyRitualPreviousWisdom": "ข้อคิดก่อนหน้า"
 }

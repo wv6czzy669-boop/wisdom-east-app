@@ -19,6 +19,7 @@ import 'package:wisdom_app/services/wisdom_localization_resolver.dart';
 import 'package:wisdom_app/services/analytics_event.dart';
 import 'package:wisdom_app/services/analytics_service.dart';
 import 'package:wisdom_app/services/daily_wisdom_access_service.dart';
+import 'package:wisdom_app/services/daily_ritual_authority.dart';
 import 'package:wisdom_app/services/first_ritual_guidance_service.dart';
 import 'package:wisdom_app/services/kept_discovery_hint_service.dart';
 import 'package:wisdom_app/services/rating_request_service.dart';
@@ -35,11 +36,232 @@ import 'package:wisdom_app/widgets/home/top_nav_ring.dart';
 
 import 'persistence_test_helpers.dart';
 
+AuthorizedDailyRitual _accountGrant(DateTime start) =>
+    AuthorizedDailyRitual.decode({
+      'wisdomId': 'east_wisdom_0059',
+      'revealId': _fixedRevealId,
+      'revealedAtMs': start.millisecondsSinceEpoch,
+      'unlockAtMs': start.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+      'accountScope': 'a' * 64,
+      'created': false,
+    });
+
+class _ControlledAccountAuthority implements DailyRitualAuthority {
+  var reply = Completer<AuthorizedDailyRitual>();
+  AuthorizedDailyRitual? cached;
+  int claims = 0;
+  @override
+  Future<AuthorizedDailyRitual> claim(
+      {required String wisdomId, DailyWisdomRecord? legacyRecord}) {
+    claims++;
+    return reply.future;
+  }
+
+  @override
+  Future<AuthorizedDailyRitual?> readCached() async => cached;
+  @override
+  Future<AuthorizedDailyRitual?> refresh(
+          {DailyWisdomRecord? legacyRecord}) async =>
+      null;
+}
+
 void main() {
   final removedRevealAnother = ['Reveal', 'another'].join(' ');
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  Future<void> returningWisdom(
+      WidgetTester tester, KeptRepositoryTestGraph graph,
+      {SavedReflectionsService? service}) async {
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+              text: 'A quiet saved wisdom.',
+              revealedAt: now,
+              unlockAt: now.add(const Duration(hours: 24)),
+              revealId: _fixedRevealId)
+          .encode(),
+      KeptDiscoveryHintService.completedKey: true,
+      KeptDiscoveryHintService.keptNavDiscoveryCompletedKey: true,
+    });
+    await tester.pumpWidget(
+        _homeApp(keptGraph: graph, savedReflectionsService: service));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    await tester.pump();
+  }
+
+  testWidgets(
+      'every durable save has one 1500ms breath and confirmation without moving either ring',
+      (tester) async {
+    final graph = KeptRepositoryTestGraph();
+    await returningWisdom(tester, graph);
+    final saveRect =
+        tester.getRect(find.byKey(const ValueKey('home-save-control-unsaved')));
+    final navRect =
+        tester.getRect(find.byKey(const ValueKey('home-kept-control')));
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump();
+    const breath = ValueKey('kept-save-feedback-breath');
+    const feedback = ValueKey('keep-save-feedback-text');
+    expect(find.byKey(breath), findsOneWidget);
+    final animation = tester
+        .widget<AnimatedBuilder>(find.descendant(
+            of: find.byKey(breath), matching: find.byType(AnimatedBuilder)))
+        .animation as AnimationController;
+    expect(animation.duration, const Duration(milliseconds: 1500));
+    expect(
+        find.byKey(const ValueKey('kept-icon-emphasis-pulse')), findsNothing);
+    expect(
+        tester
+            .widget<Opacity>(
+                find.byKey(const ValueKey('keep-save-feedback-opacity')))
+            .opacity,
+        0);
+    await tester.pump(const Duration(milliseconds: 750));
+    expect(
+        tester
+            .widget<Opacity>(
+                find.byKey(const ValueKey('keep-save-feedback-opacity')))
+            .opacity,
+        1);
+    expect(tester.getRect(find.byKey(const ValueKey('home-save-control-kept'))),
+        saveRect);
+    expect(tester.getRect(find.byKey(const ValueKey('home-kept-control'))),
+        navRect);
+    await tester.pump(const Duration(milliseconds: 749));
+    expect(find.byKey(breath), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(animation.value, closeTo(1, .001));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byKey(breath), findsNothing);
+    expect(find.byKey(feedback), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-kept')));
+    await _pumpInSteps(tester, const Duration(seconds: 3));
+    expect(find.byKey(breath), findsNothing);
+    expect(find.byKey(feedback), findsNothing);
+    expect(await graph.service.load(), hasLength(1));
+  });
+
+  testWidgets(
+      'Reduce Motion keeps the save confirmation without the decorative breath',
+      (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final graph = KeptRepositoryTestGraph();
+    await returningWisdom(tester, graph);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Saved'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+    expect(await graph.service.load(), hasLength(1));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Saved'), findsNothing);
+  });
+
+  testWidgets(
+      'backgrounding during the confirmation dismisses it without replaying on return',
+      (tester) async {
+    final graph = KeptRepositoryTestGraph();
+    await returningWisdom(tester, graph);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Saved'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(find.text('Saved'), findsNothing);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Saved'), findsNothing);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+    expect(await graph.service.load(), hasLength(1));
+  });
+
+  testWidgets(
+      'holding either ring explains it until release without saving or navigating',
+      (tester) async {
+    final graph = KeptRepositoryTestGraph();
+    await returningWisdom(tester, graph);
+    final hold = await tester.startGesture(tester
+        .getCenter(find.byKey(const ValueKey('home-save-control-unsaved'))));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(
+        find.byKey(const ValueKey('keep-control-help-text')), findsOneWidget);
+    expect(await graph.service.load(), isEmpty);
+    await hold.up();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('keep-control-help-text')), findsNothing);
+    expect(await graph.service.load(), isEmpty);
+    final navHold = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('home-kept-control'))));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(
+        find.byKey(const ValueKey('kept-control-help-text')), findsOneWidget);
+    expect(find.byKey(const ValueKey('kept-screen-root')), findsNothing);
+    await navHold.up();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('kept-control-help-text')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('home-kept-control')));
+    await _settleRoutePush(
+        tester, find.byKey(const ValueKey('kept-screen-root')));
+    expect(find.byKey(const ValueKey('kept-screen-root')), findsOneWidget);
+  });
+
+  testWidgets(
+      'pending and failed saves never acknowledge success or replay duplicate taps',
+      (tester) async {
+    final graph = KeptRepositoryTestGraph();
+    final pending = Completer<void>();
+    final service = _RecordingSavedReflectionsService(graph.service,
+        beforeToggle: pending.future);
+    await returningWisdom(tester, graph, service: service);
+    final save = find.byKey(const ValueKey('home-save-control-unsaved'));
+    await tester.tap(save);
+    await tester.pump();
+    await tester.tap(save);
+    await tester.pump();
+    expect(service.toggleCallCount, 1);
+    expect(find.byKey(const ValueKey('keep-save-feedback-text')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+    graph.store.failReplace = StateError('synthetic write failure');
+    pending.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(await graph.service.load(), isEmpty);
+    expect(find.byKey(const ValueKey('keep-save-feedback-text')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+  });
+
+  testWidgets(
+      'a save completed after backgrounding stays saved without stale confirmation on return',
+      (tester) async {
+    final graph = KeptRepositoryTestGraph();
+    final pending = Completer<void>();
+    final service = _RecordingSavedReflectionsService(graph.service,
+        beforeToggle: pending.future);
+    await returningWisdom(tester, graph, service: service);
+    await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    pending.complete();
+    await tester.pump();
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(await graph.service.load(), hasLength(1));
+    expect(find.byKey(const ValueKey('keep-save-feedback-text')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
   });
 
   testWidgets('launch ritual mark is static and geometrically restrained',
@@ -625,6 +847,96 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 950));
     await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets(
+      'account authorization gates visible text and adopts the server occurrence',
+      (tester) async {
+    final now = DateTime.utc(2026, 9, 7, 12);
+    final graph = DailyAccessTestGraph(clock: () => now);
+    final authority = _ControlledAccountAuthority();
+    await tester.pumpWidget(_homeApp(
+        dailyGraph: graph,
+        clock: () => now,
+        accountAccessService: DailyWisdomAccessService(
+            repository: graph.repository,
+            authority: authority,
+            clock: () => now)));
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump();
+    expect(authority.claims, 1);
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
+    expect(await graph.repository.loadDailyWisdomRecord(), isNull);
+    authority.reply.complete(_accountGrant(now));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 950));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Peace enters slowly.'), findsOneWidget);
+    expect(_homeCurrentRevealId(tester), _fixedRevealId);
+    expect((await graph.repository.loadDailyWisdomRecord())!.unlockAt.toUtc(),
+        now.add(const Duration(hours: 24)));
+  });
+
+  testWidgets(
+      'offline denial keeps Ask retryable and can reopen an expired cached wisdom',
+      (tester) async {
+    final now = DateTime.utc(2026, 9, 7, 12);
+    final graph = DailyAccessTestGraph(clock: () => now);
+    final authority = _ControlledAccountAuthority()
+      ..cached = _accountGrant(now.subtract(const Duration(hours: 25)));
+    await tester.pumpWidget(_homeApp(
+        dailyGraph: graph,
+        clock: () => now,
+        accountAccessService: DailyWisdomAccessService(
+            repository: graph.repository,
+            authority: authority,
+            clock: () => now)));
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump();
+    authority.reply.completeError(const DailyRitualAuthorityException(
+        DailyRitualAuthorityFailure.connectionRequired));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const ValueKey('ritual-ask-text')), findsOneWidget);
+    expect(find.text('Connect to the internet to open a new wisdom.'),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsNothing);
+    await tester.tap(find.text('Previous wisdom'));
+    await _pumpInSteps(tester, const Duration(seconds: 3));
+    expect(find.text('Peace enters slowly.'), findsOneWidget);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    expect(find.text('Peace enters slowly.'), findsOneWidget);
+    expect(authority.claims, 1);
+    expect((await graph.repository.loadDailyWisdomRecord())!.revealedAt.toUtc(),
+        now.subtract(const Duration(hours: 25)));
+
+    final returnButton = find.byKey(const ValueKey('previous-wisdom-return'));
+    expect(tester.getSize(returnButton).height, greaterThanOrEqualTo(44));
+    await tester.tap(returnButton);
+    await _pumpInSteps(tester, const Duration(seconds: 3));
+    expect(find.byKey(const ValueKey('ritual-ask-text')), findsOneWidget);
+    expect(find.text('Peace enters slowly.'), findsNothing);
+    expect(authority.claims, 1);
+
+    // Reconnection can complete a new ritual in this same Home session.
+    authority.reply = Completer<AuthorizedDailyRitual>();
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump();
+    expect(authority.claims, 2);
+    authority.reply.complete(_accountGrant(now));
+    await _pumpInSteps(tester, const Duration(seconds: 3));
+    expect(find.text('Peace enters slowly.'), findsOneWidget);
+    expect(returnButton, findsNothing);
+    expect((await graph.repository.loadDailyWisdomRecord())!.revealedAt.toUtc(),
+        now);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('final Ask tap fades immediately while pending save is delayed',
@@ -3471,8 +3783,7 @@ void main() {
 
   for (final control in topNavControls) {
     testWidgets(
-        'Build 25 Item 2 correction: "${control.semanticsLabel}" never '
-        'shows a long-press tooltip/label overlay, and its explicit '
+        '"${control.semanticsLabel}" has no lingering label after release, and its explicit '
         'Semantics and normal tap are intact', (tester) async {
       final now = DateTime.now();
       const wisdom = 'A wisdom used to verify tooltip suppression';
@@ -3491,21 +3802,16 @@ void main() {
       final controlFinder = find.byKey(ValueKey(control.key));
       expect(controlFinder, findsOneWidget);
 
-      // Correction: verify the behavioral contract directly (a real
-      // long-press produces no visible overlay) instead of finding or
-      // casting any tooltip widget — there is none. Neither control has any
-      // other on-screen `Text` reading "Settings" / "Kept" at this point,
-      // `find.text(...)` finding nothing, before and well past the former
-      // tooltip show delay, is a direct behavioral proof no overlay ever
-      // appears.
+      // tester.longPress includes release. Kept's held explanation must not
+      // linger afterward; Settings continues to have no visible explanation.
       expect(find.text(control.overlayLabel), findsNothing);
       await tester.longPress(controlFinder);
       await tester.pump(const Duration(seconds: 2));
       expect(
         find.text(control.overlayLabel),
         findsNothing,
-        reason: '"${control.semanticsLabel}" must never show a visible '
-            'tooltip/label overlay on long-press.',
+        reason:
+            '"${control.semanticsLabel}" must not leave a label after release.',
       );
       expect(tester.takeException(), isNull);
 
@@ -3515,8 +3821,7 @@ void main() {
       final semantics = tester.ensureSemantics();
 
       // Exactly one meaningful semantics node carries this control's
-      // label — proves the wrapping `GestureDetector` (added to absorb a
-      // no-op long-press) never contributes a second, separate node.
+      // label — the physical hold gesture never adds a duplicate node.
       expect(
         find.semantics.byLabel(control.semanticsLabel),
         findsOneWidget,
@@ -3537,7 +3842,7 @@ void main() {
       );
       final nodeData = node.getSemanticsData();
       expect(nodeData.hasAction(SemanticsAction.tap), isTrue);
-      // Correction: the outer `GestureDetector`'s no-op `onLongPress` must
+      // The outer `GestureDetector`'s physical long press must
       // not leak its own `longPress` semantics action onto this node —
       // `excludeFromSemantics: true` on that `GestureDetector` is what
       // keeps the explicit `Semantics` above as the sole accessibility
@@ -3546,8 +3851,7 @@ void main() {
         nodeData.hasAction(SemanticsAction.longPress),
         isFalse,
         reason: '"${control.semanticsLabel}" must not expose a longPress '
-            'semantics action — the no-op long-press absorber is purely a '
-            'physical hit-test guard, not an accessibility action.',
+            'semantics action; the control already exposes its function.',
       );
 
       // The control's own `IconButton` remains wrapped in `ExcludeSemantics`
@@ -3567,8 +3871,7 @@ void main() {
 
       // A long press must be a complete no-op for navigation: still on
       // Home, no destination mounted, no guard left engaged, no
-      // exception — not merely "no visible overlay" (already proven
-      // above).
+      // exception.
       expect(find.byKey(ValueKey(control.destinationKey)), findsNothing);
       expect(_homeNavigationInProgress(tester), isFalse);
       expect(find.byKey(const ValueKey('top-navigation')), findsOneWidget);
@@ -3790,7 +4093,7 @@ void main() {
   testWidgets(
       'P13: the first-use Keep discovery never times out -- it (and its '
       'synchronized text/ring breathing) remains actionable indefinitely; '
-      'tapping the text saves once, transitions to "Kept.", ends '
+      'tapping the text saves once, transitions to "Saved", ends '
       'the central discovery, and begins the top-right Kept-nav discovery '
       'with no fixed breath count of its own', (tester) async {
     final now = DateTime.utc(2041, 7, 23, 8);
@@ -3836,7 +4139,7 @@ void main() {
 
     // Saving ends the central discovery immediately and transitions
     // straight to "Kept.".
-    expect(find.text('Kept'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
     expect(
@@ -3876,7 +4179,7 @@ void main() {
     );
 
     // "Kept." itself still fades on its own independent ~1.3s timer.
-    expect(find.text('Kept'), findsNothing);
+    expect(find.text('Saved'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -4088,7 +4391,7 @@ void main() {
 
   testWidgets(
       'Build 25 Item 6: the discovery hint never appears once already '
-      'completed, an ordinary save away from the hint stays silent, and '
+      'completed, an ordinary save acknowledges success once, and '
       'the top-right Kept teaching breath does not run again for this '
       'later save', (tester) async {
     final now = DateTime.now();
@@ -4115,9 +4418,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // A save that happens with no hint showing must stay silent: no
-    // "Kept." text appears even though the save itself still succeeds.
-    expect(find.text('Kept'), findsNothing);
+    expect(find.text('Saved'), findsOneWidget);
+    expect(find.byKey(const ValueKey('kept-save-feedback-breath')),
+        findsOneWidget);
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
@@ -4485,8 +4788,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-save-control-unsaved')));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // The save still succeeds and "Kept." still appears.
-    expect(find.text('Kept'), findsOneWidget);
+    // The save still succeeds and "Saved" appears.
+    expect(find.text('Saved'), findsOneWidget);
     expect(find.text('Keep this wisdom.'), findsNothing);
     final savedAfterReduceMotionSave = await keptGraph.service.load();
     expect(savedAfterReduceMotionSave, hasLength(1));
@@ -4512,9 +4815,9 @@ void main() {
       findsNothing,
     );
 
-    // "Kept." fades on its own ~1.3s timer.
+    // "Saved" disappears after its 1.5-second confirmation.
     await tester.pump(const Duration(milliseconds: 900));
-    expect(find.text('Kept'), findsNothing);
+    expect(find.text('Saved'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -4995,7 +5298,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Kept Limit'), findsOneWidget);
-    expect(find.text('BECOME A KEEPER'), findsOneWidget);
+    expect(find.text('Become a Keeper'), findsOneWidget);
     final storedAfterLimit = await keptGraph.service.load();
     expect(storedAfterLimit, hasLength(3));
     // The attempted (blocked) wisdom's revealId — `_fixedRevealId`, set on
@@ -6165,6 +6468,7 @@ String _cleanTextValue(Text text) {
 
 Widget _homeApp({
   DailyAccessTestGraph? dailyGraph,
+  DailyWisdomAccessService? accountAccessService,
   KeptRepositoryTestGraph? keptGraph,
   SavedReflectionsService? savedReflectionsService,
   WisdomShareHandler? wisdomShareService,
@@ -6198,7 +6502,8 @@ Widget _homeApp({
     home: HomeScreen(
       savedReflectionsService:
           savedReflectionsService ?? resolvedKeptGraph.service,
-      dailyWisdomAccessService: resolvedDailyGraph.service,
+      dailyWisdomAccessService:
+          accountAccessService ?? resolvedDailyGraph.service,
       wisdomShareService: wisdomShareService,
       wisdomNotificationService: wisdomNotificationService,
       firstRitualGuidanceService:
@@ -6601,9 +6906,10 @@ class _HomePushCountingNavigatorObserver extends NavigatorObserver {
 /// through untouched (today's real display date) while `revealedAt` is the
 /// authoritative reveal moment — the two are never conflated.
 class _RecordingSavedReflectionsService implements SavedReflectionsService {
-  _RecordingSavedReflectionsService(this._inner);
+  _RecordingSavedReflectionsService(this._inner, {this.beforeToggle});
 
   final SavedReflectionsService _inner;
+  final Future<void>? beforeToggle;
 
   int toggleCallCount = 0;
   String? capturedText;
@@ -6612,6 +6918,18 @@ class _RecordingSavedReflectionsService implements SavedReflectionsService {
   String? capturedRevealId;
   DateTime? capturedRevealedAt;
   String? capturedExistingId;
+
+  @override
+  Future<SavedReflectionsResult> saveThought(
+          {required String itemId,
+          required String thoughtId,
+          required String reflection,
+          required bool isKeeper}) =>
+      _inner.saveThought(
+          itemId: itemId,
+          thoughtId: thoughtId,
+          reflection: reflection,
+          isKeeper: isKeeper);
 
   @override
   Future<List<FavoriteItem>> load() => _inner.load();
@@ -6625,7 +6943,7 @@ class _RecordingSavedReflectionsService implements SavedReflectionsService {
     required DateTime revealedAt,
     String? wisdomId,
     String? existingId,
-  }) {
+  }) async {
     toggleCallCount += 1;
     capturedText = text;
     capturedDate = date;
@@ -6633,6 +6951,7 @@ class _RecordingSavedReflectionsService implements SavedReflectionsService {
     capturedRevealId = revealId;
     capturedRevealedAt = revealedAt;
     capturedExistingId = existingId;
+    if (beforeToggle != null) await beforeToggle;
     return _inner.toggle(
       text: text,
       date: date,

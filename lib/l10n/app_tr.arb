@@ -21,16 +21,32 @@
   "systemDefault": "Sistem Varsayılanı",
   "english": "İngilizce",
   "languageSettingSemantics": "Dil. Geçerli seçim: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "Görünüm",
   "light": "Açık",
   "dark": "Koyu",
   "appearanceSettingSemantics": "Görünüm. Geçerli seçim: {value}.",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "Geri",
   "delete": "Sil",
   "deleteUpper": "SİL",
@@ -47,11 +63,19 @@
   "deleteReflection": "Yansımayı sil",
   "reflectedEditReflection": "YANSIMA. Yansımayı düzenle.",
   "addReflectionNumbered": "Yansıma ekle, öğe {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "Yansımayı aç, öğe {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "Günlük",
-  "keeper": "Tutucu",
+  "keeper": "Keeper",
   "restorePurchases": "Satın Alımları Geri Yükle",
   "icloudSync": "iCloud Eşzamanlama",
   "removeFromIcloud": "iCloud’dan Kaldır",
@@ -69,8 +93,8 @@
   "keptLimit": "Kalanlar Sınırı",
   "freeUsersKeepLimit": "Ücretsiz kullanıcılar en fazla 3 bilgeliği tutabilir.",
   "keepReflectingQuestion": "Yansıtmaya devam edilsin mi?",
-  "reflectionLimitExplanation": "Üç Yansıma dahildir. Tutucu, kalanlar için sınırsız alan açar.",
-  "becomeKeeper": "TUTUCU OL",
+  "reflectionLimitExplanation": "Üç Yansıma dahildir. Keeper, kalanlar için sınırsız alan açar.",
+  "becomeKeeper": "Keeper ol",
   "whoseJournal": "Bu günlük kimin?",
   "journalNameExplanation": "Günlüğünün başlık sayfasında bir isim sessizce yer alır.",
   "notificationTitle": "EAST.",
@@ -80,14 +104,20 @@
   "discoverTheObjects": "NESNELERİ KEŞFET",
   "enterTheCircle": "Çembere katıl.",
   "withinTheCircle": "Çemberin içinde.",
-  "keeperActive": "Tutucu etkin",
+  "keeperActive": "Keeper etkin",
   "oneTimePurchase": "Tek seferlik satın alma",
   "askFrom": "Soruyu",
   "yourHeart": "kalbinden sor.",
   "longPressToShareWisdom": "Bu bilgeliği paylaşmak için basılı tut.",
   "shareWisdom": "Paylaş",
   "shareWisdomNumbered": "Bilgeliği paylaş, öğe {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "Sessiz Hatırlatıcı",
   "nothingHasStayedYet": "Henüz hiçbir şey kalmadı.",
   "wisdomCouldNotBeRemoved": "Bu bilgelik kaldırılamadı. Lütfen yeniden dene.",
@@ -108,11 +138,11 @@
   "yourName": "Adın",
   "journalCouldNotBePrepared": "Günlük hazırlanamadı. Lütfen yeniden dene.",
   "takeItWithYou": "Yanında götür.",
-  "takeItWithYouKeeper": "Yanında götür. Tutucu ile kullanılabilir.",
-  "availableWithKeeper": "Tutucu ile kullanılabilir.",
+  "takeItWithYouKeeper": "Yanında götür. Keeper ile kullanılabilir.",
+  "availableWithKeeper": "Keeper ile kullanılabilir.",
   "opensKeeper": "Keeper'ı açar.",
   "nameUpper": "İSİM",
-  "keeperPersistenceError": "Tutucu erişimi kaydedilemedi. Lütfen Satın Alımları Geri Yükle’yi dene.",
+  "keeperPersistenceError": "Keeper erişimi kaydedilemedi. Lütfen Satın Alımları Geri Yükle’yi dene.",
   "purchaseUpdating": "Satın alma durumu hâlâ güncelleniyor. Lütfen Ayarlar’dan Satın Alımları Geri Yükle’yi kullan.",
   "purchaseNotReady": "Satın alma henüz hazır değil. Lütfen kısa süre sonra yeniden dene.",
   "restore": "Geri Yükle",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "Sessizliğin konuştuğu yer.",
   "preparing": "Hazırlanıyor…",
   "exportKeptAndReflections": "Kalan bilgeliklerini ve Yansımalarını yanında götür.",
-  "keeperAccessActive": "Tutucu erişimi etkin",
+  "keeperAccessActive": "Keeper erişimi etkin",
   "keeperPurchaseInProgress": "Çembere katıl, {price}. Satın alma sürüyor.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "Çembere katıl, tek seferlik {price}",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "Çembere katıl, geçici olarak kullanılamıyor",
   "keepWithoutLimit": "Sınırsız tut.",
   "reflectWithoutLimit": "Sınırsız Yansıma ekle.",
@@ -140,8 +178,8 @@
   "keeperWidgetOpensApp": "iOS 15 ve 16’da widget EAST.’i açar.",
   "keepEastAlive": "EAST. yaşamaya devam etsin.",
   "operationFailedRetry": "Bu işlem tamamlanamadı. Lütfen tekrar dene.",
-  "restoreRequestSent": "Geri yükleme isteği gönderildi. Tutucu erişimi otomatik olarak güncellenecek.",
-  "restoreRecoveryPending": "Önceki bir geri yükleme hâlâ tamamlanıyor. Tutucu erişimi otomatik olarak güncellenecek; yeniden denemeden önce EAST.’i yeniden aç.",
+  "restoreRequestSent": "Geri yükleme isteği gönderildi. Keeper erişimi otomatik olarak güncellenecek.",
+  "restoreRecoveryPending": "Önceki bir geri yükleme hâlâ tamamlanıyor. Keeper erişimi otomatik olarak güncellenecek; yeniden denemeden önce EAST.’i yeniden aç.",
   "opening": "Açılıyor.",
   "bootstrapRecovery": "Açılış beklenenden uzun sürüyor. Lütfen EAST.’i kapatıp yeniden açın.",
   "supportEmailSubject": "EAST. Destek",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "Yansıma kaydedilemedi. Yazmaya devam ederken yeniden denenecek.",
   "reflectionDeleteFailed": "Yansıma silinemedi. Lütfen tekrar dene.",
   "remainingDurationHoursMinutes": "{hours} saat {minutes} dakika kaldı",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "{hours} saat kaldı",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "{minutes} dakika kaldı",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "Keeper’a bir bakış",
+  "keeperWidgetTab": "Widget",
+  "keeperPreviewExample": "Örnek",
+  "keeperPreviewReflection": "Bugün acele etmeden ilerlemek istiyorum.",
+  "keeperDailyRitual": "Keeper ile de, Keeper olmadan da, 24 saatte bir wisdom.",
+  "keeperWidgetStepOne": "Ana Ekran’da boş bir alana basılı tut.",
+  "keeperWidgetStepTwo": "Düzenle’ye, ardından Widget Ekle’ye dokun. Eski iOS sürümlerinde + düğmesini kullan.",
+  "keeperWidgetStepThree": "EAST.’i bul, Keeper Ritüeli widget’ını seç ve Widget Ekle’ye dokun.",
+  "reflectionSaved": "Kaydedildi",
+  "reflectionSaving": "Kaydediliyor…",
+  "reflectionCopyText": "Metni kopyala",
+  "reflectionCopied": "Kopyalandı",
+  "reflectionAddThought": "Yeni bir düşünce ekle",
+  "reflectionRevisitPrompt": "Bunu bugün nasıl okuyorum?",
+  "reflectionEarlier": "Önceki düşünce",
+  "reflectionOverTime": "Zamanla",
+  "reflectionHistoryDeleteExplanation": "Bu bilgeliğe eklediğin tüm düşünceler silinecek.",
+  "reflectionRecoveryMessage": "Yazın henüz kaydedilemedi.",
+  "settingsEveryday": "Günlük tercihlerin",
+  "settingsYourWriting": "Yazıların",
+  "settingsAbout": "EAST. hakkında",
+  "writingLock": "Yazı kilidi",
+  "writingLockDescription": "Kalanlar, Yansıma ve Günlük’e Face ID, Touch ID veya aygıt parolanla gir.",
+  "writingLockFootnote": "Günlük ritüelin açık kalır. Uygulamadan ayrıldığında özel yazıların yeniden kilitlenir.",
+  "writingLockTitle": "Yazıların sana ait.",
+  "writingLockPrompt": "Özel yazılarını açmak için doğrula.",
+  "writingLockUnlock": "Kilidi aç",
+  "writingLockChecking": "Doğrulanıyor…",
+  "writingLockReason": "Özel yazılarını aç.",
+  "writingLockUnavailable": "Doğrulama şu anda kullanılamıyor. Aygıt parolanı ve Face ID veya Touch ID ayarlarını kontrol et.",
+  "writingLockToggleReason": "Özel yazılarının kilit ayarını değiştir.",
+  "writingLockOn": "Açık",
+  "writingLockOff": "Kapalı",
+  "privacyPreview": "Uygulama değiştiricide yazıların gizlenir.",
+  "settingsAboutDescription": "Günde bir kez, kendine dönmek için bir alan.",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "Yeni wisdom açmak için iCloud’a giriş yap.",
+  "dailyRitualConnectionRequired": "Yeni wisdom açmak için internete bağlan.",
+  "dailyRitualUnavailable": "Günlük wisdom’a şu anda ulaşılamıyor. Lütfen yeniden dene.",
+  "dailyRitualAccountNote": "Her iCloud hesabına 24 saatte bir wisdom. Yeni wisdom için internet bağlantısı gerekir. Kayıtlı yazılarını çevrimdışı okuyabilirsin.",
+  "dailyRitualPreviousWisdom": "Son wisdom"
 }

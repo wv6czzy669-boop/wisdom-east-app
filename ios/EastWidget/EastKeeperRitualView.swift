@@ -83,49 +83,83 @@ struct EastKeeperRitualView: View {
     }
 
     private var content: some View {
-        ZStack {
-            ritualLayer(opacity: keeperRequiredOpacity) {
-                eastText(
-                    localized("Available with Keeper."),
-                    size: 23,
-                    lineLimit: 3
-                )
+        GeometryReader { geometry in
+            // Each phrase has its own full-size canvas. Hidden layers and
+            // differently wrapped wisdoms cannot move the ritual's axes.
+            // Preserve space for tall combining marks (especially Thai)
+            // even in the shortest medium-widget canvas.
+            let beatSpacing = min(38.0, geometry.size.height * 0.38)
+            ZStack {
+                ritualLayer(opacity: keeperRequiredOpacity) {
+                    eastText(localized("Available with Keeper."), size: 23, lineLimit: 3)
+                }
+                ritualLayer(opacity: waitingOpacity) {
+                    eastText(localized("Something waits in silence."), size: 23, lineLimit: 3)
+                }
+                ritualLayer(opacity: pauseOpacity, offsetY: -beatSpacing * 0.70) {
+                    eastText(localized("Pause."), size: 34, lineLimit: 1)
+                }
+                ritualLayer(opacity: feelOpacity, offsetY: beatSpacing * 0.30) {
+                    eastText(localized("Feel."), size: 34, lineLimit: 1)
+                }
+                ritualLayer(opacity: heartOpacity, offsetY: -6) {
+                    eastText(
+                        localized("Ask from your heart."),
+                        size: 28,
+                        lineLimit: 2,
+                        maximumWidth: 264
+                    )
+                }
+                ritualLayer(opacity: revealedOpacity, offsetY: -6) {
+                    eastText(
+                        revealedText,
+                        size: wisdomFontSize(for: revealedText),
+                        lineLimit: 5
+                    )
+                }
+                if let failure = entry.snapshot.authorizationFailure, heartOpacity > 0 {
+                    eastText(localized(authorizationFailureText(failure)), size: 13, lineLimit: 3)
+                        .modifier(EastKeeperRitualInvalidation(invalidatable: true))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, 3)
+                } else {
+                responseMark
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 4)
+                }
             }
-            ritualLayer(opacity: waitingOpacity) {
-                eastText(
-                    localized("Something waits in silence."),
-                    size: 23,
-                    lineLimit: 3
-                )
-            }
-            ritualLayer(opacity: pauseOpacity) {
-                eastText(localized("Pause."), size: 36, lineLimit: 1)
-            }
-            ritualLayer(opacity: feelOpacity, offsetY: 44) {
-                eastText(localized("Feel."), size: 36, lineLimit: 1)
-            }
-            ritualLayer(opacity: heartOpacity) {
-                eastText(
-                    localized("Ask from your heart."),
-                    size: 29,
-                    lineLimit: 2,
-                    maximumWidth: 282
-                )
-            }
-            ritualLayer(opacity: revealedOpacity) {
-                eastText(
-                    revealedText,
-                    size: wisdomFontSize(for: revealedText),
-                    lineLimit: 5
-                )
-            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .modifier(EastKeeperRitualInvalidation(
-            invalidatable: isInteractiveRitualPhase
-        ))
+    }
+
+    // Keep the words still while the intent is running. Only this small
+    // resting mark receives WidgetKit's immediate invalidation feedback;
+    // dimming the entire text caused a fade-out/fade-back before each beat.
+    private var responseMark: some View {
+        Capsule()
+            .fill(eastInk.opacity(0.24))
+            .frame(width: 18, height: 1)
+            .modifier(EastWidgetAccent())
+            .modifier(EastKeeperRitualInvalidation(
+                invalidatable: isInteractiveRitualPhase
+            ))
+            .opacity(isInteractiveRitualPhase ? 1 : 0)
+            .modifier(EastKeeperRitualLayerAnimation(
+                value: contentIdentity,
+                duration: 0.20,
+                delay: 0,
+                reduceMotion: reduceMotion
+            ))
+    }
+
+    private func authorizationFailureText(_ failure: EastKeeperAuthorizationFailure) -> String.LocalizationValue {
+        switch failure {
+        case .iCloudRequired: return "Sign in to iCloud to open a new wisdom."
+        case .connectionRequired: return "Connect to the internet to open a new wisdom."
+        case .unavailable: return "Your daily wisdom is unavailable right now. Please try again."
+        }
     }
 
     private func ritualLayer<Layer: View>(
@@ -134,11 +168,13 @@ struct EastKeeperRitualView: View {
         @ViewBuilder content: () -> Layer
     ) -> some View {
         content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .offset(y: offsetY)
             .opacity(opacity)
             .modifier(EastKeeperRitualLayerAnimation(
                 value: contentIdentity,
-                duration: ritualAnimationDuration,
+                duration: animationDuration(for: opacity),
+                delay: animationDelay(for: opacity),
                 reduceMotion: reduceMotion
             ))
     }
@@ -153,13 +189,12 @@ struct EastKeeperRitualView: View {
         return 0
     }
 
-    /// Pause owns one fixed optical axis in both of its visible states.
-    /// Feel arrives 44pt below it without recentering the pair, matching the
-    /// app ritual instead of making Pause jump upward on the first tap.
+    /// Pause sits above center from the start. It stays there as a quiet
+    /// trace when Feel arrives, leaving breathing room below both words.
     private var pauseOpacity: Double {
         switch entry.snapshot.content {
         case .pause: return 1
-        case .feel: return 0.28
+        case .feel: return 0.34
         case .keeperRequired, .waiting, .heart, .revealed: return 0
         }
     }
@@ -246,6 +281,9 @@ struct EastKeeperRitualView: View {
         case .feel:
             return "\(localized("Pause.")) \(localized("Feel."))"
         case .heart:
+            if let failure = entry.snapshot.authorizationFailure {
+                return "\(localized("Ask from your heart.")) \(localized(authorizationFailureText(failure)))"
+            }
             return localized("Ask from your heart.")
         case let .revealed(reveal):
             return reveal.displayText
@@ -263,17 +301,26 @@ struct EastKeeperRitualView: View {
         }
     }
 
-    /// WidgetKit updates are snapshots, not a continuously running app view.
-    /// A short ease-out acknowledges each tap immediately; only the wisdom is
-    /// given a slightly longer arrival. Both remain well below the system's
-    /// two-second animation ceiling and avoid the sluggish 1.2s whole-view
-    /// dissolve that previously followed the App Intent round trip.
-    private var ritualAnimationDuration: TimeInterval {
+    /// An outgoing phrase clears before the next one becomes legible.
+    /// Feel can arrive alongside Pause's trace; Heart and wisdom share an
+    /// axis, so their arrivals wait for the outgoing ink to disappear.
+    /// The complete wisdom handoff remains 0.72s, with no intent-side wait.
+    private func animationDuration(for opacity: Double) -> TimeInterval {
+        if opacity == 0 { return 0.18 }
+        if opacity < 1 { return 0.46 }
         switch entry.snapshot.content {
-        case .revealed:
-            return 0.72
-        case .keeperRequired, .waiting, .pause, .feel, .heart:
-            return 0.52
+        case .revealed: return 0.54
+        case .feel, .heart: return 0.50
+        case .keeperRequired, .waiting, .pause: return 0.40
+        }
+    }
+
+    private func animationDelay(for opacity: Double) -> TimeInterval {
+        guard opacity == 1 else { return 0 }
+        switch entry.snapshot.content {
+        case .heart, .revealed: return 0.18
+        case .feel: return 0.04
+        case .keeperRequired, .waiting, .pause: return 0
         }
     }
 }
@@ -284,6 +331,7 @@ struct EastKeeperRitualView: View {
 private struct EastKeeperRitualLayerAnimation: ViewModifier {
     let value: String
     let duration: TimeInterval
+    let delay: TimeInterval
     let reduceMotion: Bool
 
     @ViewBuilder
@@ -292,7 +340,7 @@ private struct EastKeeperRitualLayerAnimation: ViewModifier {
             content
                 .contentTransition(.identity)
                 .animation(
-                    reduceMotion ? nil : .easeOut(duration: duration),
+                    reduceMotion ? nil : .easeInOut(duration: duration).delay(delay),
                     value: value
                 )
         } else {
@@ -302,9 +350,8 @@ private struct EastKeeperRitualLayerAnimation: ViewModifier {
 }
 
 /// App Intents necessarily complete in the widget extension before WidgetKit
-/// installs the next entry. Mark only the changing ritual text invalidatable,
-/// not the background or the whole widget, so iOS can acknowledge the tap at
-/// once without introducing a spinner, progress UI, or decorative animation.
+/// installs the next entry. The resting mark acknowledges that round trip
+/// without fading the phrase the person is still reading.
 private struct EastKeeperRitualInvalidation: ViewModifier {
     let invalidatable: Bool
 

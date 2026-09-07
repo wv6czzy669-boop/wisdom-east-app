@@ -56,7 +56,7 @@ class DataExportService {
   /// receipt). Returns `false` on any failure -- generation or
   /// presentation -- without ever mutating Kept/Reflection/sync state,
   /// which this class never writes to in the first place.
-  Future<bool> exportAndShare() async {
+  Future<bool> exportAndShare({bool Function()? mayPresent}) async {
     try {
       final items = await _savedReflectionsServiceProvider().load();
       final ownerName = await _journalOwnerService.loadName();
@@ -67,6 +67,9 @@ class DataExportService {
         exportedAt: _clock(),
       );
 
+      // A privacy session can expire while the local archive is being read.
+      // Never present a private native preview after that session has closed.
+      if (mayPresent != null && !mayPresent()) return false;
       await _shareLauncher(
         ShareParams(
           files: [

@@ -54,7 +54,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Hisset.',
     'askFromYourHeart': 'Soruyu kalbinden sor.',
     'kept': 'Kalanlar',
-    'keeper': 'Tutucu',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Bu sözler seninle kalsın.',
     'reflection': 'Yansıma',
     'addReflection': 'Yansıma ekle',
@@ -66,7 +66,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': '感じる。',
     'askFromYourHeart': '心から問いかける。',
     'kept': '残したもの',
-    'keeper': '残す',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'この気づきを心に留める。',
     'reflection': '内省',
     'addReflection': '内省を記す',
@@ -78,7 +78,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Spüren.',
     'askFromYourHeart': 'Von Herzen fragen.',
     'kept': 'Bewahrt',
-    'keeper': 'Bewahren',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Bewahre diese Erkenntnis.',
     'reflection': 'Reflexion',
     'addReflection': 'Reflexion hinzufügen',
@@ -90,7 +90,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Ressens.',
     'askFromYourHeart': 'Demande avec le cœur.',
     'kept': 'Ce qui reste',
-    'keeper': 'Garder',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Garde cette sagesse.',
     'reflection': 'Réflexion',
     'addReflection': 'Ajouter une réflexion',
@@ -102,7 +102,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': '느끼다.',
     'askFromYourHeart': '마음으로 묻다.',
     'kept': '남은 것',
-    'keeper': '간직',
+    'keeper': 'Keeper',
     'keepThisWisdom': '이 지혜를 간직하기',
     'reflection': '성찰',
     'addReflection': '성찰 추가',
@@ -114,7 +114,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': '感受。',
     'askFromYourHeart': '從心裡提問。',
     'kept': '留下的',
-    'keeper': '留住',
+    'keeper': 'Keeper',
     'keepThisWisdom': '留住這份智慧。',
     'reflection': '省思',
     'addReflection': '新增省思',
@@ -126,7 +126,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'اشعر.',
     'askFromYourHeart': 'اسأل من قلبك.',
     'kept': 'ما بقي',
-    'keeper': 'احتفظ',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'أبقِ هذه الحكمة معك.',
     'reflection': 'تأمُّل',
     'addReflection': 'أضف تأمّلًا',
@@ -138,7 +138,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Siente.',
     'askFromYourHeart': 'Pregunta desde el corazón.',
     'kept': 'Lo que queda',
-    'keeper': 'Guardar',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Guarda esta sabiduría.',
     'reflection': 'Reflexión',
     'addReflection': 'Añadir una reflexión',
@@ -150,7 +150,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Sinta.',
     'askFromYourHeart': 'Pergunte com o coração.',
     'kept': 'O que ficou',
-    'keeper': 'Guardar',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Guarde esta sabedoria.',
     'reflection': 'Reflexão',
     'addReflection': 'Adicionar reflexão',
@@ -162,7 +162,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Senti.',
     'askFromYourHeart': 'Chiedi con il cuore.',
     'kept': 'Ciò che resta',
-    'keeper': 'Custodire',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Conserva questa saggezza.',
     'reflection': 'Riflessione',
     'addReflection': 'Aggiungi una riflessione',
@@ -174,7 +174,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'รู้สึก.',
     'askFromYourHeart': 'ถามจากใจ.',
     'kept': 'สิ่งที่เก็บไว้',
-    'keeper': 'คงไว้',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'เก็บข้อคิดนี้ไว้',
     'reflection': 'การไตร่ตรอง',
     'addReflection': 'บันทึกการไตร่ตรอง',
@@ -186,7 +186,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Voel.',
     'askFromYourHeart': 'Vraag vanuit je hart.',
     'kept': 'Wat blijft',
-    'keeper': 'Bewaren',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Bewaar deze wijsheid.',
     'reflection': 'Reflectie',
     'addReflection': 'Reflectie toevoegen',
@@ -198,7 +198,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Poczuj.',
     'askFromYourHeart': 'Zapytaj prosto z serca.',
     'kept': 'Zachowane',
-    'keeper': 'Zachować',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Zachowaj tę mądrość.',
     'reflection': 'Refleksja',
     'addReflection': 'Dodaj refleksję',
@@ -210,7 +210,7 @@ const Map<String, Map<String, String>> _lockedTerminology =
     'feel': 'Cảm nhận.',
     'askFromYourHeart': 'Hỏi bằng tấm lòng.',
     'kept': 'Điều còn lại',
-    'keeper': 'Giữ lại',
+    'keeper': 'Keeper',
     'keepThisWisdom': 'Giữ lời này bên mình.',
     'reflection': 'Suy ngẫm',
     'addReflection': 'Thêm suy ngẫm',
@@ -273,7 +273,8 @@ void main() {
       // shareWisdomNumbered).
       // Keeper widget guidance: +3 keys (addKeeperWidget,
       // keeperWidgetInteractive, keeperWidgetOpensApp).
-      expect(expectedKeys, hasLength(161));
+      // Keeper experience previews and Home Screen guide: +8 keys.
+      expect(expectedKeys, hasLength(201));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');
@@ -282,6 +283,36 @@ void main() {
           expectedMetadata,
           reason: '$tag metadata keys',
         );
+      }
+    });
+
+    test('Keeper is a brand in every app locale and native widget gate', () {
+      final native = jsonDecode(
+              File('ios/EastShared/Localizable.xcstrings').readAsStringSync())
+          as Map<String, dynamic>;
+      final gate = native['strings']['Available with Keeper.']['localizations']
+          as Map<String, dynamic>;
+      for (final tag in _allArbFiles.keys) {
+        final arb = _readArb(tag);
+        expect(arb['keeper'], 'Keeper', reason: tag);
+        for (final key in [
+          'becomeKeeper',
+          'keeperActive',
+          'keeperAccessActive',
+          'availableWithKeeper',
+          'takeItWithYouKeeper',
+          'keeperPersistenceError',
+          'reflectionLimitExplanation',
+          'restoreRequestSent',
+          'restoreRecoveryPending',
+          'keeperDailyRitual'
+        ]) {
+          expect(arb[key] as String, contains('Keeper'), reason: '$tag $key');
+        }
+        if (gate.containsKey(tag)) {
+          expect(gate[tag]['stringUnit']['value'], arb['availableWithKeeper'],
+              reason: tag);
+        }
       }
     });
 
@@ -297,7 +328,7 @@ void main() {
       expect(settings, contains('l10n.operationFailedRetry'));
       expect(settings, contains('supportEmailSubject'));
       expect(settings, isNot(contains('failureMessage: "Privacy Policy')));
-      expect(reflection, contains('reflectionAutosaveFailed'));
+      expect(reflection, contains('reflectionRecoveryMessage'));
       expect(reflection, contains('reflectionDeleteFailed'));
       expect(journal, contains('l10n.removeUpper'));
       expect(journal, contains('l10n.saveUpper'));
@@ -355,6 +386,7 @@ void main() {
       final english = _readArb('en');
       const globallyInvariant = <String>{
         'east',
+        'keeper', // A product name in every language.
         'notificationTitle',
         'eastProductions',
         'languageOptionSemantics',
@@ -377,7 +409,10 @@ void main() {
           );
           final intentionallySame = globallyInvariant.contains(key) ||
               (tag == 'fr' && key == 'pause') ||
-              (tag == 'de' && key == 'nameUpper');
+              (tag == 'de' && key == 'nameUpper') ||
+              (key == 'keeperWidgetTab' &&
+                  <String>{'tr', 'de', 'fr', 'es', 'pt', 'pt-BR', 'it', 'nl'}
+                      .contains(tag));
           if (!intentionallySame) {
             expect(
               value,

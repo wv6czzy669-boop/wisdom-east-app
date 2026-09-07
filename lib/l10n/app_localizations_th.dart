@@ -156,7 +156,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get journalSemantic => 'สมุดบันทึก';
 
   @override
-  String get keeper => 'คงไว้';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => 'กู้คืนรายการซื้อ';
@@ -215,7 +215,7 @@ class AppLocalizationsTh extends AppLocalizations {
       'รวมการไตร่ตรอง 3 ครั้ง Keeper เปิดพื้นที่ไม่จำกัดสำหรับสิ่งที่ยังคงอยู่';
 
   @override
-  String get becomeKeeper => 'เปิดใช้ “คงไว้”';
+  String get becomeKeeper => 'เปิดใช้ Keeper';
 
   @override
   String get whoseJournal => 'สมุดบันทึกนี้เป็นของใคร?';
@@ -332,10 +332,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get takeItWithYou => 'พกติดตัวไป.';
 
   @override
-  String get takeItWithYouKeeper => 'พกติดตัวไป ใช้ได้เมื่อมี “คงไว้”.';
+  String get takeItWithYouKeeper => 'พกติดตัวไป ใช้ได้เมื่อมี Keeper';
 
   @override
-  String get availableWithKeeper => 'ใช้ได้เมื่อมี “คงไว้”.';
+  String get availableWithKeeper => 'ใช้ได้เมื่อมี Keeper';
 
   @override
   String get opensKeeper => 'เปิด Keeper';
@@ -345,7 +345,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      'ไม่สามารถบันทึกสิทธิ์ “คงไว้” ได้ โปรดลองกู้คืนรายการซื้อ.';
+      'ไม่สามารถบันทึกสิทธิ์ Keeper ได้ โปรดลองกู้คืนรายการซื้อ';
 
   @override
   String get purchaseUpdating =>
@@ -388,7 +388,7 @@ class AppLocalizationsTh extends AppLocalizations {
       'พกข้อคิดที่เก็บไว้และการไตร่ตรองของคุณไปด้วย.';
 
   @override
-  String get keeperAccessActive => 'สิทธิ์ “คงไว้” เปิดใช้งานแล้ว';
+  String get keeperAccessActive => 'สิทธิ์ Keeper เปิดใช้งานแล้ว';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -534,4 +534,135 @@ class AppLocalizationsTh extends AppLocalizations {
   String remainingDurationMinutesOnly(int minutes) {
     return 'เหลืออีก $minutes นาที';
   }
+
+  @override
+  String get keeperPreviewLabel => 'สัมผัส Keeper';
+
+  @override
+  String get keeperWidgetTab => 'วิดเจ็ต';
+
+  @override
+  String get keeperPreviewExample => 'ตัวอย่าง';
+
+  @override
+  String get keeperPreviewReflection => 'วันนี้ ฉันอยากก้าวต่อไปโดยไม่เร่งรีบ';
+
+  @override
+  String get keeperDailyRitual =>
+      'ข้อคิดหนึ่งบททุก 24 ชั่วโมง ไม่ว่าจะใช้ Keeper หรือไม่';
+
+  @override
+  String get keeperWidgetStepOne => 'แตะพื้นที่ว่างบนหน้าจอโฮมค้างไว้';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'แตะแก้ไข แล้วแตะเพิ่มวิดเจ็ต สำหรับ iOS รุ่นเก่า ให้แตะปุ่ม +';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'ค้นหา EAST. เลือกวิดเจ็ตพิธีกรรม Keeper แล้วแตะเพิ่มวิดเจ็ต';
+
+  @override
+  String get reflectionSaved => 'บันทึกแล้ว';
+
+  @override
+  String get reflectionSaving => 'กำลังบันทึก…';
+
+  @override
+  String get reflectionCopyText => 'คัดลอกข้อความ';
+
+  @override
+  String get reflectionCopied => 'คัดลอกแล้ว';
+
+  @override
+  String get reflectionAddThought => 'เพิ่มความคิดใหม่';
+
+  @override
+  String get reflectionRevisitPrompt => 'วันนี้ ฉันอ่านถ้อยคำนี้อย่างไร?';
+
+  @override
+  String get reflectionEarlier => 'ความคิดก่อนหน้า';
+
+  @override
+  String get reflectionOverTime => 'เมื่อเวลาผ่านไป';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'ความคิดทั้งหมดที่เขียนไว้กับข้อคิดนี้จะถูกลบ';
+
+  @override
+  String get reflectionRecoveryMessage => 'ยังไม่ได้บันทึกข้อความของคุณ';
+
+  @override
+  String get settingsEveryday => 'การตั้งค่าประจำวัน';
+
+  @override
+  String get settingsYourWriting => 'ถ้อยคำของคุณ';
+
+  @override
+  String get settingsAbout => 'เกี่ยวกับ EAST.';
+
+  @override
+  String get writingLock => 'ล็อกบันทึก';
+
+  @override
+  String get writingLockDescription =>
+      'เปิดสิ่งที่เก็บไว้ การไตร่ตรอง และสมุดบันทึกด้วย Face ID, Touch ID หรือรหัสอุปกรณ์';
+
+  @override
+  String get writingLockFootnote =>
+      'พิธีประจำวันยังเข้าได้ตามปกติ เมื่อออกจากแอป บันทึกส่วนตัวจะถูกล็อกอีกครั้ง';
+
+  @override
+  String get writingLockTitle => 'ถ้อยคำของคุณเป็นของคุณ';
+
+  @override
+  String get writingLockPrompt => 'ยืนยันตัวตนเพื่อเปิดบันทึกส่วนตัว';
+
+  @override
+  String get writingLockUnlock => 'ปลดล็อก';
+
+  @override
+  String get writingLockChecking => 'กำลังยืนยันตัวตน…';
+
+  @override
+  String get writingLockReason => 'เปิดบันทึกส่วนตัวของคุณ';
+
+  @override
+  String get writingLockUnavailable =>
+      'ไม่สามารถยืนยันตัวตนได้ โปรดตรวจสอบรหัสอุปกรณ์และการตั้งค่า Face ID หรือ Touch ID';
+
+  @override
+  String get writingLockToggleReason => 'เปลี่ยนการล็อกบันทึกส่วนตัวของคุณ';
+
+  @override
+  String get writingLockOn => 'เปิด';
+
+  @override
+  String get writingLockOff => 'ปิด';
+
+  @override
+  String get privacyPreview => 'บันทึกของคุณจะถูกซ่อนในหน้าสลับแอป';
+
+  @override
+  String get settingsAboutDescription => 'พื้นที่ให้กลับมาหาตัวเอง วันละครั้ง';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'ลงชื่อเข้าใช้ iCloud เพื่อเปิดข้อคิดใหม่';
+
+  @override
+  String get dailyRitualConnectionRequired =>
+      'เชื่อมต่ออินเทอร์เน็ตเพื่อเปิดข้อคิดใหม่';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'ยังเปิดข้อคิดประจำวันไม่ได้ในตอนนี้ โปรดลองอีกครั้ง';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'หนึ่งข้อคิดต่อบัญชี iCloud ทุก 24 ชั่วโมง การเปิดข้อคิดใหม่ต้องเชื่อมต่ออินเทอร์เน็ต คุณยังอ่านงานเขียนที่บันทึกไว้ได้เมื่อออฟไลน์';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'ข้อคิดก่อนหน้า';
 }

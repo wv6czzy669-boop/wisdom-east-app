@@ -151,51 +151,50 @@ final class EastKeeperRitualStoreTests: XCTestCase {
         )
     }
 
-    func testThreeAdvancesRevealTheExactPreparedCandidate() {
+    func testHeartCannotRevealWithoutAccountAuthorization() {
         prepareKeeperCandidate()
-
-        let feel = EastKeeperRitualStore.advance(now: now, defaults: defaults)
-        XCTAssertEqual(feel.snapshot.content, .feel)
-        XCTAssertNil(feel.newlyRevealed)
-
-        let heart = EastKeeperRitualStore.advance(
-            now: now.addingTimeInterval(1),
-            defaults: defaults
-        )
-        XCTAssertEqual(heart.snapshot.content, .heart)
-        XCTAssertNil(heart.newlyRevealed)
-
-        let revealMoment = now.addingTimeInterval(2)
-        let result = EastKeeperRitualStore.advance(
-            now: revealMoment,
-            defaults: defaults
-        )
-        guard let reveal = result.newlyRevealed else {
-            return XCTFail("the third advance must reveal")
-        }
-        XCTAssertEqual(reveal.candidateId, "east_wisdom_0001:1777777000000")
-        XCTAssertEqual(reveal.canonicalText, "Be still.")
-        XCTAssertEqual(reveal.displayText, "Sakin ol.")
-        XCTAssertEqual(reveal.wisdomId, "east_wisdom_0001")
-        XCTAssertEqual(reveal.revealedAt, revealMoment)
-        XCTAssertEqual(
-            reveal.unlockAt,
-            revealMoment.addingTimeInterval(EastKeeperRitualStore.lockDuration)
-        )
-        XCTAssertNil(reveal.revealId)
-        XCTAssertTrue(reveal.needsAppCommit)
-        XCTAssertEqual(result.snapshot.content, .revealed(reveal))
+        XCTAssertEqual(EastKeeperRitualStore.advance(now: now, defaults: defaults).snapshot.content, .feel)
+        XCTAssertEqual(EastKeeperRitualStore.advance(now: now, defaults: defaults).snapshot.content, .heart)
+        let result = EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        XCTAssertFalse(result.changed)
+        XCTAssertNil(result.newlyRevealed)
+        XCTAssertEqual(result.snapshot.content, .heart)
     }
 
-    func testProvisionalRevealExpiresAtExactlyTwentyFourHours() {
+    func testAuthorizationPublishesTheServerWisdomEvenWhenTheCandidateDiffers() {
         prepareKeeperCandidate()
         EastKeeperRitualStore.advance(now: now, defaults: defaults)
         EastKeeperRitualStore.advance(now: now, defaults: defaults)
-        let result = EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        let reveal = authorizeCandidate(wisdomId: "east_wisdom_0059")
+        XCTAssertEqual(reveal.wisdomId, "east_wisdom_0059")
+        XCTAssertEqual(reveal.canonicalText, "Peace enters slowly.")
+        XCTAssertEqual(reveal.revealId, "11111111-2222-4333-8444-555555555555")
+        XCTAssertFalse(reveal.needsAppCommit)
+        XCTAssertEqual(reveal.revealedAt, now)
+        XCTAssertEqual(reveal.unlockAt, now.addingTimeInterval(86_400))
+        XCTAssertFalse(EastKeeperRitualStore.publishAuthorizedReveal(grant: makeGrant(),
+            candidateId: makeCandidate().candidateId, now: now, defaults: defaults, coordinationLockURL: nil))
+    }
+
+    func testLateAuthorizationCannotReplaceANewerCandidate() {
+        prepareKeeperCandidate()
+        EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        EastKeeperRitualStore.publishPrepared(candidate: makeCandidate(wisdomId: "east_wisdom_0002"),
+            presentation: .systemDefault, now: now, defaults: defaults)
+        XCTAssertFalse(EastKeeperRitualStore.publishAuthorizedReveal(grant: makeGrant(),
+            candidateId: makeCandidate().candidateId, now: now, defaults: defaults, coordinationLockURL: nil))
+    }
+
+    func testAuthorizedRevealExpiresAtExactlyTwentyFourHours() {
+        prepareKeeperCandidate()
+        EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        let reveal = authorizeCandidate()
         let beforeUnlock = now.addingTimeInterval(EastKeeperRitualStore.lockDuration - 0.001)
         XCTAssertEqual(
             EastKeeperRitualStore.resolvedSnapshot(now: beforeUnlock, defaults: defaults).content,
-            result.snapshot.content
+            .revealed(reveal)
         )
         XCTAssertEqual(
             EastKeeperRitualStore.resolvedSnapshot(
@@ -210,8 +209,7 @@ final class EastKeeperRitualStoreTests: XCTestCase {
         prepareKeeperCandidate()
         EastKeeperRitualStore.advance(now: now, defaults: defaults)
         EastKeeperRitualStore.advance(now: now, defaults: defaults)
-        let provisional = EastKeeperRitualStore.advance(now: now, defaults: defaults)
-            .newlyRevealed!
+        let provisional = seedLegacyProvisional()
         let authoritative = EastKeeperRitualReveal(
             candidateId: provisional.candidateId,
             canonicalText: provisional.canonicalText,
@@ -324,19 +322,19 @@ final class EastKeeperRitualStoreTests: XCTestCase {
         XCTAssertEqual(result.snapshot.content, .keeperRequired)
     }
 
-    func testBridgePayloadCarriesProvisionalRevealWithoutInventingRevealId() {
+    func testBridgePayloadCarriesTheServerRevealIdForOfflineAppImport() {
         prepareKeeperCandidate()
         EastKeeperRitualStore.advance(now: now, defaults: defaults)
         EastKeeperRitualStore.advance(now: now, defaults: defaults)
-        EastKeeperRitualStore.advance(now: now, defaults: defaults)
+        _ = authorizeCandidate()
 
         let payload = EastKeeperRitualStore.bridgePayload(now: now, defaults: defaults)
         XCTAssertEqual(payload["isKeeper"] as? Bool, true)
         XCTAssertEqual(payload["state"] as? String, "revealed")
         let reveal = payload["reveal"] as? [String: Any]
         XCTAssertEqual(reveal?["wisdomId"] as? String, "east_wisdom_0001")
-        XCTAssertEqual(reveal?["needsAppCommit"] as? Bool, true)
-        XCTAssertNil(reveal?["revealId"])
+        XCTAssertEqual(reveal?["needsAppCommit"] as? Bool, false)
+        XCTAssertEqual(reveal?["revealId"] as? String, "11111111-2222-4333-8444-555555555555")
     }
 
     func testCoordinatedConcurrentAdvancesNeverLoseARitualPhase() {
@@ -358,14 +356,14 @@ final class EastKeeperRitualStoreTests: XCTestCase {
 
         let captured = results.values
         XCTAssertEqual(captured.count, 3)
-        XCTAssertEqual(captured.filter { $0.newlyRevealed != nil }.count, 1)
-        XCTAssertTrue(captured.allSatisfy(\.changed))
-        guard case .revealed = EastKeeperRitualStore.resolvedSnapshot(
+        XCTAssertEqual(captured.filter { $0.newlyRevealed != nil }.count, 0)
+        XCTAssertEqual(captured.filter(\.changed).count, 2)
+        guard case .heart = EastKeeperRitualStore.resolvedSnapshot(
             now: revealMoment,
             defaults: defaults,
             coordinationLockURL: coordinationLockURL
         ).content else {
-            return XCTFail("three coordinated advances must complete the ritual exactly once")
+            return XCTFail("concurrent local taps must stop at the account authorization boundary")
         }
     }
 
@@ -404,6 +402,36 @@ final class EastKeeperRitualStoreTests: XCTestCase {
             ),
             EastKeeperRitualSnapshot(content: .feel, presentation: presentation)
         )
+    }
+
+    private func makeGrant(wisdomId: String = "east_wisdom_0001") -> EastDailyRitualGrant {
+        EastDailyRitualGrant(wisdomId: wisdomId,
+            revealId: "11111111-2222-4333-8444-555555555555",
+            revealedAtMs: Int64(now.timeIntervalSince1970 * 1000),
+            accountScope: String(repeating: "a", count: 64))
+    }
+
+    private func authorizeCandidate(wisdomId: String = "east_wisdom_0001") -> EastKeeperRitualReveal {
+        XCTAssertTrue(EastKeeperRitualStore.publishAuthorizedReveal(grant: makeGrant(wisdomId: wisdomId),
+            candidateId: makeCandidate().candidateId, now: now,
+            defaults: defaults, coordinationLockURL: nil))
+        guard case let .revealed(reveal) = EastKeeperRitualStore.resolvedSnapshot(now: now, defaults: defaults).content
+        else { XCTFail("Authorized occurrence must be visible"); return makeReveal() }
+        return reveal
+    }
+
+    private func seedLegacyProvisional() -> EastKeeperRitualReveal {
+        let legacy = EastKeeperRitualReveal(candidateId: makeCandidate().candidateId,
+            canonicalText: "Be still.", displayText: "Sakin ol.", wisdomId: "east_wisdom_0001",
+            revealedAt: now, unlockAt: now.addingTimeInterval(86_400),
+            revealId: nil, needsAppCommit: true)
+        let document: [String: Any] = [
+            "schemaVersion": 1, "isKeeper": true, "phase": "pause", "revision": 1,
+            "presentation": ["appearanceMode": "system"],
+            "reveal": try! JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy))
+        ]
+        defaults.set(try! JSONSerialization.data(withJSONObject: document), forKey: "east_keeper_ritual_document_v1")
+        return legacy
     }
 
     private func prepareKeeperCandidate(coordinationLockURL: URL? = nil) {

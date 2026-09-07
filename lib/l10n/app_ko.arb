@@ -21,16 +21,32 @@
   "systemDefault": "시스템 기본값",
   "english": "영어",
   "languageSettingSemantics": "언어. 현재 선택: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "외관",
   "light": "라이트",
   "dark": "다크",
   "appearanceSettingSemantics": "외관. 현재 선택: {value}.",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "뒤로",
   "delete": "삭제",
   "deleteUpper": "삭제",
@@ -47,11 +63,19 @@
   "deleteReflection": "성찰 삭제",
   "reflectedEditReflection": "성찰 완료. 성찰 편집.",
   "addReflectionNumbered": "성찰 추가, 항목 {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "성찰 열기, 항목 {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "일기장",
-  "keeper": "간직",
+  "keeper": "Keeper",
   "restorePurchases": "구입 항목 복원",
   "icloudSync": "iCloud 동기화",
   "removeFromIcloud": "iCloud에서 제거",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "무료로 지혜를 3개까지 간직할 수 있습니다.",
   "keepReflectingQuestion": "계속 성찰할까요?",
   "reflectionLimitExplanation": "세 번의 성찰이 포함됩니다. Keeper는 남는 모든 것을 위한 무제한 공간을 엽니다.",
-  "becomeKeeper": "간직 열기",
+  "becomeKeeper": "Keeper 시작하기",
   "whoseJournal": "누구의 일기장인가요?",
   "journalNameExplanation": "일기장 첫 장에 이름이 조용히 적힙니다.",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "길게 눌러 이 지혜를 공유하세요.",
   "shareWisdom": "공유",
   "shareWisdomNumbered": "지혜 공유, 항목 {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "조용한 알림",
   "nothingHasStayedYet": "아직 남은 것이 없습니다.",
   "wisdomCouldNotBeRemoved": "이 지혜를 제거하지 못했습니다. 다시 시도해 주세요.",
@@ -108,11 +138,11 @@
   "yourName": "이름",
   "journalCouldNotBePrepared": "일기장을 준비하지 못했습니다. 다시 시도해 주세요.",
   "takeItWithYou": "함께 가져가기.",
-  "takeItWithYouKeeper": "함께 가져가기. ‘간직’에서 이용할 수 있습니다.",
-  "availableWithKeeper": "‘간직’에서 이용할 수 있습니다.",
+  "takeItWithYouKeeper": "함께 가져가기. Keeper에서 이용할 수 있습니다.",
+  "availableWithKeeper": "Keeper에서 이용할 수 있습니다.",
   "opensKeeper": "Keeper를 엽니다.",
   "nameUpper": "이름",
-  "keeperPersistenceError": "‘간직’ 이용 권한을 저장하지 못했습니다. 구입 항목 복원을 시도해 주세요.",
+  "keeperPersistenceError": "Keeper 이용 권한을 저장하지 못했습니다. 구입 항목 복원을 시도해 주세요.",
   "purchaseUpdating": "구입 상태를 아직 업데이트하고 있습니다. 설정에서 구입 항목 복원을 이용해 주세요.",
   "purchaseNotReady": "아직 구입할 준비가 되지 않았습니다. 잠시 후 다시 시도해 주세요.",
   "restore": "복원",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "고요가 말하는 곳.",
   "preparing": "준비 중…",
   "exportKeptAndReflections": "남은 지혜와 성찰을 함께 가져가기.",
-  "keeperAccessActive": "‘간직’ 이용 권한 활성화됨",
+  "keeperAccessActive": "Keeper 이용 권한 활성화됨",
   "keeperPurchaseInProgress": "원 안으로, {price}. 구입 진행 중.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "원 안으로, {price}, 한 번만 결제",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "원 안으로, 일시적으로 이용할 수 없음",
   "keepWithoutLimit": "제한 없이 간직하기.",
   "reflectWithoutLimit": "제한 없이 성찰하기.",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "성찰을 저장하지 못했습니다. 계속 작성하는 동안 다시 시도합니다.",
   "reflectionDeleteFailed": "성찰을 삭제하지 못했습니다. 다시 시도해 주세요.",
   "remainingDurationHoursMinutes": "{hours}시간 {minutes}분 남음",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "{hours}시간 남음",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "{minutes}분 남음",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "Keeper 미리 보기",
+  "keeperWidgetTab": "위젯",
+  "keeperPreviewExample": "예시",
+  "keeperPreviewReflection": "오늘은 서두르지 않고 나아가고 싶다.",
+  "keeperDailyRitual": "Keeper 이용 여부와 관계없이 24시간마다 하나의 지혜.",
+  "keeperWidgetStepOne": "홈 화면의 빈 공간을 길게 누르세요.",
+  "keeperWidgetStepTwo": "편집을 누른 뒤 위젯 추가를 누르세요. 이전 iOS 버전에서는 + 버튼을 누르세요.",
+  "keeperWidgetStepThree": "EAST.를 찾아 Keeper 의식 위젯을 선택하고 위젯 추가를 누르세요.",
+  "reflectionSaved": "저장됨",
+  "reflectionSaving": "저장 중…",
+  "reflectionCopyText": "글 복사",
+  "reflectionCopied": "복사됨",
+  "reflectionAddThought": "새로운 생각 더하기",
+  "reflectionRevisitPrompt": "오늘은 이 말을 어떻게 받아들이나요?",
+  "reflectionEarlier": "이전의 생각",
+  "reflectionOverTime": "시간이 흐르며",
+  "reflectionHistoryDeleteExplanation": "이 지혜에 남긴 모든 생각이 삭제됩니다.",
+  "reflectionRecoveryMessage": "아직 글이 저장되지 않았습니다.",
+  "settingsEveryday": "일상 설정",
+  "settingsYourWriting": "당신의 글",
+  "settingsAbout": "EAST. 소개",
+  "writingLock": "글 잠금",
+  "writingLockDescription": "Face ID, Touch ID 또는 기기 암호로 남은 것, 성찰, 일기장을 여세요.",
+  "writingLockFootnote": "매일의 의식은 바로 시작할 수 있어요. 앱을 벗어나면 개인적인 글이 다시 잠겨요.",
+  "writingLockTitle": "당신의 글은 당신의 것이에요.",
+  "writingLockPrompt": "인증하고 개인적인 글을 여세요.",
+  "writingLockUnlock": "잠금 해제",
+  "writingLockChecking": "인증 중…",
+  "writingLockReason": "개인적인 글을 여세요.",
+  "writingLockUnavailable": "인증을 사용할 수 없어요. 기기 암호와 Face ID 또는 Touch ID 설정을 확인해 주세요.",
+  "writingLockToggleReason": "개인적인 글의 잠금 설정을 변경하세요.",
+  "writingLockOn": "켜짐",
+  "writingLockOff": "꺼짐",
+  "privacyPreview": "앱 전환기에서는 글이 숨겨져요.",
+  "settingsAboutDescription": "하루에 한 번, 나에게 돌아오는 공간.",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "새로운 지혜를 열려면 iCloud에 로그인하세요.",
+  "dailyRitualConnectionRequired": "새로운 지혜를 열려면 인터넷에 연결하세요.",
+  "dailyRitualUnavailable": "지금은 오늘의 지혜를 열 수 없어요. 다시 시도해 주세요.",
+  "dailyRitualAccountNote": "iCloud 계정당 24시간에 하나의 지혜가 열려요. 새로운 지혜를 열려면 인터넷 연결이 필요해요. 저장한 글은 오프라인에서도 읽을 수 있어요.",
+  "dailyRitualPreviousWisdom": "지난 지혜"
 }

@@ -700,8 +700,7 @@ void main() {
 
       expect(
         find.text(
-          'Reflection could not be saved. It will try again as you keep '
-          'writing.',
+          'Your writing has not been saved yet.',
         ),
         findsOneWidget,
       );
@@ -851,8 +850,7 @@ void main() {
 
       expect(
         find.text(
-          'Reflection could not be saved. It will try again as you keep '
-          'writing.',
+          'Your writing has not been saved yet.',
         ),
         findsOneWidget,
       );
@@ -1301,6 +1299,18 @@ class _FlakyOnceSavedReflectionsService implements SavedReflectionsService {
   final SavedReflectionsService _delegate;
   int callCount = 0;
   bool _hasThrown = false;
+
+  @override
+  Future<SavedReflectionsResult> saveThought(
+          {required String itemId,
+          required String thoughtId,
+          required String reflection,
+          required bool isKeeper}) =>
+      _delegate.saveThought(
+          itemId: itemId,
+          thoughtId: thoughtId,
+          reflection: reflection,
+          isKeeper: isKeeper);
 
   @override
   Future<SavedReflectionsResult> saveReflection({

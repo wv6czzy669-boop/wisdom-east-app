@@ -91,6 +91,7 @@ const Set<String> _persistedProjectionKeys = {
   'revealedAtMs',
   'keptAtMs',
   'reflectionText',
+  'reflectionHistoryJson',
   'reflectedAtMs',
   'deletedAtMs',
   'updatedAtMs',
@@ -125,6 +126,8 @@ Map<String, Object?> _encodeProjection(CloudKeptWisdomProjection projection) {
     'keptAtMs': projection.keptAtMs,
     if (projection.reflectionText != null)
       'reflectionText': projection.reflectionText,
+    if (projection.reflectionHistoryJson != null)
+      'reflectionHistoryJson': projection.reflectionHistoryJson,
     if (projection.reflectedAtMs != null)
       'reflectedAtMs': projection.reflectedAtMs,
     'updatedAtMs': projection.updatedAtMs,

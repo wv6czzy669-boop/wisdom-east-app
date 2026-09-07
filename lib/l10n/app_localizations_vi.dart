@@ -156,7 +156,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get journalSemantic => 'Nhật ký';
 
   @override
-  String get keeper => 'Giữ lại';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => 'Khôi phục giao dịch mua';
@@ -216,7 +216,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Ba Suy ngẫm được bao gồm. Keeper mở không gian không giới hạn cho những gì ở lại.';
 
   @override
-  String get becomeKeeper => 'MỞ GIỮ LẠI';
+  String get becomeKeeper => 'Mở Keeper';
 
   @override
   String get whoseJournal => 'Đây là nhật ký của ai?';
@@ -337,10 +337,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get takeItWithYou => 'Mang theo bên mình.';
 
   @override
-  String get takeItWithYouKeeper => 'Mang theo bên mình. Có trong “Giữ lại”.';
+  String get takeItWithYouKeeper => 'Mang theo bên mình. Có trong Keeper.';
 
   @override
-  String get availableWithKeeper => 'Có trong “Giữ lại”.';
+  String get availableWithKeeper => 'Có trong Keeper.';
 
   @override
   String get opensKeeper => 'Mở Keeper.';
@@ -350,7 +350,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      'Không thể lưu quyền truy cập “Giữ lại”. Hãy thử Khôi phục giao dịch mua.';
+      'Không thể lưu quyền truy cập Keeper. Hãy thử Khôi phục giao dịch mua.';
 
   @override
   String get purchaseUpdating =>
@@ -393,7 +393,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Mang theo những điều minh triết đã giữ và các Suy ngẫm của bạn.';
 
   @override
-  String get keeperAccessActive => 'Quyền truy cập “Giữ lại” đang hoạt động';
+  String get keeperAccessActive => 'Quyền truy cập Keeper đang hoạt động';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -542,4 +542,140 @@ class AppLocalizationsVi extends AppLocalizations {
   String remainingDurationMinutesOnly(int minutes) {
     return 'Còn $minutes phút';
   }
+
+  @override
+  String get keeperPreviewLabel => 'Một thoáng Keeper';
+
+  @override
+  String get keeperWidgetTab => 'Tiện ích';
+
+  @override
+  String get keeperPreviewExample => 'Ví dụ';
+
+  @override
+  String get keeperPreviewReflection =>
+      'Hôm nay, tôi muốn bước tiếp mà không vội vàng.';
+
+  @override
+  String get keeperDailyRitual =>
+      'Một lời minh triết mỗi 24 giờ, dù có Keeper hay không.';
+
+  @override
+  String get keeperWidgetStepOne =>
+      'Chạm và giữ một vùng trống trên Màn hình chính.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'Chạm vào Sửa, rồi Thêm tiện ích. Trên các phiên bản iOS cũ hơn, chạm vào nút +.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'Tìm EAST., chọn tiện ích Nghi thức Keeper, rồi chạm vào Thêm tiện ích.';
+
+  @override
+  String get reflectionSaved => 'Đã lưu';
+
+  @override
+  String get reflectionSaving => 'Đang lưu…';
+
+  @override
+  String get reflectionCopyText => 'Sao chép văn bản';
+
+  @override
+  String get reflectionCopied => 'Đã sao chép';
+
+  @override
+  String get reflectionAddThought => 'Thêm một suy nghĩ mới';
+
+  @override
+  String get reflectionRevisitPrompt => 'Hôm nay, tôi đọc lời này thế nào?';
+
+  @override
+  String get reflectionEarlier => 'Trước đây';
+
+  @override
+  String get reflectionOverTime => 'Theo thời gian';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'Tất cả suy nghĩ gắn với lời minh triết đã lưu này sẽ bị xóa.';
+
+  @override
+  String get reflectionRecoveryMessage => 'Bài viết của bạn chưa được lưu.';
+
+  @override
+  String get settingsEveryday => 'Tùy chọn hằng ngày';
+
+  @override
+  String get settingsYourWriting => 'Những dòng viết của bạn';
+
+  @override
+  String get settingsAbout => 'Về EAST.';
+
+  @override
+  String get writingLock => 'Khóa trang viết';
+
+  @override
+  String get writingLockDescription =>
+      'Mở Điều còn lại, Suy ngẫm và Nhật ký bằng Face ID, Touch ID hoặc mật mã thiết bị.';
+
+  @override
+  String get writingLockFootnote =>
+      'Nghi thức hằng ngày vẫn luôn mở. Trang viết riêng tư sẽ khóa lại khi bạn rời ứng dụng.';
+
+  @override
+  String get writingLockTitle => 'Lời bạn viết thuộc về bạn.';
+
+  @override
+  String get writingLockPrompt => 'Xác thực để mở trang viết riêng tư.';
+
+  @override
+  String get writingLockUnlock => 'Mở khóa';
+
+  @override
+  String get writingLockChecking => 'Đang xác thực…';
+
+  @override
+  String get writingLockReason => 'Mở trang viết riêng tư của bạn.';
+
+  @override
+  String get writingLockUnavailable =>
+      'Không thể xác thực. Hãy kiểm tra mật mã thiết bị và cài đặt Face ID hoặc Touch ID.';
+
+  @override
+  String get writingLockToggleReason =>
+      'Thay đổi khóa cho trang viết riêng tư của bạn.';
+
+  @override
+  String get writingLockOn => 'Bật';
+
+  @override
+  String get writingLockOff => 'Tắt';
+
+  @override
+  String get privacyPreview =>
+      'Trang viết được ẩn trong trình chuyển đổi ứng dụng.';
+
+  @override
+  String get settingsAboutDescription =>
+      'Một nơi để trở về với chính mình, mỗi ngày một lần.';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'Đăng nhập iCloud để mở một lời trí tuệ mới.';
+
+  @override
+  String get dailyRitualConnectionRequired =>
+      'Kết nối internet để mở một lời trí tuệ mới.';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'Lời trí tuệ hằng ngày hiện chưa sẵn sàng. Vui lòng thử lại.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'Mỗi tài khoản iCloud nhận một lời trí tuệ mỗi 24 giờ. Cần kết nối internet để mở lời trí tuệ mới. Những trang viết đã lưu vẫn có thể đọc ngoại tuyến.';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'Lời trí tuệ trước';
 }

@@ -21,16 +21,32 @@
   "systemDefault": "حسب النظام",
   "english": "الإنجليزية",
   "languageSettingSemantics": "اللغة. الاختيار الحالي: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "المظهر",
   "light": "فاتح",
   "dark": "داكن",
   "appearanceSettingSemantics": "المظهر. التحديد الحالي: {value}.",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "رجوع",
   "delete": "حذف",
   "deleteUpper": "حذف",
@@ -47,11 +63,19 @@
   "deleteReflection": "حذف التأمّل",
   "reflectedEditReflection": "تأمُّل. تعديل التأمّل.",
   "addReflectionNumbered": "أضف تأمّلًا، العنصر {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "افتح التأمّل، العنصر {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "دفتر يوميات",
-  "keeper": "احتفظ",
+  "keeper": "Keeper",
   "restorePurchases": "استعادة المشتريات",
   "icloudSync": "مزامنة iCloud",
   "removeFromIcloud": "إزالة من iCloud",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "يمكن للمستخدمين المجانيين الاحتفاظ بما يصل إلى 3 حِكَم.",
   "keepReflectingQuestion": "هل تواصل التأمّل؟",
   "reflectionLimitExplanation": "تتضمن النسخة ثلاث تأملات. يفتح Keeper مساحة غير محدودة لما يبقى.",
-  "becomeKeeper": "فعّل «احتفظ»",
+  "becomeKeeper": "تفعيل Keeper",
   "whoseJournal": "لمن هذا الدفتر؟",
   "journalNameExplanation": "يظهر اسم بهدوء على صفحة عنوان دفتر يومياتك.",
   "notificationTitle": "EAST.",
@@ -80,14 +104,20 @@
   "discoverTheObjects": "اكتشف الأشياء",
   "enterTheCircle": "ادخل الدائرة.",
   "withinTheCircle": "داخل الدائرة.",
-  "keeperActive": "الحافظ مفعّل",
+  "keeperActive": "Keeper مفعّل",
   "oneTimePurchase": "شراء لمرة واحدة",
   "askFrom": "اسأل",
   "yourHeart": "من قلبك.",
   "longPressToShareWisdom": "اضغط مطولًا لمشاركة هذه الحكمة.",
   "shareWisdom": "مشاركة",
   "shareWisdomNumbered": "مشاركة الحكمة، العنصر {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "تذكير هادئ",
   "nothingHasStayedYet": "لم يبقَ شيء بعد.",
   "wisdomCouldNotBeRemoved": "تعذّرت إزالة هذه الحكمة. حاول مرة أخرى.",
@@ -108,11 +138,11 @@
   "yourName": "اسمك",
   "journalCouldNotBePrepared": "تعذّر إعداد دفتر اليوميات. حاول مرة أخرى.",
   "takeItWithYou": "خذها معك.",
-  "takeItWithYouKeeper": "خذها معك. متاح مع «احتفظ».",
-  "availableWithKeeper": "متاح مع «احتفظ».",
+  "takeItWithYouKeeper": "خذها معك. متاح مع Keeper.",
+  "availableWithKeeper": "متاح مع Keeper.",
   "opensKeeper": "يفتح Keeper.",
   "nameUpper": "الاسم",
-  "keeperPersistenceError": "تعذّر حفظ إمكانية «احتفظ». جرّب استعادة المشتريات.",
+  "keeperPersistenceError": "تعذّر حفظ الوصول إلى Keeper. جرّب استعادة المشتريات.",
   "purchaseUpdating": "لا تزال حالة الشراء قيد التحديث. استخدم استعادة المشتريات في الإعدادات.",
   "purchaseNotReady": "الشراء غير جاهز بعد. حاول مرة أخرى بعد قليل.",
   "restore": "استعادة",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "حيث يتحدث الصمت.",
   "preparing": "جارٍ التحضير…",
   "exportKeptAndReflections": "خذ معك الحِكَم التي أبقيتها وتأمّلاتك.",
-  "keeperAccessActive": "إمكانية «احتفظ» مفعّلة",
+  "keeperAccessActive": "الوصول إلى Keeper مفعّل",
   "keeperPurchaseInProgress": "ادخل الدائرة، {price}. الشراء جارٍ.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "ادخل الدائرة، {price}، دفعة واحدة",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "ادخل الدائرة، غير متاح مؤقتًا",
   "keepWithoutLimit": "احتفظ بلا حدود.",
   "reflectWithoutLimit": "تأمّل بلا حدود.",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "تعذّر حفظ التأمل. ستتم المحاولة مجددًا أثناء مواصلة الكتابة.",
   "reflectionDeleteFailed": "تعذّر حذف التأمل. حاول مرة أخرى.",
   "remainingDurationHoursMinutes": "{hours, plural, zero{} one{ساعة واحدة} two{ساعتان} few{{hours} ساعات} many{{hours} ساعة} other{{hours} ساعة}} {minutes, plural, zero{} one{ودقيقة واحدة} two{ودقيقتان} few{و{minutes} دقائق} many{و{minutes} دقيقة} other{و{minutes} دقيقة}} متبقية",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "{hours, plural, zero{لا وقت متبقٍ} one{ساعة واحدة متبقية} two{ساعتان متبقيتان} few{{hours} ساعات متبقية} many{{hours} ساعة متبقية} other{{hours} ساعة متبقية}}",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "{minutes, plural, zero{أقل من دقيقة متبقية} one{دقيقة واحدة متبقية} two{دقيقتان متبقيتان} few{{minutes} دقائق متبقية} many{{minutes} دقيقة متبقية} other{{minutes} دقيقة متبقية}}",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "لمحة عن Keeper",
+  "keeperWidgetTab": "الأداة",
+  "keeperPreviewExample": "مثال",
+  "keeperPreviewReflection": "اليوم، أريد أن أمضي دون عجلة.",
+  "keeperDailyRitual": "حكمة واحدة كل 24 ساعة، مع Keeper أو بدونه.",
+  "keeperWidgetStepOne": "المس مطولًا مساحة فارغة على الشاشة الرئيسية.",
+  "keeperWidgetStepTwo": "اضغط على تحرير، ثم إضافة أداة. في إصدارات iOS الأقدم، اضغط على زر +.",
+  "keeperWidgetStepThree": "ابحث عن EAST.، واختر أداة طقس Keeper، ثم اضغط على إضافة أداة.",
+  "reflectionSaved": "تم الحفظ",
+  "reflectionSaving": "جارٍ الحفظ…",
+  "reflectionCopyText": "نسخ النص",
+  "reflectionCopied": "تم النسخ",
+  "reflectionAddThought": "أضف فكرة جديدة",
+  "reflectionRevisitPrompt": "كيف أقرأ هذا اليوم؟",
+  "reflectionEarlier": "في وقت سابق",
+  "reflectionOverTime": "مع مرور الوقت",
+  "reflectionHistoryDeleteExplanation": "ستُحذف جميع الأفكار المرتبطة بهذه الحكمة المحفوظة.",
+  "reflectionRecoveryMessage": "لم تُحفظ كتابتك بعد.",
+  "settingsEveryday": "تفضيلات يومية",
+  "settingsYourWriting": "كتاباتك",
+  "settingsAbout": "حول EAST.",
+  "writingLock": "قفل الكتابات",
+  "writingLockDescription": "افتح «ما بقي» و«تأمُّل» و«دفتر يوميات» باستخدام Face ID أو Touch ID أو رمز دخول جهازك.",
+  "writingLockFootnote": "يبقى طقسك اليومي متاحًا. تُقفل كتاباتك الخاصة مجددًا عند مغادرة التطبيق.",
+  "writingLockTitle": "كلماتك ملك لك.",
+  "writingLockPrompt": "تحقق من هويتك لفتح كتاباتك الخاصة.",
+  "writingLockUnlock": "فتح القفل",
+  "writingLockChecking": "جارٍ التحقق…",
+  "writingLockReason": "افتح كتاباتك الخاصة.",
+  "writingLockUnavailable": "التحقق غير متاح. راجع رمز دخول جهازك وإعدادات Face ID أو Touch ID.",
+  "writingLockToggleReason": "غيّر قفل كتاباتك الخاصة.",
+  "writingLockOn": "مفعّل",
+  "writingLockOff": "غير مفعّل",
+  "privacyPreview": "تُخفى كتاباتك في مبدّل التطبيقات.",
+  "settingsAboutDescription": "مساحة تعود فيها إلى نفسك، مرة كل يوم.",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "سجّل الدخول إلى iCloud لفتح حكمة جديدة.",
+  "dailyRitualConnectionRequired": "اتصل بالإنترنت لفتح حكمة جديدة.",
+  "dailyRitualUnavailable": "حكمتك اليومية غير متاحة الآن. حاول مرة أخرى.",
+  "dailyRitualAccountNote": "حكمة واحدة لكل حساب iCloud كل 24 ساعة. تحتاج الحكمة الجديدة إلى اتصال بالإنترنت. تبقى كتاباتك المحفوظة متاحة دون اتصال.",
+  "dailyRitualPreviousWisdom": "الحكمة السابقة"
 }

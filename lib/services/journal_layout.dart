@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/favorite_item.dart';
+import '../utils/journal_pdf_text.dart';
 
 typedef JournalDateFormatter = String Function(FavoriteItem item);
 
@@ -102,34 +103,62 @@ class JournalBodyLayout {
       ],
     );
 
-    final reflection = item.reflection;
-    if (reflection == null || reflection.trim().isEmpty) {
-      return pw.Column(children: [header]);
-    }
-
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        header,
-        pw.Padding(
-          padding: const pw.EdgeInsetsDirectional.only(
-            top: entryLineGap,
-            start: reflectionIndent,
-          ),
-          child: pw.Text(
-            reflection,
-            textDirection: textDirection,
-            style: pw.TextStyle(
-              font: font,
-              fontFallback: fontFallback,
-              fontSize: reflectionFontSize,
-              color: reflectionColor,
-              height: 1.55,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          header,
+          for (final thought in reflectionSegments(item))
+            pw.Padding(
+              padding: const pw.EdgeInsetsDirectional.only(
+                  top: 24, start: reflectionIndent),
+              child: pw.RichText(
+                  textDirection: textDirection,
+                  text: pw.TextSpan(
+                    style: pw.TextStyle(
+                        font: font,
+                        fontFallback: fontFallback,
+                        fontSize: reflectionFontSize,
+                        color: reflectionColor,
+                        height: 1.55),
+                    children: [
+                      if (thought.timestamp != null)
+                        pw.TextSpan(
+                            text:
+                                '${reflectionDate(item, thought.timestamp!, dateFormatter)}\n',
+                            style: pw.TextStyle(
+                                fontSize: dateFontSize,
+                                color: dateColor,
+                                height: 1.8)),
+                      pw.TextSpan(text: normalizeJournalPdfText(thought.text)),
+                    ],
+                  )),
             ),
+        ]);
+  }
+
+  static List<({String text, String? timestamp})> reflectionSegments(
+          FavoriteItem item) =>
+      [
+        if (item.reflection != null)
+          (
+            text: item.reflection!,
+            timestamp: item.reflectionHistory.thoughts.isEmpty
+                ? null
+                : item.reflectedAt
           ),
-        ),
-      ],
-    );
+        for (final thought in item.reflectionHistory.thoughts)
+          (
+            text: thought.text,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(thought.createdAtMs,
+                    isUtc: true)
+                .toIso8601String()
+          ),
+      ];
+
+  static String reflectionDate(
+      FavoriteItem item, String timestamp, JournalDateFormatter? formatter) {
+    final dated = item.copyWith(keptAt: timestamp);
+    return formatter?.call(dated) ?? marginalDate(dated);
   }
 
   /// The safe exceptional rendering path for an entry taller than a normal
@@ -175,24 +204,33 @@ class JournalBodyLayout {
         ),
       ],
     );
-    final reflection = item.reflection;
-    if (reflection == null || reflection.trim().isEmpty) return [header];
-
     return [
       header,
-      pw.SizedBox(height: entryLineGap),
-      pw.Text(
-        reflection,
-        textDirection: textDirection,
-        style: pw.TextStyle(
-          font: font,
-          fontFallback: fontFallback,
-          fontSize: reflectionFontSize,
-          color: reflectionColor,
-          height: 1.55,
-        ),
-        overflow: pw.TextOverflow.span,
-      ),
+      for (final thought in reflectionSegments(item)) ...[
+        pw.SizedBox(height: 24),
+        pw.RichText(
+            textDirection: textDirection,
+            overflow: pw.TextOverflow.span,
+            text: pw.TextSpan(
+              style: pw.TextStyle(
+                  font: font,
+                  fontFallback: fontFallback,
+                  fontSize: reflectionFontSize,
+                  color: reflectionColor,
+                  height: 1.55),
+              children: [
+                if (thought.timestamp != null)
+                  pw.TextSpan(
+                      text:
+                          '${reflectionDate(item, thought.timestamp!, dateFormatter)}\n',
+                      style: pw.TextStyle(
+                          fontSize: dateFontSize,
+                          color: dateColor,
+                          height: 1.8)),
+                pw.TextSpan(text: normalizeJournalPdfText(thought.text)),
+              ],
+            )),
+      ],
     ];
   }
 

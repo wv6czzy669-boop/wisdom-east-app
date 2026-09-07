@@ -156,7 +156,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get journalSemantic => 'Tagebuch';
 
   @override
-  String get keeper => 'Bewahren';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => 'Käufe wiederherstellen';
@@ -216,7 +216,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Drei Reflexionen sind enthalten. Keeper öffnet unbegrenzten Raum für das, was bleibt.';
 
   @override
-  String get becomeKeeper => 'BEWAHREN FREISCHALTEN';
+  String get becomeKeeper => 'Keeper werden';
 
   @override
   String get whoseJournal => 'Wessen Tagebuch ist das?';
@@ -336,10 +336,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get takeItWithYou => 'Nimm es mit.';
 
   @override
-  String get takeItWithYouKeeper => 'Nimm es mit. Mit Bewahren verfügbar.';
+  String get takeItWithYouKeeper => 'Nimm es mit. Mit Keeper verfügbar.';
 
   @override
-  String get availableWithKeeper => 'Mit Bewahren verfügbar.';
+  String get availableWithKeeper => 'Mit Keeper verfügbar.';
 
   @override
   String get opensKeeper => 'Öffnet Keeper.';
@@ -349,7 +349,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      'Der Zugang zu Bewahren konnte nicht gespeichert werden. Bitte Käufe wiederherstellen.';
+      'Der Keeper-Zugang konnte nicht gespeichert werden. Bitte Käufe wiederherstellen.';
 
   @override
   String get purchaseUpdating =>
@@ -392,7 +392,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Nimm deine bewahrten Weisheiten und Reflexionen mit.';
 
   @override
-  String get keeperAccessActive => 'Zugang zu Bewahren aktiv';
+  String get keeperAccessActive => 'Keeper-Zugang aktiv';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -568,4 +568,142 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get keeperPreviewLabel => 'Ein Einblick in Keeper';
+
+  @override
+  String get keeperWidgetTab => 'Widget';
+
+  @override
+  String get keeperPreviewExample => 'Beispiel';
+
+  @override
+  String get keeperPreviewReflection =>
+      'Heute möchte ich mich ohne Eile bewegen.';
+
+  @override
+  String get keeperDailyRitual =>
+      'Eine Erkenntnis alle 24 Stunden, mit oder ohne Keeper.';
+
+  @override
+  String get keeperWidgetStepOne =>
+      'Halte einen freien Bereich auf dem Home-Bildschirm gedrückt.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'Tippe auf Bearbeiten und dann auf Widget hinzufügen. Unter älteren iOS-Versionen tippe auf +.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'Suche EAST., wähle das Keeper-Ritual-Widget und tippe auf Widget hinzufügen.';
+
+  @override
+  String get reflectionSaved => 'Gespeichert';
+
+  @override
+  String get reflectionSaving => 'Wird gespeichert…';
+
+  @override
+  String get reflectionCopyText => 'Text kopieren';
+
+  @override
+  String get reflectionCopied => 'Kopiert';
+
+  @override
+  String get reflectionAddThought => 'Einen neuen Gedanken hinzufügen';
+
+  @override
+  String get reflectionRevisitPrompt => 'Wie lese ich das heute?';
+
+  @override
+  String get reflectionEarlier => 'Früher';
+
+  @override
+  String get reflectionOverTime => 'Mit der Zeit';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'Alle Gedanken zu dieser bewahrten Erkenntnis werden entfernt.';
+
+  @override
+  String get reflectionRecoveryMessage =>
+      'Dein Text wurde noch nicht gespeichert.';
+
+  @override
+  String get settingsEveryday => 'Für jeden Tag';
+
+  @override
+  String get settingsYourWriting => 'Deine Worte';
+
+  @override
+  String get settingsAbout => 'Über EAST.';
+
+  @override
+  String get writingLock => 'Schutz deiner Texte';
+
+  @override
+  String get writingLockDescription =>
+      'Öffne Bewahrt, Reflexion und Tagebuch mit Face ID, Touch ID oder deinem Gerätecode.';
+
+  @override
+  String get writingLockFootnote =>
+      'Dein tägliches Ritual bleibt frei zugänglich. Wenn du die App verlässt, werden deine privaten Texte wieder gesperrt.';
+
+  @override
+  String get writingLockTitle => 'Deine Worte gehören dir.';
+
+  @override
+  String get writingLockPrompt =>
+      'Bestätige deine Identität, um deine privaten Texte zu öffnen.';
+
+  @override
+  String get writingLockUnlock => 'Entsperren';
+
+  @override
+  String get writingLockChecking => 'Wird bestätigt…';
+
+  @override
+  String get writingLockReason => 'Öffne deine privaten Texte.';
+
+  @override
+  String get writingLockUnavailable =>
+      'Die Authentifizierung ist nicht verfügbar. Prüfe deinen Gerätecode und die Einstellungen für Face ID oder Touch ID.';
+
+  @override
+  String get writingLockToggleReason =>
+      'Ändere den Schutz deiner privaten Texte.';
+
+  @override
+  String get writingLockOn => 'Ein';
+
+  @override
+  String get writingLockOff => 'Aus';
+
+  @override
+  String get privacyPreview =>
+      'Deine Texte bleiben im App-Umschalter verborgen.';
+
+  @override
+  String get settingsAboutDescription =>
+      'Ein Ort, um einmal am Tag zu dir selbst zurückzukehren.';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'Melde dich bei iCloud an, um eine neue Weisheit zu öffnen.';
+
+  @override
+  String get dailyRitualConnectionRequired =>
+      'Verbinde dich mit dem Internet, um eine neue Weisheit zu öffnen.';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'Deine tägliche Weisheit ist gerade nicht verfügbar. Versuche es bitte erneut.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'Eine Weisheit pro iCloud-Account alle 24 Stunden. Für eine neue Weisheit ist eine Internetverbindung nötig. Deine gespeicherten Texte bleiben offline verfügbar.';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'Letzte Weisheit';
 }

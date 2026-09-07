@@ -215,7 +215,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Three Reflections are included. Keeper opens unlimited space for what stays.';
 
   @override
-  String get becomeKeeper => 'BECOME A KEEPER';
+  String get becomeKeeper => 'Become a Keeper';
 
   @override
   String get whoseJournal => 'Whose journal is this?';
@@ -565,4 +565,140 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get keeperPreviewLabel => 'A glimpse of Keeper';
+
+  @override
+  String get keeperWidgetTab => 'Widget';
+
+  @override
+  String get keeperPreviewExample => 'Example';
+
+  @override
+  String get keeperPreviewReflection =>
+      'Today, I want to move without rushing.';
+
+  @override
+  String get keeperDailyRitual =>
+      'One wisdom every 24 hours, with or without Keeper.';
+
+  @override
+  String get keeperWidgetStepOne =>
+      'Touch and hold an empty area of your Home Screen.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'Tap Edit, then Add Widget. On earlier iOS versions, tap the + button.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'Find EAST., choose the Keeper Ritual widget, then tap Add Widget.';
+
+  @override
+  String get reflectionSaved => 'Saved';
+
+  @override
+  String get reflectionSaving => 'Saving…';
+
+  @override
+  String get reflectionCopyText => 'Copy text';
+
+  @override
+  String get reflectionCopied => 'Copied';
+
+  @override
+  String get reflectionAddThought => 'Add a new thought';
+
+  @override
+  String get reflectionRevisitPrompt => 'How do I read this today?';
+
+  @override
+  String get reflectionEarlier => 'Earlier';
+
+  @override
+  String get reflectionOverTime => 'Over time';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'All thoughts attached to this kept wisdom will be removed.';
+
+  @override
+  String get reflectionRecoveryMessage =>
+      'Your writing has not been saved yet.';
+
+  @override
+  String get settingsEveryday => 'Everyday preferences';
+
+  @override
+  String get settingsYourWriting => 'Your writing';
+
+  @override
+  String get settingsAbout => 'About EAST.';
+
+  @override
+  String get writingLock => 'Writing lock';
+
+  @override
+  String get writingLockDescription =>
+      'Open Kept, Reflection and Journal with Face ID, Touch ID or your device passcode.';
+
+  @override
+  String get writingLockFootnote =>
+      'Your daily ritual stays open. Your private writing locks again when you leave the app.';
+
+  @override
+  String get writingLockTitle => 'Your words belong to you.';
+
+  @override
+  String get writingLockPrompt => 'Authenticate to open your private writing.';
+
+  @override
+  String get writingLockUnlock => 'Unlock';
+
+  @override
+  String get writingLockChecking => 'Authenticating…';
+
+  @override
+  String get writingLockReason => 'Open your private writing.';
+
+  @override
+  String get writingLockUnavailable =>
+      'Authentication is unavailable. Check your device passcode and Face ID or Touch ID settings.';
+
+  @override
+  String get writingLockToggleReason =>
+      'Change the lock for your private writing.';
+
+  @override
+  String get writingLockOn => 'On';
+
+  @override
+  String get writingLockOff => 'Off';
+
+  @override
+  String get privacyPreview => 'Your writing is hidden in the app switcher.';
+
+  @override
+  String get settingsAboutDescription =>
+      'A place to return to yourself, once a day.';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'Sign in to iCloud to open a new wisdom.';
+
+  @override
+  String get dailyRitualConnectionRequired =>
+      'Connect to the internet to open a new wisdom.';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'Your daily wisdom is unavailable right now. Please try again.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'One wisdom per iCloud account every 24 hours. A new wisdom needs an internet connection. Your saved writing remains available offline.';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'Previous wisdom';
 }

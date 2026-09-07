@@ -409,12 +409,14 @@ final class _RecordOutcome {
     this.preservedId,
     this.intentIdToRetire,
     this.outboxMutationIdToRetire,
+    this.needsMergedUpload = false,
   });
 
   final CloudKeptWisdomProjection finalProjection;
   final String? preservedId;
   final String? intentIdToRetire;
   final String? outboxMutationIdToRetire;
+  final bool needsMergedUpload;
 }
 
 /// Build 26 Phase 4E-4 lock correction: the result of
@@ -1218,6 +1220,35 @@ final class KeptSyncBootstrapCoordinator {
       outcomes.add(outcome);
     }
 
+    // The merged snapshot is durable before local replacement, even when this
+    // first association does not yet have an account bucket/outbox.
+    for (final outcome in outcomes.where((o) => o.needsMergedUpload)) {
+      final p = outcome.finalProjection;
+      await _intentStore.enqueueIntent(LocalSyncIntent(
+        intentId: p.mutationId,
+        kind: LocalSyncIntentKind.update,
+        payload: LocalSyncIntentPayload.active(
+          revealId: p.revealId!,
+          operation: p.reflectionText == null
+              ? LocalSyncIntentOperation.reflectionDelete
+              : LocalSyncIntentOperation.reflectionSave,
+          wisdomText: p.wisdomText!,
+          wisdomId: p.wisdomId,
+          revealedAtMs: p.revealedAtMs!,
+          keptAtMs: p.keptAtMs!,
+          updatedAtMs: p.updatedAtMs,
+          mutationId: p.mutationId,
+          reflectionText: p.reflectionText,
+          reflectedAtMs: p.reflectedAtMs,
+          reflectionHistoryJson: p.reflectionHistoryJson,
+          localId:
+              outcome.preservedId ?? deriveIncomingKeptLocalId(p.revealId!),
+        ),
+        stage: LocalSyncIntentStage.pendingLocalApplication,
+        enqueuedAt:
+            DateTime.fromMillisecondsSinceEpoch(p.updatedAtMs, isUtc: true),
+      ));
+    }
     final nextRecords = List<KeptRecord>.of(physicalRecords);
     for (final outcome in outcomes) {
       _applyOutcomeToRecords(nextRecords, outcome);
@@ -1230,6 +1261,17 @@ final class KeptSyncBootstrapCoordinator {
       );
     }
 
+    for (final intent in await _intentStore.loadIntents()) {
+      if (intent.stage == LocalSyncIntentStage.pendingLocalApplication &&
+          outcomes.any((o) =>
+              o.finalProjection ==
+              _projectionFromIntentIndependentMirror(intent, epoch))) {
+        await _intentStore.advanceIntentStage(
+            intentId: intent.intentId,
+            expectedStage: LocalSyncIntentStage.pendingLocalApplication,
+            nextStage: LocalSyncIntentStage.localCommittedOutboxPending);
+      }
+    }
     for (final outcome in outcomes) {
       final intentId = outcome.intentIdToRetire;
       if (intentId != null) {
@@ -1464,6 +1506,7 @@ final class KeptSyncBootstrapCoordinator {
           updatedAtMs: record.updatedAt.millisecondsSinceEpoch,
           mutationId: record.mutationId,
           reflectionText: record.reflectionText,
+          reflectionHistoryJson: record.reflectionHistoryJson,
           reflectedAtMs: record.reflectedAt?.millisecondsSinceEpoch,
           localId: record.id,
         ),
@@ -1726,16 +1769,27 @@ final class KeptSyncBootstrapCoordinator {
       }
     } else {
       if (intentCandidate != null &&
-          current.source != _CandidateSource.intent) {
+          intentCandidate.projection != current.projection) {
         intentIdToRetire = intentCandidate.intentId;
       }
       if (outboxCandidate != null &&
-          current.source != _CandidateSource.outbox) {
+          outboxCandidate.projection != current.projection) {
         outboxMutationIdToRetire = outboxCandidate.mutationId;
       }
     }
 
-    final finalProjection = localWon ? current.projection : incomingRemote;
+    final winner = localWon ? current.projection : incomingRemote;
+    final CloudKeptWisdomProjection finalProjection;
+    try {
+      finalProjection = winner.mergingThoughts([
+        incomingRemote,
+        if (physicalCandidate != null) physicalCandidate.projection,
+        if (intentCandidate != null) intentCandidate.projection,
+        if (outboxCandidate != null) outboxCandidate.projection,
+      ]);
+    } on FormatException {
+      return null;
+    }
 
     String? preservedId = physicalCandidate?.recoveryId;
     if (preservedId == null &&
@@ -1746,6 +1800,7 @@ final class KeptSyncBootstrapCoordinator {
 
     return _RecordOutcome(
       finalProjection: finalProjection,
+      needsMergedUpload: !identical(finalProjection, winner),
       preservedId: preservedId,
       intentIdToRetire: intentIdToRetire,
       outboxMutationIdToRetire: outboxMutationIdToRetire,
@@ -1781,6 +1836,7 @@ final class KeptSyncBootstrapCoordinator {
         isUtc: true,
       ),
       reflectionText: projection.reflectionText,
+      reflectionHistoryJson: projection.reflectionHistoryJson,
       reflectedAt: projection.reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
@@ -1842,6 +1898,7 @@ final class KeptSyncBootstrapCoordinator {
         isUtc: true,
       ),
       reflectionText: payload.reflectionText,
+      reflectionHistoryJson: payload.reflectionHistoryJson,
       reflectedAt: payload.reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
@@ -1897,6 +1954,7 @@ final class KeptSyncBootstrapCoordinator {
         isUtc: true,
       ),
       reflectionText: payload.reflectionText,
+      reflectionHistoryJson: payload.reflectionHistoryJson,
       reflectedAt: payload.reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(

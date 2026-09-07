@@ -513,7 +513,7 @@ abstract class AppLocalizations {
   /// No description provided for @becomeKeeper.
   ///
   /// In en, this message translates to:
-  /// **'BECOME A KEEPER'**
+  /// **'Become a Keeper'**
   String get becomeKeeper;
 
   /// No description provided for @whoseJournal.
@@ -1091,6 +1091,246 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{minutes, plural, one{1 minute remaining} other{{minutes} minutes remaining}}'**
   String remainingDurationMinutesOnly(int minutes);
+
+  /// No description provided for @keeperPreviewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'A glimpse of Keeper'**
+  String get keeperPreviewLabel;
+
+  /// No description provided for @keeperWidgetTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Widget'**
+  String get keeperWidgetTab;
+
+  /// No description provided for @keeperPreviewExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Example'**
+  String get keeperPreviewExample;
+
+  /// No description provided for @keeperPreviewReflection.
+  ///
+  /// In en, this message translates to:
+  /// **'Today, I want to move without rushing.'**
+  String get keeperPreviewReflection;
+
+  /// No description provided for @keeperDailyRitual.
+  ///
+  /// In en, this message translates to:
+  /// **'One wisdom every 24 hours, with or without Keeper.'**
+  String get keeperDailyRitual;
+
+  /// No description provided for @keeperWidgetStepOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Touch and hold an empty area of your Home Screen.'**
+  String get keeperWidgetStepOne;
+
+  /// No description provided for @keeperWidgetStepTwo.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Edit, then Add Widget. On earlier iOS versions, tap the + button.'**
+  String get keeperWidgetStepTwo;
+
+  /// No description provided for @keeperWidgetStepThree.
+  ///
+  /// In en, this message translates to:
+  /// **'Find EAST., choose the Keeper Ritual widget, then tap Add Widget.'**
+  String get keeperWidgetStepThree;
+
+  /// No description provided for @reflectionSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get reflectionSaved;
+
+  /// No description provided for @reflectionSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get reflectionSaving;
+
+  /// No description provided for @reflectionCopyText.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy text'**
+  String get reflectionCopyText;
+
+  /// No description provided for @reflectionCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get reflectionCopied;
+
+  /// No description provided for @reflectionAddThought.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a new thought'**
+  String get reflectionAddThought;
+
+  /// No description provided for @reflectionRevisitPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'How do I read this today?'**
+  String get reflectionRevisitPrompt;
+
+  /// No description provided for @reflectionEarlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Earlier'**
+  String get reflectionEarlier;
+
+  /// No description provided for @reflectionOverTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Over time'**
+  String get reflectionOverTime;
+
+  /// No description provided for @reflectionHistoryDeleteExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'All thoughts attached to this kept wisdom will be removed.'**
+  String get reflectionHistoryDeleteExplanation;
+
+  /// No description provided for @reflectionRecoveryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your writing has not been saved yet.'**
+  String get reflectionRecoveryMessage;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Everyday preferences'**
+  String get settingsEveryday;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your writing'**
+  String get settingsYourWriting;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'About EAST.'**
+  String get settingsAbout;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Writing lock'**
+  String get writingLock;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Kept, Reflection and Journal with Face ID, Touch ID or your device passcode.'**
+  String get writingLockDescription;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your daily ritual stays open. Your private writing locks again when you leave the app.'**
+  String get writingLockFootnote;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your words belong to you.'**
+  String get writingLockTitle;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Authenticate to open your private writing.'**
+  String get writingLockPrompt;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get writingLockUnlock;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Authenticating…'**
+  String get writingLockChecking;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Open your private writing.'**
+  String get writingLockReason;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication is unavailable. Check your device passcode and Face ID or Touch ID settings.'**
+  String get writingLockUnavailable;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Change the lock for your private writing.'**
+  String get writingLockToggleReason;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get writingLockOn;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get writingLockOff;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your writing is hidden in the app switcher.'**
+  String get privacyPreview;
+
+  /// Private writing protection or Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'A place to return to yourself, once a day.'**
+  String get settingsAboutDescription;
+
+  /// No description provided for @dailyRitualICloudRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to iCloud to open a new wisdom.'**
+  String get dailyRitualICloudRequired;
+
+  /// No description provided for @dailyRitualConnectionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to the internet to open a new wisdom.'**
+  String get dailyRitualConnectionRequired;
+
+  /// No description provided for @dailyRitualUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Your daily wisdom is unavailable right now. Please try again.'**
+  String get dailyRitualUnavailable;
+
+  /// No description provided for @dailyRitualAccountNote.
+  ///
+  /// In en, this message translates to:
+  /// **'One wisdom per iCloud account every 24 hours. A new wisdom needs an internet connection. Your saved writing remains available offline.'**
+  String get dailyRitualAccountNote;
+
+  /// No description provided for @dailyRitualPreviousWisdom.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous wisdom'**
+  String get dailyRitualPreviousWisdom;
 }
 
 class _AppLocalizationsDelegate

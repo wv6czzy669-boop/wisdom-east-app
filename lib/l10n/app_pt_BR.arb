@@ -21,16 +21,32 @@
   "systemDefault": "Padrão do Sistema",
   "english": "Inglês",
   "languageSettingSemantics": "Idioma. Seleção atual: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "Aparência",
   "light": "Claro",
   "dark": "Escuro",
   "appearanceSettingSemantics": "Aparência. Seleção atual: {value}.",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "Voltar",
   "delete": "Excluir",
   "deleteUpper": "EXCLUIR",
@@ -47,11 +63,19 @@
   "deleteReflection": "Excluir reflexão",
   "reflectedEditReflection": "REFLEXÃO. Editar reflexão.",
   "addReflectionNumbered": "Adicionar reflexão, item {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "Abrir reflexão, item {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "Diário",
-  "keeper": "Guardar",
+  "keeper": "Keeper",
   "restorePurchases": "Restaurar Compras",
   "icloudSync": "Sincronização do iCloud",
   "removeFromIcloud": "Remover do iCloud",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "Na versão gratuita, é possível guardar até 3 sabedorias.",
   "keepReflectingQuestion": "Continuar refletindo?",
   "reflectionLimitExplanation": "Três Reflexões estão incluídas. O Keeper abre espaço ilimitado para o que fica.",
-  "becomeKeeper": "ATIVAR GUARDAR",
+  "becomeKeeper": "Ativar Keeper",
   "whoseJournal": "De quem é este diário?",
   "journalNameExplanation": "Um nome aparece discretamente na página de título do seu Diário.",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "Mantenha pressionado para compartilhar esta sabedoria.",
   "shareWisdom": "Compartilhar",
   "shareWisdomNumbered": "Compartilhar sabedoria, item {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "Lembrete silencioso",
   "nothingHasStayedYet": "Ainda não ficou nada.",
   "wisdomCouldNotBeRemoved": "Não foi possível remover esta sabedoria. Tente novamente.",
@@ -108,11 +138,11 @@
   "yourName": "Seu nome",
   "journalCouldNotBePrepared": "Não foi possível preparar o Diário. Tente novamente.",
   "takeItWithYou": "Leve com você.",
-  "takeItWithYouKeeper": "Leve com você. Disponível com Guardar.",
-  "availableWithKeeper": "Disponível com Guardar.",
+  "takeItWithYouKeeper": "Leve com você. Disponível com Keeper.",
+  "availableWithKeeper": "Disponível com Keeper.",
   "opensKeeper": "Abre o Keeper.",
   "nameUpper": "NOME",
-  "keeperPersistenceError": "Não foi possível salvar o acesso a Guardar. Tente Restaurar Compras.",
+  "keeperPersistenceError": "Não foi possível salvar o acesso ao Keeper. Tente Restaurar Compras.",
   "purchaseUpdating": "O status da compra ainda está sendo atualizado. Use Restaurar Compras nos Ajustes.",
   "purchaseNotReady": "A compra ainda não está pronta. Tente novamente em instantes.",
   "restore": "Restaurar",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "Onde o silêncio fala.",
   "preparing": "Preparando…",
   "exportKeptAndReflections": "Leve com você suas sabedorias guardadas e suas Reflexões.",
-  "keeperAccessActive": "Acesso a Guardar ativo",
+  "keeperAccessActive": "Acesso ao Keeper ativo",
   "keeperPurchaseInProgress": "Entre no círculo, {price}. Compra em andamento.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "Entre no círculo, {price}, contribuição única",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "Entre no círculo, temporariamente indisponível",
   "keepWithoutLimit": "Guarde sem limites.",
   "reflectWithoutLimit": "Reflita sem limites.",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "Não foi possível salvar a Reflexão. Uma nova tentativa será feita enquanto você escreve.",
   "reflectionDeleteFailed": "Não foi possível excluir a Reflexão. Tente novamente.",
   "remainingDurationHoursMinutes": "{hours, plural, one{Falta 1 hora} other{Faltam {hours} horas}} {minutes, plural, one{e 1 minuto} other{e {minutes} minutos}}",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "{hours, plural, one{Falta 1 hora} other{Faltam {hours} horas}}",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "{minutes, plural, one{Falta 1 minuto} other{Faltam {minutes} minutos}}",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "Um olhar sobre o Keeper",
+  "keeperWidgetTab": "Widget",
+  "keeperPreviewExample": "Exemplo",
+  "keeperPreviewReflection": "Hoje, quero seguir sem pressa.",
+  "keeperDailyRitual": "Uma sabedoria a cada 24 horas, com ou sem Keeper.",
+  "keeperWidgetStepOne": "Toque e segure uma área vazia da Tela de Início.",
+  "keeperWidgetStepTwo": "Toque em Editar e depois em Adicionar Widget. Em versões anteriores do iOS, toque no botão +.",
+  "keeperWidgetStepThree": "Busque EAST., escolha o widget Ritual Keeper e toque em Adicionar Widget.",
+  "reflectionSaved": "Salvo",
+  "reflectionSaving": "Salvando…",
+  "reflectionCopyText": "Copiar texto",
+  "reflectionCopied": "Copiado",
+  "reflectionAddThought": "Adicionar um novo pensamento",
+  "reflectionRevisitPrompt": "Como leio isto hoje?",
+  "reflectionEarlier": "Antes",
+  "reflectionOverTime": "Com o tempo",
+  "reflectionHistoryDeleteExplanation": "Todos os pensamentos ligados a esta sabedoria guardada serão removidos.",
+  "reflectionRecoveryMessage": "Seu texto ainda não foi salvo.",
+  "settingsEveryday": "Preferências do dia a dia",
+  "settingsYourWriting": "Suas palavras",
+  "settingsAbout": "Sobre o EAST.",
+  "writingLock": "Bloqueio de escritos",
+  "writingLockDescription": "Abra O que ficou, Reflexão e Diário com Face ID, Touch ID ou o código do dispositivo.",
+  "writingLockFootnote": "Seu ritual diário continua acessível. Seus escritos privados são bloqueados novamente quando você sai do app.",
+  "writingLockTitle": "Suas palavras pertencem a você.",
+  "writingLockPrompt": "Autentique-se para abrir seus escritos privados.",
+  "writingLockUnlock": "Desbloquear",
+  "writingLockChecking": "Autenticando…",
+  "writingLockReason": "Abra seus escritos privados.",
+  "writingLockUnavailable": "A autenticação não está disponível. Verifique o código do dispositivo e os ajustes de Face ID ou Touch ID.",
+  "writingLockToggleReason": "Altere o bloqueio dos seus escritos privados.",
+  "writingLockOn": "Ativado",
+  "writingLockOff": "Desativado",
+  "privacyPreview": "Seus escritos ficam ocultos no seletor de apps.",
+  "settingsAboutDescription": "Um espaço para voltar a si, uma vez por dia.",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "Entre no iCloud para abrir uma nova sabedoria.",
+  "dailyRitualConnectionRequired": "Conecte-se à internet para abrir uma nova sabedoria.",
+  "dailyRitualUnavailable": "Sua sabedoria diária não está disponível agora. Tente novamente.",
+  "dailyRitualAccountNote": "Uma sabedoria por conta do iCloud a cada 24 horas. Uma nova sabedoria precisa de conexão com a internet. Seus textos salvos continuam disponíveis offline.",
+  "dailyRitualPreviousWisdom": "Sabedoria anterior"
 }

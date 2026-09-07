@@ -597,13 +597,17 @@ class _HomeTopNavigation extends StatelessWidget {
   const _HomeTopNavigation({
     required this.onKeptPressed,
     this.keptEmphasized = false,
+    this.saveFeedback,
+    this.onHelpStart,
+    this.onHelpEnd,
   });
 
   final VoidCallback onKeptPressed;
+  final Animation<double>? saveFeedback;
+  final VoidCallback? onHelpStart;
+  final VoidCallback? onHelpEnd;
 
-  /// Item 6: briefly true right after a successful save so the Kept icon
-  /// receives a single, non-repeating emphasis pulse. Geometry, position,
-  /// and size are unchanged; see `_KeptIconEmphasis` below.
+  /// First-use teaching takes priority over the brief save feedback.
   final bool keptEmphasized;
 
   static const ButtonStyle _noHaloStyle = ButtonStyle(
@@ -621,11 +625,12 @@ class _HomeTopNavigation extends StatelessWidget {
       child: SizedBox.square(
         dimension: 48,
         // The explicit Semantics node is the single accessibility source of
-        // truth. The no-op long press preserves the control's long-press-is-
-        // a-no-op behavior without affecting a normal tap.
+        // truth. Holding reveals the label; only a normal tap navigates.
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onLongPress: () {},
+          onLongPressStart: (_) => onHelpStart?.call(),
+          onLongPressEnd: (_) => onHelpEnd?.call(),
+          onLongPressCancel: onHelpEnd,
           excludeFromSemantics: true,
           child: Semantics(
             label: eastLocalizations(context).keptWisdoms,
@@ -637,6 +642,7 @@ class _HomeTopNavigation extends StatelessWidget {
                 style: _noHaloStyle,
                 icon: _KeptIconEmphasis(
                   active: keptEmphasized,
+                  saveFeedback: saveFeedback,
                   child: const DoubleRingIcon(),
                 ),
                 onPressed: onKeptPressed,
@@ -655,19 +661,18 @@ class _HomeTopNavigation extends StatelessWidget {
 /// this control's smaller geometry, rather than a whole-icon brightness
 /// pulse. [child]'s own geometry and position are never touched — the
 /// breath is a separate, purely decorative (`IgnorePointer`) outer ring
-/// overlay. The caller (`home_screen.dart`) toggles [active] false/true in
-/// a repeating chain (matching the center breath's own pattern) so this
-/// plays exactly 5 times per activation, with a calm pause between each. A
-/// fresh `TweenAnimationBuilder` is mounted each time [active] flips from
-/// false to true, so every individual breath plays exactly once.
+/// overlay. Home repeats first-use teaching until Kept is opened. Subsequent
+/// saves use the shared 1.5-second confirmation animation for one breath.
 class _KeptIconEmphasis extends StatelessWidget {
   const _KeptIconEmphasis({
     required this.active,
     required this.child,
+    this.saveFeedback,
   });
 
   final bool active;
   final Widget child;
+  final Animation<double>? saveFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -680,6 +685,11 @@ class _KeptIconEmphasis extends StatelessWidget {
         if (active && !reduceMotion)
           const _KeptTopNavBreath(
             key: ValueKey('kept-icon-emphasis-pulse'),
+          ),
+        if (!active && saveFeedback != null && !reduceMotion)
+          _KeptTopNavBreath(
+            key: const ValueKey('kept-save-feedback-breath'),
+            progress: saveFeedback,
           ),
       ],
     );
@@ -701,37 +711,48 @@ class _KeptIconEmphasis extends StatelessWidget {
 /// and a stroke matching the nav bar's own established
 /// `TopNavRingGeometry.strokeWidth` rather than a thinner one-off value.
 class _KeptTopNavBreath extends StatelessWidget {
-  const _KeptTopNavBreath({super.key});
+  const _KeptTopNavBreath({super.key, this.progress});
+  final Animation<double>? progress;
 
   @override
   Widget build(BuildContext context) {
+    if (progress case final animation?) {
+      return IgnorePointer(
+          child: AnimatedBuilder(
+        animation: animation,
+        builder: (context, _) =>
+            _breath(context, Curves.easeOut.transform(animation.value)),
+      ));
+    }
     return IgnorePointer(
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0.0, end: 1.0),
         duration: const Duration(milliseconds: 1050),
         curve: Curves.easeOut,
-        builder: (context, t, _) {
-          final fade = sin(t * pi).clamp(0.0, 1.0);
-          // Resting diameter 30px (4px clear of the 22px icon on every
-          // side, up from 1px) breathing out to 36px (6px growth, up from
-          // 3.5px) — a clearer, calmer swing rather than a barely-visible
-          // flicker.
-          final diameter = TopNavRingGeometry.outerDiameter + 8.0 + (t * 6.0);
-          return Opacity(
-            opacity: fade * 0.42,
-            child: Container(
-              width: diameter,
-              height: diameter,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: EastColors.of(context).ink,
-                  width: TopNavRingGeometry.strokeWidth,
-                ),
-              ),
-            ),
-          );
-        },
+        builder: (context, t, _) => _breath(context, t),
+      ),
+    );
+  }
+
+  Widget _breath(BuildContext context, double t) {
+    final fade = sin(t * pi).clamp(0.0, 1.0);
+    // Resting diameter 30px (4px clear of the 22px icon on every
+    // side, up from 1px) breathing out to 36px (6px growth, up from
+    // 3.5px) — a clearer, calmer swing rather than a barely-visible
+    // flicker.
+    final diameter = TopNavRingGeometry.outerDiameter + 8.0 + (t * 6.0);
+    return Opacity(
+      opacity: fade * 0.42,
+      child: Container(
+        width: diameter,
+        height: diameter,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: EastColors.of(context).ink,
+            width: TopNavRingGeometry.strokeWidth,
+          ),
+        ),
       ),
     );
   }
@@ -827,6 +848,8 @@ class _HomeSaveControl extends StatelessWidget {
     required this.onPressed,
     required this.onFullyVisible,
     this.showBreath = false,
+    this.onHelpStart,
+    this.onHelpEnd,
   });
 
   final double opacity;
@@ -834,6 +857,8 @@ class _HomeSaveControl extends StatelessWidget {
   final bool isCurrentFavorite;
   final VoidCallback onPressed;
   final VoidCallback onFullyVisible;
+  final VoidCallback? onHelpStart;
+  final VoidCallback? onHelpEnd;
 
   /// Item 6: true for a single ~800ms restrained breath around the ring,
   /// shown once right after the discovery hint text appears. The caller
@@ -986,7 +1011,14 @@ class _HomeSaveControl extends StatelessWidget {
                         const _SaveRingBreath(
                           key: ValueKey('save-ring-breath'),
                         ),
-                      ring,
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        excludeFromSemantics: true,
+                        onLongPressStart: (_) => onHelpStart?.call(),
+                        onLongPressEnd: (_) => onHelpEnd?.call(),
+                        onLongPressCancel: onHelpEnd,
+                        child: ring,
+                      ),
                     ],
                   ),
                 ),
@@ -999,19 +1031,104 @@ class _HomeSaveControl extends StatelessWidget {
   }
 }
 
-/// A brief thin halo around the save ring that expands slightly and
-/// dissolves. Purely decorative (`IgnorePointer`), never affects the ring's
-/// own tap target, geometry, or position. A fresh instance is mounted each
-/// time `showBreath` flips to true (see `_HomeSaveControl`), so it always
-/// plays exactly once per mount.
-///
-/// Update 1B: the caller (`home_screen.dart`) now toggles `showBreath`
-/// false/true in a repeating chain so this single-breath widget remounts
-/// exactly 4 times (with a calm pause between each), rather than mounting
-/// only once. Per the approved direction, only this widget's *duration* was
-/// changed (800ms -> ~1.2s per breath, to match the new cadence); its outer
-/// ring appearance, stroke style, opacity curve, expansion direction, and
-/// easing character are all unchanged from the original approved design.
+TextStyle _homeSaveLabelStyle(BuildContext context) => EastTypography.localized(
+      context,
+      size: 15.5,
+      height: 1.3,
+      letterSpacing: 0.2,
+      color: eastMutedTextColor(context),
+    );
+
+bool _homeSaveLabelFitsBesideRing(BuildContext context, String text) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: _homeSaveLabelStyle(context)),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final fits = painter.width <= MediaQuery.sizeOf(context).width / 2 - 64 &&
+      painter.height <= 48;
+  painter.dispose();
+  return fits;
+}
+
+/// The confirmation and press-and-hold explanation share a quiet text anchor.
+/// Long translations / large type use the existing status position below the
+/// ring, without moving the wisdom, ring, navigation or other ritual elements.
+class _HomeSaveLabel extends StatelessWidget {
+  const _HomeSaveLabel(
+      {required this.text,
+      required this.progress,
+      required this.useStatusPosition});
+  final String text;
+  final Animation<double>? progress;
+  final bool useStatusPosition;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final label = Text(text,
+        key: ValueKey(progress == null
+            ? 'keep-control-help-text'
+            : 'keep-save-feedback-text'),
+        textAlign: useStatusPosition ? TextAlign.center : TextAlign.start,
+        style: _homeSaveLabelStyle(context));
+    final animation = progress;
+    return PositionedDirectional(
+      top: size.height / 2 + (useStatusPosition ? 156 : 72),
+      start: useStatusPosition ? 24 : size.width / 2 + 40,
+      end: 24,
+      height: useStatusPosition ? null : 48,
+      child: IgnorePointer(
+          child: ExcludeSemantics(
+              child: Align(
+        alignment: useStatusPosition
+            ? Alignment.center
+            : AlignmentDirectional.centerStart,
+        child: animation == null
+            ? label
+            : AnimatedBuilder(
+                animation: animation,
+                child: label,
+                builder: (context, child) {
+                  final appear =
+                      const Interval(0, .16, curve: Curves.easeOutCubic)
+                          .transform(animation.value);
+                  final disappear =
+                      const Interval(.74, 1, curve: Curves.easeInOutCubic)
+                          .transform(animation.value);
+                  return Opacity(
+                      key: const ValueKey('keep-save-feedback-opacity'),
+                      opacity: appear * (1 - disappear),
+                      child: child);
+                },
+              ),
+      ))),
+    );
+  }
+}
+
+class _HomeKeptControlHelp extends StatelessWidget {
+  const _HomeKeptControlHelp({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => PositionedDirectional(
+        top: 54,
+        start: 24,
+        end: 16,
+        child: IgnorePointer(
+            child: ExcludeSemantics(
+                child: Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: Text(text,
+              key: const ValueKey('kept-control-help-text'),
+              style: _homeSaveLabelStyle(context)),
+        ))),
+      );
+}
+
+/// The existing first-use save-ring breath. Home repeats it with calm pauses
+/// until the first save; this decorative halo never moves the control itself.
 class _SaveRingBreath extends StatelessWidget {
   const _SaveRingBreath({super.key});
 
@@ -1045,7 +1162,7 @@ class _SaveRingBreath extends StatelessWidget {
   }
 }
 
-/// P13: the once-ever "Keep this wisdom." / "Kept." first-use discovery
+/// P13: the once-ever "Keep this wisdom." first-use discovery
 /// text, positioned to the RIGHT of the save ring rather than above it, so
 /// ring and text read as one quiet horizontal discovery unit rather than a
 /// stacked label. Never a tutorial overlay — no box, border, arrow,
@@ -1148,11 +1265,13 @@ class _HomePostRevealMessage extends StatelessWidget {
     required this.opacity,
     required this.message,
     this.countdownPresentation,
+    this.onPressed,
   });
 
   final double opacity;
   final String message;
   final CountdownPresentation? countdownPresentation;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -1194,6 +1313,20 @@ class _HomePostRevealMessage extends StatelessWidget {
                       presentation: presentation,
                       style: style,
                     ),
+                  )
+                else if (onPressed != null)
+                  TextButton(
+                    key: const ValueKey('previous-wisdom-return'),
+                    onPressed: onPressed,
+                    style: TextButton.styleFrom(
+                      foregroundColor: eastMutedTextColor(context),
+                      textStyle: style.copyWith(fontSize: 17),
+                      minimumSize: const Size(88, 44),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      splashFactory: NoSplash.splashFactory,
+                    ),
+                    child: Text(message, textAlign: TextAlign.center),
                   )
                 else if (message.isNotEmpty) ...[
                   Text(

@@ -21,16 +21,32 @@
   "systemDefault": "System Default",
   "english": "English",
   "languageSettingSemantics": "Language. Current selection: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "Appearance",
   "light": "Light",
   "dark": "Dark",
   "appearanceSettingSemantics": "Appearance. Current selection: {value}.",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "Back",
   "delete": "Delete",
   "deleteUpper": "DELETE",
@@ -47,9 +63,17 @@
   "deleteReflection": "Delete reflection",
   "reflectedEditReflection": "REFLECTED. Edit reflection.",
   "addReflectionNumbered": "Add Reflection, item {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "Open Reflection, item {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "Journal",
   "keeper": "Keeper",
   "restorePurchases": "Restore Purchases",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "Free users can keep up to 3 wisdoms.",
   "keepReflectingQuestion": "Keep reflecting?",
   "reflectionLimitExplanation": "Three Reflections are included. Keeper opens unlimited space for what stays.",
-  "becomeKeeper": "BECOME A KEEPER",
+  "becomeKeeper": "Become a Keeper",
   "whoseJournal": "Whose journal is this?",
   "journalNameExplanation": "A name appears quietly on the title page of your Journal.",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "Long press to share this wisdom.",
   "shareWisdom": "Share",
   "shareWisdomNumbered": "Share wisdom, item {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "Quiet Reminder",
   "nothingHasStayedYet": "Nothing has stayed yet.",
   "wisdomCouldNotBeRemoved": "This wisdom could not be removed. Please try again.",
@@ -127,9 +157,17 @@
   "exportKeptAndReflections": "Take your Kept wisdoms and Reflections with you.",
   "keeperAccessActive": "Keeper access active",
   "keeperPurchaseInProgress": "Enter the Circle, {price}. Purchase in progress.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "Enter the Circle, {price}, one-time purchase",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "Enter the Circle, temporarily unavailable",
   "keepWithoutLimit": "Keep without limit.",
   "reflectWithoutLimit": "Reflect without limit.",
@@ -196,5 +234,96 @@
         "type": "int"
       }
     }
-  }
+  },
+  "keeperPreviewLabel": "A glimpse of Keeper",
+  "keeperWidgetTab": "Widget",
+  "keeperPreviewExample": "Example",
+  "keeperPreviewReflection": "Today, I want to move without rushing.",
+  "keeperDailyRitual": "One wisdom every 24 hours, with or without Keeper.",
+  "keeperWidgetStepOne": "Touch and hold an empty area of your Home Screen.",
+  "keeperWidgetStepTwo": "Tap Edit, then Add Widget. On earlier iOS versions, tap the + button.",
+  "keeperWidgetStepThree": "Find EAST., choose the Keeper Ritual widget, then tap Add Widget.",
+  "reflectionSaved": "Saved",
+  "reflectionSaving": "Saving…",
+  "reflectionCopyText": "Copy text",
+  "reflectionCopied": "Copied",
+  "reflectionAddThought": "Add a new thought",
+  "reflectionRevisitPrompt": "How do I read this today?",
+  "reflectionEarlier": "Earlier",
+  "reflectionOverTime": "Over time",
+  "reflectionHistoryDeleteExplanation": "All thoughts attached to this kept wisdom will be removed.",
+  "reflectionRecoveryMessage": "Your writing has not been saved yet.",
+  "settingsEveryday": "Everyday preferences",
+  "settingsYourWriting": "Your writing",
+  "settingsAbout": "About EAST.",
+  "writingLock": "Writing lock",
+  "writingLockDescription": "Open Kept, Reflection and Journal with Face ID, Touch ID or your device passcode.",
+  "writingLockFootnote": "Your daily ritual stays open. Your private writing locks again when you leave the app.",
+  "writingLockTitle": "Your words belong to you.",
+  "writingLockPrompt": "Authenticate to open your private writing.",
+  "writingLockUnlock": "Unlock",
+  "writingLockChecking": "Authenticating…",
+  "writingLockReason": "Open your private writing.",
+  "writingLockUnavailable": "Authentication is unavailable. Check your device passcode and Face ID or Touch ID settings.",
+  "writingLockToggleReason": "Change the lock for your private writing.",
+  "writingLockOn": "On",
+  "writingLockOff": "Off",
+  "privacyPreview": "Your writing is hidden in the app switcher.",
+  "settingsAboutDescription": "A place to return to yourself, once a day.",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "Sign in to iCloud to open a new wisdom.",
+  "dailyRitualConnectionRequired": "Connect to the internet to open a new wisdom.",
+  "dailyRitualUnavailable": "Your daily wisdom is unavailable right now. Please try again.",
+  "dailyRitualAccountNote": "One wisdom per iCloud account every 24 hours. A new wisdom needs an internet connection. Your saved writing remains available offline.",
+  "dailyRitualPreviousWisdom": "Previous wisdom"
 }

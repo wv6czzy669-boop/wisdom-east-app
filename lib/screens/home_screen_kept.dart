@@ -148,6 +148,7 @@ extension _HomeKeptPresentation on _HomeScreenState {
     }
 
     _saveOperationInProgress = true;
+    final saveFlow = flowSessionId;
 
     try {
       // Build 26 Phase 3D-C compatibility contract (locked): `text`/`date`
@@ -176,7 +177,9 @@ extension _HomeKeptPresentation on _HomeScreenState {
 
       _updateHomePresentation(() {});
 
-      await _onWisdomSuccessfullyKept();
+      if (result.status == HomeKeepStatus.kept) {
+        await _onWisdomSuccessfullyKept(saveFlow: saveFlow, revealId: revealId);
+      }
     } catch (_) {
       showEastSnack(wisdomCouldNotBeKept);
     } finally {

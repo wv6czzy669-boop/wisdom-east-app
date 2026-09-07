@@ -23,7 +23,7 @@ abstract interface class JournalPdfCache {
 
 /// Deterministic cache identity for every input that can affect PDF bytes.
 abstract final class JournalPdfFingerprint {
-  static const int renderSchemaVersion = 2;
+  static const int renderSchemaVersion = 3;
 
   static String create({
     required List<FavoriteItem> items,
@@ -64,6 +64,7 @@ abstract final class JournalPdfFingerprint {
             'text': entry.value.text,
             'date': entry.value.date,
             'reflection': entry.value.reflection,
+            'reflectionHistoryJson': entry.value.reflectionHistoryJson,
             'reflectedAt': entry.value.reflectedAt,
             'keptAt': entry.value.keptAt,
           },

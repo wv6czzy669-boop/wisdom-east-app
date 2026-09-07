@@ -303,6 +303,12 @@ void main() {
       reflection: 'A private seed became visible.',
       isKeeper: true,
     );
+    await service.saveThought(
+      itemId: reflected.id,
+      thoughtId: 'aaaaaaaa-0000-4000-8000-000000000099',
+      reflection: 'Later, a quieter understanding.',
+      isKeeper: true,
+    );
     final items = await service.load();
 
     await tester.pumpWidget(
@@ -330,6 +336,12 @@ void main() {
     expect(find.text(doorway.text), findsNothing);
     expect(find.text(reflected.text), findsOneWidget);
     expect(find.text('A private seed became visible.'), findsNothing);
+    expect(find.text(unrelated.text), findsNothing);
+
+    await tester.enterText(searchField, 'quieter understanding');
+    await tester.pump();
+    expect(find.text(reflected.text), findsOneWidget);
+    expect(find.text(doorway.text), findsNothing);
     expect(find.text(unrelated.text), findsNothing);
 
     await tester.enterText(searchField, 'July 2026');
@@ -734,7 +746,7 @@ void main() {
 
     await tester.tap(find.text('ADD REFLECTION'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('BECOME A KEEPER'));
+    await tester.tap(find.text('Become a Keeper'));
     await tester.pumpAndSettle();
 
     expect(find.text('Keeper'), findsOneWidget);

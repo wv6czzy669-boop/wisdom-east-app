@@ -8,6 +8,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/favorite_item.dart';
+import '../utils/journal_pdf_text.dart';
+export '../utils/journal_pdf_text.dart' show normalizeJournalPdfText;
 import '../services/wisdom_localization_resolver.dart';
 import '../utils/date_formatter.dart';
 import '../l10n/app_localizations.dart';
@@ -16,30 +18,6 @@ import '../localization/east_locale_registry.dart';
 import '../localization/east_typography_resolver.dart';
 import '../utils/journal_owner_name_policy.dart';
 import 'journal_layout.dart';
-
-/// Removes invisible emoji sequence controls that package:pdf would
-/// otherwise paint as missing-glyph boxes. The visible base emoji remains and
-/// is rendered by the bundled monochrome Noto Emoji fallback. Stored
-/// Reflection text is never changed.
-String normalizeJournalPdfText(String text) {
-  final output = StringBuffer();
-  for (final rune in text.runes) {
-    final isVariationSelector = rune == 0xFE0E || rune == 0xFE0F;
-    final isJoiner = rune == 0x200D;
-    final isKeycapCombiner = rune == 0x20E3;
-    final isSkinToneModifier = rune >= 0x1F3FB && rune <= 0x1F3FF;
-    final isEmojiTag = rune >= 0xE0020 && rune <= 0xE007F;
-    if (isVariationSelector ||
-        isJoiner ||
-        isKeycapCombiner ||
-        isSkinToneModifier ||
-        isEmojiTag) {
-      continue;
-    }
-    output.writeCharCode(rune);
-  }
-  return output.toString();
-}
 
 /// Explicit future presentation input for PDF generation. It deliberately
 /// carries no app state and never changes Journal pagination or source data.
@@ -287,6 +265,9 @@ class JournalPdfBuilder {
     for (final item in items) {
       textUnits += item.text.length;
       textUnits += item.reflection?.length ?? 0;
+      for (final thought in item.reflectionHistory.thoughts) {
+        textUnits += thought.text.length;
+      }
       textUnits += item.date.length;
       if (textUnits >= 12000) return true;
     }
@@ -429,7 +410,22 @@ class JournalPdfBuilder {
   ) {
     final parts = <String>[dateFormatter(item), item.text.trim()];
     final reflection = item.reflection?.trim();
-    if (reflection != null && reflection.isNotEmpty) parts.add(reflection);
+    if (reflection != null && reflection.isNotEmpty) {
+      if (item.reflectionHistory.thoughts.isNotEmpty &&
+          item.reflectedAt != null) {
+        parts.add(JournalBodyLayout.reflectionDate(
+            item, item.reflectedAt!, dateFormatter));
+      }
+      parts.add(reflection);
+    }
+    for (final thought in item.reflectionHistory.thoughts) {
+      parts.add(JournalBodyLayout.reflectionDate(
+          item,
+          DateTime.fromMillisecondsSinceEpoch(thought.createdAtMs, isUtc: true)
+              .toIso8601String(),
+          dateFormatter));
+      parts.add(thought.text);
+    }
     return parts.where((part) => part.isNotEmpty).join('. ');
   }
 
@@ -474,6 +470,9 @@ class JournalPdfBuilder {
         ..write(item.text)
         ..write(item.reflection ?? '')
         ..write(item.date);
+      for (final thought in item.reflectionHistory.thoughts) {
+        allText.write(thought.text);
+      }
     }
     final requiredFallbacks = _requiredPdfFallbackAssets(
       typography,

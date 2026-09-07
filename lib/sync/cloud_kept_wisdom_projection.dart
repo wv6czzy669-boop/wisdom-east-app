@@ -1,4 +1,6 @@
 import '../models/kept_record.dart';
+import '../models/reflection_history.dart';
+import 'package:uuid/uuid.dart';
 import '../utils/reflection_text_policy.dart';
 import '../data/wisdoms.dart';
 import '../utils/canonical_uuid.dart';
@@ -33,6 +35,7 @@ final class CloudKeptWisdomProjection {
     this.revealedAtMs,
     this.keptAtMs,
     this.reflectionText,
+    this.reflectionHistoryJson,
     this.reflectedAtMs,
     this.deletedAtMs,
   });
@@ -75,6 +78,7 @@ final class CloudKeptWisdomProjection {
 
   /// Present only on the active form, and only when a Reflection exists.
   final String? reflectionText;
+  final String? reflectionHistoryJson;
 
   /// Present only on the active form, and only when [reflectionText] is
   /// present.
@@ -128,6 +132,7 @@ final class CloudKeptWisdomProjection {
           canonicalizeKeptTimestamp(record.revealedAt).millisecondsSinceEpoch,
       keptAtMs: canonicalizeKeptTimestamp(record.keptAt).millisecondsSinceEpoch,
       reflectionText: record.reflectionText,
+      reflectionHistoryJson: record.reflectionHistoryJson,
       reflectedAtMs: reflectedAt == null
           ? null
           : canonicalizeKeptTimestamp(reflectedAt).millisecondsSinceEpoch,
@@ -206,6 +211,7 @@ final class CloudKeptWisdomProjection {
         'revealedAtMs',
         'keptAtMs',
         'reflectionText',
+        'reflectionHistoryJson',
         'reflectedAtMs',
       ];
       for (final key in forbiddenOnTombstone) {
@@ -246,6 +252,24 @@ final class CloudKeptWisdomProjection {
     final keptAtMs = fields['keptAtMs'];
     if (keptAtMs is! int) return null;
 
+    final rawHistory = fields['reflectionHistoryJson'];
+    if (rawHistory != null && rawHistory is! String) return null;
+    String? historyJson = rawHistory as String?;
+    try {
+      final history = ReflectionHistory.decode(historyJson);
+      // An older app clears the original fields but cannot clear a field it
+      // has never known. Treat that valid residual history as deleted too.
+      // Local disk decoding remains strict; this is a remote compatibility rule.
+      if (fields['reflectionText'] == null && history.thoughts.isNotEmpty) {
+        final latestCreation = history.thoughts.last.createdAtMs;
+        historyJson = ReflectionHistory(
+                clearedAtMs:
+                    updatedAtMs > latestCreation ? updatedAtMs : latestCreation)
+            .encode();
+      }
+    } on FormatException {
+      return null;
+    }
     final reflectionText = fields['reflectionText'];
     if (reflectionText != null) {
       if (reflectionText is! String ||
@@ -267,6 +291,7 @@ final class CloudKeptWisdomProjection {
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
       reflectionText: reflectionText as String?,
+      reflectionHistoryJson: historyJson,
       reflectedAtMs: reflectedAtMs as int?,
       updatedAtMs: updatedAtMs,
       mutationId: mutationId,
@@ -289,6 +314,62 @@ final class CloudKeptWisdomProjection {
         'schemaVersion': schemaVersion,
       };
 
+  /// Keep the established winner for the original reflection while joining
+  /// independently dated thoughts. A deterministic new mutation carries the
+  /// union back to both devices; same-thought edits use their own LWW version.
+  CloudKeptWisdomProjection mergingThoughts(
+      Iterable<CloudKeptWisdomProjection> candidates) {
+    if (isTombstone) return this;
+    final compatible = [this, ...candidates]
+        .where((p) =>
+            p.recordName == recordName &&
+            p.dataEpoch == dataEpoch &&
+            !p.isTombstone)
+        .toList();
+    if (!compatible.any((p) => p.reflectionHistoryJson != null)) return this;
+    var maximumTimestamp = updatedAtMs;
+    final histories = <ReflectionHistory>[];
+    for (final candidate in compatible) {
+      if (candidate.updatedAtMs > maximumTimestamp) {
+        maximumTimestamp = candidate.updatedAtMs;
+      }
+      final history = ReflectionHistory.decode(candidate.reflectionHistoryJson);
+      histories.add(candidate.reflectionText == null
+          ? ReflectionHistory(
+              clearedAtMs: history.thoughts.isEmpty && history.clearedAtMs > 0
+                  ? history.clearedAtMs
+                  : candidate.updatedAtMs)
+          : history);
+    }
+    final ownHistory = ReflectionHistory.decode(reflectionHistoryJson);
+    final merged = reflectionText == null
+        ? ReflectionHistory(
+            clearedAtMs:
+                ownHistory.thoughts.isEmpty && ownHistory.clearedAtMs > 0
+                    ? ownHistory.clearedAtMs
+                    : updatedAtMs)
+        : ReflectionHistory.merge(histories);
+    final encoded = merged.encode();
+    if (encoded == reflectionHistoryJson) return this;
+    return CloudKeptWisdomProjection._(
+      recordName: recordName,
+      isTombstone: false,
+      revealId: revealId,
+      wisdomText: wisdomText,
+      wisdomId: wisdomId,
+      revealedAtMs: revealedAtMs,
+      keptAtMs: keptAtMs,
+      reflectionText: reflectionText,
+      reflectedAtMs: reflectedAtMs,
+      reflectionHistoryJson: encoded,
+      updatedAtMs: maximumTimestamp + 1,
+      mutationId: const Uuid().v5(Namespace.url.value,
+          'east-reflection-merge:$recordName:$mutationId:$maximumTimestamp:$encoded'),
+      dataEpoch: dataEpoch,
+      schemaVersion: schemaVersion,
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -300,6 +381,7 @@ final class CloudKeptWisdomProjection {
         other.revealedAtMs == revealedAtMs &&
         other.keptAtMs == keptAtMs &&
         other.reflectionText == reflectionText &&
+        other.reflectionHistoryJson == reflectionHistoryJson &&
         other.reflectedAtMs == reflectedAtMs &&
         other.deletedAtMs == deletedAtMs &&
         other.updatedAtMs == updatedAtMs &&
@@ -317,6 +399,7 @@ final class CloudKeptWisdomProjection {
         revealedAtMs,
         keptAtMs,
         reflectionText,
+        reflectionHistoryJson,
         reflectedAtMs,
         deletedAtMs,
         updatedAtMs,

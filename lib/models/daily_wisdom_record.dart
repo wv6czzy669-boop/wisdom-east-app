@@ -10,6 +10,7 @@ class DailyWisdomRecord {
     required this.unlockAt,
     this.revealId,
     this.wisdomId,
+    this.authorityAccountScope,
   });
 
   final String text;
@@ -32,16 +33,20 @@ class DailyWisdomRecord {
   /// `isSupportedRevealId` (`lib/utils/canonical_uuid.dart`) for the exact
   /// accepted shapes.
   ///
-  /// This [DailyWisdomRecord] and the `daily_wisdom_access` state it
-  /// belongs to remain device-local and are never synced. A later phase
-  /// may copy this value into a separate Kept record, and only that
-  /// copied Kept-record field may then participate in sync — this field,
-  /// on this record, never does. `revealId` is never analytics data.
+  /// The local record caches the CloudKit account authority's occurrence.
+  /// New grants share this ID and their public catalog ID across devices;
+  /// private questions and writing are excluded from that authority. Older
+  /// local occurrences retain their existing ID during migration.
+  /// `revealId` is never analytics data.
   final String? revealId;
 
   /// Optional canonical catalog identity. Older records retain their exact
   /// text snapshot and decode without this field.
   final String? wisdomId;
+
+  /// Local provenance for a CloudKit-authorized occurrence. Never uploaded,
+  /// logged, or used as a public identifier; absent on pre-authority records.
+  final String? authorityAccountScope;
 
   static const Duration lockDuration = Duration(hours: 24);
 
@@ -52,6 +57,7 @@ class DailyWisdomRecord {
         unlockAt: unlockAt,
         revealId: revealId ?? this.revealId,
         wisdomId: wisdomId ?? this.wisdomId,
+        authorityAccountScope: authorityAccountScope,
       );
 
   String encode() => jsonEncode({
@@ -60,10 +66,16 @@ class DailyWisdomRecord {
         'unlockAtMs': unlockAt.millisecondsSinceEpoch,
         if (revealId != null) 'revealId': revealId,
         if (wisdomId != null) 'wisdomId': wisdomId,
+        if (authorityAccountScope != null)
+          'authorityAccountScope': authorityAccountScope,
       });
 
   static DailyWisdomRecord decode(String value) {
     final decoded = jsonDecode(value);
+    return decodeMap(decoded);
+  }
+
+  static DailyWisdomRecord decodeMap(Object? decoded) {
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Invalid daily wisdom record.');
     }
@@ -73,6 +85,12 @@ class DailyWisdomRecord {
     final unlockAtMs = _readInt(decoded, 'unlockAtMs');
     final revealId = _readOptionalRevealId(decoded, 'revealId');
     final wisdomId = _readOptionalWisdomId(decoded, 'wisdomId');
+    final authorityAccountScope = decoded['authorityAccountScope'];
+    if (authorityAccountScope != null &&
+        (authorityAccountScope is! String ||
+            !RegExp(r'^[a-f0-9]{64}$').hasMatch(authorityAccountScope))) {
+      throw const FormatException('Invalid daily authority scope.');
+    }
 
     if (text.trim().isEmpty || revealedAtMs < 0 || unlockAtMs <= revealedAtMs) {
       throw const FormatException('Invalid daily wisdom record.');
@@ -90,6 +108,7 @@ class DailyWisdomRecord {
       unlockAt: unlockAt,
       revealId: revealId,
       wisdomId: wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(text),
+      authorityAccountScope: authorityAccountScope as String?,
     );
   }
 

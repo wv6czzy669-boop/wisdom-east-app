@@ -39,6 +39,11 @@ enum EastKeeperRitualContent: Equatable {
 struct EastKeeperRitualSnapshot: Equatable {
     let content: EastKeeperRitualContent
     let presentation: EastWidgetPresentation
+    var authorizationFailure: EastKeeperAuthorizationFailure? = nil
+}
+
+enum EastKeeperAuthorizationFailure: String, Codable {
+    case iCloudRequired, connectionRequired, unavailable
 }
 
 struct EastKeeperRitualAdvanceResult: Equatable {
@@ -85,6 +90,7 @@ enum EastKeeperRitualStore {
         var reveal: EastKeeperRitualReveal?
         var presentation: EastWidgetPresentation
         var revision: Int
+        var authorizationFailure: EastKeeperAuthorizationFailure? = nil
 
         static let empty = Document(
             schemaVersion: EastKeeperRitualStore.schemaVersion,
@@ -345,7 +351,6 @@ enum EastKeeperRitualStore {
             coordinationLockURL: coordinationLockURL,
             fallback: unavailableAdvanceResult
         ) { defaults in
-            var newlyRevealed: EastKeeperRitualReveal?
             let changed = mutateUnlocked(defaults: defaults) { document in
                 guard document.isKeeper else { return false }
                 let promoted = promoteNextCandidateIfNeeded(
@@ -359,37 +364,26 @@ enum EastKeeperRitualStore {
 
                 switch document.phase {
                 case .pause:
+                    document.authorizationFailure = nil
                     document.phase = .feel
                 case .feel:
+                    document.authorizationFailure = nil
                     document.phase = .heart
                 case .heart:
-                    let reveal = EastKeeperRitualReveal(
-                        candidateId: candidate.candidateId,
-                        canonicalText: candidate.canonicalText,
-                        displayText: candidate.displayText,
-                        wisdomId: candidate.wisdomId,
-                        revealedAt: now,
-                        unlockAt: now.addingTimeInterval(lockDuration),
-                        revealId: nil,
-                        needsAppCommit: true
-                    )
-                    document.reveal = reveal
-                    document.currentCandidate = nil
-                    document.phase = .pause
-                    newlyRevealed = reveal
+                    // The AppIntent must obtain the shared account grant before
+                    // publishing any text. Offline/local advancement cannot
+                    // acquire a second daily right.
+                    return false
                 }
                 return true
             }
 
-            // Encoding is deterministic for this bounded document, but do
-            // not report a provisional reveal if persistence ever fails.
-            if !changed { newlyRevealed = nil }
             let document = readUnlocked(defaults: defaults)
             let snapshot = document.map { resolvedSnapshot(document: $0, now: now) }
                 ?? unavailableAdvanceResult().snapshot
             return EastKeeperRitualAdvanceResult(
                 snapshot: snapshot,
-                newlyRevealed: newlyRevealed,
+                newlyRevealed: nil,
                 changed: changed
             )
         }
@@ -401,6 +395,50 @@ enum EastKeeperRitualStore {
             defaults: productionDefaults,
             coordinationLockURL: productionCoordinationLockURL
         )
+    }
+
+    @discardableResult
+    static func publishAuthorizedReveal(
+        grant: EastDailyRitualGrant,
+        candidateId: String,
+        now: Date,
+        defaults: UserDefaults? = productionDefaults,
+        coordinationLockURL: URL? = productionCoordinationLockURL
+    ) -> Bool {
+        guard let canonical = EastDailyWisdomCatalog.canonicalText(for: grant.wisdomId),
+              EastDailyRitualGrant.validIdentity(grant.wisdomId, grant.revealId),
+              grant.validTimestamp
+        else { return false }
+        return mutate(defaults: defaults, coordinationLockURL: coordinationLockURL) { document in
+            // A late cloud response cannot roll back an app-side reveal or a
+            // replacement candidate that arrived while the request was pending.
+            guard document.isKeeper, document.phase == .heart,
+                  document.currentCandidate?.candidateId == candidateId else { return false }
+            document.reveal = EastKeeperRitualReveal(
+                candidateId: "\(grant.wisdomId):\(grant.revealedAtMs)",
+                canonicalText: canonical,
+                displayText: EastDailyWisdomCatalog.text(for: grant.wisdomId,
+                    localeOverrideTag: document.presentation.localeOverrideTag) ?? canonical,
+                wisdomId: grant.wisdomId,
+                revealedAt: Date(timeIntervalSince1970: Double(grant.revealedAtMs) / 1000),
+                unlockAt: Date(timeIntervalSince1970: Double(grant.unlockAtMs) / 1000),
+                revealId: grant.revealId, needsAppCommit: false)
+            document.currentCandidate = nil
+            if (document.nextCandidate?.activationAt ?? .distantFuture)
+                < document.reveal!.unlockAt { document.nextCandidate = nil }
+            document.phase = .pause
+            document.authorizationFailure = nil
+            return true
+        }
+    }
+
+    @discardableResult
+    static func recordAuthorizationFailure(_ failure: EastKeeperAuthorizationFailure, candidateId: String) -> Bool {
+        mutate(defaults: productionDefaults, coordinationLockURL: productionCoordinationLockURL) { document in
+            guard document.phase == .heart, document.currentCandidate?.candidateId == candidateId else { return false }
+            document.authorizationFailure = failure
+            return true
+        }
     }
 
     static func bridgePayload(
@@ -460,7 +498,8 @@ enum EastKeeperRitualStore {
         }
         return EastKeeperRitualSnapshot(
             content: content,
-            presentation: document.presentation
+            presentation: document.presentation,
+            authorizationFailure: document.authorizationFailure
         )
     }
 

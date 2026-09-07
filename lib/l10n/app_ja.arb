@@ -21,16 +21,32 @@
   "systemDefault": "システム設定に従う",
   "english": "英語",
   "languageSettingSemantics": "言語。現在の選択：{value}。",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "外観",
   "light": "ライト",
   "dark": "ダーク",
   "appearanceSettingSemantics": "外観。現在の選択: {value}。",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "戻る",
   "delete": "削除",
   "deleteUpper": "削除",
@@ -47,11 +63,19 @@
   "deleteReflection": "内省を削除",
   "reflectedEditReflection": "内省済み。内省を編集。",
   "addReflectionNumbered": "内省を記す、項目{number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "内省を開く、項目{number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "日記",
-  "keeper": "残す",
+  "keeper": "Keeper",
   "restorePurchases": "購入を復元",
   "icloudSync": "iCloud同期",
   "removeFromIcloud": "iCloudから削除",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "無料では知恵を3つまで残せます。",
   "keepReflectingQuestion": "内省を続けますか？",
   "reflectionLimitExplanation": "3つの内省が含まれます。Keeperなら、残ったものをいくつでも書き留められます。",
-  "becomeKeeper": "残すをひらく",
+  "becomeKeeper": "Keeperを始める",
   "whoseJournal": "これは誰の日記ですか？",
   "journalNameExplanation": "日記の扉に、名前が静かに記されます。",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "長押しすると、この知恵を共有できます。",
   "shareWisdom": "共有",
   "shareWisdomNumbered": "知恵を共有、項目{itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "静かなリマインダー",
   "nothingHasStayedYet": "まだ何も残っていません。",
   "wisdomCouldNotBeRemoved": "この知恵を削除できませんでした。もう一度お試しください。",
@@ -108,11 +138,11 @@
   "yourName": "あなたの名前",
   "journalCouldNotBePrepared": "日記を準備できませんでした。もう一度お試しください。",
   "takeItWithYou": "持っていく。",
-  "takeItWithYouKeeper": "持っていく。残すで利用できます。",
-  "availableWithKeeper": "残すで利用できます。",
+  "takeItWithYouKeeper": "持っていく。Keeperで利用できます。",
+  "availableWithKeeper": "Keeperで利用できます。",
   "opensKeeper": "Keeperを開きます。",
   "nameUpper": "名前",
-  "keeperPersistenceError": "「残す」へのアクセスを保存できませんでした。「購入を復元」をお試しください。",
+  "keeperPersistenceError": "Keeperへのアクセスを保存できませんでした。「購入を復元」をお試しください。",
   "purchaseUpdating": "購入状況を更新中です。設定から「購入を復元」をお試しください。",
   "purchaseNotReady": "購入の準備がまだ整っていません。少ししてからもう一度お試しください。",
   "restore": "復元",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "静けさが語る場所。",
   "preparing": "準備中…",
   "exportKeptAndReflections": "残した知恵と内省を持っていく。",
-  "keeperAccessActive": "「残す」は利用可能です",
+  "keeperAccessActive": "Keeperは利用可能です",
   "keeperPurchaseInProgress": "輪の中へ、{price}。購入手続き中。",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "輪の中へ、1回限り{price}",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "輪の中へ、現在利用できません",
   "keepWithoutLimit": "限りなく残す。",
   "reflectWithoutLimit": "限りなく内省を記す。",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "リフレクションを保存できませんでした。書き続ける間にもう一度試します。",
   "reflectionDeleteFailed": "リフレクションを削除できませんでした。もう一度お試しください。",
   "remainingDurationHoursMinutes": "残り{hours}時間{minutes}分",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "残り{hours}時間",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "残り{minutes}分",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "Keeperを少し体験",
+  "keeperWidgetTab": "ウィジェット",
+  "keeperPreviewExample": "表示例",
+  "keeperPreviewReflection": "今日は、急がずに進みたい。",
+  "keeperDailyRitual": "Keeperでも、そうでなくても、知恵は24時間にひとつ。",
+  "keeperWidgetStepOne": "ホーム画面の何もない場所を長押しします。",
+  "keeperWidgetStepTwo": "「編集」から「ウィジェットを追加」をタップします。以前のiOSでは「＋」ボタンをタップします。",
+  "keeperWidgetStepThree": "EAST.を探し、Keeperの儀式ウィジェットを選んで「ウィジェットを追加」をタップします。",
+  "reflectionSaved": "保存しました",
+  "reflectionSaving": "保存中…",
+  "reflectionCopyText": "文章をコピー",
+  "reflectionCopied": "コピーしました",
+  "reflectionAddThought": "新しい思いを添える",
+  "reflectionRevisitPrompt": "今日は、この言葉をどう受けとる？",
+  "reflectionEarlier": "以前の思い",
+  "reflectionOverTime": "時を重ねて",
+  "reflectionHistoryDeleteExplanation": "この知恵に添えた思いがすべて削除されます。",
+  "reflectionRecoveryMessage": "文章はまだ保存されていません。",
+  "settingsEveryday": "毎日の設定",
+  "settingsYourWriting": "あなたの言葉",
+  "settingsAbout": "EAST.について",
+  "writingLock": "文章のロック",
+  "writingLockDescription": "Face ID、Touch ID、またはデバイスのパスコードで、残したもの、内省、日記を開きます。",
+  "writingLockFootnote": "毎日の儀式はそのまま始められます。アプリを離れると、プライベートな文章は再びロックされます。",
+  "writingLockTitle": "あなたの言葉は、あなたのもの。",
+  "writingLockPrompt": "認証して、プライベートな文章を開きます。",
+  "writingLockUnlock": "ロックを解除",
+  "writingLockChecking": "認証中…",
+  "writingLockReason": "プライベートな文章を開きます。",
+  "writingLockUnavailable": "認証を利用できません。デバイスのパスコードとFace IDまたはTouch IDの設定を確認してください。",
+  "writingLockToggleReason": "プライベートな文章のロック設定を変更します。",
+  "writingLockOn": "オン",
+  "writingLockOff": "オフ",
+  "privacyPreview": "アプリスイッチャーでは文章が非表示になります。",
+  "settingsAboutDescription": "一日に一度、自分に戻るための場所。",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "新しい知恵を開くには、iCloudにサインインしてください。",
+  "dailyRitualConnectionRequired": "新しい知恵を開くには、インターネットに接続してください。",
+  "dailyRitualUnavailable": "今は今日の知恵を開けません。もう一度お試しください。",
+  "dailyRitualAccountNote": "iCloudアカウントごとに、24時間に一つの知恵。新しい知恵を開くにはインターネット接続が必要です。保存した文章はオフラインでも読めます。",
+  "dailyRitualPreviousWisdom": "前の知恵"
 }

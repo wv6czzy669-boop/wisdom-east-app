@@ -57,7 +57,8 @@ void main() {
     expect(find.text('Restore what belongs with you.'), findsNothing);
     expect(find.text('What stays private.'), findsNothing);
     expect(find.text('For thoughts and questions.'), findsNothing);
-    expect(find.text('Reach Out'), findsOneWidget);
+    expect(find.text('Reach Out'), findsNothing);
+    expect(find.text('About EAST.'), findsOneWidget);
     expect(find.text('Notifications'), findsNothing);
     expect(find.text('Daily Reminder'), findsNothing);
     expect(
@@ -71,15 +72,13 @@ void main() {
     expect(find.text('ON'), findsNothing);
     expect(find.text('OFF'), findsNothing);
     expect(
-      tester
-          .widget<Align>(
-            find.byKey(const ValueKey('settings-content')),
-          )
-          .alignment,
-      Alignment.topCenter,
-    );
+        tester
+            .widget<Column>(find.byKey(const ValueKey('settings-content')))
+            .crossAxisAlignment,
+        CrossAxisAlignment.start);
     expect(tester.getTopLeft(find.text('Settings')).dy, lessThan(100));
-    expect(tester.getTopLeft(find.text('Keeper')).dy, lessThan(110));
+    expect(tester.getTopLeft(find.text('Language')).dy,
+        lessThan(tester.getTopLeft(find.text('Keeper')).dy));
     expect(find.byType(ListView), findsNothing);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byType(Scrollable), findsOneWidget);
@@ -104,18 +103,23 @@ void main() {
     );
     expect(find.byKey(const ValueKey('keeper-circle-symbol')), findsNothing);
     expect(find.text('○'), findsNothing);
-    expect(tester.getTopLeft(find.text('Keeper')).dx, 24);
+    expect(tester.getSize(find.byKey(const ValueKey('settings-content'))).width,
+        560);
+    expect(
+        tester.getTopLeft(find.text('Keeper')).dx,
+        (tester.view.physicalSize.width / tester.view.devicePixelRatio - 560) /
+            2);
   });
 
   testWidgets(
-      'Approved EAST Settings direction: exactly three hairlines mark four '
-      'invisible groups and every row keeps the approved order',
+      'EAST Settings: exactly three hairlines mark four '
+      'groups with everyday preferences before writing and membership',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
 
-    // Four invisible groups: Keeper, iCloud & Data, Preferences, and About.
+    // Four groups: Everyday, Writing, Keeper, and About.
     // Hairlines separate groups; sibling rows remain separated only by air.
     final dividers = tester.widgetList<Divider>(find.byType(Divider)).toList();
     expect(dividers, hasLength(3));
@@ -129,16 +133,15 @@ void main() {
     }
 
     final rowOrder = [
-      'Keeper',
-      'Restore Purchases',
-      'iCloud Sync',
-      'Remove from iCloud',
-      'Export My Data',
       'Language',
       'Appearance',
-      'EAST. Productions',
-      'Privacy Policy',
-      'Reach Out',
+      'Quiet Reminder',
+      'Writing lock',
+      'iCloud Sync',
+      'Export My Data',
+      'Keeper',
+      'Restore Purchases',
+      'About EAST.'
     ];
     expect(rowOrder, isNot(contains('Daily Reminder')));
     for (var i = 0; i < rowOrder.length - 1; i++) {
@@ -161,7 +164,7 @@ void main() {
       'exactly one EAST. Productions row exists, with the exact title and '
       'subtitle, no icon, and no chevron', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: SettingsScreen()),
+      const MaterialApp(home: SettingsScreen(section: SettingsSection.about)),
     );
 
     expect(find.text('EAST. Productions'), findsOneWidget);
@@ -184,6 +187,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async {
             calls.add(_LaunchCall(uri: uri, mode: mode));
             return true;
@@ -212,6 +216,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async => false,
         ),
       ),
@@ -233,6 +238,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async {
             throw StateError('blocked');
           },
@@ -260,6 +266,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsScreen(
+            section: SettingsSection.about,
             urlLauncher: (uri, {required mode}) async => true,
           ),
         ),
@@ -356,13 +363,13 @@ void main() {
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.text('Keeper'), findsOneWidget);
-    expect(find.text('Reach Out'), findsOneWidget);
+    expect(find.text('About EAST.'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Reach Out'));
+    await tester.ensureVisible(find.text('About EAST.'));
     await tester.pump();
 
     expect(
-      tester.getCenter(find.text('Reach Out')).dy,
+      tester.getCenter(find.text('About EAST.')).dy,
       lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
     );
     expect(tester.takeException(), isNull);
@@ -403,6 +410,8 @@ void main() {
     );
 
     final keeperRow = find.byKey(const ValueKey('settings-keeper-row'));
+    await tester.ensureVisible(keeperRow);
+    await tester.pump();
     await tester.tap(keeperRow);
     await tester.pumpAndSettle();
 
@@ -423,6 +432,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async {
             calls.add(_LaunchCall(uri: uri, mode: mode));
             return true;
@@ -452,6 +462,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async => false,
         ),
       ),
@@ -473,6 +484,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async {
             throw StateError('blocked');
           },
@@ -498,6 +510,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async {
             calls.add(_LaunchCall(uri: uri, mode: mode));
             return true;
@@ -524,6 +537,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async => false,
         ),
       ),
@@ -540,6 +554,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) async {
             throw StateError('blocked');
           },
@@ -564,6 +579,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) {
             calls += 1;
             return launchCompleter.future;
@@ -607,6 +623,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: SettingsScreen(
+          section: SettingsSection.about,
           urlLauncher: (uri, {required mode}) => launchCompleter.future,
         ),
       ),
@@ -635,17 +652,23 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsScreen(
+            section: SettingsSection.main,
             urlLauncher: (uri, {required mode}) async => true,
           ),
         ),
       );
 
+      await tester.ensureVisible(
+          find.byKey(const ValueKey('settings-restore-purchases-row')));
+      await tester.pump();
       _expectSemanticNode(
         label: 'Restore Purchases. Restore what belongs with you.',
         isButton: true,
         isEnabled: Tristate.isTrue,
         hasTap: true,
       );
+      await tester.pumpWidget(const MaterialApp(
+          home: SettingsScreen(section: SettingsSection.about)));
       _expectSemanticNode(
         label: 'Privacy Policy. What stays private.',
         isButton: true,
@@ -675,6 +698,9 @@ void main() {
         ),
       );
 
+      await tester.ensureVisible(
+          find.byKey(const ValueKey('settings-restore-purchases-row')));
+      await tester.pump();
       _expectSemanticNode(
         label: 'Restore Purchases. Preparing…',
         isButton: true,
@@ -696,6 +722,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsScreen(
+            section: SettingsSection.about,
             urlLauncher: (uri, {required mode}) {
               calls += 1;
               return launchCompleter.future;
@@ -740,6 +767,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsScreen(
+            section: SettingsSection.about,
             urlLauncher: (uri, {required mode}) {
               calls += 1;
               return launchCompleter.future;

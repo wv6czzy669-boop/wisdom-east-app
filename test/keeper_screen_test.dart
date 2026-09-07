@@ -3,10 +3,12 @@ import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:wisdom_app/l10n/app_localizations.dart';
+import 'package:wisdom_app/localization/east_typography_resolver.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 import 'package:wisdom_app/theme/east_design.dart';
@@ -23,6 +25,13 @@ void main() {
     'each',
     'day.',
   ].join(' ');
+
+  setUpAll(() async {
+    for (final font in EastTypographyResolver.productionFonts) {
+      await (FontLoader(font.family)..addFont(rootBundle.load(font.asset)))
+          .load();
+    }
+  });
 
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
@@ -51,7 +60,6 @@ void main() {
       'Enter the Circle',
       'Keep without limit.',
       'Reflect without limit.',
-      'Take your Journal with you.',
       'The ritual, within your widget.',
       'Keep EAST. alive.',
     ];
@@ -74,7 +82,12 @@ void main() {
         .map((widget) => widget.data)
         .whereType<String>()
         .toSet();
-    expect(renderedCopy, lockedCopy.toSet());
+    expect(renderedCopy, containsAll(lockedCopy));
+    expect(find.byKey(const ValueKey('keeper-experience-preview')),
+        findsOneWidget);
+    expect(find.text('Example'), findsOneWidget);
+    expect(find.text('One wisdom every 24 hours, with or without Keeper.'),
+        findsOneWidget);
 
     final mutedColor =
         eastMutedTextColor(tester.element(find.text('Keep what stays.')));
@@ -92,13 +105,6 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.text('Reflect without limit.')).style?.color,
-      isNot(mutedColor),
-    );
-    expect(
-      tester
-          .widget<Text>(find.text('Take your Journal with you.'))
-          .style
-          ?.color,
       isNot(mutedColor),
     );
   });
@@ -128,12 +134,12 @@ void main() {
       ringDecoration.border!.top.color,
       tester.widget<Text>(find.text('Keep what stays.')).style!.color,
     );
-    // Ring geometry/stroke width are untouched by the color change.
+    // The compact purchase ring keeps the existing stroke and palette.
     expect(ringDecoration.border!.top.width, 0.7);
     final ringBox = tester.getSize(
       find.byKey(const ValueKey('keeper-purchase-action')),
     );
-    expect(ringBox, const Size(238, 238));
+    expect(ringBox, const Size(190, 190));
 
     // 1B: the value-copy lines must resolve to the exact same color as the
     // "Keeper" heading — only color changes; font, size, and copy are
@@ -277,6 +283,8 @@ void main() {
     );
     expect(action.onTap, isNull);
 
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('keeper-purchase-action')));
     await tester.tap(find.text('Enter the Circle'));
     await tester.pump();
 
@@ -332,6 +340,8 @@ void main() {
       ),
     );
 
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('keeper-purchase-action')));
     await tester.tap(find.text('Çembere katıl.'));
     await tester.pump();
 
@@ -362,7 +372,8 @@ void main() {
     expect(find.text(removedThreeRevealCopy), findsNothing);
     expect(find.text('Keep without limit.'), findsOneWidget);
     expect(find.text('Reflect without limit.'), findsOneWidget);
-    expect(find.text('Take your Journal with you.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('keeper-preview-tab-journal')),
+        findsOneWidget);
     expect(find.text('The ritual, within your widget.'), findsOneWidget);
     expect(find.text('Preserve what stays with you.'), findsNothing);
     expect(find.text('Keep EAST. alive.'), findsOneWidget);
@@ -654,6 +665,85 @@ void main() {
     expect(find.text('Enter the Circle'), findsOneWidget);
     expect(find.text('Keeper active'), findsNothing);
   });
+
+  testWidgets('examples switch without purchasing or opening a daily ritual',
+      (tester) async {
+    service = _StaticPurchaseService(
+        product: ProductDetails(
+            id: PurchaseService.keeperProductId,
+            title: 'Keeper',
+            description: 'Keeper',
+            price: '€3.49',
+            rawPrice: 3.49,
+            currencyCode: 'EUR'));
+    await tester
+        .pumpWidget(MaterialApp(home: KeeperScreen(purchaseService: service)));
+    for (final preview in ['reflection', 'journal', 'ritual']) {
+      await tester
+          .ensureVisible(find.byKey(ValueKey('keeper-preview-tab-$preview')));
+      await tester.tap(find.byKey(ValueKey('keeper-preview-tab-$preview')));
+      await tester.pump();
+      expect(find.byKey(ValueKey('keeper-preview-$preview')), findsOneWidget);
+      expect(find.text('Example'), findsOneWidget);
+      expect(find.text('€3.49'), findsOneWidget);
+      expect(find.byKey(const ValueKey('keeper-widget-guide-title')),
+          findsNothing);
+      expect(service.buyAttempts, 0);
+      expect(service.isKeeper, isFalse);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets(
+      'all localized examples and guide steps fit small screens and large text',
+      (tester) async {
+    tester.view.physicalSize = const Size(640, 1136);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final locale in AppLocalizations.supportedLocales) {
+      final l10n = await AppLocalizations.delegate.load(locale);
+      for (final scale in [1.0, 2.0]) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: eastTheme(
+              locale: locale,
+              brightness: scale == 1.0 ? Brightness.light : Brightness.dark),
+          home: KeeperScreen(
+              purchaseService: service, supportsInteractiveKeeperWidget: true),
+        ));
+        await tester.pump();
+        expect(find.text('Keeper'), findsOneWidget);
+        for (final preview in ['ritual', 'reflection', 'journal']) {
+          final tab = find.byKey(ValueKey('keeper-preview-tab-$preview'));
+          await tester.ensureVisible(tab);
+          await tester.tap(tab);
+          await tester.pump();
+          expect(
+              find.byKey(ValueKey('keeper-preview-$preview')), findsOneWidget);
+          expect(find.text(l10n.keeperPreviewExample), findsOneWidget);
+          expect(tester.takeException(), isNull,
+              reason: '$locale $scale $preview');
+        }
+        service.update(keeper: true);
+        await tester.pump();
+        for (final step in [1, 2, 3]) {
+          expect(find.byKey(ValueKey('keeper-widget-guide-step-$step')),
+              findsOneWidget);
+        }
+        await tester.ensureVisible(
+            find.byKey(const ValueKey('keeper-widget-guide-detail')));
+        expect(find.text(l10n.keeperWidgetInteractive), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: '$locale $scale guide');
+        service.update(keeper: false);
+      }
+    }
+  });
 }
 
 class _StaticPurchaseService extends PurchaseService {
@@ -666,6 +756,7 @@ class _StaticPurchaseService extends PurchaseService {
   bool loading;
   final ProductDetails? product;
   bool keeper;
+  int buyAttempts = 0;
 
   void update({bool? loading, bool? keeper}) {
     if (loading != null) this.loading = loading;
@@ -693,7 +784,10 @@ class _StaticPurchaseService extends PurchaseService {
   bool get isLoading => loading;
 
   @override
-  Future<bool> buyKeeper() async => false;
+  Future<bool> buyKeeper() async {
+    buyAttempts++;
+    return false;
+  }
 
   @override
   Future<bool> refreshStoreIfNeeded({bool force = false}) async =>

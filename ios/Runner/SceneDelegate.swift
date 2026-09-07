@@ -4,7 +4,8 @@ import UIKit
 
 /// Owns the opaque surface placed above Flutter while iOS is allowed to take
 /// an app-switcher snapshot. The surface contains no user data and is removed
-/// synchronously when the scene becomes active again.
+/// when the scene becomes active again. Locked writing waits for Flutter's
+/// protected frame before that opaque cover can be removed.
 @MainActor
 final class EastPrivacyShieldController {
   static let shieldViewTag = 0x4541_5354
@@ -188,6 +189,23 @@ private final class EastPrivacyShieldView: UIView {
 
 class SceneDelegate: FlutterSceneDelegate {
   private let privacyShieldController = EastPrivacyShieldController()
+  private var protectedFrameObserver: NSObjectProtocol?
+  private var waitingForProtectedFrame = false
+
+  override init() {
+    super.init()
+    protectedFrameObserver = NotificationCenter.default.addObserver(
+      forName: EastPrivateWritingLock.protectedFrameReady, object: nil, queue: .main
+    ) { [weak self] _ in
+      guard let self, self.waitingForProtectedFrame else { return }
+      self.waitingForProtectedFrame = false
+      self.privacyShieldController.reveal()
+    }
+  }
+
+  deinit {
+    if let protectedFrameObserver { NotificationCenter.default.removeObserver(protectedFrameObserver) }
+  }
 
   override func sceneWillResignActive(_ scene: UIScene) {
     // Install before handing lifecycle control onward so the protected frame
@@ -197,15 +215,24 @@ class SceneDelegate: FlutterSceneDelegate {
   }
 
   override func sceneDidEnterBackground(_ scene: UIScene) {
+    EastPrivateWritingLock.shared.didEnterBackground()
     // Idempotent fallback for lifecycle paths that reach background without
     // a usable window during `sceneWillResignActive`.
     privacyShieldController.cover(window: appWindow(in: scene))
+    if EastPrivateWritingLock.shared.requiresProtectedFrame {
+      // A native share/PDF sheet sits above Flutter's locked field. Dismiss
+      // that private preview before it can survive into another session.
+      appWindow(in: scene)?.rootViewController?.presentedViewController?.dismiss(animated: false)
+    }
     super.sceneDidEnterBackground(scene)
   }
 
   override func sceneDidBecomeActive(_ scene: UIScene) {
+    waitingForProtectedFrame = EastPrivateWritingLock.shared.requiresProtectedFrame
     super.sceneDidBecomeActive(scene)
-    privacyShieldController.reveal()
+    // For locked writing, keep the native cover until Flutter has painted a
+    // protected frame. Ritual foreground behavior remains unchanged.
+    if !waitingForProtectedFrame { privacyShieldController.reveal() }
   }
 
   private func appWindow(in scene: UIScene) -> UIWindow? {

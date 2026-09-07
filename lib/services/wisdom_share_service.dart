@@ -49,12 +49,14 @@ class WisdomShareService implements WisdomShareHandler {
     required Rect sharePositionOrigin,
     required Locale locale,
     EastColorScheme scheme = EastColorScheme.light,
+    bool Function()? mayPresent,
   }) async {
     final bytes = await _renderer.renderForLocale(
       wisdom,
       locale: locale,
       scheme: scheme,
     );
+    if (mayPresent != null && !mayPresent()) return;
     await _share(bytes, sharePositionOrigin);
   }
 

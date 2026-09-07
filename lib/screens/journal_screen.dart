@@ -1,3 +1,5 @@
+import '../controllers/private_writing_lock_controller.dart';
+import '../widgets/private_writing_gate.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -42,6 +44,7 @@ typedef JournalShareHandler = Future<bool> Function(
 class JournalScreen extends StatefulWidget {
   const JournalScreen({
     super.key,
+    this.writingLockController,
     required this.items,
     required this.isKeeper,
     this.purchaseService,
@@ -58,6 +61,8 @@ class JournalScreen extends StatefulWidget {
   final JournalPdfBuilder? pdfBuilder;
   final JournalPdfCache? pdfCache;
   final JournalShareHandler? shareHandler;
+
+  final PrivateWritingLockController? writingLockController;
 
   @override
   State<JournalScreen> createState() => _JournalScreenState();
@@ -560,7 +565,12 @@ class _JournalScreenState extends State<JournalScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PrivateWritingGate(
+        controller: widget.writingLockController,
+        child: _buildPrivateContent(context),
+      );
+
+  Widget _buildPrivateContent(BuildContext context) {
     final l10n = eastLocalizations(context);
     return Scaffold(
       backgroundColor: EastColors.of(context).background,

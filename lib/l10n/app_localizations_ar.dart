@@ -156,7 +156,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get journalSemantic => 'دفتر يوميات';
 
   @override
-  String get keeper => 'احتفظ';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => 'استعادة المشتريات';
@@ -216,7 +216,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'تتضمن النسخة ثلاث تأملات. يفتح Keeper مساحة غير محدودة لما يبقى.';
 
   @override
-  String get becomeKeeper => 'فعّل «احتفظ»';
+  String get becomeKeeper => 'تفعيل Keeper';
 
   @override
   String get whoseJournal => 'لمن هذا الدفتر؟';
@@ -247,7 +247,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get withinTheCircle => 'داخل الدائرة.';
 
   @override
-  String get keeperActive => 'الحافظ مفعّل';
+  String get keeperActive => 'Keeper مفعّل';
 
   @override
   String get oneTimePurchase => 'شراء لمرة واحدة';
@@ -333,10 +333,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get takeItWithYou => 'خذها معك.';
 
   @override
-  String get takeItWithYouKeeper => 'خذها معك. متاح مع «احتفظ».';
+  String get takeItWithYouKeeper => 'خذها معك. متاح مع Keeper.';
 
   @override
-  String get availableWithKeeper => 'متاح مع «احتفظ».';
+  String get availableWithKeeper => 'متاح مع Keeper.';
 
   @override
   String get opensKeeper => 'يفتح Keeper.';
@@ -346,7 +346,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      'تعذّر حفظ إمكانية «احتفظ». جرّب استعادة المشتريات.';
+      'تعذّر حفظ الوصول إلى Keeper. جرّب استعادة المشتريات.';
 
   @override
   String get purchaseUpdating =>
@@ -388,7 +388,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'خذ معك الحِكَم التي أبقيتها وتأمّلاتك.';
 
   @override
-  String get keeperAccessActive => 'إمكانية «احتفظ» مفعّلة';
+  String get keeperAccessActive => 'الوصول إلى Keeper مفعّل';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -574,4 +574,135 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get keeperPreviewLabel => 'لمحة عن Keeper';
+
+  @override
+  String get keeperWidgetTab => 'الأداة';
+
+  @override
+  String get keeperPreviewExample => 'مثال';
+
+  @override
+  String get keeperPreviewReflection => 'اليوم، أريد أن أمضي دون عجلة.';
+
+  @override
+  String get keeperDailyRitual => 'حكمة واحدة كل 24 ساعة، مع Keeper أو بدونه.';
+
+  @override
+  String get keeperWidgetStepOne =>
+      'المس مطولًا مساحة فارغة على الشاشة الرئيسية.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'اضغط على تحرير، ثم إضافة أداة. في إصدارات iOS الأقدم، اضغط على زر +.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'ابحث عن EAST.، واختر أداة طقس Keeper، ثم اضغط على إضافة أداة.';
+
+  @override
+  String get reflectionSaved => 'تم الحفظ';
+
+  @override
+  String get reflectionSaving => 'جارٍ الحفظ…';
+
+  @override
+  String get reflectionCopyText => 'نسخ النص';
+
+  @override
+  String get reflectionCopied => 'تم النسخ';
+
+  @override
+  String get reflectionAddThought => 'أضف فكرة جديدة';
+
+  @override
+  String get reflectionRevisitPrompt => 'كيف أقرأ هذا اليوم؟';
+
+  @override
+  String get reflectionEarlier => 'في وقت سابق';
+
+  @override
+  String get reflectionOverTime => 'مع مرور الوقت';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'ستُحذف جميع الأفكار المرتبطة بهذه الحكمة المحفوظة.';
+
+  @override
+  String get reflectionRecoveryMessage => 'لم تُحفظ كتابتك بعد.';
+
+  @override
+  String get settingsEveryday => 'تفضيلات يومية';
+
+  @override
+  String get settingsYourWriting => 'كتاباتك';
+
+  @override
+  String get settingsAbout => 'حول EAST.';
+
+  @override
+  String get writingLock => 'قفل الكتابات';
+
+  @override
+  String get writingLockDescription =>
+      'افتح «ما بقي» و«تأمُّل» و«دفتر يوميات» باستخدام Face ID أو Touch ID أو رمز دخول جهازك.';
+
+  @override
+  String get writingLockFootnote =>
+      'يبقى طقسك اليومي متاحًا. تُقفل كتاباتك الخاصة مجددًا عند مغادرة التطبيق.';
+
+  @override
+  String get writingLockTitle => 'كلماتك ملك لك.';
+
+  @override
+  String get writingLockPrompt => 'تحقق من هويتك لفتح كتاباتك الخاصة.';
+
+  @override
+  String get writingLockUnlock => 'فتح القفل';
+
+  @override
+  String get writingLockChecking => 'جارٍ التحقق…';
+
+  @override
+  String get writingLockReason => 'افتح كتاباتك الخاصة.';
+
+  @override
+  String get writingLockUnavailable =>
+      'التحقق غير متاح. راجع رمز دخول جهازك وإعدادات Face ID أو Touch ID.';
+
+  @override
+  String get writingLockToggleReason => 'غيّر قفل كتاباتك الخاصة.';
+
+  @override
+  String get writingLockOn => 'مفعّل';
+
+  @override
+  String get writingLockOff => 'غير مفعّل';
+
+  @override
+  String get privacyPreview => 'تُخفى كتاباتك في مبدّل التطبيقات.';
+
+  @override
+  String get settingsAboutDescription =>
+      'مساحة تعود فيها إلى نفسك، مرة كل يوم.';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'سجّل الدخول إلى iCloud لفتح حكمة جديدة.';
+
+  @override
+  String get dailyRitualConnectionRequired => 'اتصل بالإنترنت لفتح حكمة جديدة.';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'حكمتك اليومية غير متاحة الآن. حاول مرة أخرى.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'حكمة واحدة لكل حساب iCloud كل 24 ساعة. تحتاج الحكمة الجديدة إلى اتصال بالإنترنت. تبقى كتاباتك المحفوظة متاحة دون اتصال.';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'الحكمة السابقة';
 }

@@ -34,18 +34,19 @@ class DataExportDocument {
 /// Only meaningful, user-owned ACTIVE content is included: a Kept
 /// occurrence's stable local `recordId`, optional `revealId`, wisdom text,
 /// and `keptAt`, and (only when present) a Reflection's matching identity,
-/// text, and `reflectedAt`. Every CloudKit-internal,
+/// text, and `reflectedAt`, plus each later thought's text, identity and dates.
+/// Every CloudKit-internal,
 /// sync-internal, purchase, analytics, rating, notification,
 /// Return-scheduling, and rolling-24h-lock field is structurally absent --
-/// this builder never even receives them, since [FavoriteItem] itself never
-/// carries them (see its own class doc comment). Pre-`revealId` records are
+/// this builder explicitly selects user-owned fields and never exports the
+/// history's mutation identifiers or deletion watermark. Pre-`revealId` records are
 /// exported with their existing [FavoriteItem.id]; export never fabricates or
 /// persists a new domain identity.
 class DataExportBuilder {
   const DataExportBuilder();
 
   static const String formatName = 'EAST Data Export';
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
   static const String _divider = '--------------------------------';
 
   DataExportDocument build({
@@ -122,6 +123,22 @@ class DataExportBuilder {
               'revealId': item.revealId,
               'reflectionText': item.reflection,
               'reflectedAt': item.reflectedAt,
+              if (item.reflectionHistory.thoughts.isNotEmpty)
+                'thoughts': [
+                  for (final thought in item.reflectionHistory.thoughts)
+                    {
+                      'thoughtId': thought.id,
+                      'text': thought.text,
+                      'createdAt': DateTime.fromMillisecondsSinceEpoch(
+                              thought.createdAtMs,
+                              isUtc: true)
+                          .toIso8601String(),
+                      'updatedAt': DateTime.fromMillisecondsSinceEpoch(
+                              thought.updatedAtMs,
+                              isUtc: true)
+                          .toIso8601String(),
+                    },
+                ],
             })
         .toList();
 
@@ -163,6 +180,12 @@ class DataExportBuilder {
         buffer.writeln();
         buffer.writeln('Reflection:');
         buffer.writeln(item.reflection);
+        for (final thought in item.reflectionHistory.thoughts) {
+          buffer.writeln();
+          buffer.writeln(
+              'Thought — ${DateTime.fromMillisecondsSinceEpoch(thought.createdAtMs, isUtc: true).toIso8601String()}');
+          buffer.writeln(thought.text);
+        }
       }
 
       // Unobtrusive machine/reference metadata only -- never part of the

@@ -1,7 +1,10 @@
+import '../controllers/private_writing_lock_controller.dart';
+import '../widgets/private_writing_gate.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 
 import '../controllers/reflection_autosave_coordinator.dart';
 import '../models/favorite_item.dart';
@@ -20,6 +23,7 @@ import '../widgets/east_back_button.dart';
 class ReflectionScreen extends StatefulWidget {
   const ReflectionScreen({
     super.key,
+    this.writingLockController,
     required this.item,
     required this.isKeeper,
     this.savedReflectionsService,
@@ -37,6 +41,8 @@ class ReflectionScreen extends StatefulWidget {
   /// CloudKit sync attempt. Exposed for tests only — production always uses
   /// the default.
   final Duration autosaveDebounce;
+
+  final PrivateWritingLockController? writingLockController;
 
   @override
   State<ReflectionScreen> createState() => _ReflectionScreenState();
@@ -62,7 +68,19 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   late final TextEditingController _controller;
   late final SavedReflectionsService _service;
   late final PurchaseService _purchaseService;
-  late final ReflectionAutosaveCoordinator _autosave;
+  late ReflectionAutosaveCoordinator _autosave;
+  late FavoriteItem _item;
+  String? _editingThoughtId;
+  late String _observedText;
+  final _editorFocus = FocusNode();
+  final _editorKey = GlobalKey();
+  Timer? _savedTimer;
+  Timer? _copiedTimer;
+  ReflectionSaveState _saveState = ReflectionSaveState.idle;
+  bool _recoveryVisible = false;
+  bool _copied = false;
+  bool _switchingThought = false;
+  bool _addingThought = false;
   late final int _promptIndex;
 
   /// Phase 5G: resolved every `build()` (never cached), exactly like this
@@ -71,8 +89,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   /// itself is the stable prompt *identity* -- fixed once in [initState],
   /// never re-derived -- so switching locale changes only which language
   /// this list is read in, never which prompt is selected.
-  String get _prompt =>
-      localizedReflectionPrompts(eastLocalizations(context))[_promptIndex];
+  String get _prompt => _editingThoughtId != null
+      ? eastLocalizations(context).reflectionRevisitPrompt
+      : localizedReflectionPrompts(eastLocalizations(context))[_promptIndex];
 
   bool _deleteInProgress = false;
   bool _confirmingDelete = false;
@@ -116,25 +135,96 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     // and never re-derived from anything that can change across a save.
     _promptIndex =
         reflectionPromptIndexFor(widget.item.revealId ?? widget.item.id);
-    _controller = TextEditingController(text: widget.item.reflection)
+    _item = widget.item;
+    final latest = _item.reflectionHistory.thoughts.lastOrNull;
+    _editingThoughtId = latest?.id;
+    _observedText = latest?.text ?? _item.reflection ?? '';
+    _controller = TextEditingController(text: _observedText)
       ..addListener(_handleTextChanged);
-    _autosave = ReflectionAutosaveCoordinator(
-      debounce: widget.autosaveDebounce,
-      readText: () => _controller.text,
-      initialPersistedText: widget.item.reflection,
-      persistText: _persistReflection,
-      onLimitReached: () {
-        if (mounted) {
-          _showMessage(eastLocalizations(context).reflectionSaveFailed);
+    _autosave = _makeAutosave(_observedText);
+  }
+
+  ReflectionAutosaveCoordinator _makeAutosave(String? initialText) =>
+      ReflectionAutosaveCoordinator(
+        debounce: widget.autosaveDebounce,
+        readText: () => _controller.text,
+        initialPersistedText: initialText,
+        persistText: _persistReflection,
+        onStateChanged: _onSaveStateChanged,
+        onDiagnostic: keptDiagnostic,
+      );
+
+  void _onSaveStateChanged(ReflectionSaveState state) {
+    if (!mounted) return;
+    _savedTimer?.cancel();
+    setState(() {
+      _saveState = state;
+      if (state == ReflectionSaveState.failed ||
+          state == ReflectionSaveState.limited) {
+        _recoveryVisible = true;
+      } else if (state == ReflectionSaveState.saved ||
+          (state == ReflectionSaveState.idle &&
+              !_autosave.hasUnpersistedChanges)) {
+        _recoveryVisible = false;
+      }
+    });
+    if (state == ReflectionSaveState.saved) {
+      _savedTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted && _saveState == ReflectionSaveState.saved) {
+          setState(() => _saveState = ReflectionSaveState.idle);
         }
-      },
-      onPersistFailure: () {
-        if (mounted) {
-          _showMessage(eastLocalizations(context).reflectionAutosaveFailed);
+      });
+    }
+  }
+
+  Future<void> _copyWriting() async {
+    try {
+      await Clipboard.setData(ClipboardData(text: _controller.text));
+      if (!mounted) return;
+      _copiedTimer?.cancel();
+      setState(() => _copied = true);
+      _copiedTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _copied = false);
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage(eastLocalizations(context).operationFailedRetry);
+      }
+    }
+  }
+
+  Future<void> _addThought() async {
+    if (_addingThought || _controller.text.trim().isEmpty) return;
+    setState(() => _addingThought = true);
+    try {
+      if (!await _autosave.flush() || !mounted || !_item.hasReflection) return;
+      _autosave.dispose();
+      _switchingThought = true;
+      _editingThoughtId = const Uuid().v4();
+      _observedText = '';
+      _controller.clear();
+      _autosave = _makeAutosave(null);
+      _switchingThought = false;
+      setState(() {
+        _saveState = ReflectionSaveState.idle;
+        _recoveryVisible = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _editorFocus.requestFocus();
+        final editor = _editorKey.currentContext;
+        if (editor != null) {
+          unawaited(Scrollable.ensureVisible(editor,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 240),
+              curve: Curves.easeInOut,
+              alignment: 0.15));
         }
-      },
-      onDiagnostic: keptDiagnostic,
-    );
+      });
+    } finally {
+      if (mounted) setState(() => _addingThought = false);
+    }
   }
 
   @override
@@ -142,6 +232,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     WidgetsBinding.instance.removeObserver(this);
     _purchaseService.removeListener(_onKeeperEntitlementChanged);
     _autosave.dispose();
+    _savedTimer?.cancel();
+    _copiedTimer?.cancel();
+    _editorFocus.dispose();
     _controller
       ..removeListener(_handleTextChanged)
       ..dispose();
@@ -161,6 +254,8 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   }
 
   void _handleTextChanged() {
+    if (_switchingThought || _observedText == _controller.text) return;
+    _observedText = _controller.text;
     // Record the edit before scheduling the rebuild. This guarantees that the
     // rebuilt PopScope immediately protects the new, unpersisted revision.
     _autosave.handleTextChanged();
@@ -185,11 +280,21 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   }
 
   Future<ReflectionPersistResult> _persistReflection(String text) async {
-    final result = await _service.saveReflection(
-      itemId: widget.item.id,
-      reflection: text,
-      isKeeper: _isKeeper,
-    );
+    final thoughtId = _editingThoughtId;
+    final result = thoughtId == null
+        ? await _service.saveReflection(
+            itemId: _item.id, reflection: text, isKeeper: _isKeeper)
+        : await _service.saveThought(
+            itemId: _item.id,
+            thoughtId: thoughtId,
+            reflection: text,
+            isKeeper: _isKeeper);
+    if (!result.reflectionLimitReached && mounted) {
+      setState(() {
+        _item = result.items.where((item) => item.id == _item.id).firstOrNull ??
+            (thoughtId == null ? _item.copyWith(reflection: text) : _item);
+      });
+    }
     return result.reflectionLimitReached
         ? ReflectionPersistResult.limitReached
         : ReflectionPersistResult.saved;
@@ -201,7 +306,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
   // call, and the persisted wisdom being kept are all unchanged from the
   // prior AlertDialog implementation; only the presentation is replaced.
   void _delete() {
-    if (_deleteInProgress || !widget.item.hasReflection) return;
+    if (_deleteInProgress || !_item.hasReflection) return;
     setState(() {
       _confirmingDelete = true;
     });
@@ -300,7 +405,9 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  l10n.reflectionDeleteExplanation,
+                  _item.reflectionHistory.thoughts.isEmpty
+                      ? l10n.reflectionDeleteExplanation
+                      : l10n.reflectionHistoryDeleteExplanation,
                   textAlign: TextAlign.center,
                   style: _style(
                     15,
@@ -392,8 +499,87 @@ class _ReflectionScreenState extends State<ReflectionScreen>
     unawaited(_handlePopAttempt());
   }
 
+  String _dateLabel(String? timestamp) {
+    final date = timestamp == null ? null : DateTime.tryParse(timestamp);
+    return date == null
+        ? eastLocalizations(context).reflectionEarlier
+        : MaterialLocalizations.of(context).formatShortDate(date.toLocal());
+  }
+
+  String get _writingDate {
+    if (_editingThoughtId == null) {
+      return _dateLabel(_item.hasReflection
+          ? _item.reflectedAt
+          : DateTime.now().toIso8601String());
+    }
+    final thought = _item.reflectionHistory.thoughts
+        .where((t) => t.id == _editingThoughtId)
+        .firstOrNull;
+    return _dateLabel((thought == null
+            ? DateTime.now()
+            : DateTime.fromMillisecondsSinceEpoch(thought.createdAtMs,
+                isUtc: true))
+        .toIso8601String());
+  }
+
+  Widget _previousThought(String text, String? timestamp) => Padding(
+        padding: const EdgeInsets.only(bottom: 30),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_dateLabel(timestamp),
+              style: _style(13, color: eastMutedTextColor(context))),
+          const SizedBox(height: 10),
+          SelectableText(text, style: _style(20, height: 1.65)),
+        ]),
+      );
+
+  Widget _recoveryPanel() {
+    final l10n = eastLocalizations(context);
+    return SafeArea(
+        top: false,
+        child: Padding(
+          key: const ValueKey('reflection-recovery'),
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 12),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                    liveRegion: true,
+                    child: Text(
+                        _saveState == ReflectionSaveState.limited
+                            ? l10n.reflectionSaveFailed
+                            : l10n.reflectionRecoveryMessage,
+                        style: _style(14, color: eastMutedTextColor(context)))),
+                const SizedBox(height: 6),
+                Wrap(spacing: 16, children: [
+                  TextButton(
+                      key: const ValueKey('reflection-retry'),
+                      onPressed: _saveState == ReflectionSaveState.saving
+                          ? null
+                          : () => unawaited(_autosave.flush()),
+                      child: Text(l10n.retry, style: _style(16))),
+                  TextButton(
+                      key: const ValueKey('reflection-copy'),
+                      onPressed: _copyWriting,
+                      child: Semantics(
+                          liveRegion: true,
+                          child: Text(
+                              _copied
+                                  ? l10n.reflectionCopied
+                                  : l10n.reflectionCopyText,
+                              style: _style(16)))),
+                ]),
+              ]),
+        ));
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PrivateWritingGate(
+        controller: widget.writingLockController,
+        child: _buildPrivateContent(context),
+      );
+
+  Widget _buildPrivateContent(BuildContext context) {
     final l10n = eastLocalizations(context);
     final characterCount = ReflectionTextPolicy.length(_controller.text);
     const counterThreshold = 900;
@@ -426,7 +612,7 @@ class _ReflectionScreenState extends State<ReflectionScreen>
               : null,
           title: Text(l10n.reflection, style: _style(24)),
           actions: [
-            if (widget.item.hasReflection)
+            if (_item.hasReflection)
               Semantics(
                 button: true,
                 enabled: !_deleteInProgress,
@@ -441,6 +627,12 @@ class _ReflectionScreenState extends State<ReflectionScreen>
               ),
           ],
         ),
+        bottomNavigationBar: _recoveryVisible
+            ? Padding(
+                padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom),
+                child: _recoveryPanel())
+            : null,
         body: Stack(
           children: [
             SafeArea(
@@ -452,100 +644,134 @@ class _ReflectionScreenState extends State<ReflectionScreen>
                   child: SingleChildScrollView(
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.fromLTRB(
-                      24,
-                      16,
-                      24,
-                      28 + MediaQuery.viewInsetsOf(context).bottom,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _wisdomPresentation.resolveItem(
-                            widget.item,
-                            Localizations.localeOf(context),
-                          ),
-                          key: const ValueKey('reflection-associated-wisdom'),
-                          style: _style(24, height: 1.46),
-                        ),
-                        const SizedBox(height: 42),
-                        // A stable, always-present accessible name for this
-                        // field: `MergeSemantics` folds the TextField's own
-                        // native text-input semantics (live value, editing
-                        // actions, and the framework's built-in
-                        // maxLength-driven character-count announcement)
-                        // together with this label, so the field's purpose
-                        // is announced whether or not it is empty --
-                        // `hintText` alone is not a reliable accessible name
-                        // once a value has been entered.
-                        MergeSemantics(
-                          child: Semantics(
-                            label: eastLocalizations(context).reflection,
-                            child: TextField(
-                              key: const ValueKey('reflection-writing-area'),
-                              controller: _controller,
-                              enabled: !_deleteInProgress,
-                              autofocus: false,
-                              keyboardType: TextInputType.multiline,
-                              minLines: 7,
-                              maxLines: null,
-                              maxLength: SavedReflectionsService
-                                  .maximumReflectionLength,
-                              inputFormatters: [
-                                LengthLimitingTextInputFormatter(
-                                  SavedReflectionsService
-                                      .maximumReflectionLength,
-                                ),
-                              ],
-                              style: _style(20, height: 1.45),
-                              cursorColor: EastColors.of(context).ink,
-                              decoration: InputDecoration(
-                                hintText: _prompt,
-                                hintStyle: _style(
-                                  20,
-                                  color: EastColors.of(context).hint,
-                                  height: 1.45,
-                                ),
-                                // The TextField's own `maxLength` already
-                                // gives VoiceOver a native, non-obtrusive
-                                // current/maximum character announcement
-                                // (Flutter wires this into the field's own
-                                // Semantics automatically). This visible
-                                // counter is a sighted-only convenience near
-                                // the limit; excluding it from semantics
-                                // avoids a redundant duplicate announcement.
-                                counter: ExcludeSemantics(
-                                  child: characterCount >= counterThreshold
-                                      ? Text(
-                                          '$characterCount/'
-                                          '${SavedReflectionsService.maximumReflectionLength}',
-                                          style: _style(
-                                            13,
-                                            color: EastColors.of(context)
-                                                .secondary,
-                                          ),
-                                        )
-                                      : const SizedBox.shrink(),
-                                ),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: eastMutedTextColor(context),
-                                    width: 0.5,
-                                  ),
-                                ),
-                                focusedBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: eastMutedTextColor(context),
-                                    width: 0.5,
-                                  ),
+                    padding: const EdgeInsets.fromLTRB(28, 16, 28, 32),
+                    child: Center(
+                        child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsetsDirectional.only(
+                                  start: 18, end: 12),
+                              decoration: BoxDecoration(
+                                  border: BorderDirectional(
+                                      start: BorderSide(
+                                          color: EastColors.of(context).divider,
+                                          width: 0.7))),
+                              child: Text(
+                                  _wisdomPresentation.resolveItem(
+                                      _item, Localizations.localeOf(context)),
+                                  key: const ValueKey(
+                                      'reflection-associated-wisdom'),
+                                  style: _style(18,
+                                      color: eastMutedTextColor(context),
+                                      height: 1.55)),
+                            ),
+                            const SizedBox(height: 36),
+                            if (_editingThoughtId != null) ...[
+                              Semantics(
+                                  header: true,
+                                  child: Text(l10n.reflectionOverTime,
+                                      style: _style(14,
+                                          color: eastMutedTextColor(context)))),
+                              const SizedBox(height: 22),
+                              if (_item.reflection != null)
+                                _previousThought(
+                                    _item.reflection!, _item.reflectedAt),
+                              for (final thought
+                                  in _item.reflectionHistory.thoughts)
+                                if (thought.id != _editingThoughtId)
+                                  _previousThought(
+                                      thought.text,
+                                      DateTime.fromMillisecondsSinceEpoch(
+                                              thought.createdAtMs,
+                                              isUtc: true)
+                                          .toIso8601String()),
+                              Container(
+                                  width: 28,
+                                  height: 0.7,
+                                  color: EastColors.of(context).divider),
+                              const SizedBox(height: 28),
+                            ],
+                            Text(_writingDate,
+                                key: _editorKey,
+                                style: _style(13,
+                                    color: eastMutedTextColor(context))),
+                            const SizedBox(height: 12),
+                            MergeSemantics(
+                                child: Semantics(
+                              label: l10n.reflection,
+                              child: TextField(
+                                key: const ValueKey('reflection-writing-area'),
+                                controller: _controller,
+                                focusNode: _editorFocus,
+                                enabled: !_deleteInProgress && !_addingThought,
+                                keyboardType: TextInputType.multiline,
+                                minLines: 6,
+                                maxLines: null,
+                                maxLength: SavedReflectionsService
+                                    .maximumReflectionLength,
+                                inputFormatters: [
+                                  LengthLimitingTextInputFormatter(
+                                      SavedReflectionsService
+                                          .maximumReflectionLength)
+                                ],
+                                style: _style(24, height: 1.65),
+                                cursorColor: EastColors.of(context).ink,
+                                decoration: InputDecoration(
+                                  hintText: _prompt,
+                                  hintStyle: _style(24,
+                                      color: EastColors.of(context).hint,
+                                      height: 1.65),
+                                  contentPadding: EdgeInsets.zero,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  counter: ExcludeSemantics(
+                                      child: characterCount >= counterThreshold
+                                          ? Text(
+                                              '$characterCount/${SavedReflectionsService.maximumReflectionLength}',
+                                              style: _style(13,
+                                                  color: eastMutedTextColor(
+                                                      context)))
+                                          : const SizedBox.shrink()),
                                 ),
                               ),
+                            )),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 28),
+                              child: Semantics(
+                                  liveRegion: true,
+                                  child: Text(
+                                      _saveState == ReflectionSaveState.saved
+                                          ? l10n.reflectionSaved
+                                          : _saveState ==
+                                                  ReflectionSaveState.saving
+                                              ? l10n.reflectionSaving
+                                              : '',
+                                      key: const ValueKey(
+                                          'reflection-save-status'),
+                                      style: _style(13,
+                                          color: eastMutedTextColor(context)))),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
+                            if (_item.hasReflection &&
+                                _controller.text.trim().isNotEmpty) ...[
+                              const SizedBox(height: 18),
+                              TextButton(
+                                  key: const ValueKey('reflection-add-thought'),
+                                  onPressed:
+                                      _addingThought ? null : _addThought,
+                                  style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: const Size(44, 44),
+                                      alignment:
+                                          AlignmentDirectional.centerStart),
+                                  child: Text(l10n.reflectionAddThought,
+                                      style: _style(16))),
+                            ],
+                          ]),
+                    )),
                   ),
                 ),
               ),

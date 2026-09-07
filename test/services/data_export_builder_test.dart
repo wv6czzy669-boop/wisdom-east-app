@@ -65,7 +65,7 @@ void main() {
       final decoded = decodeJson(document);
 
       expect(decoded['format'], 'EAST Data Export');
-      expect(decoded['version'], 2);
+      expect(decoded['version'], 3);
       expect(decoded['exportedAt'], exportedAt.toUtc().toIso8601String());
     });
 

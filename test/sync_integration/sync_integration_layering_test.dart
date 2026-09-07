@@ -204,6 +204,8 @@ void main() {
       '../models/favorite_item.dart',
       '../models/kept_record.dart',
       '../repositories/kept_repository.dart',
+      // The dated-thought payload shares its validation with protected Kept.
+      '../models/reflection_history.dart',
       'package:wisdom_app/models/favorite_item.dart',
       'package:wisdom_app/models/kept_record.dart',
       'package:wisdom_app/repositories/kept_repository.dart',

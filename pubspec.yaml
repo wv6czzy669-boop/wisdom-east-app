@@ -2,7 +2,7 @@ name: wisdom_app
 description: A minimal wisdom app
 publish_to: "none"
 
-version: 1.4.0+44
+version: 2.0.0+45
 environment:
   sdk: ">=3.0.0 <4.0.0"
   flutter: ">=3.44.0"

@@ -1,5 +1,16 @@
 # EAST. CloudKit Sync Design v1.0 (Phase 4A through Phase 4F+, current shipped state)
 
+**Daily-access product decision, 2026-09-07:** [Account authority](DAILY_RITUAL_ACCOUNT_AUTHORITY.md)
+supersedes this document's historical device-only daily-ritual exclusions.
+Daily rights use a separate private zone and do not join the Kept/Reflection
+sync, opt-in, outbox or deletion pipeline described below.
+
+**Pending dated-thought extension:** [Reflection history](REFLECTION_HISTORY.md)
+documents the additive `reflectionHistoryJson` field, per-thought merge behavior
+and CloudKit Production schema prerequisite. Its merge rule extends the
+whole-record policy below only for additional thoughts; original Reflection,
+epoch and Kept tombstone precedence remain as specified here.
+
 **Status (current, Build 26+):** CloudKit sync is implemented and wired end to end. Sections 1-15 below record the design and incremental build order (Phase 4A's pure Dart sync domain through Phase 4E-1's integration foundations) and remain accurate as history and as the frozen record/conflict/privacy model still in force. Beyond Phase 4E-1, the phases anticipated in §15.11 (4E-2 real-mutation wiring, 4E-3 incoming-apply, 4E-4 bootstrap/reconciliation, 4E-5 end-to-end tests, and 4F startup/lifecycle wiring) have since been implemented, plus the "Remove from iCloud" deletion/recovery work and a diagnostics/recovery layer that were not yet designed when Section 15 was written. The current shipped architecture:
 
 - **Kept + Reflections sync through the user's private CloudKit database**, exactly as specified in Sections 1-4 below (private database only, `EASTKeptZone`, deterministic `revealId`-derived record names, whole-record last-writer-wins conflict resolution with the `dataEpoch` precedence rule).

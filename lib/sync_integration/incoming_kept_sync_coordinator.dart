@@ -52,6 +52,7 @@ import '../sync/cloud_kept_wisdom_projection.dart';
 import '../sync/conflict_resolution.dart';
 import '../sync/data_epoch.dart';
 import '../sync/sync_record_identity.dart';
+import '../sync/sync_change.dart';
 import '../sync/sync_tombstone.dart';
 import '../sync_orchestration/pending_incoming_sync_batch.dart';
 import '../sync_persistence/account_sync_state.dart';
@@ -226,12 +227,14 @@ final class _RecordOutcome {
     this.preservedId,
     this.intentIdToRetire,
     this.outboxMutationIdToRetire,
+    this.needsMergedUpload = false,
   });
 
   final CloudKeptWisdomProjection finalProjection;
   final String? preservedId;
   final String? intentIdToRetire;
   final String? outboxMutationIdToRetire;
+  final bool needsMergedUpload;
 }
 
 /// Build 26 Phase 4E-3b: the real incoming-apply coordinator. See the
@@ -396,6 +399,24 @@ final class IncomingKeptSyncCoordinator {
         );
       }
       outcomes.add(outcome);
+    }
+
+    // Persist a complete union before replacing local data or checkpointing.
+    // If interrupted, this outbox projection is itself a recovery candidate.
+    try {
+      for (final outcome in outcomes.where((o) => o.needsMergedUpload)) {
+        await _syncPersistenceStore.enqueueMutation(
+            batch.accountFingerprint,
+            SyncChange(
+                kind: SyncChangeKind.update,
+                projection: outcome.finalProjection,
+                enqueuedAt: DateTime.fromMillisecondsSinceEpoch(
+                    outcome.finalProjection.updatedAtMs,
+                    isUtc: true)));
+      }
+    } on SyncPersistenceStoreException {
+      return const IncomingApplyResult(
+          status: IncomingApplyStatus.persistenceFailure);
     }
 
     // Section 16/17 step 1: exactly one complete Kept envelope replace.
@@ -653,7 +674,18 @@ final class IncomingKeptSyncCoordinator {
     // Computed here (rather than after the retirement decision below) because
     // the "local wins decisively" branch now needs it to decide retirement by
     // content rather than by candidate-source bookkeeping.
-    final finalProjection = localWon ? current.projection : incomingRemote;
+    final winner = localWon ? current.projection : incomingRemote;
+    final CloudKeptWisdomProjection finalProjection;
+    try {
+      finalProjection = winner.mergingThoughts([
+        incomingRemote,
+        if (physicalCandidate != null) physicalCandidate.projection,
+        if (intentCandidate != null) intentCandidate.projection,
+        if (outboxCandidate != null) outboxCandidate.projection,
+      ]);
+    } on FormatException {
+      return null;
+    }
 
     String? intentIdToRetire;
     String? outboxMutationIdToRetire;
@@ -705,6 +737,7 @@ final class IncomingKeptSyncCoordinator {
 
     return _RecordOutcome(
       finalProjection: finalProjection,
+      needsMergedUpload: !identical(finalProjection, winner),
       preservedId: preservedId,
       intentIdToRetire: intentIdToRetire,
       outboxMutationIdToRetire: outboxMutationIdToRetire,
@@ -758,6 +791,7 @@ final class IncomingKeptSyncCoordinator {
         isUtc: true,
       ),
       reflectionText: payload.reflectionText,
+      reflectionHistoryJson: payload.reflectionHistoryJson,
       reflectedAt: payload.reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
@@ -814,6 +848,7 @@ final class IncomingKeptSyncCoordinator {
         isUtc: true,
       ),
       reflectionText: projection.reflectionText,
+      reflectionHistoryJson: projection.reflectionHistoryJson,
       reflectedAt: projection.reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(

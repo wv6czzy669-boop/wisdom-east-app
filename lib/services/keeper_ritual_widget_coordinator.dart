@@ -19,11 +19,9 @@ typedef DailyWisdomAccessServiceFactory = DailyWisdomAccessService Function({
 /// Keeps the optional Keeper ritual widget and EAST.'s existing daily-access
 /// record on one occurrence.
 ///
-/// WidgetKit may record a provisional reveal while the Flutter process is
-/// absent. This coordinator commits that exact candidate through
-/// [DailyWisdomAccessService] before Home reads its status. The repository
-/// still mints the revealId and remains the sole authority for the rolling
-/// 24-hour lock; the widget never writes either domain directly.
+/// New widget reveals import their exact CloudKit-authorized occurrence before
+/// Home reads its status. Only pre-upgrade provisional documents still need
+/// the bounded local identity migration.
 class KeeperRitualWidgetCoordinator {
   KeeperRitualWidgetCoordinator({
     required AppearancePreferenceController appearanceController,
@@ -109,6 +107,7 @@ class KeeperRitualWidgetCoordinator {
   }
 
   Future<void> _reconcileOnce() async {
+    await _dailyWisdomAccessService.reconcileAccountAuthority(refresh: false);
     final initialSnapshot = await _widgetService.readSnapshot();
 
     // A provisional reveal can only be created by the iOS 17 AppIntent after
@@ -150,6 +149,9 @@ class KeeperRitualWidgetCoordinator {
   Future<void> _commitProvisionalReveal(
     KeeperRitualWidgetReveal reveal,
   ) async {
+    // A new widget has already persisted the server grant in the shared cache.
+    // Never send it through the old local commit path or acquire a second grant.
+    if (reveal.revealId != null) return;
     final fixedClockService = _dailyWisdomAccessServiceFactory(
       clock: () => reveal.revealedAt,
     );
@@ -170,10 +172,7 @@ class KeeperRitualWidgetCoordinator {
       return;
     }
 
-    await fixedClockService.finalizeVisualReveal(
-      text: prepared.text,
-      revealBoundary: reveal.revealedAt,
-    );
+    await fixedClockService.restoreLegacyWidgetReveal(reveal);
   }
 
   Future<void> _publishLockedOccurrence(DailyWisdomStatus status) async {

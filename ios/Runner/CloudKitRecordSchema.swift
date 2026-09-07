@@ -50,6 +50,7 @@ enum CloudKitRecordSchema {
     static let revealedAtMs = "revealedAtMs"
     static let keptAtMs = "keptAtMs"
     static let reflectionText = "reflectionText"
+    static let reflectionHistoryJson = "reflectionHistoryJson"
     static let reflectedAtMs = "reflectedAtMs"
     static let updatedAtMs = "updatedAtMs"
     static let mutationId = "mutationId"
@@ -61,7 +62,7 @@ enum CloudKitRecordSchema {
     /// Fields a real tombstone-form record never carries (§2.4) -- seeing
     /// one indicates corruption or tampering, not a variant to tolerate.
     static let forbiddenOnTombstone: [String] = [
-      revealId, wisdomText, wisdomId, revealedAtMs, keptAtMs, reflectionText, reflectedAtMs,
+      revealId, wisdomText, wisdomId, revealedAtMs, keptAtMs, reflectionText, reflectedAtMs, reflectionHistoryJson,
     ]
   }
 

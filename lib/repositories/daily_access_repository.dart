@@ -178,6 +178,36 @@ class DailyAccessRepository {
     );
   }
 
+  /// Adopts an occurrence already authorized by the account authority. This
+  /// never mints an identity, selects a wisdom, or promotes an unshown candidate.
+  /// A late response cannot replace a newer occurrence for the same account.
+  Future<DailyWisdomRecord> adoptAuthorizedRecord(DailyWisdomRecord incoming) {
+    if (incoming.authorityAccountScope == null || incoming.revealId == null) {
+      throw ArgumentError('An account-authorized occurrence is required.');
+    }
+    return _operationCoordinator.runMutation<DailyWisdomRecord>(
+      resourceKey: resourceKey,
+      operationKey: 'adopt-authorized:${incoming.revealId}',
+      operation: () async {
+        final current = await _loadRecordRecoveringCorruption();
+        if (current != null &&
+            current.authorityAccountScope == incoming.authorityAccountScope &&
+            current.revealedAt.isAfter(incoming.revealedAt)) {
+          return current;
+        }
+        await _saveDailyWisdomRecord(incoming);
+        // Clear only the exact obsolete candidate observed here. The existing
+        // guarded cleanup cannot erase a subsequently prepared daily candidate.
+        final pending = await _loadPendingDailyWisdomReveal();
+        if (pending != null &&
+            !pending.preparedAt.isAfter(incoming.revealedAt)) {
+          _deferClearSpecificPendingBestEffort(pending.encode());
+        }
+        return incoming;
+      },
+    );
+  }
+
   Future<void> clearDailyWisdomRecordBestEffort() async {
     await _operationCoordinator.runMutation<void>(
       resourceKey: resourceKey,

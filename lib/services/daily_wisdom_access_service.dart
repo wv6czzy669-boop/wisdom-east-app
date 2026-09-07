@@ -5,6 +5,8 @@ import '../models/daily_wisdom_record.dart';
 import '../models/daily_wisdom_selection.dart';
 import '../models/pending_daily_wisdom_reveal.dart';
 import '../repositories/daily_access_repository.dart' hide WisdomSelector;
+import 'daily_ritual_authority.dart';
+import 'keeper_ritual_widget_service.dart';
 
 typedef WisdomSelector = FutureOr<String> Function();
 typedef WisdomSelectionSelector = FutureOr<DailyWisdomSelection> Function();
@@ -113,6 +115,7 @@ class DailyWisdomAccessService {
     WisdomClock? clock,
     this.lockDuration = DailyWisdomRecord.lockDuration,
     this.statusTimeout = defaultStatusTimeout,
+    this.authority,
   })  : _repository = repository,
         _clock = clock ?? DateTime.now;
 
@@ -120,6 +123,97 @@ class DailyWisdomAccessService {
   final WisdomClock _clock;
   final Duration lockDuration;
   final Duration statusTimeout;
+  final DailyRitualAuthority? authority;
+  Future<void>? _accountRefresh;
+
+  bool get requiresAccountAuthorization => authority != null;
+
+  /// Called before any newly prepared text becomes visible. A failed or
+  /// uncertain request never falls back to a locally generated daily right.
+  Future<DailyWisdomAccess> authorizePreparedReveal(
+      DailyWisdomPreparedReveal prepared) async {
+    final accountAuthority = authority;
+    final wisdomId = prepared.wisdomId;
+    if (accountAuthority == null || wisdomId == null) {
+      throw const DailyRitualAuthorityException(
+          DailyRitualAuthorityFailure.unavailable);
+    }
+    final legacy = await _repository.loadDailyWisdomRecord();
+    final authorized =
+        await accountAuthority.claim(wisdomId: wisdomId, legacyRecord: legacy);
+    final record = await _repository.adoptAuthorizedRecord(authorized.record);
+    return _authorizedAccess(record,
+        isNew: authorized.created &&
+            record.revealId == authorized.record.revealId);
+  }
+
+  /// Import a shared app/widget cache first, then refresh it opportunistically.
+  /// The refresh does not acquire a daily right and cannot block offline reading.
+  Future<void> reconcileAccountAuthority({bool refresh = true}) async {
+    final accountAuthority = authority;
+    if (accountAuthority == null) return;
+    try {
+      final cached = await accountAuthority.readCached();
+      if (cached != null) {
+        await _repository.adoptAuthorizedRecord(cached.record);
+      }
+    } catch (_) {}
+    if (refresh && _accountRefresh == null) {
+      _accountRefresh = _refreshAccount(accountAuthority).whenComplete(() {
+        _accountRefresh = null;
+      });
+      unawaited(_accountRefresh);
+    }
+  }
+
+  Future<void> _refreshAccount(DailyRitualAuthority accountAuthority) async {
+    try {
+      final legacy = await _repository.loadDailyWisdomRecord();
+      final refreshed = await accountAuthority.refresh(legacyRecord: legacy);
+      if (refreshed != null) {
+        await _repository.adoptAuthorizedRecord(refreshed.record);
+      }
+    } catch (_) {
+      // Previously opened writing remains readable when the account is offline.
+    }
+  }
+
+  /// Only a pre-upgrade widget document has an already-visible occurrence
+  /// without an ID. New widgets always carry the server ID and use the cache.
+  Future<void> restoreLegacyWidgetReveal(
+      KeeperRitualWidgetReveal reveal) async {
+    if (!reveal.needsAppCommit || reveal.revealId != null) {
+      throw ArgumentError('Only an already-opened legacy widget is eligible.');
+    }
+    final pending = await _repository.loadPendingDailyWisdomReveal();
+    if (pending?.text != reveal.canonicalText ||
+        pending?.wisdomId != reveal.wisdomId ||
+        pending!.preparedAt.isAfter(reveal.revealedAt)) {
+      return;
+    }
+    await _repository.finalizeVisualReveal(
+      text: reveal.canonicalText,
+      revealBoundary: reveal.revealedAt,
+      now: reveal.revealedAt,
+    );
+  }
+
+  /// Reading this occurrence never extends its interval or consumes a right.
+  Future<DailyWisdomAccess?> lastOpenedWisdom() async {
+    final record = await _repository.loadDailyWisdomRecord();
+    if (record == null || record.text == corruptRecordRecoveryText) return null;
+    return _authorizedAccess(record, isNew: false);
+  }
+
+  DailyWisdomAccess _authorizedAccess(DailyWisdomRecord record,
+          {required bool isNew}) =>
+      DailyWisdomAccess(
+          text: record.text,
+          isNew: isNew,
+          unlockAt: record.unlockAt,
+          revealId: record.revealId,
+          revealedAt: record.revealedAt,
+          wisdomId: record.wisdomId);
 
   static const Duration defaultStatusTimeout = Duration(seconds: 4);
   static const String corruptRecordRecoveryText = 'Silence is still available.';
@@ -226,6 +320,14 @@ class DailyWisdomAccessService {
     required String text,
     required DateTime revealBoundary,
   }) async {
+    if (requiresAccountAuthorization) {
+      final pending = await _repository.loadPendingDailyWisdomReveal();
+      final current = await _repository.loadDailyWisdomRecord();
+      final wisdomId =
+          pending?.text == text ? pending?.wisdomId : current?.wisdomId;
+      return authorizePreparedReveal(DailyWisdomPreparedReveal(
+          text: text, wisdomId: wisdomId, hasAuthoritativeRecord: false));
+    }
     final record = await _repository.finalizeVisualReveal(
       text: text,
       revealBoundary: revealBoundary,

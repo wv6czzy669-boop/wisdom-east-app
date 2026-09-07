@@ -113,6 +113,7 @@ final class CloudKeptWisdomWireEnvelope {
     'revealedAtMs',
     'keptAtMs',
     'reflectionText',
+    'reflectionHistoryJson',
     'reflectedAtMs',
     'deletedAtMs',
     'updatedAtMs',
@@ -162,6 +163,8 @@ final class CloudKeptWisdomWireEnvelope {
       'keptAtMs': projection.keptAtMs,
       if (projection.reflectionText != null)
         'reflectionText': projection.reflectionText,
+      if (projection.reflectionHistoryJson != null)
+        'reflectionHistoryJson': projection.reflectionHistoryJson,
       if (projection.reflectedAtMs != null)
         'reflectedAtMs': projection.reflectedAtMs,
       'updatedAtMs': projection.updatedAtMs,

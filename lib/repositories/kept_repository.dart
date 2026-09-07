@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/favorite_item.dart';
 import '../models/kept_bootstrap_result.dart';
 import '../models/kept_record.dart';
+import '../models/reflection_history.dart';
 import '../utils/reflection_text_policy.dart';
 import '../models/kept_state_envelope.dart';
 import '../persistence/kept_state_store.dart';
@@ -289,6 +290,8 @@ final class KeptRepository {
     required String reflection,
     required bool isKeeper,
     DateTime? reflectedAt,
+    String? thoughtId,
+    String? presetReflectionHistoryJson,
     String? presetMutationId,
     DateTime? presetUpdatedAt,
     Future<void> Function(KeptRecord target)? onAuthorized,
@@ -338,7 +341,21 @@ final class KeptRepository {
           );
         }
 
-        if (existing.reflectionText == normalized) {
+        final previousThought = thoughtId == null
+            ? null
+            : existing.reflectionHistory.thoughts
+                .where((t) => t.id == thoughtId)
+                .firstOrNull;
+        if (thoughtId != null && existing.reflectionText == null) {
+          throw const KeptRepositoryException('missing-reflection',
+              'The original reflection no longer exists.');
+        }
+        if ((thoughtId == null &&
+                existing.reflectionText == normalized &&
+                (presetReflectionHistoryJson == null ||
+                    presetReflectionHistoryJson ==
+                        existing.reflectionHistoryJson)) ||
+            (thoughtId != null && previousThought?.text == normalized)) {
           // Genuinely unchanged content: no replace, no mutationId refresh,
           // no updatedAt change.
           return KeptRepositoryMutationResult(
@@ -358,8 +375,19 @@ final class KeptRepository {
             ? _validateId(presetMutationId)
             : _generateId();
         final updated = existing.copyWith(
-          reflectionText: normalized,
-          reflectedAt: mutationTime,
+          reflectionText:
+              thoughtId == null ? normalized : existing.reflectionText,
+          reflectedAt: thoughtId == null ? mutationTime : existing.reflectedAt,
+          reflectionHistoryJson: presetReflectionHistoryJson ??
+              (thoughtId == null
+                  ? null
+                  : existing.reflectionHistory
+                      .upsert(
+                          id: thoughtId,
+                          text: normalized,
+                          timestampMs: updatedAt.millisecondsSinceEpoch,
+                          mutationId: mutationId)
+                      .encode()),
           updatedAt: updatedAt,
           mutationId: mutationId,
         );
@@ -419,6 +447,10 @@ final class KeptRepository {
             : _generateId();
         final updated = existing.copyWith(
           clearReflection: true,
+          reflectionHistoryJson: existing.reflectionHistoryJson == null
+              ? null
+              : ReflectionHistory(clearedAtMs: updatedAt.millisecondsSinceEpoch)
+                  .encode(),
           updatedAt: updatedAt,
           mutationId: mutationId,
         );
@@ -774,6 +806,7 @@ final class KeptRepository {
       text: record.wisdomText,
       date: formatFavoriteDisplayDate(record.keptAt.toLocal()),
       reflection: record.reflectionText,
+      reflectionHistoryJson: record.reflectionHistoryJson,
       reflectedAt: record.reflectedAt?.toIso8601String(),
       keptAt: record.keptAt.toIso8601String(),
       wisdomId: record.wisdomId,

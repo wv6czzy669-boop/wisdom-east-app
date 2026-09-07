@@ -156,7 +156,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get journalSemantic => '日記';
 
   @override
-  String get keeper => '残す';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => '購入を復元';
@@ -214,7 +214,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '3つの内省が含まれます。Keeperなら、残ったものをいくつでも書き留められます。';
 
   @override
-  String get becomeKeeper => '残すをひらく';
+  String get becomeKeeper => 'Keeperを始める';
 
   @override
   String get whoseJournal => 'これは誰の日記ですか？';
@@ -327,10 +327,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get takeItWithYou => '持っていく。';
 
   @override
-  String get takeItWithYouKeeper => '持っていく。残すで利用できます。';
+  String get takeItWithYouKeeper => '持っていく。Keeperで利用できます。';
 
   @override
-  String get availableWithKeeper => '残すで利用できます。';
+  String get availableWithKeeper => 'Keeperで利用できます。';
 
   @override
   String get opensKeeper => 'Keeperを開きます。';
@@ -339,7 +339,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get nameUpper => '名前';
 
   @override
-  String get keeperPersistenceError => '「残す」へのアクセスを保存できませんでした。「購入を復元」をお試しください。';
+  String get keeperPersistenceError =>
+      'Keeperへのアクセスを保存できませんでした。「購入を復元」をお試しください。';
 
   @override
   String get purchaseUpdating => '購入状況を更新中です。設定から「購入を復元」をお試しください。';
@@ -378,7 +379,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exportKeptAndReflections => '残した知恵と内省を持っていく。';
 
   @override
-  String get keeperAccessActive => '「残す」は利用可能です';
+  String get keeperAccessActive => 'Keeperは利用可能です';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -517,4 +518,130 @@ class AppLocalizationsJa extends AppLocalizations {
   String remainingDurationMinutesOnly(int minutes) {
     return '残り$minutes分';
   }
+
+  @override
+  String get keeperPreviewLabel => 'Keeperを少し体験';
+
+  @override
+  String get keeperWidgetTab => 'ウィジェット';
+
+  @override
+  String get keeperPreviewExample => '表示例';
+
+  @override
+  String get keeperPreviewReflection => '今日は、急がずに進みたい。';
+
+  @override
+  String get keeperDailyRitual => 'Keeperでも、そうでなくても、知恵は24時間にひとつ。';
+
+  @override
+  String get keeperWidgetStepOne => 'ホーム画面の何もない場所を長押しします。';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      '「編集」から「ウィジェットを追加」をタップします。以前のiOSでは「＋」ボタンをタップします。';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'EAST.を探し、Keeperの儀式ウィジェットを選んで「ウィジェットを追加」をタップします。';
+
+  @override
+  String get reflectionSaved => '保存しました';
+
+  @override
+  String get reflectionSaving => '保存中…';
+
+  @override
+  String get reflectionCopyText => '文章をコピー';
+
+  @override
+  String get reflectionCopied => 'コピーしました';
+
+  @override
+  String get reflectionAddThought => '新しい思いを添える';
+
+  @override
+  String get reflectionRevisitPrompt => '今日は、この言葉をどう受けとる？';
+
+  @override
+  String get reflectionEarlier => '以前の思い';
+
+  @override
+  String get reflectionOverTime => '時を重ねて';
+
+  @override
+  String get reflectionHistoryDeleteExplanation => 'この知恵に添えた思いがすべて削除されます。';
+
+  @override
+  String get reflectionRecoveryMessage => '文章はまだ保存されていません。';
+
+  @override
+  String get settingsEveryday => '毎日の設定';
+
+  @override
+  String get settingsYourWriting => 'あなたの言葉';
+
+  @override
+  String get settingsAbout => 'EAST.について';
+
+  @override
+  String get writingLock => '文章のロック';
+
+  @override
+  String get writingLockDescription =>
+      'Face ID、Touch ID、またはデバイスのパスコードで、残したもの、内省、日記を開きます。';
+
+  @override
+  String get writingLockFootnote =>
+      '毎日の儀式はそのまま始められます。アプリを離れると、プライベートな文章は再びロックされます。';
+
+  @override
+  String get writingLockTitle => 'あなたの言葉は、あなたのもの。';
+
+  @override
+  String get writingLockPrompt => '認証して、プライベートな文章を開きます。';
+
+  @override
+  String get writingLockUnlock => 'ロックを解除';
+
+  @override
+  String get writingLockChecking => '認証中…';
+
+  @override
+  String get writingLockReason => 'プライベートな文章を開きます。';
+
+  @override
+  String get writingLockUnavailable =>
+      '認証を利用できません。デバイスのパスコードとFace IDまたはTouch IDの設定を確認してください。';
+
+  @override
+  String get writingLockToggleReason => 'プライベートな文章のロック設定を変更します。';
+
+  @override
+  String get writingLockOn => 'オン';
+
+  @override
+  String get writingLockOff => 'オフ';
+
+  @override
+  String get privacyPreview => 'アプリスイッチャーでは文章が非表示になります。';
+
+  @override
+  String get settingsAboutDescription => '一日に一度、自分に戻るための場所。';
+
+  @override
+  String get dailyRitualICloudRequired => '新しい知恵を開くには、iCloudにサインインしてください。';
+
+  @override
+  String get dailyRitualConnectionRequired => '新しい知恵を開くには、インターネットに接続してください。';
+
+  @override
+  String get dailyRitualUnavailable => '今は今日の知恵を開けません。もう一度お試しください。';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'iCloudアカウントごとに、24時間に一つの知恵。新しい知恵を開くにはインターネット接続が必要です。保存した文章はオフラインでも読めます。';
+
+  @override
+  String get dailyRitualPreviousWisdom => '前の知恵';
 }

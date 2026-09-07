@@ -180,6 +180,7 @@ final class KeptSyncIntegrationCoordinator {
     required String reflection,
     required bool isKeeper,
     DateTime? reflectedAt,
+    String? thoughtId,
   }) {
     return _integrationCoordinator.runExclusive<KeptRepositoryMutationResult>(
       resourceKey: resourceKey,
@@ -194,6 +195,7 @@ final class KeptSyncIntegrationCoordinator {
           reflection: reflection,
           isKeeper: isKeeper,
           reflectedAt: reflectedAt,
+          thoughtId: thoughtId,
           presetMutationId: presetMutationId,
           presetUpdatedAt: presetUpdatedAt,
           onAuthorized: (target) async {
@@ -413,6 +415,7 @@ final class KeptSyncIntegrationCoordinator {
       await _keptRepository.saveReflection(
         itemId: payload.localId!,
         reflection: payload.reflectionText!,
+        presetReflectionHistoryJson: payload.reflectionHistoryJson,
         isKeeper: true, // inert -- see the keep case above.
         reflectedAt: payload.reflectedAtMs == null
             ? null
@@ -518,6 +521,7 @@ final class KeptSyncIntegrationCoordinator {
         isUtc: true,
       ),
       reflectionText: payload.reflectionText,
+      reflectionHistoryJson: payload.reflectionHistoryJson,
       reflectedAt: payload.reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
@@ -568,6 +572,7 @@ final class KeptSyncIntegrationCoordinator {
       updatedAtMs: target.updatedAt.millisecondsSinceEpoch,
       mutationId: target.mutationId,
       reflectionText: target.reflectionText,
+      reflectionHistoryJson: target.reflectionHistoryJson,
       reflectedAtMs: target.reflectedAt?.millisecondsSinceEpoch,
       localId: target.id,
     );

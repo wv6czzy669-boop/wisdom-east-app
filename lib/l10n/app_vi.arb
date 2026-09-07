@@ -21,16 +21,32 @@
   "systemDefault": "Mặc định hệ thống",
   "english": "Tiếng Anh",
   "languageSettingSemantics": "Ngôn ngữ. Lựa chọn hiện tại: {value}.",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "Giao diện",
   "light": "Sáng",
   "dark": "Tối",
   "appearanceSettingSemantics": "Giao diện. Lựa chọn hiện tại: {value}.",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "Quay lại",
   "delete": "Xóa",
   "deleteUpper": "XÓA",
@@ -47,11 +63,19 @@
   "deleteReflection": "Xóa suy ngẫm",
   "reflectedEditReflection": "SUY NGẪM. Chỉnh sửa suy ngẫm.",
   "addReflectionNumbered": "Thêm suy ngẫm, mục {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "Mở suy ngẫm, mục {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "Nhật ký",
-  "keeper": "Giữ lại",
+  "keeper": "Keeper",
   "restorePurchases": "Khôi phục giao dịch mua",
   "icloudSync": "Đồng bộ iCloud",
   "removeFromIcloud": "Xóa khỏi iCloud",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "Người dùng miễn phí có thể giữ tối đa 3 điều minh triết.",
   "keepReflectingQuestion": "Tiếp tục suy ngẫm?",
   "reflectionLimitExplanation": "Ba Suy ngẫm được bao gồm. Keeper mở không gian không giới hạn cho những gì ở lại.",
-  "becomeKeeper": "MỞ GIỮ LẠI",
+  "becomeKeeper": "Mở Keeper",
   "whoseJournal": "Đây là nhật ký của ai?",
   "journalNameExplanation": "Một cái tên xuất hiện lặng lẽ trên trang tiêu đề của Nhật ký.",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "Nhấn giữ để chia sẻ điều minh triết này.",
   "shareWisdom": "Chia sẻ",
   "shareWisdomNumbered": "Chia sẻ điều minh triết, mục {itemNumber}",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "Lời nhắc nhẹ nhàng",
   "nothingHasStayedYet": "Chưa có điều gì còn lại.",
   "wisdomCouldNotBeRemoved": "Không thể xóa điều minh triết này. Vui lòng thử lại.",
@@ -108,11 +138,11 @@
   "yourName": "Tên của bạn",
   "journalCouldNotBePrepared": "Không thể chuẩn bị Nhật ký. Vui lòng thử lại.",
   "takeItWithYou": "Mang theo bên mình.",
-  "takeItWithYouKeeper": "Mang theo bên mình. Có trong “Giữ lại”.",
-  "availableWithKeeper": "Có trong “Giữ lại”.",
+  "takeItWithYouKeeper": "Mang theo bên mình. Có trong Keeper.",
+  "availableWithKeeper": "Có trong Keeper.",
   "opensKeeper": "Mở Keeper.",
   "nameUpper": "TÊN",
-  "keeperPersistenceError": "Không thể lưu quyền truy cập “Giữ lại”. Hãy thử Khôi phục giao dịch mua.",
+  "keeperPersistenceError": "Không thể lưu quyền truy cập Keeper. Hãy thử Khôi phục giao dịch mua.",
   "purchaseUpdating": "Trạng thái mua vẫn đang cập nhật. Hãy dùng Khôi phục giao dịch mua trong Cài đặt.",
   "purchaseNotReady": "Giao dịch mua chưa sẵn sàng. Vui lòng thử lại sau giây lát.",
   "restore": "Khôi phục",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "Nơi tĩnh lặng cất lời.",
   "preparing": "Đang chuẩn bị…",
   "exportKeptAndReflections": "Mang theo những điều minh triết đã giữ và các Suy ngẫm của bạn.",
-  "keeperAccessActive": "Quyền truy cập “Giữ lại” đang hoạt động",
+  "keeperAccessActive": "Quyền truy cập Keeper đang hoạt động",
   "keeperPurchaseInProgress": "Bước vào vòng tròn, {price}. Đang mua.",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "Bước vào vòng tròn, {price}, đóng góp một lần",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "Bước vào vòng tròn, tạm thời không khả dụng",
   "keepWithoutLimit": "Giữ lại không giới hạn.",
   "reflectWithoutLimit": "Suy ngẫm không giới hạn.",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "Không thể lưu Suy ngẫm. Hệ thống sẽ thử lại khi bạn tiếp tục viết.",
   "reflectionDeleteFailed": "Không thể xóa Suy ngẫm. Vui lòng thử lại.",
   "remainingDurationHoursMinutes": "Còn {hours} giờ {minutes} phút",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "Còn {hours} giờ",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "Còn {minutes} phút",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "Một thoáng Keeper",
+  "keeperWidgetTab": "Tiện ích",
+  "keeperPreviewExample": "Ví dụ",
+  "keeperPreviewReflection": "Hôm nay, tôi muốn bước tiếp mà không vội vàng.",
+  "keeperDailyRitual": "Một lời minh triết mỗi 24 giờ, dù có Keeper hay không.",
+  "keeperWidgetStepOne": "Chạm và giữ một vùng trống trên Màn hình chính.",
+  "keeperWidgetStepTwo": "Chạm vào Sửa, rồi Thêm tiện ích. Trên các phiên bản iOS cũ hơn, chạm vào nút +.",
+  "keeperWidgetStepThree": "Tìm EAST., chọn tiện ích Nghi thức Keeper, rồi chạm vào Thêm tiện ích.",
+  "reflectionSaved": "Đã lưu",
+  "reflectionSaving": "Đang lưu…",
+  "reflectionCopyText": "Sao chép văn bản",
+  "reflectionCopied": "Đã sao chép",
+  "reflectionAddThought": "Thêm một suy nghĩ mới",
+  "reflectionRevisitPrompt": "Hôm nay, tôi đọc lời này thế nào?",
+  "reflectionEarlier": "Trước đây",
+  "reflectionOverTime": "Theo thời gian",
+  "reflectionHistoryDeleteExplanation": "Tất cả suy nghĩ gắn với lời minh triết đã lưu này sẽ bị xóa.",
+  "reflectionRecoveryMessage": "Bài viết của bạn chưa được lưu.",
+  "settingsEveryday": "Tùy chọn hằng ngày",
+  "settingsYourWriting": "Những dòng viết của bạn",
+  "settingsAbout": "Về EAST.",
+  "writingLock": "Khóa trang viết",
+  "writingLockDescription": "Mở Điều còn lại, Suy ngẫm và Nhật ký bằng Face ID, Touch ID hoặc mật mã thiết bị.",
+  "writingLockFootnote": "Nghi thức hằng ngày vẫn luôn mở. Trang viết riêng tư sẽ khóa lại khi bạn rời ứng dụng.",
+  "writingLockTitle": "Lời bạn viết thuộc về bạn.",
+  "writingLockPrompt": "Xác thực để mở trang viết riêng tư.",
+  "writingLockUnlock": "Mở khóa",
+  "writingLockChecking": "Đang xác thực…",
+  "writingLockReason": "Mở trang viết riêng tư của bạn.",
+  "writingLockUnavailable": "Không thể xác thực. Hãy kiểm tra mật mã thiết bị và cài đặt Face ID hoặc Touch ID.",
+  "writingLockToggleReason": "Thay đổi khóa cho trang viết riêng tư của bạn.",
+  "writingLockOn": "Bật",
+  "writingLockOff": "Tắt",
+  "privacyPreview": "Trang viết được ẩn trong trình chuyển đổi ứng dụng.",
+  "settingsAboutDescription": "Một nơi để trở về với chính mình, mỗi ngày một lần.",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "Đăng nhập iCloud để mở một lời trí tuệ mới.",
+  "dailyRitualConnectionRequired": "Kết nối internet để mở một lời trí tuệ mới.",
+  "dailyRitualUnavailable": "Lời trí tuệ hằng ngày hiện chưa sẵn sàng. Vui lòng thử lại.",
+  "dailyRitualAccountNote": "Mỗi tài khoản iCloud nhận một lời trí tuệ mỗi 24 giờ. Cần kết nối internet để mở lời trí tuệ mới. Những trang viết đã lưu vẫn có thể đọc ngoại tuyến.",
+  "dailyRitualPreviousWisdom": "Lời trí tuệ trước"
 }

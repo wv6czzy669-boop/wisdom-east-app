@@ -23,6 +23,7 @@
 library;
 
 import '../sync/cloud_kept_wisdom_projection.dart';
+import '../models/reflection_history.dart';
 import '../sync/sync_record_identity.dart';
 import '../utils/canonical_uuid.dart';
 
@@ -98,6 +99,7 @@ final class LocalSyncIntentPayload {
     this.revealedAtMs,
     this.keptAtMs,
     this.reflectionText,
+    this.reflectionHistoryJson,
     this.reflectedAtMs,
     this.deletedAtMs,
   }) {
@@ -111,6 +113,7 @@ final class LocalSyncIntentPayload {
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
       reflectionText: reflectionText,
+      reflectionHistoryJson: reflectionHistoryJson,
       reflectedAtMs: reflectedAtMs,
       deletedAtMs: deletedAtMs,
       updatedAtMs: updatedAtMs,
@@ -143,6 +146,7 @@ final class LocalSyncIntentPayload {
     required int updatedAtMs,
     required String mutationId,
     String? reflectionText,
+    String? reflectionHistoryJson,
     int? reflectedAtMs,
     String? localId,
   }) {
@@ -155,6 +159,7 @@ final class LocalSyncIntentPayload {
       revealedAtMs: revealedAtMs,
       keptAtMs: keptAtMs,
       reflectionText: reflectionText,
+      reflectionHistoryJson: reflectionHistoryJson,
       reflectedAtMs: reflectedAtMs,
       updatedAtMs: updatedAtMs,
       mutationId: mutationId,
@@ -215,6 +220,7 @@ final class LocalSyncIntentPayload {
   final int? revealedAtMs;
   final int? keptAtMs;
   final String? reflectionText;
+  final String? reflectionHistoryJson;
   final int? reflectedAtMs;
   final int? deletedAtMs;
 
@@ -238,6 +244,8 @@ final class LocalSyncIntentPayload {
         if (revealedAtMs != null) 'revealedAtMs': revealedAtMs,
         if (keptAtMs != null) 'keptAtMs': keptAtMs,
         if (reflectionText != null) 'reflectionText': reflectionText,
+        if (reflectionHistoryJson != null)
+          'reflectionHistoryJson': reflectionHistoryJson,
         if (reflectedAtMs != null) 'reflectedAtMs': reflectedAtMs,
         if (deletedAtMs != null) 'deletedAtMs': deletedAtMs,
         'updatedAtMs': updatedAtMs,
@@ -258,6 +266,7 @@ final class LocalSyncIntentPayload {
       'revealedAtMs',
       'keptAtMs',
       'reflectionText',
+      'reflectionHistoryJson',
       'reflectedAtMs',
       'deletedAtMs',
       'updatedAtMs',
@@ -308,6 +317,8 @@ final class LocalSyncIntentPayload {
     final keptAtMs = raw['keptAtMs'];
     if (keptAtMs != null && keptAtMs is! int) return null;
 
+    final historyJson = raw['reflectionHistoryJson'];
+    if (historyJson != null && historyJson is! String) return null;
     final reflectionText = raw['reflectionText'];
     if (reflectionText != null && reflectionText is! String) return null;
 
@@ -328,6 +339,7 @@ final class LocalSyncIntentPayload {
         revealedAtMs: revealedAtMs as int?,
         keptAtMs: keptAtMs as int?,
         reflectionText: reflectionText as String?,
+        reflectionHistoryJson: historyJson as String?,
         reflectedAtMs: reflectedAtMs as int?,
         deletedAtMs: deletedAtMs as int?,
         updatedAtMs: updatedAtMs,
@@ -348,10 +360,16 @@ final class LocalSyncIntentPayload {
     required int? revealedAtMs,
     required int? keptAtMs,
     required String? reflectionText,
+    required String? reflectionHistoryJson,
     required int? reflectedAtMs,
     required int? deletedAtMs,
     required int updatedAtMs,
   }) {
+    final history = ReflectionHistory.decode(reflectionHistoryJson);
+    if ((isTombstone && reflectionHistoryJson != null) ||
+        (reflectionText == null && history.thoughts.isNotEmpty)) {
+      throw const FormatException('Inconsistent reflection history.');
+    }
     if (!isSupportedRevealId(revealId)) {
       throw const FormatException('Invalid local sync intent revealId.');
     }
@@ -475,6 +493,7 @@ final class LocalSyncIntentPayload {
         other.revealedAtMs == revealedAtMs &&
         other.keptAtMs == keptAtMs &&
         other.reflectionText == reflectionText &&
+        other.reflectionHistoryJson == reflectionHistoryJson &&
         other.reflectedAtMs == reflectedAtMs &&
         other.deletedAtMs == deletedAtMs &&
         other.updatedAtMs == updatedAtMs &&
@@ -492,6 +511,7 @@ final class LocalSyncIntentPayload {
         revealedAtMs,
         keptAtMs,
         reflectionText,
+        reflectionHistoryJson,
         reflectedAtMs,
         deletedAtMs,
         updatedAtMs,

@@ -25,8 +25,15 @@ import UserNotifications
     registerFileProtectionChannel(with: engineBridge.pluginRegistry)
     registerCloudKitSyncChannel(with: engineBridge.pluginRegistry)
     registerWidgetSnapshotChannel(with: engineBridge.pluginRegistry)
+    registerDailyRitualChannel(with: engineBridge.pluginRegistry)
     registerKeeperEntitlementChannel(with: engineBridge.pluginRegistry)
     registerProductionDiagnosticsChannel(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "EastPrivateWritingLock") {
+      let channel = FlutterMethodChannel(name: EastPrivateWritingLock.channelName, binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        EastPrivateWritingLock.shared.handle(call, result: result)
+      }
+    }
   }
 
   private func registerProductionDiagnosticsChannel(with registry: FlutterPluginRegistry) {
@@ -49,6 +56,15 @@ import UserNotifications
         return
       }
       self.productionDiagnostics.handle(call, result: result)
+    }
+  }
+
+  private func registerDailyRitualChannel(with registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "EastDailyRitualChannel") else { return }
+    let channel = FlutterMethodChannel(name: EastDailyRitualBridge.channelName,
+        binaryMessenger: registrar.messenger())
+    channel.setMethodCallHandler { call, result in
+      EastDailyRitualBridge.handle(call, result: result)
     }
   }
 

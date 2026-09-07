@@ -127,6 +127,25 @@ void main() {
     expect(decoded['journalOwnerName'], 'Doğukan Işık');
   });
 
+  test('an expired writing session never opens a native archive preview',
+      () async {
+    final graph = KeptRepositoryTestGraph();
+    var shares = 0;
+    final service = DataExportService(
+      savedReflectionsServiceProvider: () => graph.service,
+      journalOwnerService:
+          JournalOwnerService(ownerStore: InMemoryJournalOwnerStore()),
+      shareLauncher: (_) async {
+        shares++;
+        return const ShareResult('', ShareResultStatus.success);
+      },
+    );
+    expect(await service.exportAndShare(mayPresent: () => false), isFalse);
+    expect(shares, 0);
+    expect(await service.exportAndShare(mayPresent: () => true), isTrue);
+    expect(shares, 1);
+  });
+
   test('export does not mutate Kept, Reflections, or sync state', () async {
     final graph = KeptRepositoryTestGraph();
     graph.seed([

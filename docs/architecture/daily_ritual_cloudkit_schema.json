@@ -1,0 +1,30 @@
+{
+  "container": "iCloud.com.dogukan.dailywisdom",
+  "database": "private",
+  "zone": "EASTDailyRitualZone",
+  "deployment": "additive",
+  "productionDeployedOn": "2026-09-07",
+  "recordTypes": {
+    "CKEastDailyRitual": {
+      "recordName": "current",
+      "fields": {
+        "schemaVersion": "INT64",
+        "wisdomId": "STRING",
+        "revealId": "STRING",
+        "legacyRevealedAtMs": "INT64"
+      }
+    },
+    "CKEastDailyRitualClock": {
+      "recordName": "clock",
+      "fields": { "nonce": "STRING" }
+    }
+  },
+  "queryIndexes": [],
+  "notes": [
+    "Do not replace or reset the existing container schema.",
+    "CloudKit supplies modificationDate and recordChangeTag.",
+    "legacyRevealedAtMs is optional and only used for existing pre-upgrade occurrences.",
+    "Runtime records must remain in the user's private database; never write daily grants to the public database.",
+    "The approved deployment retains Apple's default schema roles for these new types: _world Read, _icloud Create, _creator Write."
+  ]
+}

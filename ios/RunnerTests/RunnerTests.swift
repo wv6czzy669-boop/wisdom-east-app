@@ -6,6 +6,103 @@ import XCTest
 @testable import Runner
 
 class RunnerTests: XCTestCase {
+  @MainActor
+  func testWritingLockChangesRequireSuccessfulDeviceAuthentication() {
+    let name = "east.lock-test.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    defer { defaults.removePersistentDomain(forName: name) }
+    let authenticator = WritingLockTestAuthenticator()
+    let lock = EastPrivateWritingLock(preferences: defaults, authenticator: authenticator)
+    XCTAssertFalse(lock.enabled)
+    var results: [Bool] = []
+    lock.authenticate(reason: "Private writing", changingEnabled: true) { results.append($0) }
+    XCTAssertFalse(lock.enabled)
+    authenticator.finish?(false)
+    XCTAssertFalse(lock.enabled)
+    lock.authenticate(reason: "Private writing", changingEnabled: true) { results.append($0) }
+    authenticator.finish?(true)
+    XCTAssertTrue(lock.enabled)
+    XCTAssertTrue(EastPrivateWritingLock(preferences: defaults, authenticator: authenticator).enabled)
+    lock.authenticate(reason: "Private writing", changingEnabled: false) { results.append($0) }
+    authenticator.finish?(false)
+    XCTAssertTrue(lock.enabled)
+    XCTAssertEqual(results, [false, true, false])
+  }
+
+  @MainActor
+  func testWritingLockBackgroundInvalidatesLateAuthenticationAndReturnsOnce() {
+    let name = "east.lock-test.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    defer { defaults.removePersistentDomain(forName: name) }
+    let authenticator = WritingLockTestAuthenticator()
+    let lock = EastPrivateWritingLock(preferences: defaults, authenticator: authenticator)
+    var results: [Bool] = []
+    lock.authenticate(reason: "Private writing", changingEnabled: true) { results.append($0) }
+    let late = authenticator.finish
+    lock.didEnterBackground()
+    late?(true)
+    XCTAssertEqual(results, [false])
+    XCTAssertFalse(lock.enabled)
+    XCTAssertEqual(authenticator.cancellations, 1)
+  }
+
+  @MainActor
+  func testWritingLockRejectsConcurrentAndBlankAuthenticationRequests() {
+    let name = "east.lock-test.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    defer { defaults.removePersistentDomain(forName: name) }
+    let authenticator = WritingLockTestAuthenticator()
+    let lock = EastPrivateWritingLock(preferences: defaults, authenticator: authenticator)
+    var results: [Bool] = []
+    lock.authenticate(reason: " ", changingEnabled: true) { results.append($0) }
+    lock.authenticate(reason: "Private writing", changingEnabled: true) { results.append($0) }
+    lock.authenticate(reason: "Private writing", changingEnabled: false) { results.append($0) }
+    authenticator.finish?(true)
+    lock.setSensitive(true)
+    XCTAssertTrue(lock.requiresProtectedFrame)
+    lock.setSensitive(false)
+    XCTAssertFalse(lock.requiresProtectedFrame)
+    XCTAssertEqual(results, [false, false, true])
+    XCTAssertEqual(authenticator.attempts, 1)
+  }
+
+  func testReflectionHistoryRoundTripsAndTombstoneClearsIt() throws {
+    let history = #"{"version":1,"clearedAtMs":0,"thoughts":[{"id":"aaaaaaaa-0000-4000-8000-000000000011","text":"A later thought.","createdAtMs":1754078800000,"updatedAtMs":1754078800000,"mutationId":"aaaaaaaa-0000-4000-8000-000000000012"}]}"#
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Peace enters slowly.", wisdomId: nil,
+      revealedAtMs: 1_754_078_400_000, keptAtMs: 1_754_078_700_000,
+      reflectionText: "Original words.", reflectedAtMs: 1_754_078_700_000,
+      reflectionHistoryJson: history, updatedAtMs: 1_754_078_800_000,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let decoded = try CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)).get()
+    XCTAssertEqual(decoded.reflectionHistoryJson, history)
+    XCTAssertEqual(decoded.reflectionText, "Original words.")
+    let tombstone = try CloudKitKeptWisdomCodec.encodeTombstone(
+      revealId: phase4CRevealIdA, deletedAtMs: 1_754_078_900_000,
+      updatedAtMs: 1_754_078_900_000, mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    XCTAssertTrue(tombstone.changedKeys().contains(CloudKitRecordSchema.KeptWisdomField.reflectionHistoryJson))
+    XCTAssertNil(tombstone[CloudKitRecordSchema.KeptWisdomField.reflectionHistoryJson])
+  }
+
+  func testReflectionHistoryCanKeepAnUndatedOriginalWithoutInventingItsDate() throws {
+    let history = #"{"version":1,"clearedAtMs":0,"thoughts":[{"id":"aaaaaaaa-0000-4000-8000-000000000011","text":"A later thought.","createdAtMs":1754078800000,"updatedAtMs":1754078800000,"mutationId":"aaaaaaaa-0000-4000-8000-000000000012"}]}"#
+    let record = try CloudKitKeptWisdomCodec.encodeActive(
+      revealId: phase4CRevealIdA, wisdomText: "Peace enters slowly.", wisdomId: nil,
+      revealedAtMs: 1_754_078_400_000, keptAtMs: 1_754_078_700_000,
+      reflectionText: "An old undated reflection.", reflectedAtMs: nil,
+      reflectionHistoryJson: history, updatedAtMs: 1_754_078_800_000,
+      mutationId: phase4CMutationId, dataEpoch: phase4CDataEpoch)
+    let decoded = try CloudKitKeptWisdomCodec.decode(record, systemFields: sampleSystemFields(for: record)).get()
+    XCTAssertNil(decoded.reflectedAtMs)
+    XCTAssertEqual(decoded.reflectionHistoryJson, history)
+  }
+
+  func testReflectionHistoryRejectsMalformedAndOversizedPayloads() {
+    XCTAssertFalse(CloudKitKeptWisdomCodec.isValidReflectionHistory("[]"))
+    XCTAssertFalse(CloudKitKeptWisdomCodec.isValidReflectionHistory(#"{"version":1,"clearedAtMs":0,"thoughts":[{}]}"#))
+    XCTAssertFalse(CloudKitKeptWisdomCodec.isValidReflectionHistory(String(repeating: "x", count: 512 * 1024 + 1)))
+  }
+
   // MARK: - App-switcher privacy shield
 
   @MainActor
@@ -2926,4 +3023,17 @@ private extension UIView {
     }
     return nil
   }
+}
+
+@MainActor
+private final class WritingLockTestAuthenticator: EastWritingAuthenticator {
+  var available = true
+  var attempts = 0
+  var cancellations = 0
+  var finish: ((Bool) -> Void)?
+  func authenticate(reason: String, completion: @escaping (Bool) -> Void) {
+    attempts += 1
+    finish = completion
+  }
+  func cancel() { cancellations += 1 }
 }

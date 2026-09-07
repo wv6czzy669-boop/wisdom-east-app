@@ -65,9 +65,12 @@ class RitualFlowController {
           nextPhase == RitualPhase.lockedCountdown,
       RitualPhase.pause => nextPhase == RitualPhase.heart,
       RitualPhase.heart => nextPhase == RitualPhase.revealed,
-      RitualPhase.revealed ||
-      RitualPhase.lockedCountdown =>
-        nextPhase == RitualPhase.launch,
+      // Offline reading can temporarily show the previous occurrence while
+      // Ask is waiting for an account connection. Its explicit Retry control
+      // returns to that question; it does not authorize another occurrence.
+      RitualPhase.revealed =>
+        nextPhase == RitualPhase.launch || nextPhase == RitualPhase.heart,
+      RitualPhase.lockedCountdown => nextPhase == RitualPhase.launch,
     };
   }
 

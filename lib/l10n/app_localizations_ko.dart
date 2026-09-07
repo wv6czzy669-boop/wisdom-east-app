@@ -156,7 +156,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get journalSemantic => '일기장';
 
   @override
-  String get keeper => '간직';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => '구입 항목 복원';
@@ -214,7 +214,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '세 번의 성찰이 포함됩니다. Keeper는 남는 모든 것을 위한 무제한 공간을 엽니다.';
 
   @override
-  String get becomeKeeper => '간직 열기';
+  String get becomeKeeper => 'Keeper 시작하기';
 
   @override
   String get whoseJournal => '누구의 일기장인가요?';
@@ -327,10 +327,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get takeItWithYou => '함께 가져가기.';
 
   @override
-  String get takeItWithYouKeeper => '함께 가져가기. ‘간직’에서 이용할 수 있습니다.';
+  String get takeItWithYouKeeper => '함께 가져가기. Keeper에서 이용할 수 있습니다.';
 
   @override
-  String get availableWithKeeper => '‘간직’에서 이용할 수 있습니다.';
+  String get availableWithKeeper => 'Keeper에서 이용할 수 있습니다.';
 
   @override
   String get opensKeeper => 'Keeper를 엽니다.';
@@ -340,7 +340,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      '‘간직’ 이용 권한을 저장하지 못했습니다. 구입 항목 복원을 시도해 주세요.';
+      'Keeper 이용 권한을 저장하지 못했습니다. 구입 항목 복원을 시도해 주세요.';
 
   @override
   String get purchaseUpdating =>
@@ -380,7 +380,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get exportKeptAndReflections => '남은 지혜와 성찰을 함께 가져가기.';
 
   @override
-  String get keeperAccessActive => '‘간직’ 이용 권한 활성화됨';
+  String get keeperAccessActive => 'Keeper 이용 권한 활성화됨';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -521,4 +521,130 @@ class AppLocalizationsKo extends AppLocalizations {
   String remainingDurationMinutesOnly(int minutes) {
     return '$minutes분 남음';
   }
+
+  @override
+  String get keeperPreviewLabel => 'Keeper 미리 보기';
+
+  @override
+  String get keeperWidgetTab => '위젯';
+
+  @override
+  String get keeperPreviewExample => '예시';
+
+  @override
+  String get keeperPreviewReflection => '오늘은 서두르지 않고 나아가고 싶다.';
+
+  @override
+  String get keeperDailyRitual => 'Keeper 이용 여부와 관계없이 24시간마다 하나의 지혜.';
+
+  @override
+  String get keeperWidgetStepOne => '홈 화면의 빈 공간을 길게 누르세요.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      '편집을 누른 뒤 위젯 추가를 누르세요. 이전 iOS 버전에서는 + 버튼을 누르세요.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'EAST.를 찾아 Keeper 의식 위젯을 선택하고 위젯 추가를 누르세요.';
+
+  @override
+  String get reflectionSaved => '저장됨';
+
+  @override
+  String get reflectionSaving => '저장 중…';
+
+  @override
+  String get reflectionCopyText => '글 복사';
+
+  @override
+  String get reflectionCopied => '복사됨';
+
+  @override
+  String get reflectionAddThought => '새로운 생각 더하기';
+
+  @override
+  String get reflectionRevisitPrompt => '오늘은 이 말을 어떻게 받아들이나요?';
+
+  @override
+  String get reflectionEarlier => '이전의 생각';
+
+  @override
+  String get reflectionOverTime => '시간이 흐르며';
+
+  @override
+  String get reflectionHistoryDeleteExplanation => '이 지혜에 남긴 모든 생각이 삭제됩니다.';
+
+  @override
+  String get reflectionRecoveryMessage => '아직 글이 저장되지 않았습니다.';
+
+  @override
+  String get settingsEveryday => '일상 설정';
+
+  @override
+  String get settingsYourWriting => '당신의 글';
+
+  @override
+  String get settingsAbout => 'EAST. 소개';
+
+  @override
+  String get writingLock => '글 잠금';
+
+  @override
+  String get writingLockDescription =>
+      'Face ID, Touch ID 또는 기기 암호로 남은 것, 성찰, 일기장을 여세요.';
+
+  @override
+  String get writingLockFootnote =>
+      '매일의 의식은 바로 시작할 수 있어요. 앱을 벗어나면 개인적인 글이 다시 잠겨요.';
+
+  @override
+  String get writingLockTitle => '당신의 글은 당신의 것이에요.';
+
+  @override
+  String get writingLockPrompt => '인증하고 개인적인 글을 여세요.';
+
+  @override
+  String get writingLockUnlock => '잠금 해제';
+
+  @override
+  String get writingLockChecking => '인증 중…';
+
+  @override
+  String get writingLockReason => '개인적인 글을 여세요.';
+
+  @override
+  String get writingLockUnavailable =>
+      '인증을 사용할 수 없어요. 기기 암호와 Face ID 또는 Touch ID 설정을 확인해 주세요.';
+
+  @override
+  String get writingLockToggleReason => '개인적인 글의 잠금 설정을 변경하세요.';
+
+  @override
+  String get writingLockOn => '켜짐';
+
+  @override
+  String get writingLockOff => '꺼짐';
+
+  @override
+  String get privacyPreview => '앱 전환기에서는 글이 숨겨져요.';
+
+  @override
+  String get settingsAboutDescription => '하루에 한 번, 나에게 돌아오는 공간.';
+
+  @override
+  String get dailyRitualICloudRequired => '새로운 지혜를 열려면 iCloud에 로그인하세요.';
+
+  @override
+  String get dailyRitualConnectionRequired => '새로운 지혜를 열려면 인터넷에 연결하세요.';
+
+  @override
+  String get dailyRitualUnavailable => '지금은 오늘의 지혜를 열 수 없어요. 다시 시도해 주세요.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'iCloud 계정당 24시간에 하나의 지혜가 열려요. 새로운 지혜를 열려면 인터넷 연결이 필요해요. 저장한 글은 오프라인에서도 읽을 수 있어요.';
+
+  @override
+  String get dailyRitualPreviousWisdom => '지난 지혜';
 }

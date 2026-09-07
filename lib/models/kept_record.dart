@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'reflection_history.dart';
+
 import '../utils/canonical_uuid.dart';
 import '../data/wisdoms.dart';
 import '../utils/reflection_text_policy.dart';
@@ -25,6 +27,7 @@ class KeptRecord {
     required DateTime revealedAt,
     required DateTime keptAt,
     this.reflectionText,
+    this.reflectionHistoryJson,
     DateTime? reflectedAt,
     required DateTime updatedAt,
     required this.mutationId,
@@ -43,6 +46,11 @@ class KeptRecord {
         // text correctly stays null; see resolveUniqueWisdomIdForEnglishSnapshot.
         wisdomId =
             wisdomId ?? resolveUniqueWisdomIdForEnglishSnapshot(wisdomText) {
+    final history = reflectionHistory;
+    if (reflectionText == null && history.thoughts.isNotEmpty) {
+      throw const FormatException(
+          'Reflection history requires an original reflection.');
+    }
     _validate(
       id: id,
       revealId: revealId,
@@ -90,6 +98,10 @@ class KeptRecord {
   /// trimmed — up to [maximumReflectionLength] grapheme clusters.
   final String? reflectionText;
 
+  final String? reflectionHistoryJson;
+  ReflectionHistory get reflectionHistory =>
+      ReflectionHistory.decode(reflectionHistoryJson);
+
   /// When the reflection was written. Always UTC when present. Must be
   /// null whenever [reflectionText] is null. [reflectionText] may
   /// temporarily exist with [reflectedAt] still null, since older data may
@@ -125,6 +137,8 @@ class KeptRecord {
         'revealedAtMs': revealedAt.millisecondsSinceEpoch,
         'keptAtMs': keptAt.millisecondsSinceEpoch,
         if (reflectionText != null) 'reflectionText': reflectionText,
+        if (reflectionHistoryJson != null)
+          'reflectionHistoryJson': reflectionHistoryJson,
         if (reflectedAt != null)
           'reflectedAtMs': reflectedAt!.millisecondsSinceEpoch,
         'updatedAtMs': updatedAt.millisecondsSinceEpoch,
@@ -159,6 +173,7 @@ class KeptRecord {
           DateTime.fromMillisecondsSinceEpoch(revealedAtMs, isUtc: true),
       keptAt: DateTime.fromMillisecondsSinceEpoch(keptAtMs, isUtc: true),
       reflectionText: reflectionText,
+      reflectionHistoryJson: _readOptionalString(data, 'reflectionHistoryJson'),
       reflectedAt: reflectedAtMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(reflectedAtMs, isUtc: true),
@@ -181,6 +196,7 @@ class KeptRecord {
   /// here, so a copy can never accidentally change this record's identity.
   KeptRecord copyWith({
     String? reflectionText,
+    String? reflectionHistoryJson,
     DateTime? reflectedAt,
     DateTime? updatedAt,
     String? mutationId,
@@ -195,6 +211,8 @@ class KeptRecord {
       reflectionText:
           clearReflection ? null : (reflectionText ?? this.reflectionText),
       reflectedAt: clearReflection ? null : (reflectedAt ?? this.reflectedAt),
+      reflectionHistoryJson:
+          reflectionHistoryJson ?? this.reflectionHistoryJson,
       updatedAt: updatedAt ?? this.updatedAt,
       mutationId: mutationId ?? this.mutationId,
       wisdomId: wisdomId,
@@ -212,6 +230,7 @@ class KeptRecord {
         other.revealedAt.isAtSameMomentAs(revealedAt) &&
         other.keptAt.isAtSameMomentAs(keptAt) &&
         other.reflectionText == reflectionText &&
+        other.reflectionHistoryJson == reflectionHistoryJson &&
         (other.reflectedAt == null && reflectedAt == null ||
             (other.reflectedAt != null &&
                 reflectedAt != null &&
@@ -229,6 +248,7 @@ class KeptRecord {
         revealedAt.millisecondsSinceEpoch,
         keptAt.millisecondsSinceEpoch,
         reflectionText,
+        reflectionHistoryJson,
         reflectedAt?.millisecondsSinceEpoch,
         updatedAt.millisecondsSinceEpoch,
         mutationId,

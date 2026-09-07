@@ -156,7 +156,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get journalSemantic => 'Dagboek';
 
   @override
-  String get keeper => 'Bewaren';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => 'Herstel aankopen';
@@ -216,7 +216,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Drie Reflecties zijn inbegrepen. Keeper opent onbeperkte ruimte voor wat blijft.';
 
   @override
-  String get becomeKeeper => 'BEWAREN ACTIVEREN';
+  String get becomeKeeper => 'Keeper worden';
 
   @override
   String get whoseJournal => 'Van wie is dit dagboek?';
@@ -336,10 +336,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get takeItWithYou => 'Neem het mee.';
 
   @override
-  String get takeItWithYouKeeper => 'Neem het mee. Beschikbaar met Bewaren.';
+  String get takeItWithYouKeeper => 'Neem het mee. Beschikbaar met Keeper.';
 
   @override
-  String get availableWithKeeper => 'Beschikbaar met Bewaren.';
+  String get availableWithKeeper => 'Beschikbaar met Keeper.';
 
   @override
   String get opensKeeper => 'Opent Keeper.';
@@ -349,7 +349,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      'Toegang tot Bewaren kon niet worden opgeslagen. Probeer Herstel aankopen.';
+      'Keeper-toegang kon niet worden opgeslagen. Probeer Aankopen herstellen.';
 
   @override
   String get purchaseUpdating =>
@@ -392,7 +392,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Neem je bewaarde wijsheden en Reflecties mee.';
 
   @override
-  String get keeperAccessActive => 'Toegang tot Bewaren actief';
+  String get keeperAccessActive => 'Keeper-toegang actief';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -567,4 +567,140 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get keeperPreviewLabel => 'Een blik op Keeper';
+
+  @override
+  String get keeperWidgetTab => 'Widget';
+
+  @override
+  String get keeperPreviewExample => 'Voorbeeld';
+
+  @override
+  String get keeperPreviewReflection =>
+      'Vandaag wil ik zonder haast verdergaan.';
+
+  @override
+  String get keeperDailyRitual =>
+      'Eén wijsheid per 24 uur, met of zonder Keeper.';
+
+  @override
+  String get keeperWidgetStepOne =>
+      'Houd een leeg gedeelte van het beginscherm ingedrukt.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'Tik op Wijzig en daarna op Voeg widget toe. Tik in eerdere iOS-versies op de knop +.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'Zoek EAST., kies de Keeper-ritueelwidget en tik op Voeg widget toe.';
+
+  @override
+  String get reflectionSaved => 'Opgeslagen';
+
+  @override
+  String get reflectionSaving => 'Opslaan…';
+
+  @override
+  String get reflectionCopyText => 'Tekst kopiëren';
+
+  @override
+  String get reflectionCopied => 'Gekopieerd';
+
+  @override
+  String get reflectionAddThought => 'Een nieuwe gedachte toevoegen';
+
+  @override
+  String get reflectionRevisitPrompt => 'Hoe lees ik dit vandaag?';
+
+  @override
+  String get reflectionEarlier => 'Eerder';
+
+  @override
+  String get reflectionOverTime => 'Met de tijd';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'Alle gedachten bij deze bewaarde wijsheid worden verwijderd.';
+
+  @override
+  String get reflectionRecoveryMessage => 'Je tekst is nog niet opgeslagen.';
+
+  @override
+  String get settingsEveryday => 'Voor elke dag';
+
+  @override
+  String get settingsYourWriting => 'Je woorden';
+
+  @override
+  String get settingsAbout => 'Over EAST.';
+
+  @override
+  String get writingLock => 'Tekstvergrendeling';
+
+  @override
+  String get writingLockDescription =>
+      'Open Wat blijft, Reflectie en Dagboek met Face ID, Touch ID of je toegangscode.';
+
+  @override
+  String get writingLockFootnote =>
+      'Je dagelijkse ritueel blijft toegankelijk. Je privéteksten worden weer vergrendeld wanneer je de app verlaat.';
+
+  @override
+  String get writingLockTitle => 'Je woorden zijn van jou.';
+
+  @override
+  String get writingLockPrompt =>
+      'Verifieer je identiteit om je privéteksten te openen.';
+
+  @override
+  String get writingLockUnlock => 'Ontgrendelen';
+
+  @override
+  String get writingLockChecking => 'Verifiëren…';
+
+  @override
+  String get writingLockReason => 'Open je privéteksten.';
+
+  @override
+  String get writingLockUnavailable =>
+      'Verificatie is niet beschikbaar. Controleer je toegangscode en de instellingen voor Face ID of Touch ID.';
+
+  @override
+  String get writingLockToggleReason =>
+      'Wijzig de vergrendeling van je privéteksten.';
+
+  @override
+  String get writingLockOn => 'Aan';
+
+  @override
+  String get writingLockOff => 'Uit';
+
+  @override
+  String get privacyPreview => 'Je teksten worden verborgen in de appkiezer.';
+
+  @override
+  String get settingsAboutDescription =>
+      'Een plek om eenmaal per dag bij jezelf terug te komen.';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'Log in bij iCloud om een nieuwe wijsheid te openen.';
+
+  @override
+  String get dailyRitualConnectionRequired =>
+      'Maak verbinding met internet om een nieuwe wijsheid te openen.';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'Je dagelijkse wijsheid is nu niet beschikbaar. Probeer het opnieuw.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'Eén wijsheid per iCloud-account per 24 uur. Voor een nieuwe wijsheid is internet nodig. Je opgeslagen teksten blijven offline beschikbaar.';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'Vorige wijsheid';
 }

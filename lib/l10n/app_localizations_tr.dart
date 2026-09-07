@@ -156,7 +156,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get journalSemantic => 'Günlük';
 
   @override
-  String get keeper => 'Tutucu';
+  String get keeper => 'Keeper';
 
   @override
   String get restorePurchases => 'Satın Alımları Geri Yükle';
@@ -213,10 +213,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get reflectionLimitExplanation =>
-      'Üç Yansıma dahildir. Tutucu, kalanlar için sınırsız alan açar.';
+      'Üç Yansıma dahildir. Keeper, kalanlar için sınırsız alan açar.';
 
   @override
-  String get becomeKeeper => 'TUTUCU OL';
+  String get becomeKeeper => 'Keeper ol';
 
   @override
   String get whoseJournal => 'Bu günlük kimin?';
@@ -247,7 +247,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get withinTheCircle => 'Çemberin içinde.';
 
   @override
-  String get keeperActive => 'Tutucu etkin';
+  String get keeperActive => 'Keeper etkin';
 
   @override
   String get oneTimePurchase => 'Tek seferlik satın alma';
@@ -335,10 +335,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get takeItWithYou => 'Yanında götür.';
 
   @override
-  String get takeItWithYouKeeper => 'Yanında götür. Tutucu ile kullanılabilir.';
+  String get takeItWithYouKeeper => 'Yanında götür. Keeper ile kullanılabilir.';
 
   @override
-  String get availableWithKeeper => 'Tutucu ile kullanılabilir.';
+  String get availableWithKeeper => 'Keeper ile kullanılabilir.';
 
   @override
   String get opensKeeper => 'Keeper\'ı açar.';
@@ -348,7 +348,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get keeperPersistenceError =>
-      'Tutucu erişimi kaydedilemedi. Lütfen Satın Alımları Geri Yükle’yi dene.';
+      'Keeper erişimi kaydedilemedi. Lütfen Satın Alımları Geri Yükle’yi dene.';
 
   @override
   String get purchaseUpdating =>
@@ -391,7 +391,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Kalan bilgeliklerini ve Yansımalarını yanında götür.';
 
   @override
-  String get keeperAccessActive => 'Tutucu erişimi etkin';
+  String get keeperAccessActive => 'Keeper erişimi etkin';
 
   @override
   String keeperPurchaseInProgress(Object price) {
@@ -437,11 +437,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get restoreRequestSent =>
-      'Geri yükleme isteği gönderildi. Tutucu erişimi otomatik olarak güncellenecek.';
+      'Geri yükleme isteği gönderildi. Keeper erişimi otomatik olarak güncellenecek.';
 
   @override
   String get restoreRecoveryPending =>
-      'Önceki bir geri yükleme hâlâ tamamlanıyor. Tutucu erişimi otomatik olarak güncellenecek; yeniden denemeden önce EAST.’i yeniden aç.';
+      'Önceki bir geri yükleme hâlâ tamamlanıyor. Keeper erişimi otomatik olarak güncellenecek; yeniden denemeden önce EAST.’i yeniden aç.';
 
   @override
   String get opening => 'Açılıyor.';
@@ -540,4 +540,138 @@ class AppLocalizationsTr extends AppLocalizations {
   String remainingDurationMinutesOnly(int minutes) {
     return '$minutes dakika kaldı';
   }
+
+  @override
+  String get keeperPreviewLabel => 'Keeper’a bir bakış';
+
+  @override
+  String get keeperWidgetTab => 'Widget';
+
+  @override
+  String get keeperPreviewExample => 'Örnek';
+
+  @override
+  String get keeperPreviewReflection =>
+      'Bugün acele etmeden ilerlemek istiyorum.';
+
+  @override
+  String get keeperDailyRitual =>
+      'Keeper ile de, Keeper olmadan da, 24 saatte bir wisdom.';
+
+  @override
+  String get keeperWidgetStepOne => 'Ana Ekran’da boş bir alana basılı tut.';
+
+  @override
+  String get keeperWidgetStepTwo =>
+      'Düzenle’ye, ardından Widget Ekle’ye dokun. Eski iOS sürümlerinde + düğmesini kullan.';
+
+  @override
+  String get keeperWidgetStepThree =>
+      'EAST.’i bul, Keeper Ritüeli widget’ını seç ve Widget Ekle’ye dokun.';
+
+  @override
+  String get reflectionSaved => 'Kaydedildi';
+
+  @override
+  String get reflectionSaving => 'Kaydediliyor…';
+
+  @override
+  String get reflectionCopyText => 'Metni kopyala';
+
+  @override
+  String get reflectionCopied => 'Kopyalandı';
+
+  @override
+  String get reflectionAddThought => 'Yeni bir düşünce ekle';
+
+  @override
+  String get reflectionRevisitPrompt => 'Bunu bugün nasıl okuyorum?';
+
+  @override
+  String get reflectionEarlier => 'Önceki düşünce';
+
+  @override
+  String get reflectionOverTime => 'Zamanla';
+
+  @override
+  String get reflectionHistoryDeleteExplanation =>
+      'Bu bilgeliğe eklediğin tüm düşünceler silinecek.';
+
+  @override
+  String get reflectionRecoveryMessage => 'Yazın henüz kaydedilemedi.';
+
+  @override
+  String get settingsEveryday => 'Günlük tercihlerin';
+
+  @override
+  String get settingsYourWriting => 'Yazıların';
+
+  @override
+  String get settingsAbout => 'EAST. hakkında';
+
+  @override
+  String get writingLock => 'Yazı kilidi';
+
+  @override
+  String get writingLockDescription =>
+      'Kalanlar, Yansıma ve Günlük’e Face ID, Touch ID veya aygıt parolanla gir.';
+
+  @override
+  String get writingLockFootnote =>
+      'Günlük ritüelin açık kalır. Uygulamadan ayrıldığında özel yazıların yeniden kilitlenir.';
+
+  @override
+  String get writingLockTitle => 'Yazıların sana ait.';
+
+  @override
+  String get writingLockPrompt => 'Özel yazılarını açmak için doğrula.';
+
+  @override
+  String get writingLockUnlock => 'Kilidi aç';
+
+  @override
+  String get writingLockChecking => 'Doğrulanıyor…';
+
+  @override
+  String get writingLockReason => 'Özel yazılarını aç.';
+
+  @override
+  String get writingLockUnavailable =>
+      'Doğrulama şu anda kullanılamıyor. Aygıt parolanı ve Face ID veya Touch ID ayarlarını kontrol et.';
+
+  @override
+  String get writingLockToggleReason =>
+      'Özel yazılarının kilit ayarını değiştir.';
+
+  @override
+  String get writingLockOn => 'Açık';
+
+  @override
+  String get writingLockOff => 'Kapalı';
+
+  @override
+  String get privacyPreview => 'Uygulama değiştiricide yazıların gizlenir.';
+
+  @override
+  String get settingsAboutDescription =>
+      'Günde bir kez, kendine dönmek için bir alan.';
+
+  @override
+  String get dailyRitualICloudRequired =>
+      'Yeni wisdom açmak için iCloud’a giriş yap.';
+
+  @override
+  String get dailyRitualConnectionRequired =>
+      'Yeni wisdom açmak için internete bağlan.';
+
+  @override
+  String get dailyRitualUnavailable =>
+      'Günlük wisdom’a şu anda ulaşılamıyor. Lütfen yeniden dene.';
+
+  @override
+  String get dailyRitualAccountNote =>
+      'Her iCloud hesabına 24 saatte bir wisdom. Yeni wisdom için internet bağlantısı gerekir. Kayıtlı yazılarını çevrimdışı okuyabilirsin.';
+
+  @override
+  String get dailyRitualPreviousWisdom => 'Son wisdom';
 }

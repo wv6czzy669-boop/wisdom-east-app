@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -10,6 +11,30 @@ import 'package:wisdom_app/theme/east_design.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+      'a Kept share cannot appear after its writing session expires during rendering',
+      () async {
+    final renderer = _DelayedRenderer();
+    var allowed = true;
+    var shares = 0;
+    final service = WisdomShareService(
+        renderer: renderer,
+        shareLauncher: (_) async {
+          shares++;
+          return const ShareResult('', ShareResultStatus.success);
+        });
+    final pending = service.shareWisdomForLocale(
+      wisdom: 'A privately kept wisdom.',
+      sharePositionOrigin: const Rect.fromLTWH(0, 0, 100, 100),
+      locale: const Locale('en'),
+      mayPresent: () => allowed,
+    );
+    allowed = false;
+    renderer.result.complete(Uint8List.fromList([1, 2, 3]));
+    await pending;
+    expect(shares, 0);
+  });
 
   test('share card safely typesets every real wisdom', () {
     const renderer = WisdomShareCardRenderer();
@@ -251,4 +276,15 @@ class _RecordingRenderer extends WisdomShareCardRenderer {
     wisdoms.add(wisdom);
     return Uint8List.fromList([1, 2, 3, 4]);
   }
+}
+
+class _DelayedRenderer extends WisdomShareCardRenderer {
+  final result = Completer<Uint8List>();
+  @override
+  Future<Uint8List> renderForLocale(
+    String wisdom, {
+    required Locale locale,
+    EastColorScheme scheme = EastColorScheme.light,
+  }) =>
+      result.future;
 }

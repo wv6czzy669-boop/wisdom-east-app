@@ -140,6 +140,7 @@ void main() {
 
   const removalRowKey = ValueKey('settings-remove-from-icloud-row');
 
+  var sectionForTest = SettingsSection.main;
   late KeptRepositoryTestGraph keptGraph;
   late InMemorySyncPersistenceStore syncPersistenceStore;
   late SyncAssociationController controller;
@@ -148,6 +149,7 @@ void main() {
   late int requestRemovalSyncCallCount;
 
   setUp(() {
+    sectionForTest = SettingsSection.main;
     keptGraph = KeptRepositoryTestGraph();
     keptGraph.seed([
       KeptRecord(
@@ -216,6 +218,7 @@ void main() {
       MaterialApp(
         theme: eastTheme(brightness: brightness),
         home: SettingsScreen(
+          section: sectionForTest,
           urlLauncher: urlLauncher,
           purchaseService: PurchaseService(),
           cloudKitAssociationController: controller,
@@ -289,14 +292,12 @@ void main() {
       'Keeper',
       'Restore Purchases',
       'iCloud Sync',
-      'Remove from iCloud',
+      'Writing lock',
       'Export My Data',
       'Language',
       'Appearance',
       'Quiet Reminder',
-      'EAST. Productions',
-      'Privacy Policy',
-      'Reach Out',
+      'About EAST.',
     ];
     final reference = tester.widget<Text>(find.text('iCloud Sync')).style!;
     for (final title in titles) {
@@ -314,7 +315,7 @@ void main() {
       find.text('Take your Kept wisdoms and Reflections with you.'),
       findsOneWidget,
     );
-    expect(find.text('The world beyond the ritual.'), findsOneWidget);
+    expect(find.text('The world beyond the ritual.'), findsNothing);
   });
 
   testWidgets('Settings heading and Quiet Reminder resolve in every locale',
@@ -429,6 +430,7 @@ void main() {
   testWidgets(
       'B. tapping Cancel in the confirmation sheet never authorizes '
       'association', (tester) async {
+    sectionForTest = SettingsSection.iCloud;
     await pumpSettings(tester);
 
     await tester.tap(find.byKey(rowKey));
@@ -436,10 +438,12 @@ void main() {
 
     expect(find.text('Enable iCloud Sync?'), findsOneWidget);
     expect(
-      find.text(
-        'Your Kept wisdoms and Reflections will be stored in your private '
-        'iCloud database and kept in sync across your devices.',
-      ),
+      find.descendant(
+          of: find.byKey(const ValueKey('settings-enable-sync-confirm')),
+          matching: find.text(
+            'Your Kept wisdoms and Reflections will be stored in your private '
+            'iCloud database and kept in sync across your devices.',
+          )),
       findsOneWidget,
     );
     expect(
@@ -465,6 +469,7 @@ void main() {
   testWidgets(
       'confirming Enable authorizes association, requests a sync, and the '
       'row updates to Enabled', (tester) async {
+    sectionForTest = SettingsSection.iCloud;
     await pumpSettings(tester);
 
     await tester.tap(find.byKey(rowKey));
@@ -528,6 +533,7 @@ void main() {
 
   testWidgets('safe sync recovery uses only the injected coordinator action',
       (tester) async {
+    sectionForTest = SettingsSection.iCloud;
     syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
     var state = SyncHealthState.pending;
     var recoveryCalls = 0;
@@ -620,6 +626,7 @@ void main() {
       'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
   group('Remove from iCloud', () {
+    setUp(() => sectionForTest = SettingsSection.iCloud);
     testWidgets('1. the row and its action exist', (tester) async {
       syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
 
@@ -628,6 +635,7 @@ void main() {
       expect(find.text('Remove from iCloud'), findsOneWidget);
       expect(find.byKey(removalRowKey), findsOneWidget);
       // Actionable: an account is associated and nothing is pending.
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
       expect(find.text('Remove from iCloud?'), findsOneWidget);
@@ -637,14 +645,18 @@ void main() {
       syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
 
       await pumpSettings(tester);
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
       expect(find.text('Remove from iCloud?'), findsOneWidget);
       expect(
-        find.text(
-          'Your Kept wisdoms and Reflections will remain on this iPhone.',
-        ),
+        find.descendant(
+            of: find
+                .byKey(const ValueKey('settings-remove-from-icloud-confirm')),
+            matching: find.text(
+              'Your Kept wisdoms and Reflections will remain on this iPhone.',
+            )),
         findsOneWidget,
       );
       expect(
@@ -664,6 +676,7 @@ void main() {
       syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
 
       await pumpSettings(tester);
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
@@ -676,7 +689,7 @@ void main() {
           fingerprintA,
           reason: 'the association marker is untouched by Cancel.');
       expect(requestRemovalSyncCallCount, 0);
-      expect(find.text('Remove your iCloud copies.'), findsNothing);
+      expect(find.text('Remove your iCloud copies.'), findsOneWidget);
     });
 
     testWidgets(
@@ -686,6 +699,7 @@ void main() {
       syncPersistenceStore.seedAssociatedAccountFingerprint(fingerprintA);
 
       await pumpSettings(tester);
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
@@ -722,6 +736,7 @@ void main() {
       );
 
       await pumpSettings(tester, removalController: delayedController);
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
@@ -734,6 +749,7 @@ void main() {
       // A second tap on the row while the action is in flight: the row's
       // own onTap is already null (see `icloudRemovalAction`), so this is a
       // no-op gesture, never a second `beginRemoval()` call.
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pump();
       expect(find.text('Remove from iCloud?'), findsNothing,
@@ -780,6 +796,7 @@ void main() {
       // Tapping while pending re-reads state only -- it must never show a
       // second confirmation prompt and must never start a second
       // transaction.
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
       expect(find.text('Remove from iCloud?'), findsNothing);
@@ -819,6 +836,7 @@ void main() {
 
       // Tapping the still-pending-looking row re-checks state -- this is
       // the only path that can ever observe the transition.
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
@@ -895,6 +913,7 @@ void main() {
       );
 
       await pumpSettings(tester, removalController: throwingController);
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
@@ -915,7 +934,7 @@ void main() {
       );
       // The row reverts to its honest, still-actionable idle state -- never
       // silently stuck, never claiming success.
-      expect(find.text('Remove your iCloud copies.'), findsNothing);
+      expect(find.text('Remove your iCloud copies.'), findsOneWidget);
     });
 
     testWidgets(
@@ -1118,6 +1137,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsScreen(
+            section: SettingsSection.iCloud,
             purchaseService: PurchaseService(),
             cloudKitAssociationController: controller,
             icloudRemovalController: icloudRemovalController,
@@ -1126,6 +1146,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.byKey(removalRowKey));
       await tester.tap(find.byKey(removalRowKey));
       await tester.pumpAndSettle();
 
@@ -1387,7 +1408,7 @@ class _RecordingDataExportService implements DataExportService {
   final Future<void>? gate;
 
   @override
-  Future<bool> exportAndShare() async {
+  Future<bool> exportAndShare({bool Function()? mayPresent}) async {
     onExport();
     final wait = gate;
     if (wait != null) await wait;

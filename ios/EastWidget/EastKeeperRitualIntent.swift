@@ -35,6 +35,33 @@ struct EastKeeperRitualAdvanceIntent: AppIntent {
             return .result()
         }
 
+        if case .heart = EastKeeperRitualStore.resolvedSnapshot(now: Date()).content,
+           let candidate = EastKeeperRitualStore.bridgePayload(now: Date())["candidate"] as? [String: Any],
+           let wisdomId = candidate["wisdomId"] as? String,
+           let candidateId = candidate["candidateId"] as? String {
+            do {
+                let authorized = try await EastDailyRitualRuntime.claim(wisdomId: wisdomId)
+                if EastKeeperRitualStore.publishAuthorizedReveal(
+                    grant: authorized.grant, candidateId: candidateId, now: Date()),
+                   case let .revealed(reveal) = EastKeeperRitualStore.resolvedSnapshot(now: Date()).content {
+                    _ = EastWidgetSnapshotStore.publishRevealed(text: reveal.displayText,
+                        unlockAt: reveal.unlockAt,
+                        presentation: EastKeeperRitualStore.resolvedSnapshot(now: Date()).presentation)
+                    WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.kind)
+                }
+            } catch {
+                let failure: EastKeeperAuthorizationFailure
+                switch error as? EastDailyRitualFailure {
+                case .iCloudRequired: failure = .iCloudRequired
+                case .connectionRequired: failure = .connectionRequired
+                default: failure = .unavailable
+                }
+                _ = EastKeeperRitualStore.recordAuthorizationFailure(failure, candidateId: candidateId)
+            }
+            WidgetCenter.shared.reloadTimelines(ofKind: EastWidgetKind.keeperRitualKind)
+            return .result()
+        }
+
         let result = EastKeeperRitualStore.advance(now: Date())
         if let reveal = result.newlyRevealed {
             _ = EastWidgetSnapshotStore.publishRevealed(

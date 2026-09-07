@@ -21,16 +21,32 @@
   "systemDefault": "系統預設",
   "english": "英文",
   "languageSettingSemantics": "語言。目前選擇：{value}。",
-  "@languageSettingSemantics": {"placeholders": {"value": {}}},
+  "@languageSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "languageOptionSemantics": "{language}",
-  "@languageOptionSemantics": {"placeholders": {"language": {}}},
+  "@languageOptionSemantics": {
+    "placeholders": {
+      "language": {}
+    }
+  },
   "appearance": "外观",
   "light": "浅色",
   "dark": "深色",
   "appearanceSettingSemantics": "外观。当前选择：{value}。",
-  "@appearanceSettingSemantics": {"placeholders": {"value": {}}},
+  "@appearanceSettingSemantics": {
+    "placeholders": {
+      "value": {}
+    }
+  },
   "appearanceOptionSemantics": "{option}",
-  "@appearanceOptionSemantics": {"placeholders": {"option": {}}},
+  "@appearanceOptionSemantics": {
+    "placeholders": {
+      "option": {}
+    }
+  },
   "back": "返回",
   "delete": "刪除",
   "deleteUpper": "刪除",
@@ -47,11 +63,19 @@
   "deleteReflection": "刪除省思",
   "reflectedEditReflection": "已省思。編輯省思。",
   "addReflectionNumbered": "新增省思，項目 {number}",
-  "@addReflectionNumbered": {"placeholders": {"number": {}}},
+  "@addReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "openReflectionNumbered": "開啟省思，項目 {number}",
-  "@openReflectionNumbered": {"placeholders": {"number": {}}},
+  "@openReflectionNumbered": {
+    "placeholders": {
+      "number": {}
+    }
+  },
   "journalSemantic": "日記",
-  "keeper": "留住",
+  "keeper": "Keeper",
   "restorePurchases": "回復購買項目",
   "icloudSync": "iCloud 同步",
   "removeFromIcloud": "從 iCloud 移除",
@@ -70,7 +94,7 @@
   "freeUsersKeepLimit": "免費使用者最多可留住 3 則智慧。",
   "keepReflectingQuestion": "繼續省思？",
   "reflectionLimitExplanation": "內含 3 則省思。Keeper 為留下的一切開啟無限空間。",
-  "becomeKeeper": "啟用留住",
+  "becomeKeeper": "啟用 Keeper",
   "whoseJournal": "這是誰的日記？",
   "journalNameExplanation": "名字會靜靜出現在日記的扉頁。",
   "notificationTitle": "EAST.",
@@ -87,7 +111,13 @@
   "longPressToShareWisdom": "長按即可分享這份智慧。",
   "shareWisdom": "分享",
   "shareWisdomNumbered": "分享智慧，第 {itemNumber} 項",
-  "@shareWisdomNumbered": {"placeholders": {"itemNumber": {"type": "int"}}},
+  "@shareWisdomNumbered": {
+    "placeholders": {
+      "itemNumber": {
+        "type": "int"
+      }
+    }
+  },
   "quietReminder": "靜默提醒",
   "nothingHasStayedYet": "還沒有任何事物留下。",
   "wisdomCouldNotBeRemoved": "無法移除這份智慧。請再試一次。",
@@ -108,11 +138,11 @@
   "yourName": "你的名字",
   "journalCouldNotBePrepared": "無法準備日記。請再試一次。",
   "takeItWithYou": "隨身帶走。",
-  "takeItWithYouKeeper": "隨身帶走。可透過「留住」使用。",
-  "availableWithKeeper": "可透過「留住」使用。",
+  "takeItWithYouKeeper": "隨身帶走。可透過 Keeper 使用。",
+  "availableWithKeeper": "可透過 Keeper 使用。",
   "opensKeeper": "開啟 Keeper。",
   "nameUpper": "名字",
-  "keeperPersistenceError": "無法儲存「留住」的使用權。請嘗試回復購買項目。",
+  "keeperPersistenceError": "無法儲存 Keeper 的使用權。請嘗試回復購買項目。",
   "purchaseUpdating": "購買狀態仍在更新。請在設定中使用回復購買項目。",
   "purchaseNotReady": "尚未能進行購買。請稍後再試。",
   "restore": "回復",
@@ -125,11 +155,19 @@
   "whereSilenceSpeaks": "寂靜說話的地方。",
   "preparing": "準備中…",
   "exportKeptAndReflections": "帶走你留下的智慧與省思。",
-  "keeperAccessActive": "「留住」使用權已啟用",
+  "keeperAccessActive": "Keeper 使用權已啟用",
   "keeperPurchaseInProgress": "走進圓圈，{price}。購買進行中。",
-  "@keeperPurchaseInProgress": {"placeholders": {"price": {}}},
+  "@keeperPurchaseInProgress": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperPurchaseOffering": "走進圓圈，{price}，一次性費用",
-  "@keeperPurchaseOffering": {"placeholders": {"price": {}}},
+  "@keeperPurchaseOffering": {
+    "placeholders": {
+      "price": {}
+    }
+  },
   "keeperUnavailable": "走進圓圈，暫時無法使用",
   "keepWithoutLimit": "無限留住。",
   "reflectWithoutLimit": "無限省思。",
@@ -168,9 +206,121 @@
   "reflectionAutosaveFailed": "無法儲存反思；你繼續書寫時會再試一次。",
   "reflectionDeleteFailed": "無法刪除反思，請再試一次。",
   "remainingDurationHoursMinutes": "還剩{hours}小時{minutes}分鐘",
-  "@remainingDurationHoursMinutes": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}}},
+  "@remainingDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationHoursOnly": "還剩{hours}小時",
-  "@remainingDurationHoursOnly": {"placeholders": {"hours": {"type": "int"}}},
+  "@remainingDurationHoursOnly": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
   "remainingDurationMinutesOnly": "還剩{minutes}分鐘",
-  "@remainingDurationMinutesOnly": {"placeholders": {"minutes": {"type": "int"}}}
+  "@remainingDurationMinutesOnly": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "keeperPreviewLabel": "一窺 Keeper",
+  "keeperWidgetTab": "小工具",
+  "keeperPreviewExample": "範例",
+  "keeperPreviewReflection": "今天，我想不慌不忙地前行。",
+  "keeperDailyRitual": "無論是否使用 Keeper，每 24 小時一則智慧。",
+  "keeperWidgetStepOne": "長按主畫面的空白處。",
+  "keeperWidgetStepTwo": "點一下「編輯」，再點「加入小工具」。較舊的 iOS 版本請點「＋」按鈕。",
+  "keeperWidgetStepThree": "找到 EAST.，選擇 Keeper 儀式小工具，再點「加入小工具」。",
+  "reflectionSaved": "已儲存",
+  "reflectionSaving": "儲存中…",
+  "reflectionCopyText": "複製文字",
+  "reflectionCopied": "已複製",
+  "reflectionAddThought": "添上一個新想法",
+  "reflectionRevisitPrompt": "今天，我如何讀懂這句話？",
+  "reflectionEarlier": "先前的想法",
+  "reflectionOverTime": "隨著時間",
+  "reflectionHistoryDeleteExplanation": "附於這則智慧的所有想法都將被刪除。",
+  "reflectionRecoveryMessage": "你的文字尚未儲存。",
+  "settingsEveryday": "日常偏好",
+  "settingsYourWriting": "你的文字",
+  "settingsAbout": "關於 EAST.",
+  "writingLock": "文字鎖定",
+  "writingLockDescription": "使用 Face ID、Touch ID 或裝置密碼，開啟留下的、省思與日記。",
+  "writingLockFootnote": "每日儀式仍可直接開始。離開 App 時，私人文字會重新鎖定。",
+  "writingLockTitle": "你的文字，屬於你。",
+  "writingLockPrompt": "請驗證身分以開啟私人文字。",
+  "writingLockUnlock": "解鎖",
+  "writingLockChecking": "正在驗證…",
+  "writingLockReason": "開啟你的私人文字。",
+  "writingLockUnavailable": "目前無法驗證。請檢查裝置密碼及 Face ID 或 Touch ID 設定。",
+  "writingLockToggleReason": "變更私人文字的鎖定設定。",
+  "writingLockOn": "開啟",
+  "writingLockOff": "關閉",
+  "privacyPreview": "App 切換器中會隱藏你的文字。",
+  "settingsAboutDescription": "每天一次，回到自己的所在。",
+  "@settingsEveryday": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsYourWriting": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAbout": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockFootnote": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockTitle": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockPrompt": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnlock": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockChecking": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockUnavailable": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockToggleReason": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOn": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@writingLockOff": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@privacyPreview": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "@settingsAboutDescription": {
+    "description": "Private writing protection or Settings navigation."
+  },
+  "dailyRitualICloudRequired": "登入 iCloud，即可開啟新的智慧。",
+  "dailyRitualConnectionRequired": "連接網路，即可開啟新的智慧。",
+  "dailyRitualUnavailable": "目前無法開啟每日智慧，請再試一次。",
+  "dailyRitualAccountNote": "每個 iCloud 帳號每 24 小時可開啟一則智慧。新的智慧需要網路連線，已儲存的文字仍可離線閱讀。",
+  "dailyRitualPreviousWisdom": "上一則智慧"
 }

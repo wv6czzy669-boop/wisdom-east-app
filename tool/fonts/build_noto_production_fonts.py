@@ -47,7 +47,7 @@ FONTS = (
         "NotoSerifJP-Regular.ttf",
         "83181245ea893229f7f171b9de600d48a58ec607ef46cc3bd11d3d66bdd88fbd",
         "NotoSerifJP-App.ttf",
-        "d2cb8378fe230db1e38db6b8b36a5bc9320b28a85f5915dda03f937fa6bc4d90",
+        "14a56a95444f48347639bbae223e7e4d08b9fe2ebbe657c3c1c08fb19541fecf",
         ("wght=400",),
     ),
     FontBuild(
@@ -58,7 +58,7 @@ FONTS = (
         "NotoSerifKR-Regular.ttf",
         "83d1e17d404ffcb6310c89b3def464617cc4831a5fd89af2e58674bd62812b8b",
         "NotoSerifKR-App.ttf",
-        "b0e19b8784f2f5ea67634e448d82a127b1c91256f006725541c41566b8acc1db",
+        "f0f0de0114d6ee41767c5edfc4158c3f119f8a5473eeb402e8d918fe3e499b75",
         ("wght=400",),
     ),
     FontBuild(
@@ -69,7 +69,7 @@ FONTS = (
         "NotoSerifTC-Regular.ttf",
         "703a18dc5b811877ae0bb8aea24a5c61edff3c045fc7abb471c91b54963c1e7f",
         "NotoSerifTC-App.ttf",
-        "06656e792eee96808c3bd372a5cb513325df0e476a2abb232669204f37dc4be5",
+        "fed9f5555c09d346e3e7ad096870b2d0101aae289ba2b52c825ef24cdcefe764",
         ("wght=400",),
     ),
     FontBuild(

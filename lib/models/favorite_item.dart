@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'reflection_history.dart';
+
 import '../utils/canonical_uuid.dart';
 import '../utils/reflection_text_policy.dart';
 import '../data/wisdoms.dart';
@@ -10,6 +12,9 @@ class FavoriteItem {
   final String date;
   final String? reflection;
   final String? reflectedAt;
+  final String? reflectionHistoryJson;
+  ReflectionHistory get reflectionHistory =>
+      ReflectionHistory.decode(reflectionHistoryJson);
 
   /// Compatibility identity linking this Kept entry back to the Build 26
   /// reveal occurrence it came from. Always a canonical UUID: version 4 for
@@ -42,6 +47,7 @@ class FavoriteItem {
     required this.date,
     this.reflection,
     this.reflectedAt,
+    this.reflectionHistoryJson,
     this.revealId,
     this.keptAt,
     this.wisdomId,
@@ -57,6 +63,7 @@ class FavoriteItem {
     String? date,
     String? reflection,
     String? reflectedAt,
+    String? reflectionHistoryJson,
     String? revealId,
     String? keptAt,
     String? wisdomId,
@@ -68,6 +75,9 @@ class FavoriteItem {
       date: date ?? this.date,
       reflection: clearReflection ? null : reflection ?? this.reflection,
       reflectedAt: clearReflection ? null : reflectedAt ?? this.reflectedAt,
+      reflectionHistoryJson: clearReflection
+          ? null
+          : reflectionHistoryJson ?? this.reflectionHistoryJson,
       // Preserved automatically whenever a caller does not explicitly pass
       // a new value — in particular, every reflection-only edit (add/edit/
       // delete reflection, which never passes `revealId`) leaves this
@@ -86,6 +96,8 @@ class FavoriteItem {
       'text': text,
       if (reflection != null) 'reflection': reflection,
       if (reflectedAt != null) 'reflectedAt': reflectedAt,
+      if (reflectionHistoryJson != null)
+        'reflectionHistoryJson': reflectionHistoryJson,
       if (revealId != null) 'revealId': revealId,
       if (wisdomId != null) 'wisdomId': wisdomId,
     });
@@ -109,6 +121,15 @@ class FavoriteItem {
       throw const FormatException('Unsupported saved reflection schema.');
     }
 
+    final historyJson = decoded['reflectionHistoryJson'];
+    if (historyJson != null && historyJson is! String) {
+      throw const FormatException('Invalid reflection history.');
+    }
+    final history = ReflectionHistory.decode(historyJson as String?);
+    if (decoded['reflection'] == null && history.thoughts.isNotEmpty) {
+      throw const FormatException(
+          'Reflection history requires an original reflection.');
+    }
     final storedId = decoded['id'];
     final date = decoded['date'];
     final text = decoded['text'];
@@ -165,6 +186,7 @@ class FavoriteItem {
       text: text,
       reflection: normalizedReflection,
       reflectedAt: normalizedReflection == null ? null : normalizedReflectedAt,
+      reflectionHistoryJson: historyJson,
       revealId: revealId,
       wisdomId: (rawWisdomId as String?) ??
           resolveUniqueWisdomIdForEnglishSnapshot(text),

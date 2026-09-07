@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/east_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/appearance_preference_controller.dart';
+import '../controllers/private_writing_lock_controller.dart';
 import '../controllers/icloud_removal_controller.dart';
 import '../controllers/locale_preference_controller.dart';
 import '../localization/east_locale_registry.dart';
@@ -31,9 +33,13 @@ typedef SettingsUrlLauncher = Future<bool> Function(
 typedef SettingsSyncHealthReader = Future<SyncHealthSnapshot> Function();
 typedef SettingsSyncRecoveryAction = Future<SyncRecoveryResult> Function();
 
+enum SettingsSection { main, iCloud, privacy, about }
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
+    this.section = SettingsSection.main,
+    this.writingLockController,
     this.urlLauncher,
     this.purchaseService,
     this.cloudKitAssociationController,
@@ -47,6 +53,8 @@ class SettingsScreen extends StatefulWidget {
     this.syncRecoveryAction,
   });
 
+  final SettingsSection section;
+  final PrivateWritingLockController? writingLockController;
   final SettingsUrlLauncher? urlLauncher;
   final PurchaseService? purchaseService;
   final DataExportService? dataExportService;
@@ -127,10 +135,19 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// transaction happens to be pending. See [_refreshICloudRemovalStatus].
   bool _icloudRemovalJustCompleted = false;
 
+  PrivateWritingLockController get _writingLock =>
+      widget.writingLockController ?? PrivateWritingLockController.shared;
+
+  void _writingLockChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _writingLock.addListener(_writingLockChanged);
+    unawaited(_writingLock.load());
     unawaited(_refreshSyncAssociationStatus());
     unawaited(_refreshICloudRemovalStatus());
     unawaited(_refreshQuietReminderStatus());
@@ -139,6 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _writingLock.removeListener(_writingLockChanged);
     super.dispose();
   }
 
@@ -251,89 +269,75 @@ class _SettingsScreenState extends State<SettingsScreen>
     String? semanticLabel,
     Key? rowKey,
     Widget? trailing,
-    // Approved direction: iCloud Sync's state reads as a ledger entry on
-    // the trailing margin, not a second subtitle line -- every other row
-    // keeps its explanatory subtitle.
     bool showSubtitle = true,
-  }) {
-    return Semantics(
-      button: true,
-      enabled: onTap != null,
-      label: semanticLabel ?? '$title. $subtitle',
-      onTap: onTap,
-      child: ExcludeSemantics(
-        child: SizedBox(
-          width: double.infinity,
-          child: InkWell(
-            key: rowKey,
-            onTap: onTap,
-            overlayColor: _noOverlayColor,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            splashFactory: NoSplash.splashFactory,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: 17,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          title,
-                          style: eastStyle(21),
-                        ),
-                        if (showSubtitle) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            style: eastStyle(
-                              15,
-                              color: EastColors.of(context).secondary,
-                            ),
-                          ),
-                        ],
+    bool? toggled,
+    bool keepTrailingAligned = false,
+  }) =>
+      Semantics(
+        button: toggled == null,
+        enabled: onTap != null,
+        toggled: toggled,
+        label: semanticLabel ?? '$title. $subtitle',
+        onTap: onTap,
+        child: ExcludeSemantics(
+            child: InkWell(
+          key: rowKey,
+          onTap: onTap,
+          overlayColor: _noOverlayColor,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashFactory: NoSplash.splashFactory,
+          child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 17),
+              child: LayoutBuilder(builder: (context, constraints) {
+                final stacked = !keepTrailingAligned &&
+                    (constraints.maxWidth < 300 ||
+                        MediaQuery.textScalerOf(context).scale(16) > 22);
+                final description = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(title, style: eastStyle(21)),
+                      if (showSubtitle && subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(subtitle,
+                            style: eastStyle(16,
+                                color: EastColors.of(context).secondary)),
                       ],
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(width: 12),
-                    trailing,
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+                    ]);
+                if (stacked) {
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        description,
+                        if (trailing != null) ...[
+                          const SizedBox(height: 6),
+                          trailing
+                        ]
+                      ]);
+                }
+                return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: description),
+                      if (trailing != null) ...[
+                        const SizedBox(width: 16),
+                        ConstrainedBox(
+                            constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth * .38),
+                            child: trailing)
+                      ],
+                    ]);
+              })),
+        )),
+      );
 
-  // Approved EAST Settings direction: a state marker on the trailing
-  // margin (e.g. iCloud Sync's ENABLED / NOT ENABLED), read like a ledger
-  // entry -- the tracked label tier the rest of the app already uses.
-  Widget _settingsTrailingState(String value) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 96),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: AlignmentDirectional.centerEnd,
-        child: Text(
-          value,
-          style: EastTypography.localized(
-            context,
-            size: 11,
-            color: eastMutedTextColor(context),
-            letterSpacing: 2.0,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _settingsTrailingState(String value) => Text(value,
+      style: EastTypography.localized(context,
+          size: 15,
+          color: eastMutedTextColor(context),
+          height: 1.45,
+          letterSpacing: .2));
 
   Widget _settingsGroupDivider() {
     return Divider(
@@ -543,12 +547,24 @@ class _SettingsScreenState extends State<SettingsScreen>
       _dataExportInProgress = true;
     });
 
+    final privacyScope = Object();
     bool succeeded;
     try {
-      succeeded = await _dataExportService.exportAndShare();
+      await _writingLock.enter(privacyScope);
+      if (!mounted) return;
+      if (!await _writingLock
+              .unlock(eastLocalizations(context).writingLockReason) ||
+          !_writingLock.canRead ||
+          !mounted) {
+        return;
+      }
+      succeeded = await _dataExportService.exportAndShare(
+        mayPresent: () => mounted && _writingLock.canRead,
+      );
     } catch (_) {
       succeeded = false;
     } finally {
+      _writingLock.leave(privacyScope);
       if (mounted) {
         setState(() {
           _dataExportInProgress = false;
@@ -641,7 +657,8 @@ class _SettingsScreenState extends State<SettingsScreen>
             color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
-            child: Column(
+            child: SingleChildScrollView(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -679,9 +696,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                             l10n.close.toUpperCase(),
                             style: EastTypography.localized(
                               context,
-                              size: 11,
+                              size: 15,
                               color: EastColors.of(context).ink,
-                              letterSpacing: 3.0,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
@@ -690,7 +707,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),
@@ -727,9 +744,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                 label,
                 style: EastTypography.localized(
                   context,
-                  size: 11,
+                  size: 15,
                   color: color,
-                  letterSpacing: 3.0,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
@@ -769,7 +786,8 @@ class _SettingsScreenState extends State<SettingsScreen>
             color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
-            child: Column(
+            child: SingleChildScrollView(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -790,15 +808,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                   style: eastStyle(14, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 44),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 32,
+                  runSpacing: 12,
                   children: [
                     _removeFromICloudDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _cancelRemoveFromICloud,
                       color: EastColors.of(context).secondary,
                     ),
-                    const SizedBox(width: 56),
                     _removeFromICloudDecisionLabel(
                       l10n.removeUpper,
                       onTap: _confirmRemoveFromICloud,
@@ -807,7 +826,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ],
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),
@@ -834,9 +853,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                 label,
                 style: EastTypography.localized(
                   context,
-                  size: 11,
+                  size: 15,
                   color: color,
-                  letterSpacing: 3.0,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
@@ -874,7 +893,8 @@ class _SettingsScreenState extends State<SettingsScreen>
             color: EastColors.of(context).overlay,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 34),
-            child: Column(
+            child: SingleChildScrollView(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -895,15 +915,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                   style: eastStyle(14, color: EastColors.of(context).secondary),
                 ),
                 const SizedBox(height: 44),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 32,
+                  runSpacing: 12,
                   children: [
                     _enableSyncDecisionLabel(
                       l10n.cancelUpper,
                       onTap: _cancelEnableSync,
                       color: EastColors.of(context).secondary,
                     ),
-                    const SizedBox(width: 56),
                     _enableSyncDecisionLabel(
                       l10n.enableUpper,
                       onTap: _confirmEnableSync,
@@ -912,7 +933,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ],
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),
@@ -1258,14 +1279,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     return '${l10n.removeFromIcloud}. $_icloudRemovalSubtitle';
   }
 
-  /// The ordinary explanatory subtitle is intentionally absent from the
-  /// compact Settings layout. A live operation or observed outcome remains
-  /// visible because it is status, not descriptive copy.
-  bool get _showICloudRemovalStatus =>
-      _icloudRemovalActionInProgress ||
-      _icloudRemovalJustCompleted ||
-      _icloudRemovalStatus == ICloudRemovalDisplayStatus.pending;
-
   /// `null` (disabling the row) whenever an action is already in flight, or
   /// whenever no controller is available yet or the status is
   /// [ICloudRemovalDisplayStatus.notApplicable] (nothing to remove and
@@ -1386,6 +1399,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     return Scaffold(
       backgroundColor: EastColors.of(context).background,
       appBar: AppBar(
+        toolbarHeight: MediaQuery.textScalerOf(context).scale(24) > 32
+            ? MediaQuery.textScalerOf(context).scale(24) * 2.7 + 8
+            : kToolbarHeight,
         backgroundColor: EastColors.of(context).background,
         foregroundColor: EastColors.of(context).ink,
         iconTheme: IconThemeData(
@@ -1401,10 +1417,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         centerTitle: true,
         title: Semantics(
           header: true,
-          child: Text(l10n.settings, style: eastStyle(24)),
+          child: Text(_sectionTitle(l10n), style: eastStyle(24)),
         ),
       ),
       body: Stack(
+        fit: StackFit.expand,
         children: [
           IgnorePointer(
             ignoring: _restoreResultVisible ||
@@ -1425,158 +1442,255 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
+  String _sectionTitle(AppLocalizations l10n) => switch (widget.section) {
+        SettingsSection.main => l10n.settings,
+        SettingsSection.iCloud => l10n.icloudSync,
+        SettingsSection.privacy => l10n.writingLock,
+        SettingsSection.about => l10n.settingsAbout,
+      };
+
+  Future<void> _openSection(SettingsSection section) async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+              section: section,
+              writingLockController: _writingLock,
+              urlLauncher: widget.urlLauncher,
+              purchaseService: _purchaseService,
+              cloudKitAssociationController: _cloudKitAssociationController,
+              icloudRemovalController: _icloudRemovalController,
+              dataExportService: widget.dataExportService,
+              localePreferenceController: _localePreferenceController,
+              appearancePreferenceController: _appearancePreferenceController,
+              wisdomNotificationService: _wisdomNotificationService,
+              dailyWisdomStatusReader: widget.dailyWisdomStatusReader,
+              syncHealthReader: _syncHealthReader,
+              syncRecoveryAction: _syncRecoveryAction,
+            )));
+    if (mounted && section == SettingsSection.iCloud) {
+      await _refreshSyncAssociationStatus();
+      await _refreshICloudRemovalStatus();
+    }
+  }
+
+  Widget _sectionLabel(String label) => Padding(
+        padding: const EdgeInsets.only(top: 24, bottom: 5),
+        child: Semantics(
+            header: true,
+            child: Text(label,
+                style: eastStyle(15, color: eastMutedTextColor(context)))),
+      );
+
+  Future<void> _toggleWritingLock() async {
+    if (_writingLock.busy) return;
+    if (!_writingLock.loaded) {
+      await _writingLock.refresh();
+      return;
+    }
+    final l10n = eastLocalizations(context);
+    final changed = await _writingLock.changeEnabled(
+        !_writingLock.enabled, l10n.writingLockToggleReason);
+    if (!changed &&
+        mounted &&
+        (_writingLock.failed || !_writingLock.available)) {
+      showSettingsSnack(l10n.writingLockUnavailable);
+    }
+  }
+
   Widget _settingsBody(BuildContext context) {
     final l10n = eastLocalizations(context);
-    final localePreferenceLabel = _localePreferenceLabel(l10n);
-    final appearancePreferenceLabel = _appearancePreferenceLabel(l10n);
+    final language = _localePreferenceLabel(l10n);
+    final appearance = _appearancePreferenceLabel(l10n);
+    final lockStatus = !_writingLock.loaded
+        ? (_writingLock.failed ? l10n.retry : l10n.preparing)
+        : _writingLock.enabled
+            ? l10n.writingLockOn
+            : l10n.writingLockOff;
+    final rows = switch (widget.section) {
+      SettingsSection.main => <Widget>[
+          _sectionLabel(l10n.settingsEveryday),
+          settingsItem(
+              rowKey: const ValueKey('settings-language-row'),
+              title: l10n.language,
+              subtitle: language,
+              showSubtitle: false,
+              trailing: _settingsTrailingState(language),
+              semanticLabel: l10n.languageSettingSemantics(language),
+              onTap: _openLanguage),
+          settingsItem(
+              rowKey: const ValueKey('settings-appearance-row'),
+              title: l10n.appearance,
+              subtitle: appearance,
+              showSubtitle: false,
+              trailing: _settingsTrailingState(appearance),
+              semanticLabel: l10n.appearanceSettingSemantics(appearance),
+              onTap: _openAppearance),
+          settingsItem(
+              rowKey: const ValueKey('settings-quiet-reminder-row'),
+              title: l10n.quietReminder,
+              subtitle: _quietReminderStatusLabel,
+              showSubtitle: false,
+              trailing: _settingsTrailingState(_quietReminderStatusLabel),
+              semanticLabel: _quietReminderSemanticLabel,
+              onTap: _quietReminderAction),
+          _settingsGroupDivider(),
+          _sectionLabel(l10n.settingsYourWriting),
+          settingsItem(
+              rowKey: const ValueKey('settings-writing-lock-row'),
+              title: l10n.writingLock,
+              subtitle: lockStatus,
+              showSubtitle: false,
+              trailing: _settingsTrailingState(lockStatus),
+              onTap: () => _openSection(SettingsSection.privacy)),
+          settingsItem(
+              rowKey: const ValueKey('settings-icloud-sync-row'),
+              title: l10n.icloudSync,
+              subtitle: _cloudKitSyncSubtitle,
+              showSubtitle: false,
+              semanticLabel: _cloudKitSyncSemanticLabel,
+              trailing: _settingsTrailingState(_cloudKitSyncSubtitle),
+              onTap: () => _openSection(SettingsSection.iCloud)),
+          settingsItem(
+              rowKey: const ValueKey('settings-export-data-row'),
+              title: l10n.exportMyData,
+              subtitle: _dataExportInProgress
+                  ? l10n.preparing
+                  : l10n.exportKeptAndReflections,
+              semanticLabel: dataExportSemanticLabel,
+              onTap: dataExportAction),
+          _settingsGroupDivider(),
+          settingsItem(
+              rowKey: const ValueKey('settings-keeper-row'),
+              title: l10n.keeper,
+              subtitle: l10n.supportCircle,
+              onTap: _openKeeper),
+          settingsItem(
+              rowKey: const ValueKey('settings-restore-purchases-row'),
+              title: l10n.restorePurchases,
+              subtitle: l10n.restoreBelongs,
+              semanticLabel: restoreSemanticLabel,
+              onTap: restoreAction,
+              showSubtitle: false),
+          _settingsGroupDivider(),
+          settingsItem(
+              rowKey: const ValueKey('settings-about-row'),
+              title: l10n.settingsAbout,
+              subtitle: '',
+              showSubtitle: false,
+              onTap: () => _openSection(SettingsSection.about)),
+        ],
+      SettingsSection.iCloud => <Widget>[
+          const SizedBox(height: 38),
+          Text(l10n.dailyRitualAccountNote,
+              key: const ValueKey('settings-daily-ritual-account-note'),
+              style: eastStyle(19, color: eastMutedTextColor(context))),
+          const SizedBox(height: 30),
+          _settingsGroupDivider(),
+          const SizedBox(height: 28),
+          Text(l10n.settingsYourWriting, style: eastStyle(30)),
+          const SizedBox(height: 18),
+          Text(l10n.enableIcloudData,
+              style: eastStyle(19, color: eastMutedTextColor(context))),
+          const SizedBox(height: 30),
+          _settingsGroupDivider(),
+          settingsItem(
+              rowKey: const ValueKey('settings-icloud-sync-row'),
+              title: l10n.icloudSync,
+              subtitle: _cloudKitSyncSubtitle,
+              showSubtitle: false,
+              semanticLabel: _cloudKitSyncSemanticLabel,
+              onTap: cloudKitSyncAction,
+              trailing: _settingsTrailingState(_cloudKitSyncSubtitle)),
+          _settingsGroupDivider(),
+          const SizedBox(height: 28),
+          settingsItem(
+              rowKey: const ValueKey('settings-remove-from-icloud-row'),
+              title: l10n.removeFromIcloud,
+              subtitle: _icloudRemovalSubtitle,
+              semanticLabel: _icloudRemovalSemanticLabel,
+              onTap: icloudRemovalAction,
+              showSubtitle: true),
+          const SizedBox(height: 12),
+          Text(l10n.removeIcloudLocalData,
+              style: eastStyle(17, color: eastMutedTextColor(context))),
+        ],
+      SettingsSection.privacy => <Widget>[
+          const SizedBox(height: 38),
+          Text(l10n.writingLockTitle, style: eastStyle(30)),
+          const SizedBox(height: 18),
+          Text(l10n.writingLockDescription,
+              style: eastStyle(19, color: eastMutedTextColor(context))),
+          const SizedBox(height: 30),
+          _settingsGroupDivider(),
+          settingsItem(
+              rowKey: const ValueKey('settings-writing-lock-toggle'),
+              title: l10n.writingLock,
+              subtitle: lockStatus,
+              showSubtitle: false,
+              toggled: _writingLock.loaded ? _writingLock.enabled : null,
+              keepTrailingAligned: _writingLock.loaded && !_writingLock.busy,
+              trailing: !_writingLock.loaded || _writingLock.busy
+                  ? _settingsTrailingState(
+                      _writingLock.busy ? l10n.writingLockChecking : lockStatus)
+                  : IgnorePointer(
+                      child: CupertinoSwitch(
+                      value: _writingLock.enabled,
+                      activeTrackColor: EastColors.of(context).ink,
+                      inactiveTrackColor: EastColors.of(context).divider,
+                      thumbColor: EastColors.of(context).background,
+                      onChanged: (_) => unawaited(_toggleWritingLock()),
+                    )),
+              onTap: _writingLock.busy ? null : _toggleWritingLock),
+          _settingsGroupDivider(),
+          const SizedBox(height: 20),
+          Text(l10n.writingLockFootnote,
+              style: eastStyle(17, color: eastMutedTextColor(context))),
+          const SizedBox(height: 20),
+          Text(l10n.privacyPreview,
+              style: eastStyle(17, color: eastMutedTextColor(context))),
+        ],
+      SettingsSection.about => <Widget>[
+          const SizedBox(height: 34),
+          Text('EAST.', style: eastStyle(44)),
+          const SizedBox(height: 12),
+          Text(l10n.settingsAboutDescription,
+              style: eastStyle(20, color: eastMutedTextColor(context))),
+          const SizedBox(height: 38),
+          _settingsGroupDivider(),
+          settingsItem(
+              rowKey: const ValueKey('settings-east-productions-row'),
+              title: l10n.eastProductions,
+              subtitle: l10n.worldBeyondRitual,
+              semanticLabel: eastProductionsSemanticLabel,
+              onTap: eastProductionsAction),
+          settingsItem(
+              rowKey: const ValueKey('settings-privacy-policy-row'),
+              title: l10n.privacyPolicy,
+              subtitle: l10n.whatStaysPrivate,
+              semanticLabel: privacyPolicySemanticLabel,
+              onTap: privacyPolicyAction,
+              showSubtitle: false),
+          settingsItem(
+              rowKey: const ValueKey('settings-reach-out-row'),
+              title: l10n.reachOut,
+              subtitle: l10n.thoughtsAndQuestions,
+              semanticLabel: reachOutSemanticLabel,
+              onTap: reachOutAction,
+              showSubtitle: false),
+        ],
+    };
     return SafeArea(
-      top: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            key: const ValueKey('settings-scroll'),
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: constraints.maxHeight - 36,
-              ),
-              child: Align(
-                key: const ValueKey('settings-content'),
-                alignment: Alignment.topCenter,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Group 1 — what you can own: Keeper and Restore
-                    // Purchases. Every Settings title shares the same
-                    // iCloud Sync typographic tier; subtitles retain their
-                    // existing independent hierarchy.
-                    settingsItem(
-                      rowKey: const ValueKey('settings-keeper-row'),
-                      title: l10n.keeper,
-                      subtitle: l10n.supportCircle,
-                      onTap: _openKeeper,
-                    ),
-                    const SizedBox(height: 6),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-restore-purchases-row'),
-                      title: l10n.restorePurchases,
-                      subtitle: l10n.restoreBelongs,
-                      semanticLabel: restoreSemanticLabel,
-                      onTap: restoreAction,
-                      showSubtitle: false,
-                    ),
-
-                    _settingsGroupDivider(),
-
-                    // Group 2 — what holds your data: iCloud Sync's own
-                    // state reads as a trailing ledger entry rather than a
-                    // second subtitle line.
-                    settingsItem(
-                      rowKey: const ValueKey('settings-icloud-sync-row'),
-                      title: l10n.icloudSync,
-                      subtitle: _cloudKitSyncSubtitle,
-                      showSubtitle: false,
-                      semanticLabel: _cloudKitSyncSemanticLabel,
-                      onTap: cloudKitSyncAction,
-                      trailing: _settingsTrailingState(_cloudKitSyncSubtitle),
-                    ),
-                    const SizedBox(height: 12),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-remove-from-icloud-row'),
-                      title: l10n.removeFromIcloud,
-                      subtitle: _icloudRemovalSubtitle,
-                      semanticLabel: _icloudRemovalSemanticLabel,
-                      onTap: icloudRemovalAction,
-                      showSubtitle: _showICloudRemovalStatus,
-                    ),
-                    const SizedBox(height: 12),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-export-data-row'),
-                      title: l10n.exportMyData,
-                      subtitle: _dataExportInProgress
-                          ? l10n.preparing
-                          : l10n.exportKeptAndReflections,
-                      semanticLabel: dataExportSemanticLabel,
-                      onTap: dataExportAction,
-                    ),
-
-                    _settingsGroupDivider(),
-
-                    // Group 3 — language stays inside the main Settings
-                    // area, before links that leave EAST.
-                    settingsItem(
-                      rowKey: const ValueKey('settings-language-row'),
-                      title: l10n.language,
-                      subtitle: localePreferenceLabel,
-                      showSubtitle: false,
-                      semanticLabel:
-                          l10n.languageSettingSemantics(localePreferenceLabel),
-                      onTap: _openLanguage,
-                      trailing: _settingsTrailingState(localePreferenceLabel),
-                    ),
-                    const SizedBox(height: 24),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-appearance-row'),
-                      title: l10n.appearance,
-                      subtitle: appearancePreferenceLabel,
-                      showSubtitle: false,
-                      semanticLabel: l10n.appearanceSettingSemantics(
-                        appearancePreferenceLabel,
-                      ),
-                      onTap: _openAppearance,
-                      trailing:
-                          _settingsTrailingState(appearancePreferenceLabel),
-                    ),
-                    const SizedBox(height: 24),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-quiet-reminder-row'),
-                      title: l10n.quietReminder,
-                      subtitle: _quietReminderStatusLabel,
-                      showSubtitle: false,
-                      semanticLabel: _quietReminderSemanticLabel,
-                      onTap: _quietReminderAction,
-                      trailing:
-                          _settingsTrailingState(_quietReminderStatusLabel),
-                    ),
-
-                    _settingsGroupDivider(),
-
-                    // The world outside: a tight cluster of everything that
-                    // leaves EAST., using the same title tier as every other
-                    // Settings row.
-                    settingsItem(
-                      rowKey: const ValueKey('settings-east-productions-row'),
-                      title: l10n.eastProductions,
-                      subtitle: l10n.worldBeyondRitual,
-                      semanticLabel: eastProductionsSemanticLabel,
-                      onTap: eastProductionsAction,
-                    ),
-                    const SizedBox(height: 10),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-privacy-policy-row'),
-                      title: l10n.privacyPolicy,
-                      subtitle: l10n.whatStaysPrivate,
-                      semanticLabel: privacyPolicySemanticLabel,
-                      onTap: privacyPolicyAction,
-                      showSubtitle: false,
-                    ),
-                    const SizedBox(height: 10),
-                    settingsItem(
-                      rowKey: const ValueKey('settings-reach-out-row'),
-                      title: l10n.reachOut,
-                      subtitle: l10n.thoughtsAndQuestions,
-                      semanticLabel: reachOutSemanticLabel,
-                      onTap: reachOutAction,
-                      showSubtitle: false,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
+        top: false,
+        child: SingleChildScrollView(
+          key: const ValueKey('settings-scroll'),
+          physics: const ClampingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
+          child: Center(
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Column(
+                      key: const ValueKey('settings-content'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: rows))),
+        ));
   }
 }

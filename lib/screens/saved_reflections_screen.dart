@@ -1,3 +1,5 @@
+import '../controllers/private_writing_lock_controller.dart';
+import '../widgets/private_writing_gate.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -27,6 +29,7 @@ import 'reflection_screen.dart';
 class SavedReflectionsScreen extends StatefulWidget {
   const SavedReflectionsScreen({
     super.key,
+    this.writingLockController,
     required this.reflections,
     this.isKeeper = false,
     this.savedReflectionsService,
@@ -39,6 +42,8 @@ class SavedReflectionsScreen extends StatefulWidget {
   final SavedReflectionsService? savedReflectionsService;
   final PurchaseService? purchaseService;
   final WisdomShareHandler? wisdomShareService;
+
+  final PrivateWritingLockController? writingLockController;
 
   @override
   State<SavedReflectionsScreen> createState() => _SavedReflectionsScreenState();
@@ -207,6 +212,11 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
           sharePositionOrigin: origin,
           locale: Localizations.localeOf(context),
           scheme: EastColors.of(context),
+          mayPresent: () =>
+              mounted &&
+              (widget.writingLockController ??
+                      PrivateWritingLockController.shared)
+                  .canRead,
         );
       } else {
         await _wisdomShareService.shareWisdom(
@@ -269,6 +279,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         context,
         MaterialPageRoute<bool>(
           builder: (context) => ReflectionScreen(
+            writingLockController: widget.writingLockController,
             item: item,
             isKeeper: _isKeeper,
             savedReflectionsService: _service,
@@ -333,6 +344,7 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
         context,
         MaterialPageRoute<void>(
           builder: (context) => JournalScreen(
+            writingLockController: widget.writingLockController,
             items: _items,
             isKeeper: _isKeeper,
             purchaseService: _purchaseService,
@@ -888,14 +900,22 @@ class _SavedReflectionsScreenState extends State<SavedReflectionsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PrivateWritingGate(
+        controller: widget.writingLockController,
+        child: _buildPrivateContent(context),
+      );
+
+  Widget _buildPrivateContent(BuildContext context) {
     final l10n = eastLocalizations(context);
     final visibleItems = _newestFirstItems().where((item) {
       return KeptSearchMatcher.matches(
         wisdom: _displayWisdom(item),
         reflection: item.reflection,
         query: _searchQuery,
-        additionalText: _searchableDateText(item),
+        additionalText: [
+          _searchableDateText(item),
+          ...item.reflectionHistory.thoughts.map((thought) => thought.text),
+        ].join('\n'),
       );
     }).toList(growable: false);
     final archiveEntries = _archiveEntries(visibleItems);

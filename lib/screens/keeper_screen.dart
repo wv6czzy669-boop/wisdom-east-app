@@ -9,6 +9,7 @@ import '../services/purchase_service.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 import '../widgets/east_back_button.dart';
+import '../widgets/keeper_experience_preview.dart';
 
 class KeeperScreen extends StatefulWidget {
   const KeeperScreen({
@@ -165,136 +166,152 @@ class _KeeperScreenState extends State<KeeperScreen> {
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: minimumContentHeight),
                 child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        l10n.keeper,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(48).copyWith(letterSpacing: 0.8),
-                      ),
-                      const SizedBox(height: 34),
-                      Text(
-                        l10n.keepWhatStays,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(
-                          25,
-                          color: eastMutedTextColor(context),
-                        ).copyWith(letterSpacing: 1.55),
-                      ),
-                      SizedBox(height: isKeeper ? 54 : 92),
-                      Semantics(
-                        button: !isKeeper,
-                        enabled: purchaseEnabled,
-                        label: isKeeper
-                            ? l10n.keeperAccessActive
-                            : _purchaseService.isLoading && purchaseAvailable
-                                ? l10n.keeperPurchaseInProgress(
-                                    keeperProduct.price,
-                                  )
-                                : purchaseAvailable
-                                    ? l10n.keeperPurchaseOffering(
-                                        keeperProduct.price,
-                                      )
-                                    : l10n.keeperUnavailable,
-                        onTap: purchaseEnabled ? buyKeeper : null,
-                        child: ExcludeSemantics(
-                          child: GestureDetector(
-                            key: const ValueKey('keeper-purchase-action'),
-                            excludeFromSemantics: true,
-                            onTap: purchaseEnabled ? buyKeeper : null,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 500),
-                              curve: Curves.easeOutCubic,
-                              opacity: _purchaseService.isLoading ? 0.72 : 1.0,
-                              child: Container(
-                                width: isKeeper ? 168 : 238,
-                                height: isKeeper ? 168 : 238,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: EastColors.of(context)
-                                      .ink
-                                      .withValues(alpha: 0.012),
-                                  border: Border.all(
-                                    color: eastMutedTextColor(context),
-                                    width: 0.7,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          l10n.keeper,
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(48).copyWith(letterSpacing: 0.8),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          l10n.keepWhatStays,
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(
+                            25,
+                            color: eastMutedTextColor(context),
+                          ).copyWith(letterSpacing: 1.55),
+                        ),
+                        const SizedBox(height: 28),
+                        const KeeperExperiencePreview(),
+                        const SizedBox(height: 22),
+                        Text(
+                          l10n.keeperDailyRitual,
+                          key: const ValueKey('keeper-daily-ritual'),
+                          textAlign: TextAlign.center,
+                          style: keeperStyle(14).copyWith(
+                            color: eastMutedTextColor(context),
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        Semantics(
+                          button: !isKeeper,
+                          enabled: purchaseEnabled,
+                          label: isKeeper
+                              ? l10n.keeperAccessActive
+                              : _purchaseService.isLoading && purchaseAvailable
+                                  ? l10n.keeperPurchaseInProgress(
+                                      keeperProduct.price,
+                                    )
+                                  : purchaseAvailable
+                                      ? l10n.keeperPurchaseOffering(
+                                          keeperProduct.price,
+                                        )
+                                      : l10n.keeperUnavailable,
+                          onTap: purchaseEnabled ? buyKeeper : null,
+                          child: ExcludeSemantics(
+                            child: GestureDetector(
+                              key: const ValueKey('keeper-purchase-action'),
+                              excludeFromSemantics: true,
+                              onTap: purchaseEnabled ? buyKeeper : null,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 500),
+                                curve: Curves.easeOutCubic,
+                                opacity:
+                                    _purchaseService.isLoading ? 0.72 : 1.0,
+                                child: Container(
+                                  width: isKeeper ? 168 : 190,
+                                  height: isKeeper ? 168 : 190,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: EastColors.of(context)
+                                        .ink
+                                        .withValues(alpha: 0.012),
+                                    border: Border.all(
+                                      color: eastMutedTextColor(context),
+                                      width: 0.7,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: EastColors.of(context)
+                                            .accent
+                                            .withValues(alpha: 0.05),
+                                        blurRadius: 122,
+                                        spreadRadius: 5,
+                                      ),
+                                      BoxShadow(
+                                        color: EastColors.of(context)
+                                            .ink
+                                            .withValues(alpha: 0.02),
+                                        blurRadius: 78,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: EastColors.of(context)
-                                          .accent
-                                          .withValues(alpha: 0.05),
-                                      blurRadius: 122,
-                                      spreadRadius: 5,
-                                    ),
-                                    BoxShadow(
-                                      color: EastColors.of(context)
-                                          .ink
-                                          .withValues(alpha: 0.02),
-                                      blurRadius: 78,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 22),
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: SizedBox(
-                                      width: isKeeper ? 142 : 194,
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            isKeeper
-                                                ? l10n.withinTheCircle
-                                                : l10n.enterTheCircle,
-                                            textAlign: TextAlign.center,
-                                            style: keeperStyle(22)
-                                                .copyWith(letterSpacing: 0.85),
-                                          ),
-                                          if (isKeeper) ...[
-                                            const SizedBox(height: 14),
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal: isKeeper ? 14 : 22),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: SizedBox(
+                                        width: isKeeper ? 140 : 146,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
                                             Text(
-                                              l10n.keeperActive,
-                                              key: const ValueKey(
-                                                'keeper-active-status',
-                                              ),
+                                              isKeeper
+                                                  ? l10n.withinTheCircle
+                                                  : l10n.enterTheCircle,
                                               textAlign: TextAlign.center,
-                                              style: keeperStyle(
-                                                14,
-                                                color:
-                                                    eastMutedTextColor(context),
-                                              ).copyWith(letterSpacing: 0.75),
+                                              style: keeperStyle(22).copyWith(
+                                                  letterSpacing: 0.85),
                                             ),
-                                          ] else if (keeperProduct != null) ...[
-                                            const SizedBox(height: 14),
-                                            Text(
-                                              keeperProduct.price,
-                                              key: const ValueKey(
-                                                'keeper-localized-price',
+                                            if (isKeeper) ...[
+                                              const SizedBox(height: 14),
+                                              Text(
+                                                l10n.keeperActive,
+                                                key: const ValueKey(
+                                                  'keeper-active-status',
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                style: keeperStyle(
+                                                  14,
+                                                  color: eastMutedTextColor(
+                                                      context),
+                                                ).copyWith(letterSpacing: 0.75),
                                               ),
-                                              textAlign: TextAlign.center,
-                                              style: keeperStyle(17).copyWith(
-                                                  letterSpacing: 0.65),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              l10n.oneTimePurchase,
-                                              key: const ValueKey(
-                                                'keeper-one-time-purchase',
+                                            ] else if (keeperProduct !=
+                                                null) ...[
+                                              const SizedBox(height: 14),
+                                              Text(
+                                                keeperProduct.price,
+                                                key: const ValueKey(
+                                                  'keeper-localized-price',
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                style: keeperStyle(17).copyWith(
+                                                    letterSpacing: 0.65),
                                               ),
-                                              textAlign: TextAlign.center,
-                                              style: keeperStyle(
-                                                13,
-                                                color:
-                                                    eastMutedTextColor(context),
-                                              ).copyWith(letterSpacing: 0.65),
-                                            ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                l10n.oneTimePurchase,
+                                                key: const ValueKey(
+                                                  'keeper-one-time-purchase',
+                                                ),
+                                                textAlign: TextAlign.center,
+                                                style: keeperStyle(
+                                                  13,
+                                                  color: eastMutedTextColor(
+                                                      context),
+                                                ).copyWith(letterSpacing: 0.65),
+                                              ),
+                                            ],
                                           ],
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -303,67 +320,34 @@ class _KeeperScreenState extends State<KeeperScreen> {
                             ),
                           ),
                         ),
-                      ),
-                      // Lower composition: a quiet editorial close, not a
-                      // feature list. Hierarchy comes entirely from spacing
-                      // rhythm -- no rules, labels, or graphic dividers. The
-                      // core pair is tightly bound, with a wider pause before
-                      // the Journal benefit and the closing sentiment.
-                      SizedBox(height: isKeeper ? 42 : 72),
-                      if (isKeeper) ...[
+                        const SizedBox(height: 26),
+                        if (isKeeper) ...[
+                          _widgetGuide(),
+                          const SizedBox(height: 32),
+                        ] else ...[
+                          Text(
+                            l10n.keepWithoutLimit,
+                            textAlign: TextAlign.center,
+                            style: keeperStyle(16),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.reflectWithoutLimit,
+                            textAlign: TextAlign.center,
+                            style: keeperStyle(16),
+                          ),
+                          const SizedBox(height: 28),
+                        ],
                         Text(
-                          l10n.addKeeperWidget,
-                          key: const ValueKey('keeper-widget-guide-title'),
-                          textAlign: TextAlign.center,
-                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _supportsInteractiveKeeperWidget
-                              ? l10n.keeperWidgetInteractive
-                              : l10n.keeperWidgetOpensApp,
-                          key: const ValueKey('keeper-widget-guide-detail'),
+                          l10n.keepEastAlive,
                           textAlign: TextAlign.center,
                           style: keeperStyle(
                             14,
                             color: eastMutedTextColor(context),
-                          ).copyWith(letterSpacing: 0.65),
-                        ),
-                      ] else ...[
-                        Text(
-                          l10n.keepWithoutLimit,
-                          textAlign: TextAlign.center,
-                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          l10n.reflectWithoutLimit,
-                          textAlign: TextAlign.center,
-                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                        ),
-                        const SizedBox(height: 28),
-                        Text(
-                          l10n.takeJournalWithYou,
-                          textAlign: TextAlign.center,
-                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          l10n.keeperWidgetRitual,
-                          textAlign: TextAlign.center,
-                          style: keeperStyle(16).copyWith(letterSpacing: 0.75),
+                          ).copyWith(letterSpacing: 0.8),
                         ),
                       ],
-                      SizedBox(height: isKeeper ? 36 : 44),
-                      Text(
-                        l10n.keepEastAlive,
-                        textAlign: TextAlign.center,
-                        style: keeperStyle(
-                          14,
-                          color: eastMutedTextColor(context),
-                        ).copyWith(letterSpacing: 0.8),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -371,6 +355,54 @@ class _KeeperScreenState extends State<KeeperScreen> {
           },
         ),
       ),
+    );
+  }
+
+  Widget _widgetGuide() {
+    final l10n = eastLocalizations(context);
+    final steps = [
+      l10n.keeperWidgetStepOne,
+      l10n.keeperWidgetStepTwo,
+      l10n.keeperWidgetStepThree
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(l10n.addKeeperWidget,
+              key: const ValueKey('keeper-widget-guide-title'),
+              style: keeperStyle(23)),
+        ),
+        const SizedBox(height: 18),
+        for (var index = 0; index < steps.length; index++)
+          Padding(
+            key: ValueKey('keeper-widget-guide-step-${index + 1}'),
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ExcludeSemantics(
+                  child: SizedBox(
+                      width: 30,
+                      child: Text(
+                          MaterialLocalizations.of(context)
+                              .formatDecimal(index + 1),
+                          style: keeperStyle(17)
+                              .copyWith(color: eastMutedTextColor(context)))),
+                ),
+                Expanded(child: Text(steps[index], style: keeperStyle(17))),
+              ],
+            ),
+          ),
+        Text(
+          _supportsInteractiveKeeperWidget
+              ? l10n.keeperWidgetInteractive
+              : l10n.keeperWidgetOpensApp,
+          key: const ValueKey('keeper-widget-guide-detail'),
+          style: keeperStyle(14).copyWith(color: eastMutedTextColor(context)),
+        ),
+      ],
     );
   }
 }

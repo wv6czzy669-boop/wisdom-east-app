@@ -155,6 +155,24 @@ class SavedReflectionsService {
     );
   }
 
+  Future<SavedReflectionsResult> saveThought({
+    required String itemId,
+    required String thoughtId,
+    required String reflection,
+    required bool isKeeper,
+  }) async {
+    final result = await _syncCoordinator.recordReflectionSave(
+        itemId: itemId,
+        reflection: reflection,
+        isKeeper: isKeeper,
+        thoughtId: thoughtId);
+    if (!result.reflectionLimitReached) _analyticsService.reflectionSaved();
+    return SavedReflectionsResult(
+        items: result.items,
+        limitReached: result.limitReached,
+        reflectionLimitReached: result.reflectionLimitReached);
+  }
+
   Future<List<FavoriteItem>> deleteReflection({required String itemId}) {
     return _syncCoordinator.recordReflectionDelete(itemId: itemId);
   }
