@@ -703,4 +703,76 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Vorige wijsheid';
+
+  @override
+  String get keeperJournalTitle => 'Een dagboek van jou.';
+
+  @override
+  String get keeperJournalDescription =>
+      'De wijsheden die je bewaart en de woorden die je schrijft, bij elkaar.';
+
+  @override
+  String get keeperJournalOpen => 'Open je dagboek';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Het begint met de eerste wijsheid die je bewaart.';
+
+  @override
+  String get keeperJournalExport => 'Neem het met Keeper mee als PDF.';
+
+  @override
+  String get ritualSound => 'Ritueelgeluid';
+
+  @override
+  String get ritualSoundOn => 'Geluid aan';
+
+  @override
+  String get ritualSoundOff => 'Stil';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Ritueelgeluiden en zachte trillingen. Gesproken begeleiding is beschikbaar in het Engels.';
+
+  @override
+  String get ritualSoundOffDescription => 'Zonder geluid of trillingen.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Je keuze is nu actief, maar kon niet worden opgeslagen. Probeer het opnieuw.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours uur',
+      one: '1 uur',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minuten',
+      one: '1 minuut',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds seconden',
+      one: '1 seconde',
+    );
+    return 'Nog $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds seconden',
+      one: '1 seconde',
+    );
+    return 'Nog $_temp0';
+  }
 }

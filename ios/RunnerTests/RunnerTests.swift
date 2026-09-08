@@ -180,6 +180,40 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(letterSpacing, 0.5, accuracy: 0.001)
   }
 
+  @MainActor
+  func testPrivacyTitleFollowsFlutterTextScalingWithoutResizingTheRing() throws {
+    guard #available(iOS 17.0, *) else { return }
+    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+    let controller = EastPrivacyShieldController()
+    controller.cover(window: window)
+    let shield = try XCTUnwrap(window.viewWithTag(EastPrivacyShieldController.shieldViewTag))
+    let title = try XCTUnwrap(
+      shield.descendant(withAccessibilityIdentifier: "east-privacy-launch-title") as? UILabel
+    )
+    let ring = try XCTUnwrap(
+      shield.descendant(withAccessibilityIdentifier: "east-privacy-launch-ring")
+    )
+    let categories: [(UIContentSizeCategory, CGFloat)] = [
+      (.extraSmall, 14), (.small, 15), (.medium, 16), (.large, 17),
+      (.extraLarge, 19), (.extraExtraLarge, 21), (.extraExtraExtraLarge, 23),
+      (.accessibilityMedium, 28), (.accessibilityLarge, 33),
+      (.accessibilityExtraLarge, 40), (.accessibilityExtraExtraLarge, 47),
+      (.accessibilityExtraExtraExtraLarge, 53),
+    ]
+    for (category, bodySize) in categories {
+      window.traitOverrides.preferredContentSizeCategory = category
+      window.layoutIfNeeded()
+      shield.layoutIfNeeded()
+      XCTAssertEqual(title.font.pointSize, 21.5 * bodySize / 17, accuracy: 0.001)
+      XCTAssertEqual(title.font.fontName, "EBGaramond-Regular")
+      XCTAssertEqual(title.bounds.height, title.font.pointSize * 1.28, accuracy: 0.001)
+      XCTAssertEqual(ring.bounds.width, 390 * 0.585, accuracy: 0.001)
+      XCTAssertEqual(title.center.y, ring.bounds.midY - 2.5, accuracy: 0.001)
+      // Flutter scales the font, not its 0.5pt tracking.
+      XCTAssertEqual(title.attributedText?.attribute(.kern, at: 0, effectiveRange: nil) as? CGFloat, 0.5)
+    }
+  }
+
   func testRunnerUsesThePrivacyAwareSceneDelegate() throws {
     let sceneManifest = try XCTUnwrap(
       Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest")

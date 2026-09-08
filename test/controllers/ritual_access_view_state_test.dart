@@ -45,7 +45,7 @@ void main() {
       expect(state.isResolved, isTrue);
       expect(state.isLocked, isTrue);
       expect(state.showReadyMessage, isFalse);
-      expect(state.countdownDuration?.hhmm, '19:04');
+      expect(state.countdownDuration?.hhmmss, '19:04:00');
       expect(state.wisdom, same(wisdom));
       expect(state.wisdom?.revealId, 'reveal-1');
       expect(state.wisdom?.revealedAt, revealedAt);
@@ -60,7 +60,7 @@ void main() {
       expect(state.isResolved, isTrue);
       expect(state.isLocked, isTrue);
       expect(state.wisdom, isNull);
-      expect(state.countdownDuration?.hhmm, '00:01');
+      expect(state.countdownDuration?.hhmmss, '00:01:00');
     });
 
     test('maps a first-use ready status without the post-reveal message', () {
@@ -99,7 +99,7 @@ void main() {
       );
 
       expect(state.isLocked, isTrue);
-      expect(state.countdownDuration?.hhmm, '19:04');
+      expect(state.countdownDuration?.hhmmss, '19:03:01');
       expect(state.wisdom?.text, '  Keep the original spacing.  ');
       expect(state.wisdom?.revealId, 'reveal-2');
       expect(state.wisdom?.revealedAt, revealedAt);
@@ -118,7 +118,7 @@ void main() {
       );
 
       expect(state.isLocked, isTrue);
-      expect(state.countdownDuration?.hhmm, '00:01');
+      expect(state.countdownDuration?.hhmmss, '00:01:00');
       expect(state.wisdom, isNull);
     });
   });

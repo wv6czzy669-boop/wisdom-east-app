@@ -221,11 +221,7 @@ extension _HomeKeptPresentation on _HomeScreenState {
     // automatically replays after this, on this device. A no-op (no
     // write) when the discovery was never pending in the first place.
     if (_keptNavDiscoveryActive) {
-      _keptDiscoveryTimers.cancelNav();
       _keptNavDiscoveryActive = false;
-      _updateHomePresentation(() {
-        _keptIconEmphasized = false;
-      });
       unawaited(keptDiscoveryHintService.markNavDiscoveryCompleted());
     }
 

@@ -1,3 +1,5 @@
+import 'package:wisdom_app/controllers/ritual_sound_preference_controller.dart';
+import 'package:wisdom_app/services/audio_service.dart';
 import 'dart:async';
 import 'dart:ui' show Rect, SemanticsAction, Tristate;
 
@@ -93,11 +95,39 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('a fully revealed wisdom receives one three-second save breath',
+      (tester) async {
+    await tester.pumpWidget(_homeApp());
+    await _finishOpeningIntro(tester);
+    await _advanceToQuestion(tester);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump();
+    await _pumpInSteps(tester, const Duration(milliseconds: 1100));
+    const breath = ValueKey('save-ring-breath');
+    expect(find.byKey(breath), findsNothing);
+    await _pumpInSteps(tester, const Duration(milliseconds: 100));
+    // Animation status settles on the next frame after its value reaches 1.
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(breath), findsOneWidget);
+    await _pumpInSteps(tester, const Duration(milliseconds: 2999));
+    expect(find.byKey(breath), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(find.byKey(breath), findsNothing);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    expect(find.byKey(breath), findsNothing);
+    expect(find.text('Keep this wisdom.'), findsOneWidget);
+  });
+
   testWidgets(
-      'every durable save has one 1500ms breath and confirmation without moving either ring',
+      'early saving interrupts the lower breath then shows two-second text and a three-second Kept breath',
       (tester) async {
     final graph = KeptRepositoryTestGraph();
-    await returningWisdom(tester, graph);
+    await tester.pumpWidget(_homeApp(keptGraph: graph));
+    await _completeFreshRitual(tester);
+    await _pumpInSteps(tester, const Duration(milliseconds: 900));
+    expect(find.byKey(const ValueKey('save-ring-breath')), findsOneWidget);
+    expect(_keptGuard(tester).ignoring, isFalse);
     final saveRect =
         tester.getRect(find.byKey(const ValueKey('home-save-control-unsaved')));
     final navRect =
@@ -107,40 +137,43 @@ void main() {
     await tester.pump();
     const breath = ValueKey('kept-save-feedback-breath');
     const feedback = ValueKey('keep-save-feedback-text');
-    expect(find.byKey(breath), findsOneWidget);
-    final animation = tester
-        .widget<AnimatedBuilder>(find.descendant(
-            of: find.byKey(breath), matching: find.byType(AnimatedBuilder)))
-        .animation as AnimationController;
-    expect(animation.duration, const Duration(milliseconds: 1500));
-    expect(
-        find.byKey(const ValueKey('kept-icon-emphasis-pulse')), findsNothing);
-    expect(
-        tester
-            .widget<Opacity>(
-                find.byKey(const ValueKey('keep-save-feedback-opacity')))
-            .opacity,
-        0);
-    await tester.pump(const Duration(milliseconds: 750));
+    expect(await graph.service.load(), hasLength(1));
+    expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
+    expect(find.byKey(feedback), findsOneWidget);
+    expect(find.byKey(breath), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1000));
     expect(
         tester
             .widget<Opacity>(
                 find.byKey(const ValueKey('keep-save-feedback-opacity')))
             .opacity,
         1);
+    expect(find.byKey(breath), findsNothing);
     expect(tester.getRect(find.byKey(const ValueKey('home-save-control-kept'))),
         saveRect);
     expect(tester.getRect(find.byKey(const ValueKey('home-kept-control'))),
         navRect);
-    await tester.pump(const Duration(milliseconds: 749));
-    expect(find.byKey(breath), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(animation.value, closeTo(1, .001));
-    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 999));
+    expect(find.byKey(feedback), findsOneWidget);
     expect(find.byKey(breath), findsNothing);
+    await tester.pump(const Duration(milliseconds: 2));
     expect(find.byKey(feedback), findsNothing);
+    expect(find.byKey(breath), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1500));
+    final halo = tester.widget<Opacity>(find.descendant(
+        of: find.byKey(breath), matching: find.byType(Opacity)));
+    expect(halo.opacity, closeTo(.42, .001));
+    expect(tester.getRect(find.byKey(const ValueKey('home-kept-control'))),
+        navRect);
+    await tester.pump(const Duration(milliseconds: 1499));
+    expect(find.byKey(breath), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(find.byKey(breath), findsNothing);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    expect(find.byKey(breath), findsNothing);
     await tester.tap(find.byKey(const ValueKey('home-save-control-kept')));
-    await _pumpInSteps(tester, const Duration(seconds: 3));
+    await _pumpInSteps(tester, const Duration(seconds: 6));
     expect(find.byKey(breath), findsNothing);
     expect(find.byKey(feedback), findsNothing);
     expect(await graph.service.load(), hasLength(1));
@@ -1607,9 +1640,9 @@ void main() {
     );
     expect(countdownSentence.data, 'Return when the silence opens again.');
     final countdownHhmm = tester.widget<Text>(
-      find.byKey(const ValueKey('home-countdown-hhmm')),
+      find.byKey(const ValueKey('home-countdown-hhmmss')),
     );
-    expect(countdownHhmm.data, matches(RegExp(r'^\d{2}:\d{2}$')));
+    expect(countdownHhmm.data, matches(RegExp(r'^\d{2}:\d{2}:\d{2}$')));
     final mutedColor = eastMutedTextColor(
       tester
           .element(find.textContaining('Return when the silence opens again.')),
@@ -1774,6 +1807,81 @@ void main() {
     // inherit an old occurrence's revealId/revealedAt.
     expect(_homeCurrentRevealId(tester), isNull);
     expect(_homeCurrentRevealedAt(tester), isNull);
+  });
+
+  testWidgets(
+      'silent mode cancels pending voices and suppresses reveal audio and haptics',
+      (tester) async {
+    final sound = RitualSoundPreferenceController();
+    await sound.load();
+    final audio = _RecordingRitualAudio();
+    final haptics = <Object?>[];
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.pumpWidget(
+        _homeApp(audioService: audio, ritualSoundPreferenceController: sound));
+    await _finishOpeningIntro(tester);
+    await _tapCenter(tester);
+    expect(haptics, hasLength(1));
+    await sound.setMode(RitualSoundMode.silent);
+    final stops = audio.stops;
+    expect(stops, greaterThan(0));
+    await tester.pump(const Duration(milliseconds: 850));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 850));
+    expect(audio.played, isEmpty);
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1300));
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(milliseconds: 560));
+    await _tapCenter(tester);
+    await tester.pump(const Duration(milliseconds: 1250));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2000));
+    expect(find.byKey(const ValueKey('wisdom-reveal-fade')), findsOneWidget);
+    expect(audio.played, isEmpty);
+    expect(haptics, hasLength(1));
+    await tester.pumpWidget(const SizedBox.shrink());
+    sound.dispose();
+  });
+
+  testWidgets('seconds tick locally and recheck authority at expiry',
+      (tester) async {
+    var now = DateTime.utc(2026, 9, 8, 12);
+    final unlock = now.add(const Duration(minutes: 1, seconds: 2));
+    SharedPreferences.setMockInitialValues({
+      'daily_wisdom_access': DailyWisdomRecord(
+              text: 'A saved wisdom.',
+              revealId: _fixedRevealId,
+              revealedAt: unlock.subtract(const Duration(hours: 24)),
+              unlockAt: unlock)
+          .encode(),
+    });
+    final adapter = _CountingCountdownReads();
+    final graph = DailyAccessTestGraph(adapter: adapter, clock: () => now);
+    await tester.pumpWidget(_homeApp(dailyGraph: graph, clock: () => now));
+    await _finishOpeningIntro(tester);
+    await _openExistingWisdom(tester);
+    final token = find.byKey(const ValueKey('home-countdown-hhmmss'));
+    expect(tester.widget<Text>(token).data, '00:01:02');
+    final reads = adapter.reads;
+    now = now.add(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.widget<Text>(token).data, '00:00:59');
+    expect(adapter.reads, reads);
+    now = unlock;
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(adapter.reads, greaterThan(reads));
+    expect(token, findsNothing);
+    expect(find.byKey(const ValueKey('launch-ritual-mark')), findsOneWidget);
   });
 
   testWidgets('ritual uses the restrained haptic sequence', (tester) async {
@@ -2179,9 +2287,9 @@ void main() {
     );
     expect(countdownSentence.data, 'Return when the silence opens again.');
     final countdownHhmm = tester.widget<Text>(
-      find.byKey(const ValueKey('home-countdown-hhmm')),
+      find.byKey(const ValueKey('home-countdown-hhmmss')),
     );
-    expect(countdownHhmm.data, matches(RegExp(r'^\d{2}:\d{2}$')));
+    expect(countdownHhmm.data, matches(RegExp(r'^\d{2}:\d{2}:\d{2}$')));
     expect(_keptGuard(tester).ignoring, isTrue);
     expect(tester.takeException(), isNull);
 
@@ -4090,97 +4198,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'P13: the first-use Keep discovery never times out -- it (and its '
-      'synchronized text/ring breathing) remains actionable indefinitely; '
-      'tapping the text saves once, transitions to "Saved", ends '
-      'the central discovery, and begins the top-right Kept-nav discovery '
-      'with no fixed breath count of its own', (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
+  testWidgets('first-use text stays actionable after the single breath ends',
+      (tester) async {
     final keptGraph = KeptRepositoryTestGraph();
-
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
-        clock: () => now,
-        keptGraph: keptGraph,
-      ),
-    );
+    await tester.pumpWidget(_homeApp(keptGraph: keptGraph));
     await _completeFreshRitual(tester);
-
-    // Reach the existing notification-timing slot: ritual 1's first-use
-    // discovery begins there.
-    await _pumpInSteps(tester, const Duration(seconds: 10));
+    await _pumpInSteps(tester, const Duration(seconds: 30));
     expect(find.text('Keep this wisdom.'), findsOneWidget);
-
-    // No timeout: wait far longer than the old (now-retired) 7.5s
-    // auto-hide window, well past several full breath cycles. The text and
-    // ring must enter and leave every breath together.
-    await _pumpInSteps(tester, const Duration(seconds: 20));
-    expect(find.text('Keep this wisdom.'), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-save-control-unsaved')),
-        findsOneWidget);
-    var sawSynchronizedBreath = false;
-    for (var i = 0; i < 20; i++) {
-      final ringIsBreathing =
-          find.byKey(const ValueKey('save-ring-breath')).evaluate().isNotEmpty;
-      final textIsBreathing = find
-          .byKey(const ValueKey('keep-discovery-hint-breath'))
-          .evaluate()
-          .isNotEmpty;
-      expect(textIsBreathing, ringIsBreathing);
-      sawSynchronizedBreath = sawSynchronizedBreath || ringIsBreathing;
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(sawSynchronizedBreath, isTrue);
-
-    await tester.tap(find.byKey(const ValueKey('keep-discovery-hint-action')));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Saving ends the central discovery immediately and transitions
-    // straight to "Kept.".
-    expect(find.text('Saved'), findsOneWidget);
-    expect(find.text('Keep this wisdom.'), findsNothing);
     expect(find.byKey(const ValueKey('save-ring-breath')), findsNothing);
     expect(
-      find.byKey(const ValueKey('kept-icon-emphasis-pulse')),
-      findsOneWidget,
-      reason: 'The top-right Kept breath must begin immediately after the '
-          'successful first Keep.',
-    );
-    final saved = await keptGraph.service.load();
-    expect(saved, hasLength(1));
-
+        find.byKey(const ValueKey('keep-discovery-hint-breath')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('keep-discovery-hint-action')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Saved'), findsOneWidget);
+    expect(find.text('Keep this wisdom.'), findsNothing);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+    await tester.pump(const Duration(milliseconds: 2016));
+    expect(find.text('Saved'), findsNothing);
+    expect(find.byKey(const ValueKey('kept-save-feedback-breath')),
+        findsOneWidget);
+    await _pumpInSteps(tester, const Duration(seconds: 10));
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+    expect(await keptGraph.service.load(), hasLength(1));
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(KeptDiscoveryHintService.completedKey), isTrue);
-    expect(
-      prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
-      isTrue,
-      reason: 'The first save that completes central discovery must mark '
-          'the top-right Kept-navigation discovery pending.',
-    );
-
-    // The top-right teaching breath begins and keeps looping -- no fixed
-    // count of its own under P13's no-timeout contract. Pumped well past
-    // the old (now-retired) 5-breath ~6.3s window; it must still be
-    // running, not have stopped on its own.
-    const emphasisKey = ValueKey('kept-icon-emphasis-pulse');
-    await _pumpInSteps(tester, const Duration(seconds: 8));
-    var sawEmphasis = false;
-    for (var i = 0; i < 20; i++) {
-      if (find.byKey(emphasisKey).evaluate().isNotEmpty) sawEmphasis = true;
-      await tester.pump(const Duration(milliseconds: 200));
-    }
-    expect(
-      sawEmphasis,
-      isTrue,
-      reason: 'The top-right Kept teaching breath must still be looping '
-          'well past the old fixed 5-breath window -- it has no timeout.',
-    );
-
-    // "Kept." itself still fades on its own independent ~1.3s timer.
-    expect(find.text('Saved'), findsNothing);
-    expect(tester.takeException(), isNull);
+    expect(prefs.getBool(KeptDiscoveryHintService.keptNavDiscoveryPendingKey),
+        isTrue);
   });
 
   testWidgets(
@@ -4240,11 +4286,8 @@ void main() {
       reason: 'Waiting alone must never complete the Kept-nav discovery.',
     );
 
-    // A full app relaunch (kill and reopen, not merely backgrounding) --
-    // the persisted pending flag must resume the discovery animation on
-    // the fresh `HomeScreen` instance, whenever the top-right control is
-    // available on the normal wisdom/home state, without needing to
-    // rediscover eligibility from scratch.
+    // A relaunch retains completion bookkeeping, but never replays a
+    // finished save animation just because Kept has not been opened yet.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await tester.pumpWidget(
@@ -4272,9 +4315,9 @@ void main() {
     }
     expect(
       sawEmphasisAfterRelaunch,
-      isTrue,
-      reason: 'A relaunched app must resume the pending Kept-nav discovery '
-          'animation, recovered from persisted state.',
+      isFalse,
+      reason: 'Pending first-use bookkeeping must not replay a finished '
+          'save animation after relaunch.',
     );
     prefs = await SharedPreferences.getInstance();
     expect(
@@ -4376,16 +4419,11 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt(KeptDiscoveryHintService.hintCountKey) ?? 0, 0);
 
-    // The top-right teaching breath is running (looping) for the nav
-    // discovery this save just began -- polled across several on/off
-    // cycles since the breath itself toggles present/absent rhythmically.
-    const emphasisKey = ValueKey('kept-icon-emphasis-pulse');
-    var sawEmphasis = false;
-    for (var i = 0; i < 20; i++) {
-      if (find.byKey(emphasisKey).evaluate().isNotEmpty) sawEmphasis = true;
-      await tester.pump(const Duration(milliseconds: 200));
-    }
-    expect(sawEmphasis, isTrue);
+    // The save sequence has finished, even on the first-ever save.
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('kept-icon-emphasis-pulse')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -4419,14 +4457,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('Saved'), findsOneWidget);
-    expect(find.byKey(const ValueKey('kept-save-feedback-breath')),
-        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('kept-save-feedback-breath')), findsNothing);
     expect(
         find.byKey(const ValueKey('home-save-control-kept')), findsOneWidget);
     expect(
       (await keptGraph.service.load()).single.text,
       wisdom,
     );
+
+    await tester.pump(const Duration(milliseconds: 2016));
+    expect(find.byKey(const ValueKey('kept-save-feedback-breath')),
+        findsOneWidget);
 
     // Test 3 (requested correction): discovery was already completed
     // *before* this save (`completedKey: true` seeded above), so this is
@@ -4560,53 +4602,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'P13: disposing HomeScreen while the first-use discovery\'s own '
-      'center breath-chain timer is pending (mid-loop, since it never '
-      'stops on its own under the no-timeout contract) cancels it cleanly '
-      '— no pending Timer, no setState-after-dispose exception',
+  testWidgets('disposing Home during the lower breath leaves no active ticker',
       (tester) async {
-    final now = DateTime.utc(2041, 7, 23, 8);
-
-    // A fresh service (see "Discovery test isolation" above) so this test
-    // is independent of every other test's discovery state.
-    await tester.pumpWidget(
-      _homeApp(
-        dailyGraph: DailyAccessTestGraph(clock: () => now),
-        clock: () => now,
-        keptDiscoveryHintService: KeptDiscoveryHintService(),
-      ),
-    );
+    await tester.pumpWidget(_homeApp());
     await _completeFreshRitual(tester);
-
-    // Reach the existing notification-timing slot, where ritual 1's
-    // first-use discovery begins.
-    await _pumpInSteps(tester, const Duration(seconds: 10));
-    expect(find.text('Keep this wisdom.'), findsOneWidget);
-
-    // The breath chain loops indefinitely under P13's no-timeout contract
-    // — pump well past several full breath cycles, so disposal genuinely
-    // happens mid-loop rather than merely during the first breath. Each
-    // breath is only actually mounted for its own ~1.2s "on" phase (with a
-    // ~200ms "off" gap between breaths), so land inside an "on" phase by
-    // polling rather than checking one arbitrary instant.
-    await _pumpInSteps(tester, const Duration(seconds: 6));
-    const breathKey = ValueKey('save-ring-breath');
-    for (var i = 0; i < 20; i++) {
-      if (find.byKey(breathKey).evaluate().isNotEmpty) break;
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(find.byKey(breathKey), findsOneWidget);
-
-    // Dispose HomeScreen right now, mid-breath, then stop. Deliberately
-    // not pumping past that window: doing so would let an uncancelled
-    // timer simply fire and disappear here, proving nothing. Whether
-    // `dispose()`'s `_cancelAllDiscoveryTimers()` actually cancelled it is
-    // instead left entirely to flutter_test's own end-of-test teardown,
-    // which fails the test on any Timer still pending once it ends.
+    // Let the existing reveal-settle delay finish while the halo is mid-breath.
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const ValueKey('save-ring-breath')), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-
     expect(tester.takeException(), isNull);
   });
 
@@ -5985,18 +5989,18 @@ void main() {
     });
   });
 
-  group('EAST. 1.2 HH:MM countdown', () {
+  group('EAST. 1.2 HH:MM:SS countdown', () {
     // Site A (the locked-countdown main ritual state, screenStep == 5) and
     // Site B (the post-reveal message beneath revealed wisdom, screenStep
     // == 4) are mutually exclusive by construction -- `screenStep` is a
     // single `int` field, and `onLockedCountdown`/`wisdomRevealed` are
     // distinct values of it (5 vs 4). They are therefore proven here in
     // separate states, never simultaneously, using the identical
-    // underlying 5h30m duration at both sites so the same HH:MM token
+    // underlying 5h30m duration at both sites so the same HH:MM:SS token
     // ("05:30") independently confirms both render sites derive from the
     // same `CountdownFormatter.resolve` source of truth.
     const countdownDuration = Duration(hours: 5, minutes: 30);
-    const expectedHhmm = '05:30';
+    const expectedHhmm = '05:30:00';
 
     String expectedNaturalDuration(
         AppLocalizations l10n, int hours, int minutes) {
@@ -6006,7 +6010,7 @@ void main() {
     }
 
     testWidgets(
-        'Site A: locked countdown renders HH:MM and exposes exactly one '
+        'Site A: locked countdown renders HH:MM:SS and exposes exactly one '
         'natural-language semantics label, never the raw token',
         (tester) async {
       final now = DateTime.utc(2041, 7, 23, 8);
@@ -6025,15 +6029,15 @@ void main() {
         await _finishOpeningIntro(tester);
         await _openExistingWisdom(tester);
 
-        // Exactly one HH:MM token in the whole tree -- Site B's post-reveal
+        // Exactly one HH:MM:SS token in the whole tree -- Site B's post-reveal
         // message is not even built while `wisdomRevealed` is false.
-        expect(
-            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
-        final hhmmText = tester.widget<Text>(
-          find.byKey(const ValueKey('home-countdown-hhmm')),
+        expect(find.byKey(const ValueKey('home-countdown-hhmmss')),
+            findsOneWidget);
+        final hhmmssText = tester.widget<Text>(
+          find.byKey(const ValueKey('home-countdown-hhmmss')),
         );
-        expect(hhmmText.data, expectedHhmm);
-        expect(hhmmText.textDirection, TextDirection.ltr);
+        expect(hhmmssText.data, expectedHhmm);
+        expect(hhmmssText.textDirection, TextDirection.ltr);
 
         final sentenceText = tester.widget<Text>(
           find.text('Return when the silence opens again.'),
@@ -6046,7 +6050,7 @@ void main() {
 
         // Site A's outer ritual Semantics is the sole owner: exactly one
         // node carries the composed sentence + natural duration label, and
-        // it never contains the raw HH:MM token.
+        // it never contains the raw HH:MM:SS token.
         expect(find.semantics.byLabel(expectedLabel), findsOneWidget);
         expect(expectedLabel.contains(expectedHhmm), isFalse);
         expect(find.semantics.byLabel(expectedHhmm), findsNothing);
@@ -6056,7 +6060,7 @@ void main() {
     });
 
     testWidgets(
-        'Site B: post-reveal message renders the same HH:MM token beneath '
+        'Site B: post-reveal message renders the same HH:MM:SS token beneath '
         'revealed wisdom, with its own separate natural-language semantics '
         'node distinct from the revealed-wisdom node', (tester) async {
       final now = DateTime.utc(2041, 7, 23, 8);
@@ -6078,13 +6082,13 @@ void main() {
         await _pumpInSteps(tester, const Duration(milliseconds: 900));
 
         expect(find.text(wisdomText), findsOneWidget);
-        expect(
-            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
-        final hhmmText = tester.widget<Text>(
-          find.byKey(const ValueKey('home-countdown-hhmm')),
+        expect(find.byKey(const ValueKey('home-countdown-hhmmss')),
+            findsOneWidget);
+        final hhmmssText = tester.widget<Text>(
+          find.byKey(const ValueKey('home-countdown-hhmmss')),
         );
-        expect(hhmmText.data, expectedHhmm);
-        expect(hhmmText.textDirection, TextDirection.ltr);
+        expect(hhmmssText.data, expectedHhmm);
+        expect(hhmmssText.textDirection, TextDirection.ltr);
 
         final l10n = lookupAppLocalizations(const Locale('en'));
         final expectedLabel = 'Return when the silence opens again. '
@@ -6136,8 +6140,8 @@ void main() {
         expect(find.text(wisdomText), findsOneWidget);
         // Structurally present (AnimatedOpacity never unmounts its child)
         // but not yet semantically exposed.
-        expect(
-            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-countdown-hhmmss')),
+            findsOneWidget);
         final l10n = lookupAppLocalizations(const Locale('en'));
         final expectedLabel = 'Return when the silence opens again. '
             '${expectedNaturalDuration(l10n, 5, 30)}';
@@ -6181,8 +6185,8 @@ void main() {
         await _completeFreshRitual(tester);
         await _pumpInSteps(tester, const Duration(milliseconds: 1600));
 
-        expect(
-            find.byKey(const ValueKey('home-countdown-hhmm')), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-countdown-hhmmss')),
+            findsOneWidget);
 
         // Exercise the existing non-null-unlockAt ready-status branch while
         // the freshly revealed wisdom remains on screen
@@ -6199,7 +6203,8 @@ void main() {
           () => find.text('A new wisdom is ready.').evaluate().isNotEmpty,
         );
 
-        expect(find.byKey(const ValueKey('home-countdown-hhmm')), findsNothing);
+        expect(
+            find.byKey(const ValueKey('home-countdown-hhmmss')), findsNothing);
         expect(find.text('A new wisdom is ready.'), findsOneWidget);
         // Unchanged default `Text` semantics -- no explicit countdown
         // `Semantics` node is introduced for this non-countdown message.
@@ -6214,7 +6219,7 @@ void main() {
 
     testWidgets(
         'live locale switching updates the sentence and natural duration '
-        'while the HH:MM token stays byte-identical, and Arabic keeps the '
+        'while the HH:MM:SS token stays byte-identical, and Arabic keeps the '
         'token LTR', (tester) async {
       final now = DateTime.utc(2041, 7, 23, 8);
       final localeController = LocalePreferenceController(
@@ -6233,12 +6238,12 @@ void main() {
       await _completeFreshRitual(tester);
       await _pumpInSteps(tester, const Duration(milliseconds: 1600));
 
-      final hhmmFinder = find.byKey(const ValueKey('home-countdown-hhmm'));
-      expect(hhmmFinder, findsOneWidget);
+      final hhmmssFinder = find.byKey(const ValueKey('home-countdown-hhmmss'));
+      expect(hhmmssFinder, findsOneWidget);
       // A fresh reveal locks for exactly 24h -- an exact ceiling boundary,
       // so this stays fixed at "24:00" across every locale switch below.
-      const expectedHhmmFresh = '24:00';
-      expect(tester.widget<Text>(hhmmFinder).data, expectedHhmmFresh);
+      const expectedHhmmFresh = '24:00:00';
+      expect(tester.widget<Text>(hhmmssFinder).data, expectedHhmmFresh);
 
       for (final locale in [
         const Locale('en'),
@@ -6249,15 +6254,15 @@ void main() {
         await tester.pump();
         await tester.pump();
 
-        final hhmmText = tester.widget<Text>(hhmmFinder);
-        expect(hhmmText.data, expectedHhmmFresh, reason: 'locale=$locale');
+        final hhmmssText = tester.widget<Text>(hhmmssFinder);
+        expect(hhmmssText.data, expectedHhmmFresh, reason: 'locale=$locale');
         expect(
-          hhmmText.textDirection,
+          hhmmssText.textDirection,
           TextDirection.ltr,
           reason: 'locale=$locale (must stay LTR even under Arabic)',
         );
 
-        final l10n = AppLocalizations.of(tester.element(hhmmFinder))!;
+        final l10n = AppLocalizations.of(tester.element(hhmmssFinder))!;
         final expectedSentence = l10n.returnWhenSilenceOpensAgain;
         expect(
           find.text(expectedSentence),
@@ -6467,6 +6472,8 @@ String _cleanTextValue(Text text) {
 }
 
 Widget _homeApp({
+  AudioService? audioService,
+  RitualSoundPreferenceController? ritualSoundPreferenceController,
   DailyAccessTestGraph? dailyGraph,
   DailyWisdomAccessService? accountAccessService,
   KeptRepositoryTestGraph? keptGraph,
@@ -6500,6 +6507,8 @@ Widget _homeApp({
     darkTheme: eastTheme(brightness: Brightness.dark),
     themeMode: themeMode,
     home: HomeScreen(
+      audioService: audioService,
+      ritualSoundPreferenceController: ritualSoundPreferenceController,
       savedReflectionsService:
           savedReflectionsService ?? resolvedKeptGraph.service,
       dailyWisdomAccessService:
@@ -7254,5 +7263,46 @@ class _FailingFirstBoundaryMarkAdapter
     }
 
     return super.setString(key, value);
+  }
+}
+
+class _RecordingRitualAudio implements AudioService {
+  final played = <String>[];
+  int stops = 0;
+  @override
+  Future<void> stop() async {
+    stops++;
+  }
+
+  @override
+  Future<void> playPauseSound() async {
+    played.add('pause');
+  }
+
+  @override
+  Future<void> playFeelSound() async {
+    played.add('feel');
+  }
+
+  @override
+  Future<void> playHeartSound() async {
+    played.add('heart');
+  }
+
+  @override
+  Future<void> playRevealSound() async {
+    played.add('reveal');
+  }
+
+  @override
+  void dispose() {}
+}
+
+class _CountingCountdownReads extends StoragePreferencesAdapter {
+  int reads = 0;
+  @override
+  Future<String?> getString(String key) {
+    reads++;
+    return super.getString(key);
   }
 }

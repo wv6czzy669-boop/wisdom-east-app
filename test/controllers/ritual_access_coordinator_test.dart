@@ -20,7 +20,7 @@ void main() {
       final state = await coordinator.refresh();
 
       expect(state?.availability, RitualAccessAvailability.locked);
-      expect(state?.countdownDuration?.hhmm, '03:59');
+      expect(state?.countdownDuration?.hhmmss, '03:58:01');
       expect(state?.wisdom?.text, 'Remain.');
       expect(state?.wisdom?.revealId, 'reveal-1');
     });

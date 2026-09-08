@@ -78,13 +78,21 @@ private final class EastPrivacyShieldView: UIView {
 
     titleLabel.textAlignment = .center
     titleLabel.accessibilityIdentifier = "east-privacy-launch-title"
-    titleLabel.font = Self.launchMarkFont()
+    updateTitleTypography()
+    ringView.addSubview(titleLabel)
+
+    applyPalette()
+  }
+
+  private func updateTitleTypography() {
+    let size = Self.launchMarkTitleSize * Self.flutterTextScale(for: traitCollection.preferredContentSizeCategory)
+    titleLabel.font = Self.launchMarkFont(size: size)
     let paragraphStyle = NSMutableParagraphStyle()
     paragraphStyle.alignment = .center
     paragraphStyle.minimumLineHeight =
-      Self.launchMarkTitleSize * Self.launchMarkTitleLineHeight
+      titleLabel.font.pointSize * Self.launchMarkTitleLineHeight
     paragraphStyle.maximumLineHeight =
-      Self.launchMarkTitleSize * Self.launchMarkTitleLineHeight
+      titleLabel.font.pointSize * Self.launchMarkTitleLineHeight
     titleLabel.attributedText = NSAttributedString(
       string: "EAST.",
       attributes: [
@@ -93,9 +101,34 @@ private final class EastPrivacyShieldView: UIView {
         .paragraphStyle: paragraphStyle,
       ]
     )
-    ringView.addSubview(titleLabel)
+    setNeedsLayout()
+  }
 
-    applyPalette()
+  // FlutterViewController.textScaleFactor scales iOS body sizes relative to
+  // Large (17pt). UIFontMetrics uses a different curve for custom fonts, so
+  // mirror the engine mapping; the ritual keeps its existing typography.
+  private static func flutterTextScale(for category: UIContentSizeCategory) -> CGFloat {
+    let bodySize: CGFloat
+    switch category {
+    case .extraSmall: bodySize = 14
+    case .small: bodySize = 15
+    case .medium: bodySize = 16
+    case .extraLarge: bodySize = 19
+    case .extraExtraLarge: bodySize = 21
+    case .extraExtraExtraLarge: bodySize = 23
+    case .accessibilityMedium: bodySize = 28
+    case .accessibilityLarge: bodySize = 33
+    case .accessibilityExtraLarge: bodySize = 40
+    case .accessibilityExtraExtraLarge: bodySize = 47
+    case .accessibilityExtraExtraExtraLarge: bodySize = 53
+    default: bodySize = 17
+    }
+    return bodySize / 17
+  }
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    updateTitleTypography()
   }
 
   @available(*, unavailable)
@@ -123,7 +156,7 @@ private final class EastPrivacyShieldView: UIView {
       x: 0,
       y: 0,
       width: ceil(titleSize.width),
-      height: Self.launchMarkTitleSize * Self.launchMarkTitleLineHeight
+      height: titleLabel.font.pointSize * Self.launchMarkTitleLineHeight
     )
     titleLabel.center = CGPoint(
       x: ringView.bounds.midX,
@@ -133,6 +166,9 @@ private final class EastPrivacyShieldView: UIView {
 
   override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
     super.traitCollectionDidChange(previousTraitCollection)
+    if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+      updateTitleTypography()
+    }
     if previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle {
       applyPalette()
     }
@@ -162,10 +198,10 @@ private final class EastPrivacyShieldView: UIView {
     ringView.layer.borderColor = ink.withAlphaComponent(Self.launchMarkBorderAlpha).cgColor
   }
 
-  private static func launchMarkFont() -> UIFont {
+  private static func launchMarkFont(size: CGFloat) -> UIFont {
     if let registeredFont = UIFont(
       name: "EBGaramond-Regular",
-      size: launchMarkTitleSize
+      size: size
     ) {
       return registeredFont
     }
@@ -181,9 +217,9 @@ private final class EastPrivacyShieldView: UIView {
       CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
     }
 
-    return UIFont(name: "EBGaramond-Regular", size: launchMarkTitleSize)
-      ?? UIFont(name: "Georgia", size: launchMarkTitleSize)
-      ?? UIFont.systemFont(ofSize: launchMarkTitleSize, weight: .regular)
+    return UIFont(name: "EBGaramond-Regular", size: size)
+      ?? UIFont(name: "Georgia", size: size)
+      ?? UIFont.systemFont(ofSize: size, weight: .regular)
   }
 }
 

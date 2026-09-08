@@ -5,10 +5,21 @@ import '../services/wisdom_localization_resolver.dart';
 import '../theme/east_design.dart';
 import '../theme/muted_text_color.dart';
 
-// A fixed, explicitly labelled example. This view never selects a daily
-// wisdom, reads personal writing, advances the ritual, or writes to storage.
+// Fixed examples and a Journal invitation. Personal writing is never
+// displayed here; the parent owns navigation to the protected Journal.
 class KeeperExperiencePreview extends StatefulWidget {
-  const KeeperExperiencePreview({super.key});
+  const KeeperExperiencePreview({
+    super.key,
+    this.journalHasEntries,
+    this.journalLoadFailed = false,
+    this.onJournalSelected,
+    this.onOpenJournal,
+  });
+
+  final bool? journalHasEntries;
+  final bool journalLoadFailed;
+  final VoidCallback? onJournalSelected;
+  final VoidCallback? onOpenJournal;
 
   @override
   State<KeeperExperiencePreview> createState() =>
@@ -59,7 +70,12 @@ class _KeeperExperiencePreviewState extends State<KeeperExperiencePreview> {
                 selected: _selected == preview,
                 child: TextButton(
                   key: ValueKey('keeper-preview-tab-${preview.name}'),
-                  onPressed: () => setState(() => _selected = preview),
+                  onPressed: () {
+                    setState(() => _selected = preview);
+                    if (preview == _Preview.journal) {
+                      widget.onJournalSelected?.call();
+                    }
+                  },
                   style: TextButton.styleFrom(
                     foregroundColor: EastColors.of(context).ink,
                     minimumSize: const Size(44, 44),
@@ -101,7 +117,7 @@ class _KeeperExperiencePreviewState extends State<KeeperExperiencePreview> {
           switch (_selected) {
             _Preview.ritual => l10n.keeperWidgetRitual,
             _Preview.reflection => l10n.reflectWithoutLimit,
-            _Preview.journal => l10n.takeJournalWithYou,
+            _Preview.journal => l10n.keeperJournalExport,
           },
           key: const ValueKey('keeper-preview-caption'),
           textAlign: TextAlign.center,
@@ -178,33 +194,84 @@ class _KeeperExperiencePreviewState extends State<KeeperExperiencePreview> {
 
   Widget _journal() {
     final l10n = eastLocalizations(context);
-    return Container(
-      key: const ValueKey('keeper-preview-journal'),
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 14),
-      decoration: BoxDecoration(
-        border: Border.all(color: EastColors.of(context).divider, width: 0.5),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.keeperPreviewExample, style: _style(13, muted: true)),
-          const SizedBox(height: 18),
-          Text(_exampleWisdom, style: _style(22)),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 14, top: 14),
-            child: Text(l10n.keeperPreviewReflection,
-                style: _style(16, muted: true)),
+    final empty = widget.journalHasEntries == false;
+    final action = widget.journalLoadFailed
+        ? widget.onJournalSelected
+        : widget.journalHasEntries == true
+            ? widget.onOpenJournal
+            : null;
+    final actionLabel =
+        widget.journalLoadFailed ? l10n.retry : l10n.keeperJournalOpen;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Semantics(
+        button: action != null,
+        onTap: action,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: const ValueKey('keeper-preview-journal'),
+            onTap: action,
+            excludeFromSemantics: true,
+            splashFactory: NoSplash.splashFactory,
+            highlightColor: EastColors.of(context).ink.withValues(alpha: 0.025),
+            child: Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(minHeight: 196),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: EastColors.of(context).divider, width: 0.5),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.keeperJournalTitle, style: _style(25)),
+                  const SizedBox(height: 14),
+                  Text(l10n.keeperJournalDescription,
+                      style: _style(17, muted: true)),
+                  const SizedBox(height: 26),
+                  if (empty)
+                    Container(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(l10n.keeperJournalEmpty,
+                          key: const ValueKey('keeper-journal-empty'),
+                          style: _style(16, muted: true)),
+                    )
+                  else ...[
+                    if (widget.journalLoadFailed) ...[
+                      Text(l10n.journalCouldNotBePrepared,
+                          style: _style(16, muted: true)),
+                      const SizedBox(height: 12),
+                    ],
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(actionLabel,
+                                key: const ValueKey('keeper-journal-open'),
+                                style: _style(18, muted: action == null)),
+                          ),
+                          const SizedBox(width: 12),
+                          ExcludeSemantics(
+                            child: Icon(Icons.arrow_forward,
+                                size: 18,
+                                color: action == null
+                                    ? eastMutedTextColor(context)
+                                    : EastColors.of(context).ink),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 20),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: Text(MaterialLocalizations.of(context).formatDecimal(1),
-                style: _style(13, muted: true)),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Maak verbinding met internet om een nieuwe wijsheid te openen.",
   "dailyRitualUnavailable": "Je dagelijkse wijsheid is nu niet beschikbaar. Probeer het opnieuw.",
   "dailyRitualAccountNote": "Eén wijsheid per iCloud-account per 24 uur. Voor een nieuwe wijsheid is internet nodig. Je opgeslagen teksten blijven offline beschikbaar.",
-  "dailyRitualPreviousWisdom": "Vorige wijsheid"
+  "dailyRitualPreviousWisdom": "Vorige wijsheid",
+  "keeperJournalTitle": "Een dagboek van jou.",
+  "keeperJournalDescription": "De wijsheden die je bewaart en de woorden die je schrijft, bij elkaar.",
+  "keeperJournalOpen": "Open je dagboek",
+  "keeperJournalEmpty": "Het begint met de eerste wijsheid die je bewaart.",
+  "keeperJournalExport": "Neem het met Keeper mee als PDF.",
+  "ritualSound": "Ritueelgeluid",
+  "ritualSoundOn": "Geluid aan",
+  "ritualSoundOff": "Stil",
+  "ritualSoundOnDescription": "Ritueelgeluiden en zachte trillingen. Gesproken begeleiding is beschikbaar in het Engels.",
+  "ritualSoundOffDescription": "Zonder geluid of trillingen.",
+  "ritualSoundSaveFailed": "Je keuze is nu actief, maar kon niet worden opgeslagen. Probeer het opnieuw.",
+  "remainingDurationHoursMinutesSeconds": "Nog {hours, plural, one{1 uur} other{{hours} uur}} {minutes, plural, one{1 minuut} other{{minutes} minuten}} {seconds, plural, one{1 seconde} other{{seconds} seconden}}",
+  "remainingDurationSecondsOnly": "Nog {seconds, plural, one{1 seconde} other{{seconds} seconden}}",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

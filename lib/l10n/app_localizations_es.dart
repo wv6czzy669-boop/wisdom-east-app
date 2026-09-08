@@ -703,4 +703,76 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Sabiduría anterior';
+
+  @override
+  String get keeperJournalTitle => 'Un diario propio.';
+
+  @override
+  String get keeperJournalDescription =>
+      'La sabiduría que guardas y las palabras que escribes, juntas.';
+
+  @override
+  String get keeperJournalOpen => 'Abre tu diario';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Comienza con la primera sabiduría que guardas.';
+
+  @override
+  String get keeperJournalExport => 'Con Keeper, llévalo contigo en PDF.';
+
+  @override
+  String get ritualSound => 'Sonido del ritual';
+
+  @override
+  String get ritualSoundOn => 'Con sonido';
+
+  @override
+  String get ritualSoundOff => 'Silencio';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Sonidos del ritual y vibraciones suaves. La guía de voz está disponible en inglés.';
+
+  @override
+  String get ritualSoundOffDescription => 'Sin sonido ni vibración.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Tu elección está activa, pero no se pudo guardar. Inténtalo de nuevo.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours horas',
+      one: '1 hora',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutos',
+      one: '1 minuto',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds segundos',
+      one: '1 segundo',
+    );
+    return 'Quedan $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds segundos',
+      one: '1 segundo',
+    );
+    return 'Quedan $_temp0';
+  }
 }

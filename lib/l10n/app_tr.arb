@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Yeni wisdom açmak için internete bağlan.",
   "dailyRitualUnavailable": "Günlük wisdom’a şu anda ulaşılamıyor. Lütfen yeniden dene.",
   "dailyRitualAccountNote": "Her iCloud hesabına 24 saatte bir wisdom. Yeni wisdom için internet bağlantısı gerekir. Kayıtlı yazılarını çevrimdışı okuyabilirsin.",
-  "dailyRitualPreviousWisdom": "Son wisdom"
+  "dailyRitualPreviousWisdom": "Son wisdom",
+  "keeperJournalTitle": "Sana ait bir günlük.",
+  "keeperJournalDescription": "Sakladığın wisdom’lar ve yazdıkların, aynı yerde.",
+  "keeperJournalOpen": "Günlüğünü aç",
+  "keeperJournalEmpty": "İlk sakladığın wisdom ile başlar.",
+  "keeperJournalExport": "Keeper ile PDF olarak yanında götür.",
+  "ritualSound": "Ritüel sesi",
+  "ritualSoundOn": "Sesli",
+  "ritualSoundOff": "Sessiz",
+  "ritualSoundOnDescription": "Ritüel sesleri ve hafif titreşimler. Sesli yönlendirmeler İngilizcede kullanılabilir.",
+  "ritualSoundOffDescription": "Ses ve titreşim olmadan.",
+  "ritualSoundSaveFailed": "Tercihin şu an geçerli, ancak kaydedilemedi. Lütfen yeniden dene.",
+  "remainingDurationHoursMinutesSeconds": "{hours} saat {minutes} dakika {seconds} saniye kaldı",
+  "remainingDurationSecondsOnly": "{seconds} saniye kaldı",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

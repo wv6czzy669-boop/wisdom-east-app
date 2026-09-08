@@ -1,3 +1,5 @@
+import '../controllers/ritual_sound_preference_controller.dart';
+import 'ritual_sound_selection_screen.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -47,6 +49,7 @@ class SettingsScreen extends StatefulWidget {
     this.dataExportService,
     this.localePreferenceController,
     this.appearancePreferenceController,
+    this.ritualSoundPreferenceController,
     this.wisdomNotificationService,
     this.dailyWisdomStatusReader,
     this.syncHealthReader,
@@ -60,6 +63,7 @@ class SettingsScreen extends StatefulWidget {
   final DataExportService? dataExportService;
   final LocalePreferenceController? localePreferenceController;
   final AppearancePreferenceController? appearancePreferenceController;
+  final RitualSoundPreferenceController? ritualSoundPreferenceController;
   final WisdomNotificationService? wisdomNotificationService;
   final QuietReminderDailyStatusReader? dailyWisdomStatusReader;
   final SettingsSyncHealthReader? syncHealthReader;
@@ -138,6 +142,15 @@ class _SettingsScreenState extends State<SettingsScreen>
   PrivateWritingLockController get _writingLock =>
       widget.writingLockController ?? PrivateWritingLockController.shared;
 
+  RitualSoundPreferenceController get _ritualSound =>
+      widget.ritualSoundPreferenceController ??
+      app_services.ritualSoundPreferenceController;
+
+  Future<void> _openRitualSound() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => RitualSoundSelectionScreen(controller: _ritualSound)));
+  }
+
   void _writingLockChanged() {
     if (mounted) setState(() {});
   }
@@ -147,6 +160,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _writingLock.addListener(_writingLockChanged);
+    _ritualSound.addListener(_writingLockChanged);
+    unawaited(_ritualSound.load());
     unawaited(_writingLock.load());
     unawaited(_refreshSyncAssociationStatus());
     unawaited(_refreshICloudRemovalStatus());
@@ -157,6 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _writingLock.removeListener(_writingLockChanged);
+    _ritualSound.removeListener(_writingLockChanged);
     super.dispose();
   }
 
@@ -1461,6 +1477,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               dataExportService: widget.dataExportService,
               localePreferenceController: _localePreferenceController,
               appearancePreferenceController: _appearancePreferenceController,
+              ritualSoundPreferenceController: _ritualSound,
               wisdomNotificationService: _wisdomNotificationService,
               dailyWisdomStatusReader: widget.dailyWisdomStatusReader,
               syncHealthReader: _syncHealthReader,
@@ -1507,6 +1524,20 @@ class _SettingsScreenState extends State<SettingsScreen>
             : l10n.writingLockOff;
     final rows = switch (widget.section) {
       SettingsSection.main => <Widget>[
+          const SizedBox(height: 18),
+          settingsItem(
+              rowKey: const ValueKey('settings-keeper-row'),
+              title: l10n.keeper,
+              subtitle: l10n.supportCircle,
+              onTap: _openKeeper),
+          settingsItem(
+              rowKey: const ValueKey('settings-restore-purchases-row'),
+              title: l10n.restorePurchases,
+              subtitle: l10n.restoreBelongs,
+              semanticLabel: restoreSemanticLabel,
+              onTap: restoreAction,
+              showSubtitle: false),
+          _settingsGroupDivider(),
           _sectionLabel(l10n.settingsEveryday),
           settingsItem(
               rowKey: const ValueKey('settings-language-row'),
@@ -1524,6 +1555,18 @@ class _SettingsScreenState extends State<SettingsScreen>
               trailing: _settingsTrailingState(appearance),
               semanticLabel: l10n.appearanceSettingSemantics(appearance),
               onTap: _openAppearance),
+          settingsItem(
+              rowKey: const ValueKey('settings-ritual-sound-row'),
+              title: l10n.ritualSound,
+              subtitle: _ritualSound.mode == RitualSoundMode.sound
+                  ? l10n.ritualSoundOn
+                  : l10n.ritualSoundOff,
+              showSubtitle: false,
+              trailing: _settingsTrailingState(
+                  _ritualSound.mode == RitualSoundMode.sound
+                      ? l10n.ritualSoundOn
+                      : l10n.ritualSoundOff),
+              onTap: _openRitualSound),
           settingsItem(
               rowKey: const ValueKey('settings-quiet-reminder-row'),
               title: l10n.quietReminder,
@@ -1557,19 +1600,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                   : l10n.exportKeptAndReflections,
               semanticLabel: dataExportSemanticLabel,
               onTap: dataExportAction),
-          _settingsGroupDivider(),
-          settingsItem(
-              rowKey: const ValueKey('settings-keeper-row'),
-              title: l10n.keeper,
-              subtitle: l10n.supportCircle,
-              onTap: _openKeeper),
-          settingsItem(
-              rowKey: const ValueKey('settings-restore-purchases-row'),
-              title: l10n.restorePurchases,
-              subtitle: l10n.restoreBelongs,
-              semanticLabel: restoreSemanticLabel,
-              onTap: restoreAction,
-              showSubtitle: false),
           _settingsGroupDivider(),
           settingsItem(
               rowKey: const ValueKey('settings-about-row'),

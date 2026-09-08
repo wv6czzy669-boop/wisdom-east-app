@@ -10,6 +10,11 @@ import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_inte
 import 'package:wisdom_app/l10n/app_localizations.dart';
 import 'package:wisdom_app/localization/east_typography_resolver.dart';
 import 'package:wisdom_app/screens/keeper_screen.dart';
+import 'package:wisdom_app/screens/journal_screen.dart';
+import 'package:wisdom_app/models/favorite_item.dart';
+import 'package:wisdom_app/services/saved_reflections_service.dart';
+import 'package:wisdom_app/controllers/private_writing_lock_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wisdom_app/services/purchase_service.dart';
 import 'package:wisdom_app/theme/east_design.dart';
 import 'package:wisdom_app/theme/muted_text_color.dart';
@@ -17,6 +22,7 @@ import 'package:wisdom_app/theme/muted_text_color.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late _StaticPurchaseService service;
+  late _JournalEntries entries;
 
   final removedThreeRevealCopy = [
     'Three',
@@ -42,6 +48,8 @@ void main() {
     }
     InAppPurchasePlatform.instance = _NoopInAppPurchasePlatform();
     service = _StaticPurchaseService();
+    entries = _JournalEntries();
+    SharedPreferences.setMockInitialValues({});
   });
 
   tearDown(() {
@@ -51,7 +59,9 @@ void main() {
   testWidgets('Keeper screen preserves restrained product message',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     const lockedCopy = [
@@ -114,7 +124,9 @@ void main() {
       'to the exact same colors as Keep what stays. and KEEPER',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     // 1A: the ring's outline color must be exactly the same resolved color
@@ -181,7 +193,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     expect(find.text('CA\$6.99'), findsOneWidget);
@@ -218,7 +232,8 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           theme: eastTheme(locale: locale),
-          home: KeeperScreen(purchaseService: service),
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries),
         ),
       );
       await tester.pump();
@@ -250,7 +265,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: eastTheme(brightness: brightness),
-          home: KeeperScreen(purchaseService: service),
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries),
         ),
       );
       await tester.pump();
@@ -275,7 +291,9 @@ void main() {
   testWidgets('Keeper purchase action is blocked when product is unavailable',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     final action = tester.widget<GestureDetector>(
@@ -307,7 +325,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     final action = tester.widget<GestureDetector>(
@@ -336,7 +356,8 @@ void main() {
         locale: const Locale('tr'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: KeeperScreen(purchaseService: service),
+        home: KeeperScreen(
+            purchaseService: service, savedReflectionsService: entries),
       ),
     );
 
@@ -364,7 +385,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
@@ -402,7 +425,9 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
       await tester.pumpWidget(
-        MaterialApp(home: KeeperScreen(purchaseService: service)),
+        MaterialApp(
+            home: KeeperScreen(
+                purchaseService: service, savedReflectionsService: entries)),
       );
       await tester.pump();
 
@@ -432,7 +457,9 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: KeeperScreen(purchaseService: service)),
+        MaterialApp(
+            home: KeeperScreen(
+                purchaseService: service, savedReflectionsService: entries)),
       );
 
       final purchaseNode = find.semantics
@@ -473,7 +500,9 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: KeeperScreen(purchaseService: service)),
+        MaterialApp(
+            home: KeeperScreen(
+                purchaseService: service, savedReflectionsService: entries)),
       );
 
       final loadingNode = find.semantics
@@ -495,7 +524,9 @@ void main() {
 
       service = _StaticPurchaseService();
       await tester.pumpWidget(
-        MaterialApp(home: KeeperScreen(purchaseService: service)),
+        MaterialApp(
+            home: KeeperScreen(
+                purchaseService: service, savedReflectionsService: entries)),
       );
 
       final unavailableNode = find.semantics
@@ -526,7 +557,9 @@ void main() {
       service = _StaticPurchaseService(keeper: true);
 
       await tester.pumpWidget(
-        MaterialApp(home: KeeperScreen(purchaseService: service)),
+        MaterialApp(
+            home: KeeperScreen(
+                purchaseService: service, savedReflectionsService: entries)),
       );
 
       final keeperNode =
@@ -597,7 +630,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     expect(find.text('Enter the Circle'), findsOneWidget);
@@ -637,7 +672,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: KeeperScreen(purchaseService: service)),
+      MaterialApp(
+          home: KeeperScreen(
+              purchaseService: service, savedReflectionsService: entries)),
     );
 
     expect(
@@ -666,6 +703,83 @@ void main() {
     expect(find.text('Keeper active'), findsNothing);
   });
 
+  testWidgets(
+      'Journal invitation is honest when empty and retries a failed read',
+      (tester) async {
+    entries.fail = true;
+    await tester.pumpWidget(MaterialApp(
+        home: KeeperScreen(
+            purchaseService: service, savedReflectionsService: entries)));
+    expect(entries.reads, 0);
+    await tester.tap(find.byKey(const ValueKey('keeper-preview-tab-journal')));
+    await tester.pump();
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.byKey(const ValueKey('keeper-journal-empty')), findsNothing);
+    entries.fail = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    expect(
+        find.text('It begins with the first wisdom you keep.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('keeper-journal-open')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('keeper-preview-journal')));
+    await tester.pump();
+    expect(find.byType(JournalScreen), findsNothing);
+    expect(service.buyAttempts, 0);
+  });
+
+  testWidgets('Journal invitation refreshes entries before opening',
+      (tester) async {
+    entries.items = [_journalItem];
+    await tester.pumpWidget(MaterialApp(
+        home: KeeperScreen(
+            purchaseService: service, savedReflectionsService: entries)));
+    await tester.tap(find.byKey(const ValueKey('keeper-preview-tab-journal')));
+    await tester.pump();
+    expect(find.text('Open your Journal'), findsOneWidget);
+    expect(find.text(_journalItem.text), findsNothing);
+    entries.items = [];
+    await tester.tap(find.byKey(const ValueKey('keeper-preview-journal')));
+    await tester.pump();
+    expect(find.byType(JournalScreen), findsNothing);
+    expect(find.byKey(const ValueKey('keeper-journal-empty')), findsOneWidget);
+    expect(entries.reads, 2);
+  });
+
+  testWidgets(
+      'Journal opens behind the writing lock and returns to this Keeper',
+      (tester) async {
+    entries.items = [_journalItem];
+    final bridge = _LockedWritingBridge();
+    final lock = PrivateWritingLockController(bridge: bridge);
+    await tester.pumpWidget(MaterialApp(
+        home: KeeperScreen(
+            purchaseService: service,
+            savedReflectionsService: entries,
+            writingLockController: lock)));
+    await tester.tap(find.byKey(const ValueKey('keeper-preview-tab-journal')));
+    await tester.pump();
+    final card = find.byKey(const ValueKey('keeper-preview-journal'));
+    await tester.tap(card);
+    await tester.tap(card);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final journal = tester.widget<JournalScreen>(find.byType(JournalScreen));
+    expect(journal.items.single.id, _journalItem.id);
+    expect(journal.purchaseService, same(service));
+    expect(
+        find.byKey(const ValueKey('private-writing-locked')), findsOneWidget);
+    expect(bridge.attempts, 1);
+    expect(find.byType(KeeperScreen, skipOffstage: false), findsOneWidget);
+    // The free export destination must reuse the originating offering.
+    journal.onRequestKeeper!();
+    await tester.pumpAndSettle();
+    expect(find.byType(JournalScreen), findsNothing);
+    expect(find.byType(KeeperScreen), findsOneWidget);
+    expect(service.buyAttempts, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+    lock.dispose();
+  });
+
   testWidgets('examples switch without purchasing or opening a daily ritual',
       (tester) async {
     service = _StaticPurchaseService(
@@ -676,15 +790,17 @@ void main() {
             price: '€3.49',
             rawPrice: 3.49,
             currencyCode: 'EUR'));
-    await tester
-        .pumpWidget(MaterialApp(home: KeeperScreen(purchaseService: service)));
+    await tester.pumpWidget(MaterialApp(
+        home: KeeperScreen(
+            purchaseService: service, savedReflectionsService: entries)));
     for (final preview in ['reflection', 'journal', 'ritual']) {
       await tester
           .ensureVisible(find.byKey(ValueKey('keeper-preview-tab-$preview')));
       await tester.tap(find.byKey(ValueKey('keeper-preview-tab-$preview')));
       await tester.pump();
       expect(find.byKey(ValueKey('keeper-preview-$preview')), findsOneWidget);
-      expect(find.text('Example'), findsOneWidget);
+      expect(find.text('Example'),
+          preview == 'journal' ? findsNothing : findsOneWidget);
       expect(find.text('€3.49'), findsOneWidget);
       expect(find.byKey(const ValueKey('keeper-widget-guide-title')),
           findsNothing);
@@ -715,7 +831,9 @@ void main() {
               locale: locale,
               brightness: scale == 1.0 ? Brightness.light : Brightness.dark),
           home: KeeperScreen(
-              purchaseService: service, supportsInteractiveKeeperWidget: true),
+              purchaseService: service,
+              savedReflectionsService: entries,
+              supportsInteractiveKeeperWidget: true),
         ));
         await tester.pump();
         expect(find.text('Keeper'), findsOneWidget);
@@ -726,7 +844,22 @@ void main() {
           await tester.pump();
           expect(
               find.byKey(ValueKey('keeper-preview-$preview')), findsOneWidget);
-          expect(find.text(l10n.keeperPreviewExample), findsOneWidget);
+          expect(find.text(l10n.keeperPreviewExample),
+              preview == 'journal' ? findsNothing : findsOneWidget);
+          if (preview == 'journal') {
+            expect(find.text(l10n.keeperJournalTitle), findsOneWidget);
+            expect(find.text(l10n.keeperJournalExport), findsOneWidget);
+            entries.items = [_journalItem];
+            await tester.tap(tab);
+            await tester.pump();
+            expect(find.text(l10n.keeperJournalOpen), findsOneWidget);
+            expect(tester.takeException(), isNull,
+                reason: '$locale $scale journal action');
+            entries.items = [];
+            await tester.tap(tab);
+            await tester.pump();
+            expect(find.text(l10n.keeperJournalEmpty), findsOneWidget);
+          }
           expect(tester.takeException(), isNull,
               reason: '$locale $scale $preview');
         }
@@ -822,4 +955,45 @@ class _NoopInAppPurchasePlatform extends InAppPurchasePlatform {
 
   @override
   Future<void> completePurchase(PurchaseDetails purchase) async {}
+}
+
+const _journalItem = FavoriteItem(
+  id: 'journal-invitation-test',
+  text: 'Private wisdom',
+  date: 'September 7, 2026',
+  reflection: 'Private writing',
+);
+
+class _JournalEntries implements SavedReflectionsService {
+  List<FavoriteItem> items = [];
+  bool fail = false;
+  int reads = 0;
+  @override
+  Future<List<FavoriteItem>> load() async {
+    reads++;
+    if (fail) throw StateError('read unavailable');
+    return items;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _LockedWritingBridge implements PrivateWritingLockBridge {
+  int attempts = 0;
+  @override
+  Future<Map<Object?, Object?>> status() async =>
+      {'enabled': true, 'available': true};
+  @override
+  Future<bool> authenticate(String reason) async {
+    attempts++;
+    return false;
+  }
+
+  @override
+  Future<void> setSensitive(bool value) async {}
+  @override
+  Future<void> protectedFrameReady() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

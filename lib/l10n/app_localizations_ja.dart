@@ -644,4 +644,48 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => '前の知恵';
+
+  @override
+  String get keeperJournalTitle => 'あなただけの日記。';
+
+  @override
+  String get keeperJournalDescription => '心に留めた言葉と、あなたが綴った言葉を、一冊に。';
+
+  @override
+  String get keeperJournalOpen => '日記を開く';
+
+  @override
+  String get keeperJournalEmpty => '最初の言葉を残すことから始まります。';
+
+  @override
+  String get keeperJournalExport => 'Keeperで、PDFとして持ち歩こう。';
+
+  @override
+  String get ritualSound => 'リチュアルの音';
+
+  @override
+  String get ritualSoundOn => '音あり';
+
+  @override
+  String get ritualSoundOff => 'サイレント';
+
+  @override
+  String get ritualSoundOnDescription => 'リチュアルの音と穏やかな振動。音声ガイドは英語で利用できます。';
+
+  @override
+  String get ritualSoundOffDescription => '音も振動もありません。';
+
+  @override
+  String get ritualSoundSaveFailed => '選択は適用されましたが、保存できませんでした。もう一度お試しください。';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return '残り$hours時間$minutes分$seconds秒';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return '残り$seconds秒';
+  }
 }

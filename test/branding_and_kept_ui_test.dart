@@ -77,8 +77,8 @@ void main() {
             .crossAxisAlignment,
         CrossAxisAlignment.start);
     expect(tester.getTopLeft(find.text('Settings')).dy, lessThan(100));
-    expect(tester.getTopLeft(find.text('Language')).dy,
-        lessThan(tester.getTopLeft(find.text('Keeper')).dy));
+    expect(tester.getTopLeft(find.text('Keeper')).dy,
+        lessThan(tester.getTopLeft(find.text('Language')).dy));
     expect(find.byType(ListView), findsNothing);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byType(Scrollable), findsOneWidget);
@@ -113,13 +113,13 @@ void main() {
 
   testWidgets(
       'EAST Settings: exactly three hairlines mark four '
-      'groups with everyday preferences before writing and membership',
+      'groups with membership before everyday preferences and writing',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: SettingsScreen()),
     );
 
-    // Four groups: Everyday, Writing, Keeper, and About.
+    // Four groups: Keeper, Everyday, Writing, and About.
     // Hairlines separate groups; sibling rows remain separated only by air.
     final dividers = tester.widgetList<Divider>(find.byType(Divider)).toList();
     expect(dividers, hasLength(3));
@@ -133,14 +133,15 @@ void main() {
     }
 
     final rowOrder = [
+      'Keeper',
+      'Restore Purchases',
       'Language',
       'Appearance',
+      'Ritual sound',
       'Quiet Reminder',
       'Writing lock',
       'iCloud Sync',
       'Export My Data',
-      'Keeper',
-      'Restore Purchases',
       'About EAST.'
     ];
     expect(rowOrder, isNot(contains('Daily Reminder')));

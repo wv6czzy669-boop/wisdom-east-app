@@ -706,4 +706,76 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Letzte Weisheit';
+
+  @override
+  String get keeperJournalTitle => 'Ein Tagebuch, ganz deins.';
+
+  @override
+  String get keeperJournalDescription =>
+      'Deine bewahrten Weisheiten und deine eigenen Worte, vereint.';
+
+  @override
+  String get keeperJournalOpen => 'Dein Tagebuch öffnen';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Es beginnt mit der ersten Weisheit, die du bewahrst.';
+
+  @override
+  String get keeperJournalExport => 'Mit Keeper als PDF mitnehmen.';
+
+  @override
+  String get ritualSound => 'Ritualklang';
+
+  @override
+  String get ritualSoundOn => 'Mit Ton';
+
+  @override
+  String get ritualSoundOff => 'Lautlos';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Ritualklänge und sanfte Vibrationen. Gesprochene Begleitung ist auf Englisch verfügbar.';
+
+  @override
+  String get ritualSoundOffDescription => 'Ohne Ton und Vibration.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Deine Wahl gilt jetzt, konnte aber nicht gespeichert werden. Bitte versuche es erneut.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours Stunden',
+      one: '1 Stunde',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes Minuten',
+      one: '1 Minute',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds Sekunden',
+      one: '1 Sekunde',
+    );
+    return 'Noch $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds Sekunden',
+      one: '1 Sekunde',
+    );
+    return 'Noch $_temp0';
+  }
 }

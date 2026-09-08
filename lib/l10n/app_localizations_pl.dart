@@ -710,4 +710,85 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Poprzednia mądrość';
+
+  @override
+  String get keeperJournalTitle => 'Twój własny dziennik.';
+
+  @override
+  String get keeperJournalDescription =>
+      'Zachowane mądrości i napisane przez Ciebie słowa, razem.';
+
+  @override
+  String get keeperJournalOpen => 'Otwórz swój dziennik';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Zaczyna się od pierwszej zachowanej mądrości.';
+
+  @override
+  String get keeperJournalExport =>
+      'Z Keeper zabierzesz go ze sobą w formacie PDF.';
+
+  @override
+  String get ritualSound => 'Dźwięk rytuału';
+
+  @override
+  String get ritualSoundOn => 'Z dźwiękiem';
+
+  @override
+  String get ritualSoundOff => 'Cisza';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Dźwięki rytuału i delikatne wibracje. Wskazówki głosowe są dostępne po angielsku.';
+
+  @override
+  String get ritualSoundOffDescription => 'Bez dźwięku i wibracji.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Twój wybór działa teraz, ale nie udało się go zapisać. Spróbuj ponownie.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours godzin',
+      many: '$hours godzin',
+      few: '$hours godziny',
+      one: '1 godzina',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minut',
+      many: '$minutes minut',
+      few: '$minutes minuty',
+      one: '1 minuta',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds sekund',
+      many: '$seconds sekund',
+      few: '$seconds sekundy',
+      one: '1 sekunda',
+    );
+    return 'Pozostało: $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds sekund',
+      many: '$seconds sekund',
+      few: '$seconds sekundy',
+      one: '1 sekunda',
+    );
+    return 'Pozostało: $_temp0';
+  }
 }

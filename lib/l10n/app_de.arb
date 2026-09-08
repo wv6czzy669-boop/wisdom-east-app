@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Verbinde dich mit dem Internet, um eine neue Weisheit zu öffnen.",
   "dailyRitualUnavailable": "Deine tägliche Weisheit ist gerade nicht verfügbar. Versuche es bitte erneut.",
   "dailyRitualAccountNote": "Eine Weisheit pro iCloud-Account alle 24 Stunden. Für eine neue Weisheit ist eine Internetverbindung nötig. Deine gespeicherten Texte bleiben offline verfügbar.",
-  "dailyRitualPreviousWisdom": "Letzte Weisheit"
+  "dailyRitualPreviousWisdom": "Letzte Weisheit",
+  "keeperJournalTitle": "Ein Tagebuch, ganz deins.",
+  "keeperJournalDescription": "Deine bewahrten Weisheiten und deine eigenen Worte, vereint.",
+  "keeperJournalOpen": "Dein Tagebuch öffnen",
+  "keeperJournalEmpty": "Es beginnt mit der ersten Weisheit, die du bewahrst.",
+  "keeperJournalExport": "Mit Keeper als PDF mitnehmen.",
+  "ritualSound": "Ritualklang",
+  "ritualSoundOn": "Mit Ton",
+  "ritualSoundOff": "Lautlos",
+  "ritualSoundOnDescription": "Ritualklänge und sanfte Vibrationen. Gesprochene Begleitung ist auf Englisch verfügbar.",
+  "ritualSoundOffDescription": "Ohne Ton und Vibration.",
+  "ritualSoundSaveFailed": "Deine Wahl gilt jetzt, konnte aber nicht gespeichert werden. Bitte versuche es erneut.",
+  "remainingDurationHoursMinutesSeconds": "Noch {hours, plural, one{1 Stunde} other{{hours} Stunden}} {minutes, plural, one{1 Minute} other{{minutes} Minuten}} {seconds, plural, one{1 Sekunde} other{{seconds} Sekunden}}",
+  "remainingDurationSecondsOnly": "Noch {seconds, plural, one{1 Sekunde} other{{seconds} Sekunden}}",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

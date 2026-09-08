@@ -704,6 +704,78 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Sabedoria anterior';
+
+  @override
+  String get keeperJournalTitle => 'Um diário só teu.';
+
+  @override
+  String get keeperJournalDescription =>
+      'A sabedoria que guardas e as palavras que escreves, juntas.';
+
+  @override
+  String get keeperJournalOpen => 'Abre o teu diário';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Começa com a primeira sabedoria que guardas.';
+
+  @override
+  String get keeperJournalExport => 'Com Keeper, leva-o contigo em PDF.';
+
+  @override
+  String get ritualSound => 'Som do ritual';
+
+  @override
+  String get ritualSoundOn => 'Com som';
+
+  @override
+  String get ritualSoundOff => 'Silencioso';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Sons do ritual e vibrações suaves. A orientação por voz está disponível em inglês.';
+
+  @override
+  String get ritualSoundOffDescription => 'Sem som nem vibração.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'A tua escolha está ativa, mas não foi possível guardá-la. Tenta novamente.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours horas',
+      one: '1 hora',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutos',
+      one: '1 minuto',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds segundos',
+      one: '1 segundo',
+    );
+    return 'Restam $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds segundos',
+      one: '1 segundo',
+    );
+    return 'Restam $_temp0';
+  }
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -1406,4 +1478,76 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get dailyRitualPreviousWisdom => 'Sabedoria anterior';
+
+  @override
+  String get keeperJournalTitle => 'Um diário só seu.';
+
+  @override
+  String get keeperJournalDescription =>
+      'A sabedoria que você guarda e as palavras que escreve, juntas.';
+
+  @override
+  String get keeperJournalOpen => 'Abra seu diário';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Começa com a primeira sabedoria que você guarda.';
+
+  @override
+  String get keeperJournalExport => 'Com Keeper, leve com você em PDF.';
+
+  @override
+  String get ritualSound => 'Som do ritual';
+
+  @override
+  String get ritualSoundOn => 'Com som';
+
+  @override
+  String get ritualSoundOff => 'Silencioso';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Sons do ritual e vibrações suaves. A orientação por voz está disponível em inglês.';
+
+  @override
+  String get ritualSoundOffDescription => 'Sem som nem vibração.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Sua escolha está ativa, mas não foi possível salvá-la. Tente novamente.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours horas',
+      one: '1 hora',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutos',
+      one: '1 minuto',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds segundos',
+      one: '1 segundo',
+    );
+    return 'Restam $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds segundos',
+      one: '1 segundo',
+    );
+    return 'Restam $_temp0';
+  }
 }

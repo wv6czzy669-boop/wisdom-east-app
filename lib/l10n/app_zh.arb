@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "連接網路，即可開啟新的智慧。",
   "dailyRitualUnavailable": "目前無法開啟每日智慧，請再試一次。",
   "dailyRitualAccountNote": "每個 iCloud 帳號每 24 小時可開啟一則智慧。新的智慧需要網路連線，已儲存的文字仍可離線閱讀。",
-  "dailyRitualPreviousWisdom": "上一則智慧"
+  "dailyRitualPreviousWisdom": "上一則智慧",
+  "keeperJournalTitle": "一本属于你的日记。",
+  "keeperJournalDescription": "珍藏的智慧与写下的心声，汇聚一处。",
+  "keeperJournalOpen": "打开你的日记",
+  "keeperJournalEmpty": "从珍藏第一则智慧开始。",
+  "keeperJournalExport": "通过 Keeper，将日记保存为 PDF，随身携带。",
+  "ritualSound": "仪式声音",
+  "ritualSoundOn": "有声",
+  "ritualSoundOff": "静音",
+  "ritualSoundOnDescription": "仪式声音与轻柔振动。语音引导提供英语版本。",
+  "ritualSoundOffDescription": "无声音或振动。",
+  "ritualSoundSaveFailed": "选择已生效，但未能保存。请重试。",
+  "remainingDurationHoursMinutesSeconds": "剩余{hours}小时{minutes}分钟{seconds}秒",
+  "remainingDurationSecondsOnly": "剩余{seconds}秒",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

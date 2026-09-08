@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "新しい知恵を開くには、インターネットに接続してください。",
   "dailyRitualUnavailable": "今は今日の知恵を開けません。もう一度お試しください。",
   "dailyRitualAccountNote": "iCloudアカウントごとに、24時間に一つの知恵。新しい知恵を開くにはインターネット接続が必要です。保存した文章はオフラインでも読めます。",
-  "dailyRitualPreviousWisdom": "前の知恵"
+  "dailyRitualPreviousWisdom": "前の知恵",
+  "keeperJournalTitle": "あなただけの日記。",
+  "keeperJournalDescription": "心に留めた言葉と、あなたが綴った言葉を、一冊に。",
+  "keeperJournalOpen": "日記を開く",
+  "keeperJournalEmpty": "最初の言葉を残すことから始まります。",
+  "keeperJournalExport": "Keeperで、PDFとして持ち歩こう。",
+  "ritualSound": "リチュアルの音",
+  "ritualSoundOn": "音あり",
+  "ritualSoundOff": "サイレント",
+  "ritualSoundOnDescription": "リチュアルの音と穏やかな振動。音声ガイドは英語で利用できます。",
+  "ritualSoundOffDescription": "音も振動もありません。",
+  "ritualSoundSaveFailed": "選択は適用されましたが、保存できませんでした。もう一度お試しください。",
+  "remainingDurationHoursMinutesSeconds": "残り{hours}時間{minutes}分{seconds}秒",
+  "remainingDurationSecondsOnly": "残り{seconds}秒",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

@@ -52,6 +52,7 @@ class JournalScreen extends StatefulWidget {
     this.pdfBuilder,
     this.pdfCache,
     this.shareHandler,
+    this.onRequestKeeper,
   });
 
   final List<FavoriteItem> items;
@@ -61,6 +62,9 @@ class JournalScreen extends StatefulWidget {
   final JournalPdfBuilder? pdfBuilder;
   final JournalPdfCache? pdfCache;
   final JournalShareHandler? shareHandler;
+
+  /// Reuse the originating offering when entered from Keeper itself.
+  final VoidCallback? onRequestKeeper;
 
   final PrivateWritingLockController? writingLockController;
 
@@ -388,6 +392,10 @@ class _JournalScreenState extends State<JournalScreen> {
   /// export the Journal, for either entitlement.
   Future<void> _handleTakeItWithYou() async {
     if (!_isKeeper) {
+      if (widget.onRequestKeeper case final openKeeper?) {
+        openKeeper();
+        return;
+      }
       await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(

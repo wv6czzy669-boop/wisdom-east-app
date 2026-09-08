@@ -1,3 +1,4 @@
+import '../controllers/ritual_sound_preference_controller.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -7,7 +8,6 @@ import 'package:flutter/services.dart';
 import '../controllers/appearance_preference_controller.dart';
 import '../controllers/home_kept_controller.dart';
 import '../controllers/home_swipe_to_kept_tracker.dart';
-import '../controllers/kept_discovery_timer_controller.dart';
 import '../controllers/locale_preference_controller.dart';
 import '../controllers/notification_offer_gate.dart';
 import '../controllers/ritual_access_coordinator.dart';
@@ -51,12 +51,19 @@ part 'home_screen_kept.dart';
 /// Shared by both countdown render sites' accessibility composition (Site
 /// A's outer ritual `Semantics` label, Site B's post-reveal countdown
 /// `Semantics` node) -- always built from the same integers the visible
-/// `HH:MM` token renders from, never by parsing a display string.
+/// `HH:MM:SS` token renders from, never by parsing a display string.
 String _naturalCountdownDuration(
   BuildContext context,
   CountdownDuration duration,
 ) {
   final l10n = eastLocalizations(context);
+  if (duration.seconds != 0) {
+    if (duration.hours == 0 && duration.minutes == 0) {
+      return l10n.remainingDurationSecondsOnly(duration.seconds);
+    }
+    return l10n.remainingDurationHoursMinutesSeconds(
+        duration.hours, duration.minutes, duration.seconds);
+  }
   if (duration.hours == 0) {
     return l10n.remainingDurationMinutesOnly(duration.minutes);
   }
@@ -70,6 +77,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     this.clock,
+    this.audioService,
     this.dailyWisdomAccessService,
     this.savedReflectionsService,
     this.wisdomShareService,
@@ -83,12 +91,14 @@ class HomeScreen extends StatefulWidget {
     this.wisdomSelectorService,
     this.localePreferenceController,
     this.appearancePreferenceController,
+    this.ritualSoundPreferenceController,
     this.dailyWisdomOperationTimeout = const Duration(seconds: 8),
     this.dailyWisdomStatusTimeout =
         DailyWisdomAccessService.defaultStatusTimeout,
   });
 
   final WisdomClock? clock;
+  final AudioService? audioService;
   final DailyWisdomAccessService? dailyWisdomAccessService;
   final SavedReflectionsService? savedReflectionsService;
   final WisdomShareHandler? wisdomShareService;
@@ -110,6 +120,7 @@ class HomeScreen extends StatefulWidget {
   final WisdomSelectorService? wisdomSelectorService;
   final LocalePreferenceController? localePreferenceController;
   final AppearancePreferenceController? appearancePreferenceController;
+  final RitualSoundPreferenceController? ritualSoundPreferenceController;
   final Duration dailyWisdomOperationTimeout;
   final Duration dailyWisdomStatusTimeout;
 
@@ -183,37 +194,24 @@ class _HomeScreenState extends State<HomeScreen>
   // stay here; the gesture geometry and one-trigger guard are isolated.
   final HomeSwipeToKeptTracker _swipeToKeptTracker = HomeSwipeToKeptTracker();
 
-  // Item 6 / P13 — Save -> Kept micro-guidance.
-  //
-  // P13: the central "Keep this wisdom." discovery is now shown at most
-  // once, ever -- on the device's first genuinely completed ritual only
-  // (see `_pendingRitualOrdinal`/`_beginFirstUseKeepDiscovery` below) --
-  // and, unlike the old twice-shown/auto-timeout hint this replaces, never
-  // times out: it remains visible (and the ring keeps calmly breathing)
-  // until the user actually taps the Keep ring. `_firstUseKeepDiscoveryActive`
-  // is the persistent (survives navigation-away/backgrounding, cleared only
-  // by an actual save) marker that this discovery is still owed to the
-  // user; it is never reset merely because the app was backgrounded or the
-  // user briefly navigated elsewhere (see `_resumePendingDiscoveryIfNeeded`).
+  // First-use text may remain until saved, but decorative motion never loops.
   bool _firstUseKeepDiscoveryActive = false;
   String _keptDiscoveryHintText = '';
   double _keptDiscoveryHintOpacity = 0.0;
   bool _keptDiscoveryBreathActive = false;
-  bool _keptIconEmphasized = false;
-  static const _saveFeedbackDuration = Duration(milliseconds: 1500);
+  bool _saveBreathPlayedForPresentation = false;
+  static const _ringBreathDuration = Duration(seconds: 3);
+  static const _saveFeedbackDuration = Duration(seconds: 2);
+  late final AnimationController _saveRingBreathController;
   late final AnimationController _saveFeedbackController;
+  late final AnimationController _keptFeedbackController;
   bool _saveFeedbackVisible = false;
+  bool _keptFeedbackVisible = false;
   bool _saveHelpVisible = false;
   bool _keptHelpVisible = false;
-  // P13: true from the moment the first-ever successful save completes the
-  // central discovery until the user actually opens Kept via the top-right
-  // control -- drives the (also no-timeout) top-right Kept-icon teaching
-  // breath, and survives navigation/backgrounding exactly like
-  // `_firstUseKeepDiscoveryActive` above (see `KeptDiscoveryHintService`'s
-  // `keptNavDiscoveryPendingKey`).
+  // Retain existing first-use completion bookkeeping across upgrades. It no
+  // longer starts a repeating animation on launch or resume.
   bool _keptNavDiscoveryActive = false;
-  final KeptDiscoveryTimerController _keptDiscoveryTimers =
-      KeptDiscoveryTimerController();
 
   // P13: the ritual ordinal (1-based) of the reveal currently in flight,
   // set once `finishCommittedDailyWisdom` learns it from
@@ -286,8 +284,36 @@ class _HomeScreenState extends State<HomeScreen>
   late final Animation<double> askFadeAnimation;
 
   Timer? countdownTimer;
+  DateTime? _countdownResolvedAt;
+  bool _countdownExpiryChecked = false;
 
-  final AudioService audioService = AudioService();
+  CountdownDuration? get _liveCountdownDuration {
+    final duration = _accessViewState.countdownDuration;
+    if (duration == null) return null;
+    final elapsed = _countdownResolvedAt == null
+        ? Duration.zero
+        : revealBoundaryNow().difference(_countdownResolvedAt!);
+    return CountdownFormatter.resolve(Duration(
+            hours: duration.hours,
+            minutes: duration.minutes,
+            seconds: duration.seconds) -
+        (elapsed.isNegative ? Duration.zero : elapsed));
+  }
+
+  late final AudioService audioService = widget.audioService ?? AudioService();
+  late final _ritualSound = widget.ritualSoundPreferenceController ??
+      app_services.ritualSoundPreferenceController;
+
+  void _soundPreferenceChanged() {
+    if (!_ritualSound.canPlay) unawaited(audioService.stop());
+  }
+
+  RitualAudioPolicy get _audioPolicy =>
+      RitualAudioPolicy.forLocale(Localizations.localeOf(context),
+          mode: _ritualSound.canPlay
+              ? RitualSoundMode.sound
+              : RitualSoundMode.silent);
+
   late final DailyWisdomAccessService dailyWisdomAccessService;
   late final SavedReflectionsService savedReflectionsService;
   late final WisdomShareHandler wisdomShareService;
@@ -307,10 +333,22 @@ class _HomeScreenState extends State<HomeScreen>
 
     countdownTimer?.cancel();
     countdownTimer = Timer.periodic(
-      const Duration(minutes: 1),
-      (_) {
+      const Duration(seconds: 1),
+      (timer) {
         if (!mounted) return;
-        updateNextWisdomMessage();
+        final duration = _liveCountdownDuration;
+        final expired = duration != null &&
+            duration.hours == 0 &&
+            duration.minutes == 0 &&
+            duration.seconds == 0;
+        if (timer.tick % 60 == 0 || (expired && !_countdownExpiryChecked)) {
+          _countdownExpiryChecked = expired;
+          unawaited(updateNextWisdomMessage());
+        } else if (duration != null && !navigationInProgress) {
+          // Presentation tick only; authority and storage keep their existing
+          // minute refresh, with an additional check at the actual boundary.
+          setState(() {});
+        }
       },
     );
   }
@@ -331,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen>
   /// and the live locale, or `null` when no countdown is active. Never
   /// cached in state.
   CountdownPresentation? _currentCountdownPresentation(BuildContext context) {
-    final duration = _accessViewState.countdownDuration;
+    final duration = _liveCountdownDuration;
     if (duration == null) return null;
     return CountdownPresentation(
       sentence: eastLocalizations(context).returnWhenSilenceOpensAgain,
@@ -345,6 +383,8 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
+    _ritualSound.addListener(_soundPreferenceChanged);
+    unawaited(_ritualSound.load());
 
     WidgetsBinding.instance.addObserver(this);
     app_services.purchaseService.addListener(_syncKeeperStatus);
@@ -407,6 +447,22 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(milliseconds: 5200),
     )..repeat(reverse: true);
 
+    _saveRingBreathController = AnimationController(
+      vsync: this,
+      duration: _ringBreathDuration,
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() => _keptDiscoveryBreathActive = false);
+        }
+      });
+    _keptFeedbackController = AnimationController(
+      vsync: this,
+      duration: _ringBreathDuration,
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() => _keptFeedbackVisible = false);
+        }
+      });
     _saveFeedbackController = AnimationController(
       vsync: this,
       duration: _saveFeedbackDuration,
@@ -415,7 +471,14 @@ class _HomeScreenState extends State<HomeScreen>
       animationBehavior: AnimationBehavior.preserve,
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed && mounted) {
-          setState(() => _saveFeedbackVisible = false);
+          setState(() {
+            _saveFeedbackVisible = false;
+            _keptFeedbackVisible =
+                !_reduceMotion && wisdomRevealed && !navigationInProgress;
+          });
+          if (_keptFeedbackVisible) {
+            _keptFeedbackController.forward(from: 0);
+          }
         }
       });
 
@@ -458,6 +521,10 @@ class _HomeScreenState extends State<HomeScreen>
       if (_reduceMotion) {
         pulseController.stop();
         pulseController.value = 0.5;
+        _saveRingBreathController.stop();
+        _keptFeedbackController.stop();
+        _keptDiscoveryBreathActive = false;
+        _keptFeedbackVisible = false;
       } else if (WidgetsBinding.instance.lifecycleState ==
               AppLifecycleState.resumed &&
           !pulseController.isAnimating) {
@@ -512,11 +579,13 @@ class _HomeScreenState extends State<HomeScreen>
     stopCountdownTimer();
     _notificationOfferGate.dispose();
     _firstRitualGuidanceTimer?.cancel();
-    _keptDiscoveryTimers.dispose();
+    _saveRingBreathController.dispose();
+    _keptFeedbackController.dispose();
     _saveFeedbackController.dispose();
     pulseController.dispose();
     wisdomRevealController.dispose();
     askFadeController.dispose();
+    _ritualSound.removeListener(_soundPreferenceChanged);
     audioService.dispose();
     super.dispose();
   }
@@ -597,9 +666,9 @@ class _HomeScreenState extends State<HomeScreen>
     }
     if (onHeartScreen) return l10n.askFromYourHeart;
     // Site A is the sole owner of the countdown announcement here: composed
-    // from the same `CountdownDuration` integers the visible `HH:MM` token
+    // from the same `CountdownDuration` integers the visible `HH:MM:SS` token
     // renders from, never from a parsed display string, and never the raw
-    // `HH:MM` token itself. Returning a non-null label here makes the outer
+    // `HH:MM:SS` token itself. Returning a non-null label here makes the outer
     // Semantics own the announcement and (via `excludeSemantics: label !=
     // null` below) suppresses the inner Text's own duplicate node.
     if (onLockedCountdown) {
@@ -913,7 +982,26 @@ class _HomeScreenState extends State<HomeScreen>
     if (status != AnimationStatus.completed || !mounted || !wisdomRevealed) {
       return;
     }
+    _startSaveRingBreathIfReady();
     setState(() {});
+  }
+
+  void _startSaveRingBreathIfReady() {
+    if (!mounted ||
+        !wisdomRevealed ||
+        navigationInProgress ||
+        _saveBreathPlayedForPresentation ||
+        _reduceMotion ||
+        !wisdomRevealController.isCompleted ||
+        saveControlOpacity < 1 ||
+        _revealPersistenceNeedsRetry ||
+        _saveOperationInProgress ||
+        isCurrentFavorite()) {
+      return;
+    }
+    _saveBreathPlayedForPresentation = true;
+    setState(() => _keptDiscoveryBreathActive = true);
+    _saveRingBreathController.forward(from: 0);
   }
 
   Future<void> handleMainTap() async {
@@ -923,7 +1011,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (_phase == RitualPhase.launch) {
       _hideFirstRitualGuidance();
-      HapticFeedback.selectionClick();
+      if (_ritualSound.canPlay) HapticFeedback.selectionClick();
 
       final launchFlowSession = flowSessionId;
       transitionInProgress = true;
@@ -983,7 +1071,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (_phase == RitualPhase.pause) {
       _completeFirstRitualGuidance();
-      HapticFeedback.lightImpact();
+      if (_ritualSound.canPlay) HapticFeedback.lightImpact();
 
       if (pauseFeelOpacity < 1.0) {
         final callbackSession = delayedCallbackSession;
@@ -1033,8 +1121,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _playVoiceCue(Future<void> Function() play) {
-    if (!RitualAudioPolicy.forLocale(Localizations.localeOf(context))
-        .playsVoiceCues) {
+    if (!_audioPolicy.playsVoiceCues) {
       return;
     }
     unawaited(play());
@@ -1143,6 +1230,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     final currentFlow = ++flowSessionId;
     transitionInProgress = true;
+    _stopKeepFeedback();
+    _saveBreathPlayedForPresentation = false;
 
     try {
       if (!isCurrentFlow(currentFlow)) return;
@@ -1188,6 +1277,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         saveControlOpacity = 1.0;
       });
+      _startSaveRingBreathIfReady();
 
       await Future.delayed(const Duration(milliseconds: 520));
 
@@ -1234,6 +1324,8 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> updateNextWisdomMessage() async {
     final nextAccessViewState = await ritualAccessCoordinator.refresh();
     if (!mounted || nextAccessViewState == null) return;
+    _countdownResolvedAt = revealBoundaryNow();
+    _countdownExpiryChecked = false;
 
     if (!nextAccessViewState.isLocked) {
       setState(() {
@@ -1418,18 +1510,8 @@ class _HomeScreenState extends State<HomeScreen>
     // path above was taken.
   }
 
-  // P13 — the central "Keep this wisdom." first-use discovery. Reached
-  // only once, ever, per device: from `_runQueuedNotificationPermissionOffer`
-  // three seconds after the first wisdom has fully appeared, and only when
-  // `_pendingRitualOrdinal == 1`
-  // (this device's first genuinely completed ritual -- see
-  // `RatingRequestService.recordCompletedRitual`). Unlike the discovery
-  // hint this replaces, there is deliberately no hide/timeout timer
-  // anywhere in this method or in the breath chain it starts: the text and
-  // the ring's calm breathing both remain until the user actually taps the
-  // Keep ring (`_onWisdomSuccessfullyKept` is what ends it), or resume
-  // identically after a navigation/backgrounding interruption (see
-  // `_resumePendingDiscoveryIfNeeded`).
+  // The first-use explanation keeps its existing eligibility and timing.
+  // Its text remains actionable; the ring's one breath belongs to the reveal.
   Future<void> _beginFirstUseKeepDiscovery() async {
     if (!mounted || !wisdomRevealed) return;
     if (transitionInProgress || _transitionLock || _isInRitualSilence) return;
@@ -1440,12 +1522,10 @@ class _HomeScreenState extends State<HomeScreen>
     // even arrived) -- nothing left to teach for this reveal.
     if (isCurrentFavorite()) return;
 
-    final reduceMotion = _reduceMotion;
     setState(() {
       _firstUseKeepDiscoveryActive = true;
       _keptDiscoveryHintText = 'keep';
       _keptDiscoveryHintOpacity = 1.0;
-      _keptDiscoveryBreathActive = false;
     });
     // Best-effort persisted bookkeeping (see `KeptDiscoveryHintService`'s
     // own doc comments): `recordDisplayShown` for continuity with the
@@ -1456,22 +1536,12 @@ class _HomeScreenState extends State<HomeScreen>
     unawaited(keptDiscoveryHintService.recordDisplayShown());
     unawaited(keptDiscoveryHintService.markCentralDiscoveryPending());
 
-    if (!reduceMotion) {
-      _startKeptDiscoveryBreathing();
-    }
     // Deliberately no hide timer: this discovery never times out (see
     // this method's own doc comment).
   }
 
-  // Re-presents the central discovery (text + breathing) after a
-  // navigation-away/backgrounding interruption paused it, or after a cold
-  // relaunch recovers it from persisted state -- never re-evaluates
-  // eligibility/ordinal, since `_firstUseKeepDiscoveryActive` being true
-  // already proves this device owes the user this discovery. Also resumes
-  // the top-right Kept-navigation teaching breath under the same
-  // circumstances. A no-op whenever neither is currently owed, or the
-  // current screen state cannot show them (already kept, mid-transition,
-  // navigating, etc).
+  // Restore only the first-use explanation after navigation. Finished or
+  // interrupted decorative feedback does not replay on return.
   void _resumePendingDiscoveryIfNeeded() {
     if (!mounted) return;
 
@@ -1489,53 +1559,17 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _keptDiscoveryHintText = 'keep';
         _keptDiscoveryHintOpacity = 1.0;
-        _keptDiscoveryBreathActive = false;
       });
-      if (!_reduceMotion) {
-        _startKeptDiscoveryBreathing();
-      }
-    }
-
-    // The top-right nav breath deliberately is NOT gated on
-    // transition/navigation state: unlike the central discovery, it does
-    // not depend on a settled ritual view -- the icon it decorates is only
-    // ever rendered in the tree when chrome is actually visible (see
-    // `_chromeVisible`), which already self-gates its visual appearance.
-    // Gating this on ritual-transition state too would create a real race
-    // on cold start: `loadInitialState()`'s own call here can land while
-    // the user's own tap has already kicked off
-    // `transitionToExistingWisdom` (which holds `transitionInProgress`
-    // true for over a second), and nothing would ever retry afterward --
-    // silently losing the resumed animation for the rest of the session.
-    if (_keptNavDiscoveryActive &&
-        !_keptIconEmphasized &&
-        !_keptDiscoveryTimers.hasNavTimer &&
-        !_reduceMotion) {
-      _scheduleKeptTopNavBreaths();
     }
   }
 
-  void _startKeptDiscoveryBreathing() {
-    _keptDiscoveryTimers.startCentralBreathing(
-      onActiveChanged: (active) {
-        if (!mounted) return;
-        setState(() => _keptDiscoveryBreathActive = active);
-      },
-      shouldContinue: () => mounted && _firstUseKeepDiscoveryActive,
-    );
-  }
-
-  // Correction: single central cancellation point for every discovery-hint
-  // UI timer (breath reset, "Kept." dismissal, Kept-icon emphasis reset).
-  // Called from `dispose`, navigation interruption and lifecycle
-  // pause/inactive (both via `_dismissKeptDiscoveryHint` below), a
-  // successful save, and the start of a replacement wisdom reveal — so no
-  // discovery timer can ever outlive the state it was scheduled for. Never
-  // clears `_firstUseKeepDiscoveryActive`/`_keptNavDiscoveryActive`
-  // themselves -- those persist across interruption by design (see
-  // `_resumePendingDiscoveryIfNeeded`).
-  void _cancelAllDiscoveryTimers() {
-    _keptDiscoveryTimers.cancelAll();
+  // Stop all three independent animations on navigation, backgrounding,
+  // a successful save, or replacement wisdom. No delayed halo can leak out.
+  void _stopKeepFeedback() {
+    _saveRingBreathController.stop();
+    _keptFeedbackController.stop();
+    _keptDiscoveryBreathActive = false;
+    _keptFeedbackVisible = false;
     _saveFeedbackController.stop();
     _saveFeedbackVisible = false;
     _saveHelpVisible = false;
@@ -1543,14 +1577,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _dismissKeptDiscoveryHint() {
-    _cancelAllDiscoveryTimers();
-    if (_keptDiscoveryHintOpacity != 0.0 ||
-        _keptDiscoveryBreathActive ||
-        _keptIconEmphasized) {
-      _keptDiscoveryHintOpacity = 0.0;
-      _keptDiscoveryBreathActive = false;
-      _keptIconEmphasized = false;
-    }
+    _stopKeepFeedback();
+    _keptDiscoveryHintOpacity = 0.0;
   }
 
   // Durable saves acknowledge every occurrence. First-use discovery remains
@@ -1559,7 +1587,7 @@ class _HomeScreenState extends State<HomeScreen>
     required int saveFlow,
     required String revealId,
   }) async {
-    _cancelAllDiscoveryTimers();
+    _stopKeepFeedback();
     _firstUseKeepDiscoveryActive = false;
 
     bool wasCompletedBefore;
@@ -1589,26 +1617,9 @@ class _HomeScreenState extends State<HomeScreen>
       _keptDiscoveryHintText = '';
       _keptDiscoveryHintOpacity = 0;
       _keptDiscoveryBreathActive = false;
-      _keptIconEmphasized = false;
       _saveFeedbackVisible = true;
     });
     _saveFeedbackController.forward(from: 0);
-    if (_keptNavDiscoveryActive && !_reduceMotion) {
-      _scheduleKeptTopNavBreaths();
-    }
-  }
-
-  // Starts the independent top-right Kept-navigation teaching breath chain.
-  // Eligibility and visible state stay in Home; timer ownership lives in
-  // [KeptDiscoveryTimerController].
-  void _scheduleKeptTopNavBreaths() {
-    _keptDiscoveryTimers.startNavBreathing(
-      onActiveChanged: (active) {
-        if (!mounted) return;
-        setState(() => _keptIconEmphasized = active);
-      },
-      shouldContinue: () => mounted && _keptNavDiscoveryActive,
-    );
   }
 
   Future<void> shareCurrentWisdom() async {
@@ -1638,7 +1649,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     _shareInProgress = true;
-    HapticFeedback.mediumImpact();
+    if (_ritualSound.canPlay) HapticFeedback.mediumImpact();
     try {
       final locale = Localizations.localeOf(context);
       final presentedWisdom = _presentedWisdom(locale);
@@ -1731,6 +1742,7 @@ class _HomeScreenState extends State<HomeScreen>
       saveInteractionEnabled = nextSaveInteractionEnabled;
       postRevealMessageOpacity = nextPostRevealMessageOpacity;
     });
+    _startSaveRingBreathIfReady();
   }
 
   void _observeLateRevealCommit(
@@ -1768,7 +1780,7 @@ class _HomeScreenState extends State<HomeScreen>
     transitionInProgress = true;
 
     try {
-      HapticFeedback.mediumImpact();
+      if (_ritualSound.canPlay) HapticFeedback.mediumImpact();
 
       if (!mounted) return;
 
@@ -1794,7 +1806,8 @@ class _HomeScreenState extends State<HomeScreen>
       // reveal's notification/discovery decision — `finishCommittedDailyWisdom`
       // (reached once this reveal's own commit resolves, well before its
       // notification/discovery timing slot fires) sets the real value.
-      _cancelAllDiscoveryTimers();
+      _stopKeepFeedback();
+      _saveBreathPlayedForPresentation = false;
       _pendingRitualOrdinal = null;
 
       setState(() {
@@ -1813,7 +1826,6 @@ class _HomeScreenState extends State<HomeScreen>
         _keptDiscoveryHintText = '';
         _keptDiscoveryHintOpacity = 0.0;
         _keptDiscoveryBreathActive = false;
-        _keptIconEmphasized = false;
       });
 
       final silenceComplete =
@@ -1925,11 +1937,10 @@ class _HomeScreenState extends State<HomeScreen>
         );
       }
 
-      if (RitualAudioPolicy.forLocale(Localizations.localeOf(context))
-          .playsRevealSound) {
+      if (_audioPolicy.playsRevealSound) {
         unawaited(audioService.playRevealSound());
       }
-      HapticFeedback.selectionClick();
+      if (_ritualSound.canPlay) HapticFeedback.selectionClick();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!isCurrentFlow(currentFlow) || !wisdomRevealed) return;
         wisdomRevealController.forward(from: 0.0);
@@ -1977,6 +1988,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         saveControlOpacity = 1.0;
       });
+      _startSaveRingBreathIfReady();
 
       await Future.delayed(const Duration(milliseconds: 520));
 
@@ -2083,6 +2095,7 @@ class _HomeScreenState extends State<HomeScreen>
         context,
         MaterialPageRoute(
           builder: (context) => SettingsScreen(
+            ritualSoundPreferenceController: _ritualSound,
             localePreferenceController: widget.localePreferenceController,
             appearancePreferenceController:
                 widget.appearancePreferenceController,
@@ -2142,7 +2155,7 @@ class _HomeScreenState extends State<HomeScreen>
     // Built fresh every build from `_accessViewState` and the live
     // locale (see `_currentCountdownPresentation`'s own doc comment) --
     // shared by both countdown render sites below so they always show the
-    // identical HH:MM token for the identical underlying duration.
+    // identical HH:MM:SS token for the identical underlying duration.
     final countdownPresentation = _currentCountdownPresentation(context);
     final saveLabelText = _saveFeedbackVisible || isCurrentFavorite()
         ? l10n.reflectionSaved
@@ -2231,11 +2244,9 @@ class _HomeScreenState extends State<HomeScreen>
                         _HomeSettingsMenuControl(onPressed: openSettings),
                         _HomeTopNavigation(
                           onKeptPressed: openFavorites,
-                          keptEmphasized: _keptIconEmphasized,
-                          saveFeedback:
-                              _saveFeedbackVisible && !_keptNavDiscoveryActive
-                                  ? _saveFeedbackController
-                                  : null,
+                          saveFeedback: _keptFeedbackVisible
+                              ? _keptFeedbackController
+                              : null,
                           onHelpStart: () =>
                               setState(() => _keptHelpVisible = true),
                           onHelpEnd: () =>
@@ -2248,7 +2259,9 @@ class _HomeScreenState extends State<HomeScreen>
                           interactionEnabled: saveInteractionEnabled,
                           isCurrentFavorite: isCurrentFavorite(),
                           onPressed: toggleFavorite,
-                          showBreath: _keptDiscoveryBreathActive,
+                          breathProgress: _keptDiscoveryBreathActive
+                              ? _saveRingBreathController
+                              : null,
                           onHelpStart: () =>
                               setState(() => _saveHelpVisible = true),
                           onHelpEnd: () =>
@@ -2264,6 +2277,7 @@ class _HomeScreenState extends State<HomeScreen>
                             setState(() {
                               saveInteractionEnabled = true;
                             });
+                            _startSaveRingBreathIfReady();
                           },
                         ),
                       if (wisdomRevealed && !saveLabelUsesStatusPosition)
@@ -2302,8 +2316,6 @@ class _HomeScreenState extends State<HomeScreen>
                               : _keptDiscoveryHintText.isEmpty
                                   ? ''
                                   : l10n.keepThisWisdom,
-                          showBreath: _keptDiscoveryHintText == 'keep' &&
-                              _keptDiscoveryBreathActive,
                           onPressed: _keptDiscoveryHintText == 'keep'
                               ? toggleFavorite
                               : null,

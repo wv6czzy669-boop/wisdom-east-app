@@ -705,4 +705,51 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'الحكمة السابقة';
+
+  @override
+  String get keeperJournalTitle => 'يوميات تخصّك.';
+
+  @override
+  String get keeperJournalDescription =>
+      'الحِكم التي تحتفظ بها والكلمات التي تكتبها، في مكان واحد.';
+
+  @override
+  String get keeperJournalOpen => 'افتح يومياتك';
+
+  @override
+  String get keeperJournalEmpty => 'تبدأ بأول حكمة تحتفظ بها.';
+
+  @override
+  String get keeperJournalExport => 'مع Keeper، خذها معك بصيغة PDF.';
+
+  @override
+  String get ritualSound => 'صوت الطقس';
+
+  @override
+  String get ritualSoundOn => 'مع الصوت';
+
+  @override
+  String get ritualSoundOff => 'صامت';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'أصوات الطقس واهتزازات لطيفة. الإرشاد الصوتي متاح بالإنجليزية.';
+
+  @override
+  String get ritualSoundOffDescription => 'بلا صوت أو اهتزاز.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'اختيارك مفعّل الآن، لكن تعذّر حفظه. حاول مجددًا.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return 'الوقت المتبقي: $hours ساعة و$minutes دقيقة و$seconds ثانية';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return 'الوقت المتبقي: $seconds ثانية';
+  }
 }

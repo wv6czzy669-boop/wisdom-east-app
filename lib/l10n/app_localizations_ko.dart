@@ -647,4 +647,48 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => '지난 지혜';
+
+  @override
+  String get keeperJournalTitle => '나만의 일기.';
+
+  @override
+  String get keeperJournalDescription => '간직한 지혜와 내가 쓴 글을 한곳에.';
+
+  @override
+  String get keeperJournalOpen => '일기 열기';
+
+  @override
+  String get keeperJournalEmpty => '첫 번째 지혜를 간직하는 순간 시작됩니다.';
+
+  @override
+  String get keeperJournalExport => 'Keeper로 PDF를 저장해 간직하세요.';
+
+  @override
+  String get ritualSound => '리추얼 소리';
+
+  @override
+  String get ritualSoundOn => '소리 켜기';
+
+  @override
+  String get ritualSoundOff => '무음';
+
+  @override
+  String get ritualSoundOnDescription => '리추얼 소리와 부드러운 진동. 음성 안내는 영어로 제공됩니다.';
+
+  @override
+  String get ritualSoundOffDescription => '소리와 진동 없이.';
+
+  @override
+  String get ritualSoundSaveFailed => '선택은 적용되었지만 저장하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return '$hours시간 $minutes분 $seconds초 남음';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return '$seconds초 남음';
+  }
 }

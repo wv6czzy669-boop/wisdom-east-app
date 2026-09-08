@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Connecte-toi à Internet pour ouvrir une nouvelle sagesse.",
   "dailyRitualUnavailable": "Ta sagesse du jour est indisponible pour le moment. Réessaie.",
   "dailyRitualAccountNote": "Une sagesse par compte iCloud toutes les 24 heures. Une connexion Internet est nécessaire pour une nouvelle sagesse. Tes écrits enregistrés restent accessibles hors ligne.",
-  "dailyRitualPreviousWisdom": "Dernière sagesse"
+  "dailyRitualPreviousWisdom": "Dernière sagesse",
+  "keeperJournalTitle": "Un journal à toi.",
+  "keeperJournalDescription": "Les sagesses que tu gardes et les mots que tu écris, réunis.",
+  "keeperJournalOpen": "Ouvrir ton journal",
+  "keeperJournalEmpty": "Il commence avec la première sagesse que tu gardes.",
+  "keeperJournalExport": "Avec Keeper, emporte-le en PDF.",
+  "ritualSound": "Son du rituel",
+  "ritualSoundOn": "Avec son",
+  "ritualSoundOff": "Silencieux",
+  "ritualSoundOnDescription": "Sons du rituel et vibrations douces. Le guidage vocal est disponible en anglais.",
+  "ritualSoundOffDescription": "Sans son ni vibration.",
+  "ritualSoundSaveFailed": "Ton choix est actif, mais n’a pas pu être enregistré. Réessaie.",
+  "remainingDurationHoursMinutesSeconds": "Il reste {hours, plural, one{1 heure} other{{hours} heures}} {minutes, plural, one{1 minute} other{{minutes} minutes}} {seconds, plural, one{1 seconde} other{{seconds} secondes}}",
+  "remainingDurationSecondsOnly": "Il reste {seconds, plural, one{1 seconde} other{{seconds} secondes}}",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

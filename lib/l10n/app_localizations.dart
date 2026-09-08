@@ -1331,6 +1331,85 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Previous wisdom'**
   String get dailyRitualPreviousWisdom;
+
+  /// No description provided for @keeperJournalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A journal of your own.'**
+  String get keeperJournalTitle;
+
+  /// No description provided for @keeperJournalDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The wisdom you keep and the words you write, together.'**
+  String get keeperJournalDescription;
+
+  /// No description provided for @keeperJournalOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open your Journal'**
+  String get keeperJournalOpen;
+
+  /// No description provided for @keeperJournalEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'It begins with the first wisdom you keep.'**
+  String get keeperJournalEmpty;
+
+  /// No description provided for @keeperJournalExport.
+  ///
+  /// In en, this message translates to:
+  /// **'With Keeper, take it with you as a PDF.'**
+  String get keeperJournalExport;
+
+  /// No description provided for @ritualSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Ritual sound'**
+  String get ritualSound;
+
+  /// No description provided for @ritualSoundOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Sound on'**
+  String get ritualSoundOn;
+
+  /// No description provided for @ritualSoundOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Silent'**
+  String get ritualSoundOff;
+
+  /// No description provided for @ritualSoundOnDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Ritual sounds and gentle haptics. Spoken guidance is available in English.'**
+  String get ritualSoundOnDescription;
+
+  /// No description provided for @ritualSoundOffDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'No sound or vibration.'**
+  String get ritualSoundOffDescription;
+
+  /// No description provided for @ritualSoundSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your choice applies now, but could not be saved. Please try again.'**
+  String get ritualSoundSaveFailed;
+
+  /// No description provided for @remainingDurationHoursMinutesSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, one{1 hour} other{{hours} hours}} {minutes, plural, one{1 minute} other{{minutes} minutes}} {seconds, plural, one{1 second} other{{seconds} seconds}} remaining'**
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds);
+
+  /// No description provided for @remainingDurationSecondsOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds, plural, one{1 second} other{{seconds} seconds}} remaining'**
+  String remainingDurationSecondsOnly(int seconds);
 }
 
 class _AppLocalizationsDelegate

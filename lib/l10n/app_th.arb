@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "เชื่อมต่ออินเทอร์เน็ตเพื่อเปิดข้อคิดใหม่",
   "dailyRitualUnavailable": "ยังเปิดข้อคิดประจำวันไม่ได้ในตอนนี้ โปรดลองอีกครั้ง",
   "dailyRitualAccountNote": "หนึ่งข้อคิดต่อบัญชี iCloud ทุก 24 ชั่วโมง การเปิดข้อคิดใหม่ต้องเชื่อมต่ออินเทอร์เน็ต คุณยังอ่านงานเขียนที่บันทึกไว้ได้เมื่อออฟไลน์",
-  "dailyRitualPreviousWisdom": "ข้อคิดก่อนหน้า"
+  "dailyRitualPreviousWisdom": "ข้อคิดก่อนหน้า",
+  "keeperJournalTitle": "บันทึกที่เป็นของคุณ",
+  "keeperJournalDescription": "ข้อคิดที่คุณเก็บไว้และถ้อยคำที่คุณเขียน รวมไว้ในที่เดียว",
+  "keeperJournalOpen": "เปิดบันทึกของคุณ",
+  "keeperJournalEmpty": "เริ่มต้นจากข้อคิดแรกที่คุณเก็บไว้",
+  "keeperJournalExport": "พกบันทึกไปกับคุณในรูปแบบ PDF ด้วย Keeper",
+  "ritualSound": "เสียงของพิธี",
+  "ritualSoundOn": "เปิดเสียง",
+  "ritualSoundOff": "เงียบ",
+  "ritualSoundOnDescription": "เสียงของพิธีและการสั่นเบา ๆ มีเสียงแนะนำเป็นภาษาอังกฤษ",
+  "ritualSoundOffDescription": "ไม่มีเสียงหรือการสั่น",
+  "ritualSoundSaveFailed": "ตัวเลือกของคุณมีผลแล้ว แต่ยังบันทึกไม่ได้ โปรดลองอีกครั้ง",
+  "remainingDurationHoursMinutesSeconds": "เหลืออีก {hours} ชั่วโมง {minutes} นาที {seconds} วินาที",
+  "remainingDurationSecondsOnly": "เหลืออีก {seconds} วินาที",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

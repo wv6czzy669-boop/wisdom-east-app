@@ -706,4 +706,76 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Ultima saggezza';
+
+  @override
+  String get keeperJournalTitle => 'Un diario tutto tuo.';
+
+  @override
+  String get keeperJournalDescription =>
+      'Le saggezze che custodisci e le parole che scrivi, insieme.';
+
+  @override
+  String get keeperJournalOpen => 'Apri il tuo diario';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Inizia con la prima saggezza che custodisci.';
+
+  @override
+  String get keeperJournalExport => 'Con Keeper, portalo con te in PDF.';
+
+  @override
+  String get ritualSound => 'Suono del rituale';
+
+  @override
+  String get ritualSoundOn => 'Con audio';
+
+  @override
+  String get ritualSoundOff => 'Silenzioso';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Suoni del rituale e vibrazioni delicate. La guida vocale è disponibile in inglese.';
+
+  @override
+  String get ritualSoundOffDescription => 'Senza suoni né vibrazioni.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'La tua scelta è attiva, ma non è stato possibile salvarla. Riprova.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours ore',
+      one: '1 ora',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minuti',
+      one: '1 minuto',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds secondi',
+      one: '1 secondo',
+    );
+    return 'Tempo rimanente: $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds secondi',
+      one: '1 secondo',
+    );
+    return 'Tempo rimanente: $_temp0';
+  }
 }

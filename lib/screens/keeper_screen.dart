@@ -4,6 +4,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../l10n/east_localizations.dart';
+import '../controllers/private_writing_lock_controller.dart';
+import '../models/favorite_item.dart';
+import '../services/saved_reflections_service.dart';
+import 'journal_screen.dart';
 import '../services/app_services.dart' as app_services;
 import '../services/purchase_service.dart';
 import '../theme/east_design.dart';
@@ -15,10 +19,14 @@ class KeeperScreen extends StatefulWidget {
   const KeeperScreen({
     super.key,
     this.purchaseService,
+    this.savedReflectionsService,
+    this.writingLockController,
     this.supportsInteractiveKeeperWidget,
   });
 
   final PurchaseService? purchaseService;
+  final SavedReflectionsService? savedReflectionsService;
+  final PrivateWritingLockController? writingLockController;
   final bool? supportsInteractiveKeeperWidget;
 
   @override
@@ -27,6 +35,61 @@ class KeeperScreen extends StatefulWidget {
 
 class _KeeperScreenState extends State<KeeperScreen> {
   bool _persistenceErrorShown = false;
+  bool? _journalHasEntries;
+  bool _journalLoadFailed = false;
+  bool _journalNavigationInProgress = false;
+  int _journalRequest = 0;
+
+  Future<List<FavoriteItem>?> _loadJournal() async {
+    final request = ++_journalRequest;
+    setState(() {
+      _journalHasEntries = null;
+      _journalLoadFailed = false;
+    });
+    try {
+      final items = await (widget.savedReflectionsService ??
+              app_services.savedReflectionsService)
+          .load();
+      if (!mounted || request != _journalRequest) return null;
+      setState(() => _journalHasEntries = items.isNotEmpty);
+      return items;
+    } catch (_) {
+      if (mounted && request == _journalRequest) {
+        setState(() => _journalLoadFailed = true);
+      }
+      return null;
+    }
+  }
+
+  void _selectJournal() {
+    if (!_journalNavigationInProgress) unawaited(_loadJournal());
+  }
+
+  Future<void> _openJournal() async {
+    if (_journalNavigationInProgress) return;
+    _journalNavigationInProgress = true;
+    try {
+      // Refresh at entry so a sync or deletion cannot open an old snapshot.
+      final items = await _loadJournal();
+      if (!mounted || items == null || items.isEmpty) return;
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (journalContext) => JournalScreen(
+            items: items,
+            isKeeper: _purchaseService.resolveKeeperAccess(),
+            purchaseService: _purchaseService,
+            writingLockController: widget.writingLockController,
+            // Export from this visit returns to the existing Keeper offering.
+            onRequestKeeper: () => Navigator.pop(journalContext),
+          ),
+        ),
+      );
+      if (mounted) await _loadJournal();
+    } finally {
+      _journalNavigationInProgress = false;
+    }
+  }
 
   PurchaseService get _purchaseService =>
       widget.purchaseService ?? app_services.purchaseService;
@@ -186,7 +249,12 @@ class _KeeperScreenState extends State<KeeperScreen> {
                           ).copyWith(letterSpacing: 1.55),
                         ),
                         const SizedBox(height: 28),
-                        const KeeperExperiencePreview(),
+                        KeeperExperiencePreview(
+                          journalHasEntries: _journalHasEntries,
+                          journalLoadFailed: _journalLoadFailed,
+                          onJournalSelected: _selectJournal,
+                          onOpenJournal: () => unawaited(_openJournal()),
+                        ),
                         const SizedBox(height: 22),
                         Text(
                           l10n.keeperDailyRitual,

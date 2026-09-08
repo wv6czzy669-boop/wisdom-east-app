@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Conecte-se à internet para abrir uma nova sabedoria.",
   "dailyRitualUnavailable": "Sua sabedoria diária não está disponível agora. Tente novamente.",
   "dailyRitualAccountNote": "Uma sabedoria por conta do iCloud a cada 24 horas. Uma nova sabedoria precisa de conexão com a internet. Seus textos salvos continuam disponíveis offline.",
-  "dailyRitualPreviousWisdom": "Sabedoria anterior"
+  "dailyRitualPreviousWisdom": "Sabedoria anterior",
+  "keeperJournalTitle": "Um diário só seu.",
+  "keeperJournalDescription": "A sabedoria que você guarda e as palavras que escreve, juntas.",
+  "keeperJournalOpen": "Abra seu diário",
+  "keeperJournalEmpty": "Começa com a primeira sabedoria que você guarda.",
+  "keeperJournalExport": "Com Keeper, leve com você em PDF.",
+  "ritualSound": "Som do ritual",
+  "ritualSoundOn": "Com som",
+  "ritualSoundOff": "Silencioso",
+  "ritualSoundOnDescription": "Sons do ritual e vibrações suaves. A orientação por voz está disponível em inglês.",
+  "ritualSoundOffDescription": "Sem som nem vibração.",
+  "ritualSoundSaveFailed": "Sua escolha está ativa, mas não foi possível salvá-la. Tente novamente.",
+  "remainingDurationHoursMinutesSeconds": "Restam {hours, plural, one{1 hora} other{{hours} horas}} {minutes, plural, one{1 minuto} other{{minutes} minutos}} {seconds, plural, one{1 segundo} other{{seconds} segundos}}",
+  "remainingDurationSecondsOnly": "Restam {seconds, plural, one{1 segundo} other{{seconds} segundos}}",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

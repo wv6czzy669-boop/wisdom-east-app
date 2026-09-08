@@ -191,6 +191,10 @@ void main() {
           expect(find.byKey(const ValueKey('keep-save-feedback-text')),
               findsNothing);
           expect(find.byKey(const ValueKey('kept-save-feedback-breath')),
+              findsOneWidget);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 3016));
+          expect(find.byKey(const ValueKey('kept-save-feedback-breath')),
               findsNothing);
         }
       }

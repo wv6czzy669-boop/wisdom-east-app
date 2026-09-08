@@ -34,6 +34,7 @@ Future<void> main() async {
     initializeKeptStorage(),
     localePreferenceLoad,
     appearancePreferenceLoad,
+    ritualSoundPreferenceController.load(),
     dateFormattingLoad,
   ]);
 

@@ -1,3 +1,4 @@
+import '../controllers/ritual_sound_preference_controller.dart';
 import 'dart:async';
 
 import '../controllers/icloud_removal_controller.dart';
@@ -37,6 +38,8 @@ import 'saved_reflections_service.dart';
 import 'widget_snapshot_service.dart';
 import 'wisdom_notification_service.dart';
 import 'wisdom_share_service.dart';
+
+final ritualSoundPreferenceController = RitualSoundPreferenceController();
 
 final AnalyticsService analyticsService = AnalyticsService();
 final PurchaseService purchaseService = PurchaseService(

@@ -665,4 +665,51 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'ข้อคิดก่อนหน้า';
+
+  @override
+  String get keeperJournalTitle => 'บันทึกที่เป็นของคุณ';
+
+  @override
+  String get keeperJournalDescription =>
+      'ข้อคิดที่คุณเก็บไว้และถ้อยคำที่คุณเขียน รวมไว้ในที่เดียว';
+
+  @override
+  String get keeperJournalOpen => 'เปิดบันทึกของคุณ';
+
+  @override
+  String get keeperJournalEmpty => 'เริ่มต้นจากข้อคิดแรกที่คุณเก็บไว้';
+
+  @override
+  String get keeperJournalExport => 'พกบันทึกไปกับคุณในรูปแบบ PDF ด้วย Keeper';
+
+  @override
+  String get ritualSound => 'เสียงของพิธี';
+
+  @override
+  String get ritualSoundOn => 'เปิดเสียง';
+
+  @override
+  String get ritualSoundOff => 'เงียบ';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'เสียงของพิธีและการสั่นเบา ๆ มีเสียงแนะนำเป็นภาษาอังกฤษ';
+
+  @override
+  String get ritualSoundOffDescription => 'ไม่มีเสียงหรือการสั่น';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'ตัวเลือกของคุณมีผลแล้ว แต่ยังบันทึกไม่ได้ โปรดลองอีกครั้ง';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return 'เหลืออีก $hours ชั่วโมง $minutes นาที $seconds วินาที';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return 'เหลืออีก $seconds วินาที';
+  }
 }

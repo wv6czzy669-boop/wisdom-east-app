@@ -274,7 +274,8 @@ void main() {
       // Keeper widget guidance: +3 keys (addKeeperWidget,
       // keeperWidgetInteractive, keeperWidgetOpensApp).
       // Keeper experience previews and Home Screen guide: +8 keys.
-      expect(expectedKeys, hasLength(201));
+      // Journal invitation: +5. Sound preference and second precision: +8.
+      expect(expectedKeys, hasLength(214));
       for (final tag in _allArbFiles.keys) {
         final arb = _readArb(tag);
         expect(_messageKeys(arb), expectedKeys, reason: '$tag message keys');

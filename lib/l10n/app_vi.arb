@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Kết nối internet để mở một lời trí tuệ mới.",
   "dailyRitualUnavailable": "Lời trí tuệ hằng ngày hiện chưa sẵn sàng. Vui lòng thử lại.",
   "dailyRitualAccountNote": "Mỗi tài khoản iCloud nhận một lời trí tuệ mỗi 24 giờ. Cần kết nối internet để mở lời trí tuệ mới. Những trang viết đã lưu vẫn có thể đọc ngoại tuyến.",
-  "dailyRitualPreviousWisdom": "Lời trí tuệ trước"
+  "dailyRitualPreviousWisdom": "Lời trí tuệ trước",
+  "keeperJournalTitle": "Một cuốn nhật ký của riêng bạn.",
+  "keeperJournalDescription": "Những lời chiêm nghiệm bạn lưu giữ và những dòng bạn viết, cùng một nơi.",
+  "keeperJournalOpen": "Mở nhật ký của bạn",
+  "keeperJournalEmpty": "Bắt đầu từ lời chiêm nghiệm đầu tiên bạn lưu giữ.",
+  "keeperJournalExport": "Với Keeper, mang theo dưới dạng PDF.",
+  "ritualSound": "Âm thanh nghi thức",
+  "ritualSoundOn": "Bật âm thanh",
+  "ritualSoundOff": "Im lặng",
+  "ritualSoundOnDescription": "Âm thanh nghi thức và rung nhẹ. Hướng dẫn bằng giọng nói có bằng tiếng Anh.",
+  "ritualSoundOffDescription": "Không âm thanh hay rung.",
+  "ritualSoundSaveFailed": "Lựa chọn đã có hiệu lực nhưng chưa lưu được. Vui lòng thử lại.",
+  "remainingDurationHoursMinutesSeconds": "Còn {hours} giờ {minutes} phút {seconds} giây",
+  "remainingDurationSecondsOnly": "Còn {seconds} giây",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

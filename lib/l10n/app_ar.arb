@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "اتصل بالإنترنت لفتح حكمة جديدة.",
   "dailyRitualUnavailable": "حكمتك اليومية غير متاحة الآن. حاول مرة أخرى.",
   "dailyRitualAccountNote": "حكمة واحدة لكل حساب iCloud كل 24 ساعة. تحتاج الحكمة الجديدة إلى اتصال بالإنترنت. تبقى كتاباتك المحفوظة متاحة دون اتصال.",
-  "dailyRitualPreviousWisdom": "الحكمة السابقة"
+  "dailyRitualPreviousWisdom": "الحكمة السابقة",
+  "keeperJournalTitle": "يوميات تخصّك.",
+  "keeperJournalDescription": "الحِكم التي تحتفظ بها والكلمات التي تكتبها، في مكان واحد.",
+  "keeperJournalOpen": "افتح يومياتك",
+  "keeperJournalEmpty": "تبدأ بأول حكمة تحتفظ بها.",
+  "keeperJournalExport": "مع Keeper، خذها معك بصيغة PDF.",
+  "ritualSound": "صوت الطقس",
+  "ritualSoundOn": "مع الصوت",
+  "ritualSoundOff": "صامت",
+  "ritualSoundOnDescription": "أصوات الطقس واهتزازات لطيفة. الإرشاد الصوتي متاح بالإنجليزية.",
+  "ritualSoundOffDescription": "بلا صوت أو اهتزاز.",
+  "ritualSoundSaveFailed": "اختيارك مفعّل الآن، لكن تعذّر حفظه. حاول مجددًا.",
+  "remainingDurationHoursMinutesSeconds": "الوقت المتبقي: {hours} ساعة و{minutes} دقيقة و{seconds} ثانية",
+  "remainingDurationSecondsOnly": "الوقت المتبقي: {seconds} ثانية",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

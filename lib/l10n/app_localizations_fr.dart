@@ -710,4 +710,76 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Dernière sagesse';
+
+  @override
+  String get keeperJournalTitle => 'Un journal à toi.';
+
+  @override
+  String get keeperJournalDescription =>
+      'Les sagesses que tu gardes et les mots que tu écris, réunis.';
+
+  @override
+  String get keeperJournalOpen => 'Ouvrir ton journal';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Il commence avec la première sagesse que tu gardes.';
+
+  @override
+  String get keeperJournalExport => 'Avec Keeper, emporte-le en PDF.';
+
+  @override
+  String get ritualSound => 'Son du rituel';
+
+  @override
+  String get ritualSoundOn => 'Avec son';
+
+  @override
+  String get ritualSoundOff => 'Silencieux';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Sons du rituel et vibrations douces. Le guidage vocal est disponible en anglais.';
+
+  @override
+  String get ritualSoundOffDescription => 'Sans son ni vibration.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Ton choix est actif, mais n’a pas pu être enregistré. Réessaie.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours heures',
+      one: '1 heure',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutes',
+      one: '1 minute',
+    );
+    String _temp2 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds secondes',
+      one: '1 seconde',
+    );
+    return 'Il reste $_temp0 $_temp1 $_temp2';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    String _temp0 = intl.Intl.pluralLogic(
+      seconds,
+      locale: localeName,
+      other: '$seconds secondes',
+      one: '1 seconde',
+    );
+    return 'Il reste $_temp0';
+  }
 }

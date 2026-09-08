@@ -322,5 +322,20 @@
   "dailyRitualConnectionRequired": "Połącz się z internetem, aby otworzyć nową mądrość.",
   "dailyRitualUnavailable": "Twoja codzienna mądrość jest teraz niedostępna. Spróbuj ponownie.",
   "dailyRitualAccountNote": "Jedna mądrość na konto iCloud co 24 godziny. Nowa mądrość wymaga połączenia z internetem. Zapisane teksty pozostają dostępne offline.",
-  "dailyRitualPreviousWisdom": "Poprzednia mądrość"
+  "dailyRitualPreviousWisdom": "Poprzednia mądrość",
+  "keeperJournalTitle": "Twój własny dziennik.",
+  "keeperJournalDescription": "Zachowane mądrości i napisane przez Ciebie słowa, razem.",
+  "keeperJournalOpen": "Otwórz swój dziennik",
+  "keeperJournalEmpty": "Zaczyna się od pierwszej zachowanej mądrości.",
+  "keeperJournalExport": "Z Keeper zabierzesz go ze sobą w formacie PDF.",
+  "ritualSound": "Dźwięk rytuału",
+  "ritualSoundOn": "Z dźwiękiem",
+  "ritualSoundOff": "Cisza",
+  "ritualSoundOnDescription": "Dźwięki rytuału i delikatne wibracje. Wskazówki głosowe są dostępne po angielsku.",
+  "ritualSoundOffDescription": "Bez dźwięku i wibracji.",
+  "ritualSoundSaveFailed": "Twój wybór działa teraz, ale nie udało się go zapisać. Spróbuj ponownie.",
+  "remainingDurationHoursMinutesSeconds": "Pozostało: {hours, plural, one{1 godzina} few{{hours} godziny} many{{hours} godzin} other{{hours} godzin}} {minutes, plural, one{1 minuta} few{{minutes} minuty} many{{minutes} minut} other{{minutes} minut}} {seconds, plural, one{1 sekunda} few{{seconds} sekundy} many{{seconds} sekund} other{{seconds} sekund}}",
+  "remainingDurationSecondsOnly": "Pozostało: {seconds, plural, one{1 sekunda} few{{seconds} sekundy} many{{seconds} sekund} other{{seconds} sekund}}",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

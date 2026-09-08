@@ -248,13 +248,13 @@ void main() {
   });
 
   testWidgets(
-      'Settings puts everyday preferences first and moves destructive actions and links into details',
+      'Settings puts membership first and moves destructive actions and links into details',
       (tester) async {
     bridge.enabled = false;
     await tester.pumpWidget(app(SettingsScreen(writingLockController: lock)));
     await tester.pumpAndSettle();
-    expect(tester.getTopLeft(find.text('Language')).dy,
-        lessThan(tester.getTopLeft(find.text('Keeper')).dy));
+    expect(tester.getTopLeft(find.text('Keeper')).dy,
+        lessThan(tester.getTopLeft(find.text('Language')).dy));
     expect(find.byKey(const ValueKey('settings-remove-from-icloud-row')),
         findsNothing);
     expect(find.byKey(const ValueKey('settings-east-productions-row')),

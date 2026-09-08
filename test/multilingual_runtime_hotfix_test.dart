@@ -82,7 +82,7 @@ void main() {
 
     test(
         'CountdownPresentation.plainText embeds the caller-supplied '
-        'localized sentence and the ceiling-based HH:MM token, for every '
+        'localized sentence and the ceiling-based HH:MM:SS token, for every '
         'product locale', () {
       for (final locale in locales) {
         final l10n = lookupAppLocalizations(locale);
@@ -94,7 +94,7 @@ void main() {
             const Duration(minutes: 41, seconds: 30),
           ),
         );
-        expect(underAnHour.plainText, '$sentence\n00:42');
+        expect(underAnHour.plainText, '$sentence\n00:41:30');
 
         final overAnHour = CountdownPresentation(
           sentence: sentence,
@@ -102,7 +102,7 @@ void main() {
             const Duration(hours: 19, minutes: 24),
           ),
         );
-        expect(overAnHour.plainText, '$sentence\n19:24');
+        expect(overAnHour.plainText, '$sentence\n19:24:00');
       }
     });
 

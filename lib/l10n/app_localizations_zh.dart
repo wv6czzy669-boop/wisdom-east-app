@@ -636,6 +636,50 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => '上一則智慧';
+
+  @override
+  String get keeperJournalTitle => '一本属于你的日记。';
+
+  @override
+  String get keeperJournalDescription => '珍藏的智慧与写下的心声，汇聚一处。';
+
+  @override
+  String get keeperJournalOpen => '打开你的日记';
+
+  @override
+  String get keeperJournalEmpty => '从珍藏第一则智慧开始。';
+
+  @override
+  String get keeperJournalExport => '通过 Keeper，将日记保存为 PDF，随身携带。';
+
+  @override
+  String get ritualSound => '仪式声音';
+
+  @override
+  String get ritualSoundOn => '有声';
+
+  @override
+  String get ritualSoundOff => '静音';
+
+  @override
+  String get ritualSoundOnDescription => '仪式声音与轻柔振动。语音引导提供英语版本。';
+
+  @override
+  String get ritualSoundOffDescription => '无声音或振动。';
+
+  @override
+  String get ritualSoundSaveFailed => '选择已生效，但未能保存。请重试。';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return '剩余$hours小时$minutes分钟$seconds秒';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return '剩余$seconds秒';
+  }
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -1270,4 +1314,48 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get dailyRitualPreviousWisdom => '上一則智慧';
+
+  @override
+  String get keeperJournalTitle => '一本屬於你的日記。';
+
+  @override
+  String get keeperJournalDescription => '珍藏的智慧與寫下的心聲，匯聚一處。';
+
+  @override
+  String get keeperJournalOpen => '打開你的日記';
+
+  @override
+  String get keeperJournalEmpty => '從珍藏第一則智慧開始。';
+
+  @override
+  String get keeperJournalExport => '透過 Keeper，將日記儲存為 PDF，隨身攜帶。';
+
+  @override
+  String get ritualSound => '儀式聲音';
+
+  @override
+  String get ritualSoundOn => '有聲';
+
+  @override
+  String get ritualSoundOff => '靜音';
+
+  @override
+  String get ritualSoundOnDescription => '儀式聲音與輕柔震動。語音引導提供英語版本。';
+
+  @override
+  String get ritualSoundOffDescription => '無聲音或震動。';
+
+  @override
+  String get ritualSoundSaveFailed => '選擇已生效，但未能儲存。請重試。';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return '剩餘$hours小時$minutes分鐘$seconds秒';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return '剩餘$seconds秒';
+  }
 }

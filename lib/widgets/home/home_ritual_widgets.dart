@@ -170,8 +170,8 @@ class _HomeFirstRitualGuidance extends StatelessWidget {
 /// locked-countdown main ritual state via [_HomeRitualContent], and the
 /// post-reveal message beneath revealed wisdom via [_HomePostRevealMessage])
 /// -- renders the localized sentence in the ambient text direction and the
-/// fixed `HH:MM` token isolated to LTR, with tabular figures applied only
-/// to the token. Never parses [presentation]'s `hhmm`/`plainText` -- reads
+/// fixed `HH:MM:SS` token isolated to LTR, with tabular figures applied only
+/// to the token. Never parses [presentation]'s `hhmmss`/`plainText` -- reads
 /// only its structured `duration`.
 class _HomeCountdownText extends StatelessWidget {
   const _HomeCountdownText({
@@ -193,8 +193,8 @@ class _HomeCountdownText extends StatelessWidget {
           style: style,
         ),
         Text(
-          presentation.duration.hhmm,
-          key: const ValueKey('home-countdown-hhmm'),
+          presentation.duration.hhmmss,
+          key: const ValueKey('home-countdown-hhmmss'),
           textAlign: TextAlign.center,
           // Isolates only this Text's paragraph direction to LTR so the
           // digits never mirror under an RTL locale (e.g. Arabic); the
@@ -596,7 +596,6 @@ class _HomePauseFeelText extends StatelessWidget {
 class _HomeTopNavigation extends StatelessWidget {
   const _HomeTopNavigation({
     required this.onKeptPressed,
-    this.keptEmphasized = false,
     this.saveFeedback,
     this.onHelpStart,
     this.onHelpEnd,
@@ -606,9 +605,6 @@ class _HomeTopNavigation extends StatelessWidget {
   final Animation<double>? saveFeedback;
   final VoidCallback? onHelpStart;
   final VoidCallback? onHelpEnd;
-
-  /// First-use teaching takes priority over the brief save feedback.
-  final bool keptEmphasized;
 
   static const ButtonStyle _noHaloStyle = ButtonStyle(
     backgroundColor: WidgetStatePropertyAll(Colors.transparent),
@@ -641,7 +637,6 @@ class _HomeTopNavigation extends StatelessWidget {
                 key: const ValueKey('home-kept-control'),
                 style: _noHaloStyle,
                 icon: _KeptIconEmphasis(
-                  active: keptEmphasized,
                   saveFeedback: saveFeedback,
                   child: const DoubleRingIcon(),
                 ),
@@ -655,22 +650,14 @@ class _HomeTopNavigation extends StatelessWidget {
   }
 }
 
-/// Wraps the Kept icon with the top-right Kept "teaching" breath (Update
-/// 1D): the same approved outer-breathing-ring visual language as the
-/// center save-ring breath (`_SaveRingBreath`), adapted proportionally to
-/// this control's smaller geometry, rather than a whole-icon brightness
-/// pulse. [child]'s own geometry and position are never touched — the
-/// breath is a separate, purely decorative (`IgnorePointer`) outer ring
-/// overlay. Home repeats first-use teaching until Kept is opened. Subsequent
-/// saves use the shared 1.5-second confirmation animation for one breath.
+/// A single decorative halo after the save confirmation has disappeared.
+/// The icon's geometry and hit target remain fixed throughout.
 class _KeptIconEmphasis extends StatelessWidget {
   const _KeptIconEmphasis({
-    required this.active,
     required this.child,
     this.saveFeedback,
   });
 
-  final bool active;
   final Widget child;
   final Animation<double>? saveFeedback;
 
@@ -682,14 +669,10 @@ class _KeptIconEmphasis extends StatelessWidget {
       alignment: Alignment.center,
       children: [
         child,
-        if (active && !reduceMotion)
-          const _KeptTopNavBreath(
-            key: ValueKey('kept-icon-emphasis-pulse'),
-          ),
-        if (!active && saveFeedback != null && !reduceMotion)
+        if (saveFeedback != null && !reduceMotion)
           _KeptTopNavBreath(
             key: const ValueKey('kept-save-feedback-breath'),
-            progress: saveFeedback,
+            progress: saveFeedback!,
           ),
       ],
     );
@@ -711,25 +694,16 @@ class _KeptIconEmphasis extends StatelessWidget {
 /// and a stroke matching the nav bar's own established
 /// `TopNavRingGeometry.strokeWidth` rather than a thinner one-off value.
 class _KeptTopNavBreath extends StatelessWidget {
-  const _KeptTopNavBreath({super.key, this.progress});
-  final Animation<double>? progress;
+  const _KeptTopNavBreath({super.key, required this.progress});
+  final Animation<double> progress;
 
   @override
   Widget build(BuildContext context) {
-    if (progress case final animation?) {
-      return IgnorePointer(
-          child: AnimatedBuilder(
-        animation: animation,
-        builder: (context, _) =>
-            _breath(context, Curves.easeOut.transform(animation.value)),
-      ));
-    }
     return IgnorePointer(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 1050),
-        curve: Curves.easeOut,
-        builder: (context, t, _) => _breath(context, t),
+      child: AnimatedBuilder(
+        animation: progress,
+        builder: (context, _) =>
+            _breath(context, Curves.easeInOutSine.transform(progress.value)),
       ),
     );
   }
@@ -847,7 +821,7 @@ class _HomeSaveControl extends StatelessWidget {
     required this.isCurrentFavorite,
     required this.onPressed,
     required this.onFullyVisible,
-    this.showBreath = false,
+    this.breathProgress,
     this.onHelpStart,
     this.onHelpEnd,
   });
@@ -860,11 +834,9 @@ class _HomeSaveControl extends StatelessWidget {
   final VoidCallback? onHelpStart;
   final VoidCallback? onHelpEnd;
 
-  /// Item 6: true for a single ~800ms restrained breath around the ring,
-  /// shown once right after the discovery hint text appears. The caller
-  /// is responsible for setting this back to false after one play; this
-  /// widget also defensively skips the breath under Reduce Motion.
-  final bool showBreath;
+  /// A single reveal-owned breath, independent of saving eligibility.
+  /// Decorative motion is suppressed under Reduce Motion.
+  final Animation<double>? breathProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -1007,9 +979,10 @@ class _HomeSaveControl extends StatelessWidget {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (showBreath && !reduceMotion)
-                        const _SaveRingBreath(
-                          key: ValueKey('save-ring-breath'),
+                      if (breathProgress != null && !reduceMotion)
+                        _SaveRingBreath(
+                          key: const ValueKey('save-ring-breath'),
+                          progress: breathProgress!,
                         ),
                       GestureDetector(
                         behavior: HitTestBehavior.opaque,
@@ -1127,19 +1100,19 @@ class _HomeKeptControlHelp extends StatelessWidget {
       );
 }
 
-/// The existing first-use save-ring breath. Home repeats it with calm pauses
-/// until the first save; this decorative halo never moves the control itself.
+/// One three-second breath after the wisdom appears. Its controller belongs
+/// to Home, so saving or leaving the screen can stop it immediately.
 class _SaveRingBreath extends StatelessWidget {
-  const _SaveRingBreath({super.key});
+  const _SaveRingBreath({super.key, required this.progress});
+  final Animation<double> progress;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 1200),
-        curve: Curves.easeOut,
-        builder: (context, t, _) {
+      child: AnimatedBuilder(
+        animation: progress,
+        builder: (context, _) {
+          final t = Curves.easeInOutSine.transform(progress.value);
           final fade = sin(t * pi).clamp(0.0, 1.0);
           final diameter = 38.0 + (t * 6.0);
           return Opacity(
@@ -1174,13 +1147,11 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
   const _HomeKeptDiscoveryHint({
     required this.opacity,
     required this.text,
-    required this.showBreath,
     this.onPressed,
   });
 
   final double opacity;
   final String text;
-  final bool showBreath;
   final VoidCallback? onPressed;
 
   /// Matches `_HomeSaveControl`'s own ring geometry (the default
@@ -1195,8 +1166,6 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final textWidget = Text(
       text,
       textAlign: TextAlign.start,
@@ -1208,26 +1177,6 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
         letterSpacing: 0.4,
       ),
     );
-    final breathingText = showBreath && !reduceMotion
-        ? TweenAnimationBuilder<double>(
-            key: const ValueKey('keep-discovery-hint-breath'),
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 1200),
-            curve: Curves.easeOut,
-            builder: (context, t, child) {
-              final breath = sin(t * pi).clamp(0.0, 1.0);
-              return Opacity(
-                opacity: 0.82 + (breath * 0.18),
-                child: Transform.scale(
-                  alignment: AlignmentDirectional.centerStart,
-                  scale: 1.0 + (breath * 0.018),
-                  child: child,
-                ),
-              );
-            },
-            child: textWidget,
-          )
-        : textWidget;
     return PositionedDirectional(
       top: size.height / 2 + 72,
       height: _ringDiameter,
@@ -1249,7 +1198,7 @@ class _HomeKeptDiscoveryHint extends StatelessWidget {
                   duration: const Duration(milliseconds: 350),
                   curve: Curves.easeOutCubic,
                   opacity: opacity,
-                  child: breathingText,
+                  child: textWidget,
                 ),
               ),
             ),
@@ -1301,7 +1250,7 @@ class _HomePostRevealMessage extends StatelessWidget {
                 if (presentation != null)
                   // Exactly one natural-language countdown semantics node
                   // here, composed from the same `CountdownDuration`
-                  // integers the visible `HH:MM` token renders from --
+                  // integers the visible `HH:MM:SS` token renders from --
                   // never the raw token. `excludeSemantics: true`
                   // suppresses the two inner Text children so they never
                   // contribute duplicate nodes.

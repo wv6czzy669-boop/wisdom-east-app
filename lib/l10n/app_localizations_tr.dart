@@ -674,4 +674,51 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Son wisdom';
+
+  @override
+  String get keeperJournalTitle => 'Sana ait bir günlük.';
+
+  @override
+  String get keeperJournalDescription =>
+      'Sakladığın wisdom’lar ve yazdıkların, aynı yerde.';
+
+  @override
+  String get keeperJournalOpen => 'Günlüğünü aç';
+
+  @override
+  String get keeperJournalEmpty => 'İlk sakladığın wisdom ile başlar.';
+
+  @override
+  String get keeperJournalExport => 'Keeper ile PDF olarak yanında götür.';
+
+  @override
+  String get ritualSound => 'Ritüel sesi';
+
+  @override
+  String get ritualSoundOn => 'Sesli';
+
+  @override
+  String get ritualSoundOff => 'Sessiz';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Ritüel sesleri ve hafif titreşimler. Sesli yönlendirmeler İngilizcede kullanılabilir.';
+
+  @override
+  String get ritualSoundOffDescription => 'Ses ve titreşim olmadan.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Tercihin şu an geçerli, ancak kaydedilemedi. Lütfen yeniden dene.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return '$hours saat $minutes dakika $seconds saniye kaldı';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return '$seconds saniye kaldı';
+  }
 }

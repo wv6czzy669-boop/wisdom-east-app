@@ -325,5 +325,20 @@
   "dailyRitualConnectionRequired": "Connect to the internet to open a new wisdom.",
   "dailyRitualUnavailable": "Your daily wisdom is unavailable right now. Please try again.",
   "dailyRitualAccountNote": "One wisdom per iCloud account every 24 hours. A new wisdom needs an internet connection. Your saved writing remains available offline.",
-  "dailyRitualPreviousWisdom": "Previous wisdom"
+  "dailyRitualPreviousWisdom": "Previous wisdom",
+  "keeperJournalTitle": "A journal of your own.",
+  "keeperJournalDescription": "The wisdom you keep and the words you write, together.",
+  "keeperJournalOpen": "Open your Journal",
+  "keeperJournalEmpty": "It begins with the first wisdom you keep.",
+  "keeperJournalExport": "With Keeper, take it with you as a PDF.",
+  "ritualSound": "Ritual sound",
+  "ritualSoundOn": "Sound on",
+  "ritualSoundOff": "Silent",
+  "ritualSoundOnDescription": "Ritual sounds and gentle haptics. Spoken guidance is available in English.",
+  "ritualSoundOffDescription": "No sound or vibration.",
+  "ritualSoundSaveFailed": "Your choice applies now, but could not be saved. Please try again.",
+  "remainingDurationHoursMinutesSeconds": "{hours, plural, one{1 hour} other{{hours} hours}} {minutes, plural, one{1 minute} other{{minutes} minutes}} {seconds, plural, one{1 second} other{{seconds} seconds}} remaining",
+  "remainingDurationSecondsOnly": "{seconds, plural, one{1 second} other{{seconds} seconds}} remaining",
+  "@remainingDurationHoursMinutesSeconds": {"placeholders": {"hours": {"type": "int"}, "minutes": {"type": "int"}, "seconds": {"type": "int"}}},
+  "@remainingDurationSecondsOnly": {"placeholders": {"seconds": {"type": "int"}}}
 }

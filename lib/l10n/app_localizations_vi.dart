@@ -678,4 +678,52 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dailyRitualPreviousWisdom => 'Lời trí tuệ trước';
+
+  @override
+  String get keeperJournalTitle => 'Một cuốn nhật ký của riêng bạn.';
+
+  @override
+  String get keeperJournalDescription =>
+      'Những lời chiêm nghiệm bạn lưu giữ và những dòng bạn viết, cùng một nơi.';
+
+  @override
+  String get keeperJournalOpen => 'Mở nhật ký của bạn';
+
+  @override
+  String get keeperJournalEmpty =>
+      'Bắt đầu từ lời chiêm nghiệm đầu tiên bạn lưu giữ.';
+
+  @override
+  String get keeperJournalExport => 'Với Keeper, mang theo dưới dạng PDF.';
+
+  @override
+  String get ritualSound => 'Âm thanh nghi thức';
+
+  @override
+  String get ritualSoundOn => 'Bật âm thanh';
+
+  @override
+  String get ritualSoundOff => 'Im lặng';
+
+  @override
+  String get ritualSoundOnDescription =>
+      'Âm thanh nghi thức và rung nhẹ. Hướng dẫn bằng giọng nói có bằng tiếng Anh.';
+
+  @override
+  String get ritualSoundOffDescription => 'Không âm thanh hay rung.';
+
+  @override
+  String get ritualSoundSaveFailed =>
+      'Lựa chọn đã có hiệu lực nhưng chưa lưu được. Vui lòng thử lại.';
+
+  @override
+  String remainingDurationHoursMinutesSeconds(
+      int hours, int minutes, int seconds) {
+    return 'Còn $hours giờ $minutes phút $seconds giây';
+  }
+
+  @override
+  String remainingDurationSecondsOnly(int seconds) {
+    return 'Còn $seconds giây';
+  }
 }
